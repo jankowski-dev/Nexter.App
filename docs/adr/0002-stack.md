@@ -8,13 +8,13 @@ Accepted.
 
 - Node.js 22+ locally; Node 24 in Docker.
 - pnpm workspaces.
-- NestJS 12 with Fastify adapter.
+- NestJS 11 with Fastify adapter.
 - React 19 + Vite + TanStack Router/Query.
 - PostgreSQL 17 + Drizzle ORM.
 - pg-boss for background jobs.
-- Zod for validation and shared contracts.
-- Tailwind CSS + shadcn-style components.
-- Vitest, Playwright, Testcontainers, fast-check, Anvil.
+- Zod for validation and shared contracts (dual CJS/ESM package).
+- Tailwind CSS + shadcn-compatible primitives.
+- Vitest now; Playwright, Testcontainers, fast-check, and Anvil are planned for later phases.
 - Railway for app/worker/Postgres; Cloudflare for edge; R2 for backups.
 
 ## Rationale

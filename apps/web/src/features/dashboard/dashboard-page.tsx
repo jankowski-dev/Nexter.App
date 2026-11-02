@@ -1,12 +1,14 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle, CardValue } from '@/components/ui/card';
-import { apiFetch, type HealthResponse } from '@/lib/api';
+import { apiFetch, healthResponseSchema } from '@/lib/api';
+import { messages } from '@/lib/i18n';
+import type { HealthResponse } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 
 export function DashboardPage() {
   const health = useQuery({
     queryKey: ['health'],
-    queryFn: () => apiFetch<HealthResponse>('/health'),
+    queryFn: () => apiFetch<HealthResponse>('/health', {}, healthResponseSchema),
     refetchInterval: 30_000,
   });
 
@@ -14,57 +16,55 @@ export function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Дашборд</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Каркас Nexter запущен. Здесь появится портфель, P&amp;L и статистика.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">{messages.dashboard.title}</h1>
+          <p className="mt-1 text-sm text-zinc-400">{messages.dashboard.subtitle}</p>
         </div>
         <Button variant="secondary" onClick={() => void health.refetch()}>
-          Проверить API
+          {messages.dashboard.checkApi}
         </Button>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle>API</CardTitle>
+            <CardTitle>{messages.dashboard.api}</CardTitle>
           </CardHeader>
           <CardValue>
             {health.isPending ? '...' : health.isError ? 'offline' : health.data?.status}
           </CardValue>
           <CardDescription>
-            {health.isError ? 'API недоступен. Запустите backend.' : 'Liveness probe /health'}
+            {health.isError ? 'API недоступен. Запустите backend.' : messages.dashboard.apiHint}
           </CardDescription>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Версия</CardTitle>
+            <CardTitle>{messages.dashboard.version}</CardTitle>
           </CardHeader>
           <CardValue>{health.data?.version ?? '—'}</CardValue>
-          <CardDescription>Текущая версия API</CardDescription>
+          <CardDescription>{messages.dashboard.versionHint}</CardDescription>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Фаза</CardTitle>
+            <CardTitle>{messages.dashboard.phase}</CardTitle>
           </CardHeader>
           <CardValue>1</CardValue>
-          <CardDescription>Foundation: каркас, БД, CI</CardDescription>
+          <CardDescription>{messages.dashboard.phaseHint}</CardDescription>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Следующая фаза</CardTitle>
+            <CardTitle>{messages.dashboard.nextPhase}</CardTitle>
           </CardHeader>
           <CardValue>2</CardValue>
-          <CardDescription>Auth, 2FA, сессии, audit</CardDescription>
+          <CardDescription>{messages.dashboard.nextPhaseHint}</CardDescription>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Что уже есть</CardTitle>
+          <CardTitle>{messages.dashboard.whatWorks}</CardTitle>
         </CardHeader>
         <ul className="grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
           <li>• pnpm workspace и строгая типизация</li>

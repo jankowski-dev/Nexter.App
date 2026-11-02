@@ -35,5 +35,6 @@ COPY --from=build /app/apps/worker/dist ./apps/worker/dist
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 
+USER node
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]

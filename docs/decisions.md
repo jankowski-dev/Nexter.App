@@ -27,6 +27,8 @@ Format: date — decision — reason.
 - **NestJS 11, not 12.** NestJS 12 is ESM-first and adds friction for the CJS-oriented Nest toolchain. NestJS 11 is stable and matches the implementation contract.
 - **TypeScript 5.9.** Required by the NestJS 11 toolchain; strict mode remains enabled.
 - **Worker is ESM.** pg-boss 12 is ESM-only. The worker package uses `"type": "module"` and NodeNext resolution.
-- **SPA served by Nest via `@nestjs/serve-static`.** `@fastify/static` 9.3.0 is used to satisfy `@nestjs/serve-static`; the peer warning from `@nestjs/platform-fastify` is accepted and runtime-verified.
-- **Web uses local contracts for now.** Shared contracts are consumed by the API. A dual-format package or generated OpenAPI client will replace the local web contract later.
-- **Migration validated with PGlite.** Docker/Postgres was unavailable locally; the SQL schema was executed in an in-memory Postgres-compatible engine.
+- **SPA served by Nest via `@fastify/static` 10.1.8 and an explicit SPA fallback.** `@nestjs/serve-static` was removed because its peer range conflicted with the Fastify adapter; deep links are rewritten to `index.html` with an `onRequest` hook.
+- **Fastify pinned to 5.12.8 via pnpm override.** The NestJS adapter’s transitive Fastify version had high-severity advisories; the runtime version is verified in the smoke test.
+- **Shared contracts are dual CJS/ESM.** `@nexter/contracts` is built with tsup and consumed by both API and web, including runtime response validation.
+- **Typecheck and test build workspace packages first.** A clean checkout must not depend on gitignored `dist/` artifacts.
+- **Migration validated with PGlite.** Docker/Postgres was unavailable locally; the SQL schema was executed in an in-memory Postgres-compatible engine without `pgcrypto`.

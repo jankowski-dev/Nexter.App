@@ -5,5 +5,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "drizzle"]
+  "exclude": ["src/**/*.test.ts", "dist", "node_modules", "drizzle"]
 }

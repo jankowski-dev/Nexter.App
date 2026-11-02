@@ -1,0 +1,31 @@
+export const messages = {
+  app: {
+    name: 'Nexter',
+    tagline: 'личные финансы',
+    phase: 'Фаза 1 · Каркас',
+    header: 'Личный финансовый учёт',
+    status: 'MVP-1: каркас',
+  },
+  nav: {
+    dashboard: 'Дашборд',
+    portfolio: 'Портфель',
+    trades: 'Сделки',
+    imports: 'Импорт',
+    watchlist: 'Наблюдение',
+    settings: 'Настройки',
+  },
+  dashboard: {
+    title: 'Дашборд',
+    subtitle: 'Каркас Nexter запущен. Здесь появится портфель, P&L и статистика.',
+    checkApi: 'Проверить API',
+    api: 'API',
+    apiHint: 'Liveness probe /health',
+    version: 'Версия',
+    versionHint: 'Текущая версия API',
+    phase: 'Фаза',
+    phaseHint: 'Каркас, БД, CI',
+    nextPhase: 'Следующая фаза',
+    nextPhaseHint: 'Auth, 2FA, сессии, audit',
+    whatWorks: 'Что уже есть',
+  },
+} as const;

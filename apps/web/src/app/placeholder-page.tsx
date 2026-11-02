@@ -11,10 +11,10 @@ export function PlaceholderPage({ title }: { title: string }) {
       </div>
 
       <Card>
-        <CardTitle>Phase 1 — Foundation</CardTitle>
+        <CardTitle>Фаза 1 — Каркас</CardTitle>
         <CardDescription>
           Сейчас собран каркас приложения: API, база данных, фронтенд, healthcheck и CI.
-          Функциональные экраны появятся в Phase 5.
+          Функциональные экраны появятся на следующей фазе разработки.
         </CardDescription>
       </Card>
     </div>

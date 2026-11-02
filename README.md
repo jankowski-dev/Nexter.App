@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 1 — Foundation**.
+Current phase: **Phase 1 — Foundation (in review)**.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -14,8 +14,8 @@ The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 - PostgreSQL 17 + Drizzle ORM
 - pg-boss
 - React 19 + Vite + TanStack Router/Query
-- Tailwind CSS + shadcn-style components
-- Vitest, Playwright, Testcontainers, fast-check, Anvil
+- Tailwind CSS + shadcn-compatible primitives
+- Vitest now; Playwright, Testcontainers, fast-check, and Anvil planned
 - Railway + Cloudflare + R2
 
 ## Repository
@@ -32,10 +32,14 @@ docs           specs, ADRs, runbooks
 
 ## Local setup
 
-1. Copy environment file:
+1. Copy environment file and set `DATABASE_URL`:
 
    ```bash
    cp .env.example .env
+   ```
+
+   ```dotenv
+   DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter
    ```
 
 2. Start Postgres:
@@ -78,12 +82,22 @@ npx pnpm@10.20.0 typecheck
 npx pnpm@10.20.0 lint
 npx pnpm@10.20.0 test
 npx pnpm@10.20.0 format
+npx pnpm@10.20.0 smoke:static
+npx pnpm@10.20.0 smoke:worker
 ```
+
+## Documentation
+
+- [`docs/mega-prompt.md`](docs/mega-prompt.md) — implementation contract
+- [`docs/specs/`](docs/specs) — product, threat model, accounting, API/UX, KyberSwap
+- [`docs/adr/`](docs/adr) — architecture decisions
+- [`docs/runbooks/`](docs/runbooks) — Railway and restore procedures
+- [`docs/phase-1-report.md`](docs/phase-1-report.md) — Phase 1 verification report
 
 ## Phase status
 
 - [x] Phase 0 — Design
-- [ ] Phase 1 — Foundation
+- [ ] Phase 1 — Foundation (in review)
 - [ ] Phase 2 — Auth and security
 - [ ] Phase 3 — Accounting core
 - [ ] Phase 4 — Notion import

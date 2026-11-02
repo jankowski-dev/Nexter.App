@@ -1,22 +1,7 @@
-import { z } from 'zod';
+import { errorEnvelopeSchema, healthResponseSchema, type HealthResponse } from '@nexter/contracts';
 
-export const healthResponseSchema = z.object({
-  status: z.literal('ok'),
-  uptime: z.number().nonnegative(),
-  timestamp: z.iso.datetime(),
-  version: z.string().min(1),
-});
-
-export type HealthResponse = z.infer<typeof healthResponseSchema>;
-
-export const errorEnvelopeSchema = z.object({
-  error: z.object({
-    code: z.string().min(1),
-    message: z.string().min(1),
-    details: z.unknown().optional(),
-    requestId: z.string().min(1),
-  }),
-});
+export { healthResponseSchema };
+export type { HealthResponse };
 
 export class ApiError extends Error {
   constructor(
@@ -30,7 +15,11 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+  schema?: { parse: (value: unknown) => T },
+): Promise<T> {
   const response = await fetch(path, {
     credentials: 'include',
     ...init,
@@ -64,6 +53,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     }
 
     throw new ApiError('HTTP_ERROR', `Ошибка запроса (${response.status})`);
+  }
+
+  if (schema) {
+    return schema.parse(payload);
   }
 
   return payload as T;
