@@ -21,3 +21,12 @@ Format: date — decision — reason.
 - **Cloudflare Access optional.** App auth remains mandatory.
 - **RPO 1 hour / RTO 4 hours.** PITR + encrypted dumps to R2.
 - **Sentry SaaS with scrubbing.** No PII or wallet addresses in events.
+
+## 2026-11-03
+
+- **NestJS 11, not 12.** NestJS 12 is ESM-first and adds friction for the CJS-oriented Nest toolchain. NestJS 11 is stable and matches the implementation contract.
+- **TypeScript 5.9.** Required by the NestJS 11 toolchain; strict mode remains enabled.
+- **Worker is ESM.** pg-boss 12 is ESM-only. The worker package uses `"type": "module"` and NodeNext resolution.
+- **SPA served by Nest via `@nestjs/serve-static`.** `@fastify/static` 9.3.0 is used to satisfy `@nestjs/serve-static`; the peer warning from `@nestjs/platform-fastify` is accepted and runtime-verified.
+- **Web uses local contracts for now.** Shared contracts are consumed by the API. A dual-format package or generated OpenAPI client will replace the local web contract later.
+- **Migration validated with PGlite.** Docker/Postgres was unavailable locally; the SQL schema was executed in an in-memory Postgres-compatible engine.
