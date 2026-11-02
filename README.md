@@ -10,7 +10,7 @@ The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
 - Node.js 22+ (Docker image uses Node 24)
 - pnpm workspaces
-- NestJS 12 + Fastify
+- NestJS 11 + Fastify
 - PostgreSQL 17 + Drizzle ORM
 - pg-boss
 - React 19 + Vite + TanStack Router/Query
