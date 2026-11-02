@@ -28,7 +28,7 @@ Opportunistic attackers, credential stuffing, phishing, malware, malicious brows
 - Secrets only in env; no secrets in logs; pino allowlist serializer; Sentry scrubbing.
 - Private Postgres, least privilege, PITR, encrypted dumps to R2, restore tests.
 - Swap allowlists, calldata decoding, simulation, exact approvals, MEV protection, step-up TOTP, kill switch.
-- Dependency audit, lockfile, pinned versions, secret scan.
+- Dependency audit, lockfile, secret scan. Exact version pinning and base-image digest pinning remain hardening items.
 - AI agents: no prod access, read-only research, worktrees, security review.
 
 ## Residual risks

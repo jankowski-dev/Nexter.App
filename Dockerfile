@@ -27,7 +27,6 @@ COPY --from=build /app/packages ./packages
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
 COPY --from=build /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/public ./apps/api/public
 COPY --from=build /app/apps/web/dist ./apps/api/public
 COPY --from=build /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build /app/apps/worker/node_modules ./apps/worker/node_modules

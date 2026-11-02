@@ -19,6 +19,7 @@ Variables:
 - `SETUP_TOKEN` (required before first setup in Phase 2)
 - `ENABLE_DOCS=false`
 - `WEB_DIST_PATH=/app/apps/api/public`
+- `TRUST_PROXY` — set to the exact Railway/Cloudflare proxy CIDR or use `true` only when the origin is unreachable except through the trusted proxy. Default `false`.
 
 Healthcheck: `/ready` (requires database).
 

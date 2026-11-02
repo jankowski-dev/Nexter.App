@@ -5,7 +5,9 @@ dist
 coverage
 .git
 .github
+.opencode
 docs
+apps/api/public
 .env
 .env.*
 *.log

@@ -26,13 +26,23 @@ async function bootstrap(): Promise<void> {
     });
   }
 
+  const trustProxy =
+    env.TRUST_PROXY === 'false' ? false : env.TRUST_PROXY === 'true' ? true : env.TRUST_PROXY;
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy: false }),
+    new FastifyAdapter({ trustProxy }),
     { bufferLogs: true },
   );
 
   app.useLogger(app.get(Logger));
+
+  const fastify = app.getHttpAdapter().getInstance();
+
+  fastify.addHook('onSend', (_request, reply, payload, done) => {
+    void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    done(null, payload);
+  });
 
   await app.register(helmet as any, {
     contentSecurityPolicy: {
@@ -45,17 +55,11 @@ async function bootstrap(): Promise<void> {
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
       },
     },
     xFrameOptions: { action: 'deny' },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    permissionsPolicy: {
-      features: {
-        camera: ["'none'"],
-        microphone: ["'none'"],
-        geolocation: ["'none'"],
-      },
-    },
   });
   await app.register(cookie as any);
 
@@ -67,14 +71,12 @@ async function bootstrap(): Promise<void> {
   const hasWebBuild = existsSync(join(webDistPath, 'index.html'));
 
   if (hasWebBuild) {
-    const fastify = app.getHttpAdapter().getInstance();
-
     fastify.addHook('onRequest', (request, _reply, done) => {
       const url = request.url.split('?')[0] ?? '/';
       const isAsset = extname(url) !== '';
 
       if (
-        request.method === 'GET' &&
+        (request.method === 'GET' || request.method === 'HEAD') &&
         !url.startsWith('/api/') &&
         url !== '/health' &&
         url !== '/ready' &&

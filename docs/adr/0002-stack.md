@@ -6,7 +6,7 @@ Accepted.
 
 ## Decision
 
-- Node.js 22+ locally; Node 24 in Docker.
+- Node.js 24 LTS in Docker and CI; Node.js 22.12+ is supported locally.
 - pnpm workspaces.
 - NestJS 11 with Fastify adapter.
 - React 19 + Vite + TanStack Router/Query.

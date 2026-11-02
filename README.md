@@ -8,7 +8,7 @@ The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
 ## Stack
 
-- Node.js 22+ (Docker image uses Node 24)
+- Node.js 24 LTS in Docker and CI; Node.js 22.12+ is supported locally
 - pnpm workspaces
 - NestJS 11 + Fastify
 - PostgreSQL 17 + Drizzle ORM
@@ -26,6 +26,7 @@ apps/web       React SPA
 apps/worker    background jobs
 packages/db    Drizzle schema, migrations, client
 packages/contracts shared Zod schemas and API types
+packages/config shared root env loader
 packages/ui    shared UI utilities
 docs           specs, ADRs, runbooks
 ```
@@ -108,6 +109,10 @@ npx pnpm@10.20.0 smoke:worker
 - [ ] Phase 9 — Ethereum
 - [ ] Phase 10 — On-chain reconciliation
 - [ ] Phase 11 — Other modules
+
+## Production environment
+
+Production and staging require `DATABASE_URL`, `SETUP_TOKEN`, and `APP_URL`. Set `TRUST_PROXY` to the exact Railway/Cloudflare proxy CIDR (default `false`). See `docs/runbooks/railway.md`.
 
 ## Security notes
 

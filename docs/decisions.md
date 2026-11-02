@@ -32,3 +32,10 @@ Format: date — decision — reason.
 - **Shared contracts are dual CJS/ESM.** `@nexter/contracts` is built with tsup and consumed by both API and web, including runtime response validation.
 - **Typecheck and test build workspace packages first.** A clean checkout must not depend on gitignored `dist/` artifacts.
 - **Migration validated with PGlite.** Docker/Postgres was unavailable locally; the SQL schema was executed in an in-memory Postgres-compatible engine without `pgcrypto`.
+- **Shared root env loader.** `@nexter/config` finds the repository root and loads `.env` for API, worker, and migrations, regardless of package cwd.
+- **Empty env placeholders are normalized.** `DATABASE_URL=`, `SETUP_TOKEN=`, and `APP_URL=` are treated as unset; development falls back to localhost, production/staging fails fast.
+- **Permissions-Policy is set manually.** Helmet 8 does not implement the option; a Fastify `onSend` hook sets `camera=(), microphone=(), geolocation=()`. CSP uses `frame-ancestors 'none'`.
+- **Sentry scrubbing lives in shared contracts.** API and worker both scrub request, exception, tags, contexts, breadcrumbs, and secret-looking strings.
+- **Phase 2 auth fields are in migration 0001.** `users.totp_enabled` and `sessions.last_seen_at` are added now to avoid a Phase 2 schema surprise.
+- **Production audit is clean.** `glob`, `js-yaml`, and `minimatch` are overridden to patched versions; `pnpm audit --prod` reports no vulnerabilities.
+- **CI exercises the container and worker.** Docker build, API container `/ready`/SPA, worker startup, compiled migration runner, secret scan, and audit are CI gates.

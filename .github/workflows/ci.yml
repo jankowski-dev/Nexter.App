@@ -8,7 +8,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -47,6 +47,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Secret scan
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          zricethezav/gitleaks:latest
+          detect --source /repo --no-git --verbose
+          --config /repo/.gitleaks.toml
+
       - name: Format check
         run: pnpm format:check
 
@@ -65,11 +73,52 @@ jobs:
       - name: Migrate database
         run: pnpm db:migrate
 
+      - name: Compile migration runner and migrate again
+        run: pnpm db:migrate:prod
+
       - name: Static and API smoke test
         run: pnpm smoke:static
 
       - name: Worker syntax check
         run: pnpm smoke:worker
+
+      - name: Build Docker image
+        run: docker build -t nexter:ci .
+
+      - name: Run API container
+        run: |
+          docker run -d --name nexter-api --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter \
+            -e SETUP_TOKEN=test-setup-token \
+            -e APP_URL=http://127.0.0.1:3000 \
+            nexter:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/health; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/ready
+          curl -fsS http://127.0.0.1:3000/dashboard > /dev/null
+          curl -fsS http://127.0.0.1:3000/api/v1/unknown -o /dev/null -w "%{http_code}\n" | grep -q 404
+
+      - name: Stop API container
+        if: always()
+        run: docker rm -f nexter-api || true
+
+      - name: Run worker container
+        run: |
+          docker run -d --name nexter-worker --network host \
+            -e NODE_ENV=production \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter \
+            nexter:ci node apps/worker/dist/main.js
+          sleep 5
+          docker logs nexter-worker 2>&1 | grep -q "Nexter worker started"
+
+      - name: Stop worker container
+        if: always()
+        run: docker rm -f nexter-worker || true
 
       - name: Dependency audit
         run: pnpm audit --prod --audit-level=high

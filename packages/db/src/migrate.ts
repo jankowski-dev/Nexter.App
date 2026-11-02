@@ -3,8 +3,8 @@ import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { resolve } from 'node:path';
 import { createDb } from './client';
 
-config({ path: resolve(__dirname, '../../../.env') });
-config();
+config({ path: resolve(__dirname, '../../../.env'), quiet: true });
+config({ quiet: true });
 
 const connectionString: string =
   process.env.DATABASE_URL ??

@@ -30,7 +30,8 @@
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "@nexter/config": "workspace:*"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.24",

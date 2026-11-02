@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "build:packages": "pnpm --filter @nexter/contracts build && pnpm --filter @nexter/db build && pnpm --filter @nexter/ui build",
+    "build:packages": "pnpm --filter @nexter/config build && pnpm --filter @nexter/contracts build && pnpm --filter @nexter/db build && pnpm --filter @nexter/ui build",
     "dev": "pnpm build:packages && pnpm -r --parallel dev",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -29,7 +29,10 @@
       "esbuild"
     ],
     "overrides": {
-      "fastify": "5.12.8"
+      "fastify": "5.12.8",
+      "glob": "14.0.2",
+      "js-yaml": "5.4.1",
+      "minimatch": "11.0.1"
     }
   },
   "devDependencies": {

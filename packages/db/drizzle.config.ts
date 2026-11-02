@@ -2,8 +2,8 @@ import { config } from 'dotenv';
 import { defineConfig } from 'drizzle-kit';
 import { resolve } from 'node:path';
 
-config({ path: resolve(__dirname, '../../.env') });
-config();
+config({ path: resolve(__dirname, '../../.env'), quiet: true });
+config({ quiet: true });
 
 export default defineConfig({
   dialect: 'postgresql',

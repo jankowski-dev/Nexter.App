@@ -22,14 +22,18 @@ Do not implement auth, accounting, imports, or swap features until Phase 1 is re
 8. No secrets in code, prompts, logs, or screenshots.
 9. Agents have no production access.
 10. Schema changes require an ADR and review.
-11. Tests, typecheck, and lint must pass before merge.
-12. UI is Russian, dark theme, USD base currency.
-13. BSC first, Ethereum second.
-14. Swap tokens are allowlisted.
-15. Step-up TOTP is required for swaps above $500.
-16. Do not change acceptance tests to make them pass.
-17. Do not invent financial or tax logic.
-18. If something is unclear, stop and ask.
+11. No destructive migrations without a backup and explicit approval.
+12. Tests, typecheck, and lint must pass before merge.
+13. UI is Russian, dark theme, USD base currency.
+14. BSC first, Ethereum second.
+15. Swap tokens are allowlisted.
+16. Step-up TOTP is required for swaps above $500.
+17. Cloudflare is optional; application auth is mandatory.
+18. RPO is 1 hour and RTO is 4 hours.
+19. No third-party analytics or trackers.
+20. Do not change acceptance tests to make them pass.
+21. Do not invent financial or tax logic.
+22. If something is unclear, stop and ask.
 
 ## Commands
 

@@ -1,3 +1,4 @@
+import { scrubSentryBreadcrumb, scrubSentryEvent } from '@nexter/contracts';
 import * as Sentry from '@sentry/node';
 import { PgBoss } from 'pg-boss';
 import { env } from './config.js';
@@ -9,25 +10,12 @@ async function main(): Promise<void> {
       dsn: env.SENTRY_DSN,
       environment: env.NODE_ENV,
       tracesSampleRate: 0.1,
-      beforeSend: (event) => {
-        if (event.request) {
-          delete event.request.headers;
-          delete event.request.cookies;
-          delete event.request.query_string;
-          delete event.request.data;
-          delete event.request.url;
-        }
-
-        if (event.extra) {
-          for (const key of Object.keys(event.extra)) {
-            if (/token|secret|password|cookie|authorization|key/i.test(key)) {
-              event.extra[key] = '[redacted]';
-            }
-          }
-        }
-
-        return event;
-      },
+      beforeSend: (event) =>
+        scrubSentryEvent(event as unknown as Record<string, unknown>) as unknown as typeof event,
+      beforeBreadcrumb: (breadcrumb) =>
+        scrubSentryBreadcrumb(
+          breadcrumb as unknown as Record<string, unknown>,
+        ) as unknown as typeof breadcrumb,
     });
   }
 

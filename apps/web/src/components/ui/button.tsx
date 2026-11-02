@@ -24,8 +24,20 @@ export interface ButtonProps
   asChild?: boolean;
 }
 
-export function Button({ className, variant, asChild = false, ...props }: ButtonProps) {
+export function Button({
+  className,
+  variant,
+  asChild = false,
+  type = 'button',
+  ...props
+}: ButtonProps) {
   const Component = asChild ? Slot : 'button';
 
-  return <Component className={cn(buttonVariants({ variant, className }))} {...props} />;
+  return (
+    <Component
+      type={asChild ? undefined : type}
+      className={cn(buttonVariants({ variant, className }))}
+      {...props}
+    />
+  );
 }

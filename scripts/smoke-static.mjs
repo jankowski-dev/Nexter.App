@@ -12,6 +12,8 @@ const child = spawn(process.execPath, ['apps/api/dist/main.js'], {
     NODE_ENV: 'production',
     PORT: String(port),
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/nexter',
+    SETUP_TOKEN: 'test-setup-token',
+    APP_URL: `http://127.0.0.1:${port}`,
     WEB_DIST_PATH: 'apps/web/dist',
     ENABLE_DOCS: 'false',
     LOG_LEVEL: 'silent',
@@ -52,6 +54,9 @@ async function main() {
   const deepLink = await fetch(`${base}/portfolio`);
   assert.equal(deepLink.status, 200, 'SPA deep link must return 200');
   assert.match(await deepLink.text(), /Nexter/, 'SPA deep link must serve index.html');
+
+  const headDeepLink = await fetch(`${base}/dashboard`, { method: 'HEAD' });
+  assert.equal(headDeepLink.status, 200, 'SPA HEAD deep link must return 200');
 
   const assetPath = indexHtml.match(/\/assets\/[^"']+\.js/)?.[0];
   assert.ok(assetPath, 'index.html must reference a JS asset');
@@ -106,6 +111,16 @@ async function main() {
     healthHeaders.headers.get('referrer-policy'),
     'strict-origin-when-cross-origin',
     'Referrer-Policy must be strict-origin-when-cross-origin',
+  );
+  assert.equal(
+    healthHeaders.headers.get('permissions-policy'),
+    'camera=(), microphone=(), geolocation=()',
+    'Permissions-Policy must restrict camera, microphone, and geolocation',
+  );
+  assert.match(
+    healthHeaders.headers.get('content-security-policy') ?? '',
+    /frame-ancestors 'none'/,
+    'CSP must deny framing',
   );
 
   console.log('Static/API smoke test passed');

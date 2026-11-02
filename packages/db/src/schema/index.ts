@@ -17,6 +17,7 @@ export const users = pgTable(
     email: text('email').notNull(),
     passwordHash: text('password_hash').notNull(),
     totpSecretEncrypted: text('totp_secret_encrypted'),
+    totpEnabled: boolean('totp_enabled').notNull().default(false),
     recoveryCodesHash: text('recovery_codes_hash')
       .array()
       .notNull()
@@ -41,6 +42,7 @@ export const sessions = pgTable(
     userAgent: text('user_agent'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [

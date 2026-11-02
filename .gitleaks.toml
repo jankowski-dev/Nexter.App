@@ -1,0 +1,12 @@
+title = "Nexter gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Local development and CI-only credentials"
+regexes = [
+  '''postgres://postgres:postgres@''',
+  '''test-setup-token''',
+  '''change-me''',
+]
