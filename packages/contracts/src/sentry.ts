@@ -2,6 +2,23 @@ const secretKey = /token|secret|password|cookie|authorization|api[-_]?key/i;
 const secretText =
   /(?:bearer\s+[a-z0-9._-]+|api[-_]?key\s*[:=]\s*\S+|token\s*[:=]\s*\S+|password\s*[:=]\s*\S+)/i;
 
+function redactValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return secretText.test(value) ? '[redacted]' : value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(redactValue);
+  }
+
+  if (value && typeof value === 'object') {
+    redactRecord(value as Record<string, unknown>);
+    return value;
+  }
+
+  return value;
+}
+
 function redactRecord(record: Record<string, unknown> | undefined): void {
   if (!record) return;
 
@@ -11,12 +28,7 @@ function redactRecord(record: Record<string, unknown> | undefined): void {
       continue;
     }
 
-    const value = record[key];
-    if (typeof value === 'string' && secretText.test(value)) {
-      record[key] = '[redacted]';
-    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-      redactRecord(value as Record<string, unknown>);
-    }
+    record[key] = redactValue(record[key]);
   }
 }
 
@@ -47,6 +59,8 @@ export function scrubSentryEvent(event: Record<string, unknown>): Record<string,
     delete request.data;
     delete request.url;
   }
+
+  delete event.user;
 
   if (event.extra && typeof event.extra === 'object') {
     redactRecord(event.extra as Record<string, unknown>);

@@ -16,7 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "dotenv": "^18.0.9",
+    "@nexter/config": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "pg": "^8.23.1"
   },

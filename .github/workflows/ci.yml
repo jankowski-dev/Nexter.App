@@ -33,6 +33,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Secret scan
+        run: >-
+          docker run --rm
+          -v "$PWD:/repo"
+          zricethezav/gitleaks:v8.28.0
+          dir /repo --config /repo/.gitleaks.toml --redact --verbose
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -46,14 +53,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Secret scan
-        run: >-
-          docker run --rm
-          -v "$PWD:/repo"
-          zricethezav/gitleaks:latest
-          detect --source /repo --no-git --verbose
-          --config /repo/.gitleaks.toml
 
       - name: Format check
         run: pnpm format:check

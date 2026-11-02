@@ -11,9 +11,10 @@ describe('Sentry scrubbing', () => {
         query_string: 'token=secret',
         data: { password: 'secret' },
       },
-      extra: { apiKey: 'secret', safe: 'value' },
+      extra: { apiKey: 'secret', safe: 'value', list: [{ token: 'secret' }] },
       tags: { token: 'secret', environment: 'test' },
       contexts: { runtime: { name: 'node', password: 'secret' } },
+      user: { email: 'user@example.com', token: 'secret' },
       message: 'request failed with token=secret',
       exception: { values: [{ value: 'Authorization: Bearer secret' }] },
       breadcrumbs: [
@@ -31,6 +32,7 @@ describe('Sentry scrubbing', () => {
     const serialized = JSON.stringify(event);
 
     expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('user@example.com');
     expect((event.extra as Record<string, unknown>).safe).toBe('value');
     expect((event.tags as Record<string, unknown>).environment).toBe('test');
   });

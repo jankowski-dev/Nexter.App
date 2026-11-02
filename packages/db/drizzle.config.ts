@@ -1,9 +1,7 @@
-import { config } from 'dotenv';
+import { loadRootEnv } from '@nexter/config';
 import { defineConfig } from 'drizzle-kit';
-import { resolve } from 'node:path';
 
-config({ path: resolve(__dirname, '../../.env'), quiet: true });
-config({ quiet: true });
+loadRootEnv();
 
 export default defineConfig({
   dialect: 'postgresql',

@@ -55,7 +55,7 @@ Results:
 - format: pass
 - lint: pass
 - typecheck: pass
-- tests: 21 tests pass (contracts 6, db 1, web 2, api 10, worker 2)
+- tests: 21 pass locally (contracts 6, db 1, web 2, api 10, worker 2); the PostgreSQL readiness test is skipped without `DATABASE_URL` and runs in CI, for 22 passing tests there
 - build: pass
 - static/API smoke: pass
 - SPA root and deep links (GET and HEAD): 200
@@ -99,13 +99,29 @@ Medium findings included missing `Permissions-Policy`, incomplete worker Sentry 
 - Added overrides for `glob`, `js-yaml`, and `minimatch`; production audit is now clean.
 - Added HEAD deep-link handling, Button `type="button"` default, and docs corrections.
 
-A third independent review is required before Phase 1 is accepted.
+### Third review — FAIL
+
+No Critical findings. One High remained: the Docker deps stage did not copy `packages/config/package.json`, so the Docker build failed before the container smoke gates.
+
+Medium findings included gitleaks fragility, unresolved production proxy CIDRs, partial Railway configuration, migrations not actually using `@nexter/config`, missing PostgreSQL-backed API integration tests, and minor Sentry/pino residuals.
+
+### Fixes applied after third review
+
+- Added `packages/config/package.json` to the Docker deps stage.
+- Pinned gitleaks to `v8.28.0`, switched to `dir`, added `--redact`, and moved the secret scan before dependency installation.
+- Migrations and Drizzle config now use `@nexter/config`; root `db:generate`/`db:migrate` build the config package first.
+- Added a PostgreSQL readiness e2e test that runs when `DATABASE_URL` is present (CI) and is skipped locally.
+- Sentry scrubbing now removes `event.user` and recurses arrays; worker pino redaction covers more secret-shaped keys.
+- Updated CI container checks and worker startup wait.
+
+A fourth independent review is required before Phase 1 is accepted.
 
 ## Known limitations
 
 - Docker is not installed in the local environment; Docker build and container runtime are exercised in CI, not locally.
 - A real PostgreSQL 17 instance is not available locally; the migration is exercised against PostgreSQL 17 in CI and validated in PGlite locally.
 - The worker is exercised by a Docker runtime check in CI; there is no separate long-running integration test.
+- The PostgreSQL readiness e2e test runs in CI; local runs skip it when no database is configured.
 - Production dependency pruning in the Docker image is still a Phase 6 hardening item.
 - `trustProxy` defaults to `false`; set it to the exact Railway/Cloudflare proxy CIDR before enabling IP-based rate limits.
 - No Railway staging deployment has been observed yet; the deployment runbook is written.

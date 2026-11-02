@@ -283,9 +283,9 @@ importers:
 
   packages/db:
     dependencies:
-      dotenv:
-        specifier: ^18.0.9
-        version: 18.0.9
+      '@nexter/config':
+        specifier: workspace:*
+        version: link:../config
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@opentelemetry/api@1.10.0)(@types/pg@8.23.1)(pg@8.23.1)

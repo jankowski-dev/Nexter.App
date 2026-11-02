@@ -45,4 +45,13 @@ describe('App (e2e)', () => {
     });
     expect(response.body.error.requestId).toBeTruthy();
   });
+
+  it.runIf(Boolean(process.env.DATABASE_URL))('returns readiness with a database', async () => {
+    const response = await request(app.getHttpServer()).get('/ready').expect(200);
+
+    expect(response.body).toMatchObject({
+      status: 'ready',
+      database: 'ok',
+    });
+  });
 });

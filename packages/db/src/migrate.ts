@@ -1,10 +1,9 @@
-import { config } from 'dotenv';
+import { loadRootEnv } from '@nexter/config';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { resolve } from 'node:path';
 import { createDb } from './client';
 
-config({ path: resolve(__dirname, '../../../.env'), quiet: true });
-config({ quiet: true });
+loadRootEnv();
 
 const connectionString: string =
   process.env.DATABASE_URL ??

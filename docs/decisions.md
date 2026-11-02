@@ -39,3 +39,7 @@ Format: date — decision — reason.
 - **Phase 2 auth fields are in migration 0001.** `users.totp_enabled` and `sessions.last_seen_at` are added now to avoid a Phase 2 schema surprise.
 - **Production audit is clean.** `glob`, `js-yaml`, and `minimatch` are overridden to patched versions; `pnpm audit --prod` reports no vulnerabilities.
 - **CI exercises the container and worker.** Docker build, API container `/ready`/SPA, worker startup, compiled migration runner, secret scan, and audit are CI gates.
+- **Migrations use the shared root env loader.** `@nexter/config` is used by API, worker, and database scripts; `db:generate`/`db:migrate` build it first.
+- **Secret scan is pinned and redacted.** gitleaks `v8.28.0`, `dir` mode, `--redact`, and path allowlists for generated/dependency directories.
+- **PostgreSQL readiness is tested in CI.** The API e2e suite runs a DB-backed `/ready` test when `DATABASE_URL` is set and skips it locally.
+- **Sentry scrubbing includes user context and arrays.** `event.user` is removed and nested arrays are recursively scrubbed.

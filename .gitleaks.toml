@@ -4,7 +4,14 @@ title = "Nexter gitleaks config"
 useDefault = true
 
 [allowlist]
-description = "Local development and CI-only credentials"
+description = "Local development, generated, and CI-only credentials"
+paths = [
+  '''node_modules''',
+  '''\.pnpm''',
+  '''dist''',
+  '''coverage''',
+  '''pnpm-lock\.yaml''',
+]
 regexes = [
   '''postgres://postgres:postgres@''',
   '''test-setup-token''',
