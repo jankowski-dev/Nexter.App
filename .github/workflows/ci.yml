@@ -101,7 +101,7 @@ jobs:
           done
           curl -fsS http://127.0.0.1:3000/ready
           curl -fsS http://127.0.0.1:3000/dashboard > /dev/null
-          curl -fsS http://127.0.0.1:3000/api/v1/unknown -o /dev/null -w "%{http_code}\n" | grep -q 404
+          test "$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/v1/unknown)" = "404"
 
       - name: Stop API container
         if: always()
@@ -113,8 +113,14 @@ jobs:
             -e NODE_ENV=production \
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter \
             nexter:ci node apps/worker/dist/main.js
-          sleep 5
-          docker logs nexter-worker 2>&1 | grep -q "Nexter worker started"
+          for attempt in $(seq 1 30); do
+            if docker logs nexter-worker 2>&1 | grep -q "Nexter worker started"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs nexter-worker
+          exit 1
 
       - name: Stop worker container
         if: always()
