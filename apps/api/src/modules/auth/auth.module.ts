@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { env } from '../../shared/config/env';
 import { NoStoreInterceptor } from '../../shared/http/no-store.interceptor';
+import { AccountingModule } from '../accounting/accounting.module';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -13,6 +14,7 @@ import { TotpService } from './totp.service';
 import { TwoFactorGuard } from './two-factor.guard';
 
 @Module({
+  imports: [AccountingModule],
   controllers: [AuthController],
   providers: [
     AuthService,

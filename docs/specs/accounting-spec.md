@@ -37,6 +37,17 @@ Control sums: 429 orders, 410 closed, 19 active, deposits 2519.80, withdrawals 5
 
 Imported rows are flagged: `chain_known=false`, `contract_known=false`, `network_fee_included=false`, `reconciled=false`.
 
+## Phase 3 implementation notes
+
+- Seed chains: `bsc`, `ethereum`.
+- Seed assets are per chain. BSC: USDC (18 decimals), XNY, BASED, APR, POP, LINK, BNB (18). Ethereum: USDC (6), LINK, BASED, APR, ETH (18).
+- USDC is a stablecoin and cash equivalent. Unknown token decimals default to 18 and are marked `is_verified = false` until the token registry is populated.
+- Default accounts per owner: `External`, `Income`, `Expense`, `Equity`, `Tangem BSC`, `Tangem Ethereum`.
+- Manual buys and sells require a cash-equivalent quote/proceeds asset in MVP-1; token-to-token swaps support two non-cash legs.
+- Manual prices are stored with `source = manual`; missing prices make position value/unrealized P&L `null` and are listed in `missingPrices`.
+- Income is tracked separately (`incomeUsd`) and included in total P&L, so `equity − netDeposits = totalPnl`; the disposal formula is unchanged.
+- Adjustments are positive additions in MVP-1; negative corrections are deferred to a later transaction-reversal workflow.
+
 ## Invariants
 
 1. Per transaction/asset postings sum to zero.

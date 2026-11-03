@@ -31,6 +31,7 @@ import type { FastifyRequest } from 'fastify';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { AuditService } from '../../shared/audit/audit.service';
+import { AccountingBootstrapService } from '../accounting/accounting-bootstrap.service';
 import type { AuthContext } from './auth.types';
 import { AuthThrottleService } from './auth-throttle.service';
 import { CryptoService } from './crypto.service';
@@ -55,6 +56,7 @@ export class AuthService {
     private readonly sessions: SessionService,
     private readonly throttle: AuthThrottleService,
     private readonly audit: AuditService,
+    private readonly accountingBootstrap: AccountingBootstrapService,
   ) {}
 
   private publicUser(user: User): PublicUser {
@@ -186,6 +188,7 @@ export class AuthService {
         }
 
         await tx.insert(settings).values({ userId: user.id });
+        await this.accountingBootstrap.ensureDefaults(user.id, tx, this.meta(request), true);
 
         const tokens = await this.sessions.create(
           user.id,

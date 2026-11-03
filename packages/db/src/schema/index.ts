@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -107,3 +108,239 @@ export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type NewAuditLogEntry = typeof auditLog.$inferInsert;
 export type Settings = typeof settings.$inferSelect;
 export type NewSettings = typeof settings.$inferInsert;
+
+export type AccountType = 'wallet' | 'external' | 'income' | 'expense' | 'equity';
+export type TransactionType =
+  'trade' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
+export type TransactionSubtype =
+  'buy' | 'sell' | 'swap' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
+export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'system';
+export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
+
+export const chains = pgTable(
+  'chains',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('chains_code_unique').on(table.code)],
+);
+
+export const assets = pgTable(
+  'assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chainId: uuid('chain_id')
+      .notNull()
+      .references(() => chains.id, { onDelete: 'restrict' }),
+    symbol: text('symbol').notNull(),
+    name: text('name').notNull(),
+    contractAddress: text('contract_address'),
+    decimals: integer('decimals').notNull().default(18),
+    coingeckoId: text('coingecko_id'),
+    isStablecoin: boolean('is_stablecoin').notNull().default(false),
+    isCashEquivalent: boolean('is_cash_equivalent').notNull().default(false),
+    isVerified: boolean('is_verified').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('assets_chain_symbol_unique').on(table.chainId, table.symbol),
+    index('assets_chain_id_idx').on(table.chainId),
+  ],
+);
+
+export const accounts = pgTable(
+  'accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: text('type').$type<AccountType>().notNull(),
+    chainId: uuid('chain_id').references(() => chains.id, { onDelete: 'restrict' }),
+    isSystem: boolean('is_system').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('accounts_user_name_unique').on(table.userId, table.name),
+    index('accounts_user_id_idx').on(table.userId),
+  ],
+);
+
+export const tradeGroups = pgTable(
+  'trade_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    status: text('status').$type<TradeGroupStatus>().notNull().default('open'),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('trade_groups_user_id_idx').on(table.userId),
+    index('trade_groups_asset_id_idx').on(table.assetId),
+  ],
+);
+
+export const transactions = pgTable(
+  'transactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').$type<TransactionType>().notNull(),
+    subtype: text('subtype').$type<TransactionSubtype>().notNull(),
+    source: text('source').$type<TransactionSource>().notNull().default('manual'),
+    sourceId: text('source_id'),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('transactions_user_time_idx').on(table.userId, table.occurredAt),
+    index('transactions_trade_group_idx').on(table.tradeGroupId),
+    uniqueIndex('transactions_source_unique')
+      .on(table.userId, table.source, table.sourceId)
+      .where(sql`${table.sourceId} is not null`),
+  ],
+);
+
+export const postings = pgTable(
+  'postings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    transactionId: uuid('transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+    usdValue: numeric('usd_value', { precision: 24, scale: 8 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('postings_transaction_idx').on(table.transactionId),
+    index('postings_account_asset_idx').on(table.accountId, table.assetId),
+  ],
+);
+
+export const tradeDetails = pgTable(
+  'trade_details',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    tradeGroupId: uuid('trade_group_id')
+      .notNull()
+      .references(() => tradeGroups.id, { onDelete: 'cascade' }),
+    transactionId: uuid('transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'cascade' }),
+    referencePriceUsd: numeric('reference_price_usd', { precision: 24, scale: 8 }),
+    executionCostUsd: numeric('execution_cost_usd', { precision: 24, scale: 8 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('trade_details_group_idx').on(table.tradeGroupId),
+    index('trade_details_transaction_idx').on(table.transactionId),
+  ],
+);
+
+export const lots = pgTable(
+  'lots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    acquisitionTransactionId: uuid('acquisition_transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+    remainingAmount: numeric('remaining_amount', { precision: 36, scale: 18 }).notNull(),
+    costBasisUsd: numeric('cost_basis_usd', { precision: 24, scale: 8 }).notNull(),
+    remainingCostBasisUsd: numeric('remaining_cost_basis_usd', {
+      precision: 24,
+      scale: 8,
+    }).notNull(),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('lots_user_asset_idx').on(table.userId, table.assetId),
+    index('lots_remaining_idx').on(table.remainingAmount),
+    index('lots_group_idx').on(table.tradeGroupId),
+  ],
+);
+
+export const lotConsumptions = pgTable(
+  'lot_consumptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    lotId: uuid('lot_id')
+      .notNull()
+      .references(() => lots.id, { onDelete: 'restrict' }),
+    disposalTransactionId: uuid('disposal_transaction_id')
+      .notNull()
+      .references(() => transactions.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+    costBasisUsd: numeric('cost_basis_usd', { precision: 24, scale: 8 }).notNull(),
+    proceedsUsd: numeric('proceeds_usd', { precision: 24, scale: 8 }).notNull(),
+    realizedPnlUsd: numeric('realized_pnl_usd', { precision: 24, scale: 8 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('lot_consumptions_lot_idx').on(table.lotId),
+    index('lot_consumptions_transaction_idx').on(table.disposalTransactionId),
+  ],
+);
+
+export const prices = pgTable(
+  'prices',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    priceUsd: numeric('price_usd', { precision: 24, scale: 8 }).notNull(),
+    observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
+    source: text('source').notNull().default('manual'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('prices_asset_observed_idx').on(table.assetId, table.observedAt)],
+);
+
+export type Chain = typeof chains.$inferSelect;
+export type Asset = typeof assets.$inferSelect;
+export type Account = typeof accounts.$inferSelect;
+export type TradeGroup = typeof tradeGroups.$inferSelect;
+export type Transaction = typeof transactions.$inferSelect;
+export type Posting = typeof postings.$inferSelect;
+export type TradeDetail = typeof tradeDetails.$inferSelect;
+export type Lot = typeof lots.$inferSelect;
+export type LotConsumption = typeof lotConsumptions.$inferSelect;
+export type Price = typeof prices.$inferSelect;

@@ -66,3 +66,10 @@ Format: date — decision — reason.
 - **Password reset/change clear auth lockouts.** Recovery after an attacker-triggered 2FA lockout is not blocked; the break-glass runbook also clears `rate_limits`.
 - **Destructive auth tests require `NEXTER_TEST_DB=1`.** CI uses a disposable PostgreSQL service; local runs must use a dedicated test database.
 - **Phase 2 accepted.** Three independent reviews: FAIL → PASS WITH CHANGES → PASS WITH CHANGES; all Critical/High and actionable Medium findings fixed. Final green CI: `6d09b82`. Next phase: Phase 3 — Accounting core.
+- **Phase 3 uses an append-only ledger with per-chain assets.** `transactions` + signed `postings` are the source of truth; balances and P&L are derived. Assets are unique per `(chain, symbol)` so BSC USDC and Ethereum USDC can have different decimals.
+- **Default accounts are bootstrapped idempotently.** Every owner gets system accounts and `Tangem BSC`/`Tangem Ethereum` wallets; account rows are audited.
+- **FIFO is global per asset.** Lots are not per account; transfers do not change lots. Stablecoins are cash equivalents and do not create lots.
+- **Manual prices only in Phase 3.** No external price provider is added. Missing prices are represented as `null` and listed in `missingPrices`, never invented.
+- **Income is separate from disposal P&L.** `incomeUsd` is included in total P&L; realized disposal P&L remains `proceeds − cost basis − selling fees`.
+- **MVP manual buys/sells require a cash-equivalent quote/proceeds asset.** Token-to-token swaps remain supported; broader quote assets are a later extension.
+- **Manual transactions are audited in the same transaction as the ledger writes.** Price changes are audited too; account bootstrap writes audit rows.

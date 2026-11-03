@@ -118,13 +118,14 @@ npx pnpm@10.20.0 test:e2e
 - [`docs/runbooks/`](docs/runbooks) — Railway, restore, and auth break-glass procedures
 - [`docs/phase-1-report.md`](docs/phase-1-report.md) — Phase 1 verification report
 - [`docs/phase-2-report.md`](docs/phase-2-report.md) — Phase 2 verification report
+- [`docs/phase-3-report.md`](docs/phase-3-report.md) — Phase 3 verification report
 
 ## Phase status
 
 - [x] Phase 0 — Design
 - [x] Phase 1 — Foundation (accepted with operational follow-ups)
 - [x] Phase 2 — Auth and security (accepted)
-- [ ] Phase 3 — Accounting core
+- [ ] Phase 3 — Accounting core (in review)
 - [ ] Phase 4 — Notion import
 - [ ] Phase 5 — MVP-1 UI
 - [ ] Phase 6 — MVP-1 hardening
