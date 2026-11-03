@@ -177,6 +177,9 @@ describe.runIf(canRun)('Auth e2e', () => {
     const pendingSessions = await agent.get('/api/v1/auth/sessions').expect(403);
     expect(pendingSessions.body.error.code).toBe('TOTP_REQUIRED');
 
+    const noSession = await request(app.getHttpServer()).get('/api/v1/auth/sessions').expect(401);
+    expect(noSession.headers['cache-control']).toBe('no-store');
+
     const { secret, csrf } = await enableTotp(agent, owner.csrf);
 
     const meReady = await agent.get('/api/v1/auth/me').expect(200);

@@ -29,6 +29,7 @@ Phase 2 added authentication and security on top of the Phase 1 schema. The orig
 
 - Throttle counters live in `rate_limits` so limits survive process restarts and work across instances.
 - Login is limited per IP and per IP+email pair. The login counter is reset only after successful 2FA or a password reset/change, not after a correct password. A global per-email lockout is intentionally avoided to prevent unauthenticated denial of service against the single owner.
+- Password reset uses the same composite IP+email and per-IP keys, avoiding a global recovery-email lockout.
 - TOTP and recovery verification share a per-user counter (`2fa:<user_id>`). The counter is checked before decrypting or verifying a code, so a valid code cannot bypass an active block.
 - Counters are updated with a single `INSERT … ON CONFLICT … DO UPDATE … RETURNING` statement to make increments atomic.
 - Successful password reset or password change clears the per-user 2FA lockout and login counters, so recovery is not blocked by a prior attack.

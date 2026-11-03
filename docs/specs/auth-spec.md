@@ -100,14 +100,14 @@ The setup token is **not** a recovery mechanism. Break-glass recovery is documen
 - Setup: 5 attempts / 15 minutes per IP.
 - TOTP/recovery: 5 attempts / 5 minutes per user (shared counter, checked before verification); 15-minute block.
 - Password change/recovery-code regeneration: 5 attempts / 15 minutes per user.
-- Password reset: 5 attempts / 15 minutes per IP and per email hash.
+- Password reset: 5 attempts / 15 minutes per IP+email pair and per IP. A global per-email reset lockout is intentionally avoided for the same DoS reason as login.
 - Successful password reset/password change clears the per-user 2FA lockout and login counters so recovery is not blocked by a prior attack.
 - Process-local request limiter: 10/min auth attempts, 60/min other mutations, 300/min reads per IP. Database counters are authoritative for auth lockout.
 
 ## Audit
 
-- Credential and session mutations (`setup`, `totp_enabled`, `totp_verified`, `recovery_code_used`, `logout`, `session_revoked`, `password_changed`, `password_reset`, `recovery_codes_regenerated`, `totp_setup_started`) write audit rows in the same transaction as the mutation. Audit failure rolls the mutation back.
-- Failed logins/setup/2FA/recovery attempts and rate-limit blocks are audited best-effort.
+- Credential and session mutations (`setup`, `login_password_ok`, `totp_enabled`, `totp_verified`, `recovery_code_used`, `logout`, `session_revoked`, `password_changed`, `password_reset`, `recovery_codes_regenerated`, `totp_setup_started`) write audit rows in the same transaction as the mutation. Audit failure rolls the mutation back.
+- Failed logins/setup/2FA/recovery attempts and database-backed rate-limit blocks are audited best-effort. The process-local request limiter is an in-memory defense layer and is not written to `audit_log`.
 
 ## Environment
 

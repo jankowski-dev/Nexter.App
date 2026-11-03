@@ -115,6 +115,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       );
     }
 
+    if (request.url.startsWith('/api/v1/auth/')) {
+      void reply.header('Cache-Control', 'no-store');
+    }
+
     void reply.status(status).header('x-request-id', requestId).send({
       error: {
         code,

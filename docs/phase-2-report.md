@@ -75,7 +75,7 @@ Status: implemented, independent review findings fixed, pending re-review
 - Step-up TOTP for swaps is deferred to MVP-2.
 - Cloudflare Access remains an optional deployment layer.
 - Auth UI is functional but intentionally minimal.
-- CI run on `4fdee5f` passed; the final run includes the follow-up fixes in this revision.
+- CI run on `0fcde16` passed, including typecheck, lint, format, tests, Playwright auth E2E, Docker build, secret scan, and dependency audit. The final follow-up commit only adds `Cache-Control: no-store` to auth error responses and a test-safety guard.
 
 ## Review history
 

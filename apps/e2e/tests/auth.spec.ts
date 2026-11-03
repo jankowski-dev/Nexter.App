@@ -12,6 +12,10 @@ test.skip(
 );
 
 test.beforeAll(async () => {
+  if (process.env.NEXTER_TEST_DB !== '1') {
+    return;
+  }
+
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 

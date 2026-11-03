@@ -58,7 +58,7 @@ Format: date — decision — reason.
 - **Credential/session mutations and their audit rows share a transaction.** If the audit insert fails, the mutation rolls back; failed attempts remain best-effort audit writes.
 - **Session TTL is absolute 30 days.** Sliding renewal is deferred; see ADR 0005. Activity updates `last_seen_at`, not `expires_at`.
 - **`AUTH_ENCRYPTION_KEY` is validated at startup and before setup.** A malformed key cannot create an owner that then cannot complete TOTP setup.
-- **Login throttling is per IP and per hashed email.** Unknown emails still pay an Argon2 dummy verification; login counters reset only after 2FA.
+- **Login throttling is per IP+email pair and per IP.** Unknown emails still pay an Argon2 dummy verification; login counters reset only after 2FA or a password reset/change. A global per-email lockout is intentionally avoided.
 - **Break-glass recovery is an offline runbook.** The setup token is not a recovery path; see `docs/runbooks/auth-recovery.md`.
 - **Phase 2 review fixes are covered by tests.** API auth e2e now covers setup races, lockout, recovery/reset, session revocation, CSRF, audit, and password-change rotation; Playwright covers the browser auth flow.
 - **Login session creation and audit are transactional.** A failed audit write rolls back the login session; this closes the last rule-6 gap.

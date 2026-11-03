@@ -81,6 +81,12 @@ async function bootstrap(): Promise<void> {
       reply.header('x-frame-options', 'DENY');
       reply.header('x-content-type-options', 'nosniff');
       reply.header('referrer-policy', 'strict-origin-when-cross-origin');
+      reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+      reply.header('strict-transport-security', 'max-age=15552000; includeSubDomains');
+      reply.header(
+        'content-security-policy',
+        "default-src 'self'; base-uri 'self'; font-src 'self' https: data:; img-src 'self' data: https:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+      );
       await reply.code(429).send({
         error: {
           code: 'RATE_LIMITED',

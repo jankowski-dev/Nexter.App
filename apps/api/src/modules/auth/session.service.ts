@@ -94,7 +94,13 @@ export class SessionService {
     const [revoked] = await executor
       .update(sessions)
       .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.id, oldSession.id), isNull(sessions.revokedAt)))
+      .where(
+        and(
+          eq(sessions.id, oldSession.id),
+          isNull(sessions.revokedAt),
+          gt(sessions.expiresAt, new Date()),
+        ),
+      )
       .returning({ id: sessions.id });
 
     if (!revoked) {
@@ -112,6 +118,16 @@ export class SessionService {
       .update(sessions)
       .set({ revokedAt: new Date() })
       .where(eq(sessions.id, sessionId));
+  }
+
+  async revokeActive(sessionId: string, executor: DbExecutor = this.db): Promise<boolean> {
+    const [revoked] = await executor
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt)))
+      .returning({ id: sessions.id });
+
+    return Boolean(revoked);
   }
 
   async revokeOthers(

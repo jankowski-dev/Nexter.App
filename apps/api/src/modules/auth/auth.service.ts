@@ -702,13 +702,21 @@ export class AuthService {
     const passwordHash = await this.crypto.hashPassword(dto.newPassword);
 
     const tokens = await this.db.transaction(async (tx) => {
+      const revoked = await this.sessions.revokeActive(auth.session.id, tx);
+
+      if (!revoked) {
+        throw new UnauthorizedException({
+          code: 'AUTH_REQUIRED',
+          message: 'Session is no longer active',
+        });
+      }
+
       await tx
         .update(users)
         .set({ passwordHash, updatedAt: new Date() })
         .where(eq(users.id, auth.user.id));
 
       await this.sessions.revokeOthers(auth.user.id, auth.session.id, tx);
-      await this.sessions.revoke(auth.session.id, tx);
 
       const rotated = await this.sessions.create(
         auth.user.id,
@@ -746,7 +754,8 @@ export class AuthService {
   ): Promise<RecoveryCodesResponse> {
     const email = dto.email.toLowerCase();
     const meta = this.meta(request);
-    const keys = [`reset:${request.ip}`, `reset-email:${this.crypto.sha256(email)}`];
+    const emailHash = this.crypto.sha256(email);
+    const keys = [`reset:${request.ip}:${emailHash}`, `reset-ip:${request.ip}`];
 
     for (const key of keys) {
       await this.throttle.assertNotBlocked(key, meta);
