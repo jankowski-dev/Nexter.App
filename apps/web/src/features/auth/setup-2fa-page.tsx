@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiError, apiPost } from '@/lib/api';
-import { toRussianError } from '@/lib/error-messages';
+import { apiErrorReason, toRussianError } from '@/lib/error-messages';
 import { FormError, Field } from './form-helpers';
 import { twoFactorSetupResponseSchema, twoFactorVerifyResponseSchema } from '@nexter/contracts';
 import { useNavigate } from '@tanstack/react-router';
@@ -30,7 +30,10 @@ export function Setup2faPage() {
           void navigate({ to: '/login' });
           return;
         }
-        if (requestError instanceof ApiError && requestError.code === 'TOTP_ALREADY_ENABLED') {
+        if (
+          requestError instanceof ApiError &&
+          apiErrorReason(requestError) === 'TOTP_ALREADY_ENABLED'
+        ) {
           void navigate({ to: '/dashboard' });
           return;
         }

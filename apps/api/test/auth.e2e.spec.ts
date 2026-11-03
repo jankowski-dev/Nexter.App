@@ -10,7 +10,10 @@ import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
 const canRun = Boolean(
-  process.env.DATABASE_URL && process.env.SETUP_TOKEN && process.env.AUTH_ENCRYPTION_KEY,
+  process.env.NEXTER_TEST_DB === '1' &&
+  process.env.DATABASE_URL &&
+  process.env.SETUP_TOKEN &&
+  process.env.AUTH_ENCRYPTION_KEY,
 );
 
 const password = 'correct horse battery staple';
@@ -125,6 +128,12 @@ describe.runIf(canRun)('Auth e2e', () => {
       .send({ setupToken: 'wrong-token', email: 'one@example.com', password })
       .expect(401);
 
+    await agent
+      .post('/api/v1/auth/setup')
+      .set('origin', 'https://evil.example')
+      .send({ setupToken: process.env.SETUP_TOKEN, email: 'one@example.com', password })
+      .expect(403);
+
     const setup = await agent
       .post('/api/v1/auth/setup')
       .send({ setupToken: process.env.SETUP_TOKEN, email: 'one@example.com', password })
@@ -172,10 +181,14 @@ describe.runIf(canRun)('Auth e2e', () => {
 
     const meReady = await agent.get('/api/v1/auth/me').expect(200);
     expect(meReady.body.requires2fa).toBe(false);
+    expect(meReady.headers['cache-control']).toBe('no-store');
 
     await agent.post('/api/v1/auth/logout').set('x-csrf-token', csrf).expect(204);
 
-    const login = await agent.post('/api/v1/auth/login').send({ email: owner.email, password });
+    const login = await agent
+      .post('/api/v1/auth/login')
+      .set('user-agent', 'auth-e2e/1.0')
+      .send({ email: owner.email, password });
     expect(login.status).toBe(200);
     expect(login.body.requires2fa).toBe(true);
     const loginCsrf = csrfFrom(login);
@@ -188,6 +201,7 @@ describe.runIf(canRun)('Auth e2e', () => {
     expect(cookieText).toContain('nexter_session=');
     expect(cookieText).toContain('HttpOnly');
     expect(cookieText).toContain('SameSite=Lax');
+    expect(cookieText).toContain('Path=/');
 
     const pendingLoginSessions = await agent.get('/api/v1/auth/sessions').expect(403);
     expect(pendingLoginSessions.body.error.code).toBe('TOTP_REQUIRED');
@@ -195,15 +209,21 @@ describe.runIf(canRun)('Auth e2e', () => {
     const verified = await agent
       .post('/api/v1/auth/2fa/verify')
       .set('x-csrf-token', loginCsrf)
+      .set('user-agent', 'auth-e2e/1.0')
       .send({ code: generateSync({ secret }) })
       .expect(200);
 
     expect(verified.body.user.totpEnabled).toBe(true);
     const verifiedCsrf = csrfFrom(verified);
+    const verifiedSessionCookie = cookieHeaderFrom(verified, 'nexter_session');
 
     const sessionsResponse = await agent.get('/api/v1/auth/sessions').expect(200);
     expect(sessionsResponse.body.sessions).toHaveLength(1);
     expect(sessionsResponse.body.sessions[0].current).toBe(true);
+    expect(sessionsResponse.body.sessions[0].ip).toBeTruthy();
+    expect(sessionsResponse.body.sessions[0].userAgent).toBeTruthy();
+    expect(sessionsResponse.body.sessions[0].lastSeenAt).toBeTruthy();
+    expect(sessionsResponse.body.sessions[0].expiresAt).toBeTruthy();
 
     const csrfMissing = await agent
       .post('/api/v1/auth/password')
@@ -227,8 +247,18 @@ describe.runIf(canRun)('Auth e2e', () => {
       .expect(403);
     expect(originMismatch.body.error.details.reason).toBe('ORIGIN_MISMATCH');
 
+    const randomCsrf = 'a'.repeat(64);
+    const csrfSessionMismatch = await request(app.getHttpServer())
+      .post('/api/v1/auth/password')
+      .set('cookie', `${verifiedSessionCookie}; nexter_csrf=${randomCsrf}`)
+      .set('x-csrf-token', randomCsrf)
+      .send({ currentPassword: password, newPassword })
+      .expect(403);
+    expect(csrfSessionMismatch.body.error.details.reason).toBe('CSRF_SESSION_MISMATCH');
+
     const auditRows = await db.select().from(auditLog);
     expect(auditRows.some((row) => row.action === 'auth.setup_completed')).toBe(true);
+    expect(auditRows.some((row) => row.action === 'auth.login_password_ok')).toBe(true);
     expect(auditRows.some((row) => row.action === 'auth.totp_enabled')).toBe(true);
     expect(auditRows.some((row) => row.action === 'auth.totp_verified')).toBe(true);
   }, 30_000);
@@ -269,6 +299,21 @@ describe.runIf(canRun)('Auth e2e', () => {
       .expect(429);
     expect(validWhileBlocked.body.error.code).toBe('RATE_LIMITED');
 
+    await agent.post('/api/v1/auth/logout').set('x-csrf-token', loginCsrf).expect(204);
+
+    const secondLogin = await agent
+      .post('/api/v1/auth/login')
+      .send({ email: owner.email, password })
+      .expect(200);
+    const secondLoginCsrf = csrfFrom(secondLogin);
+
+    const blockedAcrossLogin = await agent
+      .post('/api/v1/auth/2fa/verify')
+      .set('x-csrf-token', secondLoginCsrf)
+      .send({ code: generateSync({ secret }) })
+      .expect(429);
+    expect(blockedAcrossLogin.body.error.code).toBe('RATE_LIMITED');
+
     const auditRows = await db.select().from(auditLog);
     expect(auditRows.some((row) => row.action === 'auth.rate_limited')).toBe(true);
 
@@ -276,8 +321,8 @@ describe.runIf(canRun)('Auth e2e', () => {
 
     await agent
       .post('/api/v1/auth/2fa/verify')
-      .set('x-csrf-token', loginCsrf)
-      .send({ code: validCode })
+      .set('x-csrf-token', secondLoginCsrf)
+      .send({ code: generateSync({ secret }) })
       .expect(200);
   }, 30_000);
 
@@ -359,6 +404,109 @@ describe.runIf(canRun)('Auth e2e', () => {
     expect(reusedOldCode.body.error.details.reason).toBe('RECOVERY_CODE_INVALID');
   }, 30_000);
 
+  it('clears the 2FA lockout after a password reset', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const { secret, csrf } = await enableTotp(agent, owner.csrf);
+    await agent.post('/api/v1/auth/logout').set('x-csrf-token', csrf).expect(204);
+
+    const login = await agent
+      .post('/api/v1/auth/login')
+      .send({ email: owner.email, password })
+      .expect(200);
+    const loginCsrf = csrfFrom(login);
+    const validCode = generateSync({ secret });
+    const wrongCode = validCode === '000000' ? '000001' : '000000';
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await agent
+        .post('/api/v1/auth/2fa/verify')
+        .set('x-csrf-token', loginCsrf)
+        .send({ code: wrongCode })
+        .expect(401);
+    }
+
+    await agent
+      .post('/api/v1/auth/2fa/verify')
+      .set('x-csrf-token', loginCsrf)
+      .send({ code: wrongCode })
+      .expect(429);
+
+    await request(app.getHttpServer())
+      .post('/api/v1/auth/password/reset')
+      .send({
+        email: owner.email,
+        recoveryCode: owner.recoveryCodes[0],
+        newPassword,
+      })
+      .expect(200);
+
+    const newAgent = request.agent(app.getHttpServer());
+    const newLogin = await newAgent
+      .post('/api/v1/auth/login')
+      .send({ email: owner.email, password: newPassword })
+      .expect(200);
+    const newCsrf = csrfFrom(newLogin);
+
+    await newAgent
+      .post('/api/v1/auth/2fa/verify')
+      .set('x-csrf-token', newCsrf)
+      .send({ code: generateSync({ secret }) })
+      .expect(200);
+  }, 30_000);
+
+  it('consumes a recovery code atomically under concurrency', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const { csrf } = await enableTotp(agent, owner.csrf);
+    await agent.post('/api/v1/auth/logout').set('x-csrf-token', csrf).expect(204);
+
+    const attempts = [agent];
+
+    for (let index = 0; index < 4; index += 1) {
+      attempts.push(request.agent(app.getHttpServer()));
+    }
+
+    const pending = [];
+
+    for (const attemptAgent of attempts) {
+      const login = await attemptAgent
+        .post('/api/v1/auth/login')
+        .send({ email: owner.email, password })
+        .expect(200);
+      pending.push({ agent: attemptAgent, csrf: csrfFrom(login) });
+    }
+
+    const responses = await Promise.all(
+      pending.map(({ agent: attemptAgent, csrf: attemptCsrf }) =>
+        attemptAgent
+          .post('/api/v1/auth/recovery/verify')
+          .set('x-csrf-token', attemptCsrf)
+          .send({ code: owner.recoveryCodes[0] }),
+      ),
+    );
+
+    const statuses = responses.map((response) => response.status);
+    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(statuses.every((status) => [200, 401, 429].includes(status))).toBe(true);
+
+    await db.delete(rateLimits);
+
+    const reuseAgent = request.agent(app.getHttpServer());
+    const reuseLogin = await reuseAgent
+      .post('/api/v1/auth/login')
+      .send({ email: owner.email, password })
+      .expect(200);
+    const reuseCsrf = csrfFrom(reuseLogin);
+
+    const reused = await reuseAgent
+      .post('/api/v1/auth/recovery/verify')
+      .set('x-csrf-token', reuseCsrf)
+      .send({ code: owner.recoveryCodes[0] })
+      .expect(401);
+    expect(reused.body.error.code).toBe('INVALID_CREDENTIALS');
+  }, 30_000);
+
   it('revokes sessions and rotates the current session on password change', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -386,6 +534,9 @@ describe.runIf(canRun)('Auth e2e', () => {
       .set('x-csrf-token', csrf)
       .expect(404);
 
+    const thirdAgent = request.agent(app.getHttpServer());
+    await loginWithTotp(thirdAgent, owner.email, secret);
+
     const changed = await agent
       .post('/api/v1/auth/password')
       .set('x-csrf-token', csrf)
@@ -393,10 +544,15 @@ describe.runIf(canRun)('Auth e2e', () => {
       .expect(204);
 
     expect(changed.headers['set-cookie']).toBeDefined();
+    await thirdAgent.get('/api/v1/auth/me').expect(401);
 
     const after = await agent.get('/api/v1/auth/sessions').expect(200);
     expect(after.body.sessions).toHaveLength(1);
     expect(after.body.sessions[0].current).toBe(true);
+
+    const auditRows = await db.select().from(auditLog);
+    expect(auditRows.some((row) => row.action === 'auth.session_revoked')).toBe(true);
+    expect(auditRows.some((row) => row.action === 'auth.password_changed')).toBe(true);
 
     expect(oldSessionCookie).toContain('nexter_session=');
     await request(app.getHttpServer())

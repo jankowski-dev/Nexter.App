@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { env } from '../../shared/config/env';
+import { NoStoreInterceptor } from '../../shared/http/no-store.interceptor';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -18,6 +19,7 @@ import { TwoFactorGuard } from './two-factor.guard';
     AuthThrottleService,
     SessionService,
     TotpService,
+    NoStoreInterceptor,
     {
       provide: CryptoService,
       useFactory: () => new CryptoService(env.AUTH_ENCRYPTION_KEY),

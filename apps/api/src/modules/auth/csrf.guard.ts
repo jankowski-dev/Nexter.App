@@ -27,6 +27,8 @@ export class CsrfGuard implements CanActivate {
       return true;
     }
 
+    this.assertSameOrigin(request);
+
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_METADATA, [
       context.getHandler(),
       context.getClass(),
@@ -46,8 +48,6 @@ export class CsrfGuard implements CanActivate {
         message: 'Authentication required',
       });
     }
-
-    this.assertSameOrigin(request);
 
     const headerToken = request.headers['x-csrf-token'];
     const cookieToken = request.cookies?.[CSRF_COOKIE];

@@ -4,11 +4,15 @@ import { CSRF_COOKIE, SESSION_COOKIE } from './auth.constants';
 import type { SessionTokens } from './session.service';
 
 function cookieOptions() {
+  return authCookieOptions(env.NODE_ENV, env.SESSION_TTL_DAYS);
+}
+
+export function authCookieOptions(nodeEnv: string, ttlDays: number) {
   return {
-    secure: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+    secure: nodeEnv === 'production' || nodeEnv === 'staging',
     sameSite: 'lax' as const,
     path: '/',
-    maxAge: env.SESSION_TTL_DAYS * 86_400,
+    maxAge: ttlDays * 86_400,
   };
 }
 

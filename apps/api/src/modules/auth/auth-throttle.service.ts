@@ -46,7 +46,7 @@ export class AuthThrottleService {
     const windowStart = new Date(now.getTime() - options.windowSeconds * 1000);
     const blockedUntil = new Date(now.getTime() + options.blockSeconds * 1000);
 
-    const reset = sql`((${rateLimits.blockedUntil} is not null and ${rateLimits.blockedUntil} <= ${now}::timestamptz) or ${rateLimits.windowStartedAt} < ${windowStart}::timestamptz)`;
+    const reset = sql`((${rateLimits.blockedUntil} is null or ${rateLimits.blockedUntil} <= ${now}::timestamptz) and ((${rateLimits.blockedUntil} is not null and ${rateLimits.blockedUntil} <= ${now}::timestamptz) or ${rateLimits.windowStartedAt} < ${windowStart}::timestamptz))`;
     const nextPoints = sql`(case when ${reset} then 1 else ${rateLimits.points} + 1 end)`;
 
     const [row] = await this.db

@@ -77,6 +77,10 @@ async function bootstrap(): Promise<void> {
 
     if (bucket.count > max) {
       reply.header('retry-after', Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)));
+      reply.header('cache-control', 'no-store');
+      reply.header('x-frame-options', 'DENY');
+      reply.header('x-content-type-options', 'nosniff');
+      reply.header('referrer-policy', 'strict-origin-when-cross-origin');
       await reply.code(429).send({
         error: {
           code: 'RATE_LIMITED',

@@ -6,6 +6,11 @@ const setupToken = process.env.SETUP_TOKEN ?? '';
 const password = 'correct horse battery staple';
 const newPassword = 'correct horse battery staple 2';
 
+test.skip(
+  process.env.NEXTER_TEST_DB !== '1',
+  'Set NEXTER_TEST_DB=1 and use a dedicated test database; this suite truncates auth tables.',
+);
+
 test.beforeAll(async () => {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
@@ -43,6 +48,9 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
+
+  await page.goto('/setup-2fa');
+  await expect(page).toHaveURL(/\/dashboard$/);
 
   await page.getByRole('button', { name: 'Выйти' }).first().click();
   await expect(page).toHaveURL(/\/login$/);

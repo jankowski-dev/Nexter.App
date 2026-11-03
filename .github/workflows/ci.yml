@@ -30,6 +30,7 @@ jobs:
       NODE_ENV: test
       SETUP_TOKEN: test-setup-token
       AUTH_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      NEXTER_TEST_DB: '1'
 
     steps:
       - name: Checkout

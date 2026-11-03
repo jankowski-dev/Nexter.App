@@ -22,15 +22,16 @@ Phase 2 added authentication and security on top of the Phase 1 schema. The orig
 ### CSRF
 
 - State-changing requests require `X-CSRF-Token`, the `nexter_csrf` cookie, and a hash match against the session's `csrf_token_hash`.
-- The guard also rejects authenticated mutations whose `Origin`/`Referer` does not match `APP_URL`.
-- Public endpoints (setup, login, password reset) are exempt from CSRF because they have no authenticated session; they are rate-limited and audited instead.
+- Every non-safe request with an `Origin`/`Referer` must match `APP_URL`, including public setup/login/reset requests.
+- Public endpoints (setup, login, password reset) are exempt from the CSRF token check because they have no authenticated session; they are rate-limited and audited instead.
 
 ### Rate limits
 
 - Throttle counters live in `rate_limits` so limits survive process restarts and work across instances.
-- Login is limited per IP and per hashed email. The login counter is reset only after successful 2FA, not after a correct password.
+- Login is limited per IP and per IP+email pair. The login counter is reset only after successful 2FA or a password reset/change, not after a correct password. A global per-email lockout is intentionally avoided to prevent unauthenticated denial of service against the single owner.
 - TOTP and recovery verification share a per-user counter (`2fa:<user_id>`). The counter is checked before decrypting or verifying a code, so a valid code cannot bypass an active block.
 - Counters are updated with a single `INSERT … ON CONFLICT … DO UPDATE … RETURNING` statement to make increments atomic.
+- Successful password reset or password change clears the per-user 2FA lockout and login counters, so recovery is not blocked by a prior attack.
 - Auth endpoints also pass through a process-local request limiter in `main.ts` (10/min for auth attempts, 60/min for other mutations, 300/min for reads). The database counters are the authoritative auth lockout; the process-local limiter is defense in depth for a single instance.
 
 ### Single owner

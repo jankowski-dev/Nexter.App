@@ -179,6 +179,9 @@ export function SecuritySettingsPage() {
                     ? new Date(session.lastSeenAt).toLocaleString()
                     : 'нет данных'}
                 </div>
+                <div className="text-xs text-zinc-600">
+                  Истекает: {new Date(session.expiresAt).toLocaleString()}
+                </div>
               </div>
               {!session.current ? (
                 <Button

@@ -52,6 +52,24 @@ The command requires `DATABASE_URL`. It resolves migrations from `packages/db/dr
 
 Do not run migrations automatically on every API boot.
 
+### Phase 2 migration 0003 preflight
+
+Migration `0003` creates `users_singleton_unique` and aborts with a clear error if more than one owner exists (possible only if an old deployment hit the pre-fix setup race).
+
+```sql
+SELECT id, email, created_at FROM users ORDER BY created_at;
+```
+
+If the query returns more than one row:
+
+1. Take a fresh backup and stop the API.
+2. Decide which row is the canonical owner. Do not delete rows blindly.
+3. In a transaction, move or merge `settings`, `sessions`, and `audit_log` references to the canonical user, record the decision in `audit_log`, and remove only the duplicate owner rows.
+4. Re-run migrations and verify `GET /ready`.
+5. Record the incident and the owner used.
+
+If the history is ambiguous, restore the pre-migration backup and resolve the duplicate owners manually before retrying.
+
 ## Rollback
 
 - Keep the previous deployment image available.

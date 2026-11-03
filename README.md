@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 2 — Auth & Security (in review)**.
+Current phase: **Phase 2 — Auth & Security (review fixes applied, pending re-acceptance)**.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -15,7 +15,7 @@ The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 - pg-boss
 - React 19 + Vite + TanStack Router/Query
 - Tailwind CSS + shadcn-compatible primitives
-- Vitest now; Playwright, Testcontainers, fast-check, and Anvil planned
+- Vitest + Supertest + Playwright; Testcontainers, fast-check, and Anvil planned
 - Railway + Cloudflare + R2
 
 ## Repository
@@ -96,9 +96,16 @@ npx pnpm@10.20.0 smoke:static
 npx pnpm@10.20.0 smoke:worker
 ```
 
-Browser auth E2E (requires a running PostgreSQL, `DATABASE_URL`, `SETUP_TOKEN`, `AUTH_ENCRYPTION_KEY`, and Chromium):
+Browser auth E2E and API auth integration tests **truncate auth tables**. Never point them at a database that contains real Nexter data. Create a disposable database (for example `nexter_test`) and set `NEXTER_TEST_DB=1`; without this flag the destructive suites are skipped.
 
 ```bash
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter_test
+export SETUP_TOKEN=test-setup-token
+export AUTH_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+export NEXTER_TEST_DB=1
+
+npx pnpm@10.20.0 db:migrate
+npx pnpm@10.20.0 test
 npx pnpm@10.20.0 --filter @nexter/e2e exec playwright install chromium
 npx pnpm@10.20.0 test:e2e
 ```
@@ -116,7 +123,7 @@ npx pnpm@10.20.0 test:e2e
 
 - [x] Phase 0 — Design
 - [x] Phase 1 — Foundation (accepted with operational follow-ups)
-- [ ] Phase 2 — Auth and security (in review)
+- [ ] Phase 2 — Auth and security (review fixes applied, pending re-acceptance)
 - [ ] Phase 3 — Accounting core
 - [ ] Phase 4 — Notion import
 - [ ] Phase 5 — MVP-1 UI

@@ -40,6 +40,10 @@ function reasonFrom(error: ApiError): string | undefined {
   return undefined;
 }
 
+export function apiErrorReason(error: unknown): string | undefined {
+  return error instanceof ApiError ? reasonFrom(error) : undefined;
+}
+
 export function toRussianError(error: unknown, fallback: string): string {
   if (error instanceof ApiError) {
     const reason = reasonFrom(error);

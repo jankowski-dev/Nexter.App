@@ -83,9 +83,9 @@ The setup token is **not** a recovery mechanism. Break-glass recovery is documen
 
 - `AuthGuard`: requires a valid session cookie; attaches user/session to the request.
 - `TwoFactorGuard`: requires `twoFactorVerified` for all protected routes, except `@Public()` and `@AllowPending2fa()` auth endpoints. Failure code is `TOTP_REQUIRED`.
-- `CsrfGuard`: requires `X-CSRF-Token` matching the CSRF cookie and the session hash for state-changing requests. Authenticated mutations with a mismatched `Origin`/`Referer` are rejected.
+- `CsrfGuard`: requires `X-CSRF-Token` matching the CSRF cookie and the session hash for state-changing requests. Non-safe requests with a mismatched `Origin`/`Referer` are rejected, including public setup/login/reset requests.
 - `@Public()`: setup, login, auth status, password reset.
-- `@AllowPending2fa()`: me, TOTP setup/enable/verify, recovery verify, logout.
+- `@AllowPending2fa()`: me, csrf, TOTP setup/enable/verify, recovery verify, logout.
 
 ## Cookies
 
@@ -96,11 +96,12 @@ The setup token is **not** a recovery mechanism. Break-glass recovery is documen
 
 ## Rate limits
 
-- Login: 10 attempts / 15 minutes per IP **and** per hashed email; 15-minute block.
+- Login: 10 attempts / 15 minutes per IP+email pair and per IP; 15-minute block. A global per-email lockout is intentionally avoided to prevent unauthenticated denial of service against the single owner.
 - Setup: 5 attempts / 15 minutes per IP.
 - TOTP/recovery: 5 attempts / 5 minutes per user (shared counter, checked before verification); 15-minute block.
 - Password change/recovery-code regeneration: 5 attempts / 15 minutes per user.
-- Password reset: 5 attempts / 15 minutes per IP and per hashed email.
+- Password reset: 5 attempts / 15 minutes per IP and per email hash.
+- Successful password reset/password change clears the per-user 2FA lockout and login counters so recovery is not blocked by a prior attack.
 - Process-local request limiter: 10/min auth attempts, 60/min other mutations, 300/min reads per IP. Database counters are authoritative for auth lockout.
 
 ## Audit
@@ -130,7 +131,8 @@ Server error messages are mapped to Russian UI copy in `apps/web/src/lib/error-m
 
 ## Tests
 
-- `apps/api/test/auth.e2e.spec.ts` covers setup single-owner/concurrency, invalid setup token, TOTP enable/login, pending-session isolation, CSRF missing/mismatch/origin, cookie flags, audit entries, TOTP lockout including a valid code while blocked, recovery-code consumption/reuse, password reset, session revocation, password change rotation, and old-password rejection.
+- Destructive auth tests require `NEXTER_TEST_DB=1` and a disposable database; they truncate auth tables.
+- `apps/api/test/auth.e2e.spec.ts` covers setup single-owner/concurrency, invalid setup token, TOTP enable/login, pending-session isolation, CSRF missing/mismatch/session-hash/origin, cookie flags, audit entries, TOTP lockout including a valid code while blocked and after re-login, recovery-code consumption/reuse and concurrency, password reset, reset-after-lockout, session revocation, password change rotation with a live session, and old-password rejection.
 - `apps/e2e/tests/auth.spec.ts` is a Playwright browser flow: setup → recovery codes → TOTP setup → dashboard → logout → login + TOTP → security settings → password change → re-login.
 
 ## Acceptance criteria

@@ -42,9 +42,11 @@ export class CryptoService {
 
   private requireKey(): Buffer {
     if (!this.key) {
-      throw new ServiceUnavailableException(
-        'AUTH_ENCRYPTION_KEY is not configured or is not a 32-byte base64/hex key',
-      );
+      throw new ServiceUnavailableException({
+        code: 'INTERNAL_ERROR',
+        message: 'Auth encryption is not configured',
+        details: { reason: 'AUTH_ENCRYPTION_KEY' },
+      });
     }
 
     return this.key;

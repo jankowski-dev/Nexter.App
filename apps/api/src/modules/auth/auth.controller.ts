@@ -11,6 +11,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
@@ -41,6 +42,7 @@ import {
   totpCodeSchema,
 } from '@nexter/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { NoStoreInterceptor } from '../../shared/http/no-store.interceptor';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { clearAuthCookies, setAuthCookies } from './auth.cookies';
 import { CSRF_COOKIE } from './auth.constants';
@@ -50,6 +52,7 @@ import type { AuthContext } from './auth.types';
 import { AuthService } from './auth.service';
 
 @ApiTags('auth')
+@UseInterceptors(NoStoreInterceptor)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}

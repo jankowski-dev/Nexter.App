@@ -74,7 +74,8 @@ export class AuthService {
   }
 
   private loginKeys(request: FastifyRequest, email: string): string[] {
-    return [`login:${request.ip}`, `login-email:${this.crypto.sha256(email)}`];
+    const emailHash = this.crypto.sha256(email);
+    return [`login:${request.ip}:${emailHash}`, `login-ip:${request.ip}`];
   }
 
   private async assertLoginNotBlocked(
@@ -132,7 +133,7 @@ export class AuthService {
     if (!env.SETUP_TOKEN) {
       throw new ServiceUnavailableException({
         code: 'SETUP_DISABLED',
-        message: 'SETUP_TOKEN is not configured',
+        message: 'First-run setup is disabled',
       });
     }
 
@@ -252,18 +253,29 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.sessions.create(user.id, {
-      twoFactorVerified: false,
-      ...meta,
-    });
+    const tokens = await this.db.transaction(async (tx) => {
+      const created = await this.sessions.create(
+        user.id,
+        {
+          twoFactorVerified: false,
+          ...meta,
+        },
+        tx,
+      );
 
-    await this.audit.log({
-      userId: user.id,
-      action: 'auth.login_password_ok',
-      entityType: 'user',
-      entityId: user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      await this.audit.log(
+        {
+          userId: user.id,
+          action: 'auth.login_password_ok',
+          entityType: 'user',
+          entityId: user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+
+      return created;
     });
 
     return {
@@ -723,6 +735,8 @@ export class AuthService {
     });
 
     await this.throttle.reset(key);
+    await this.throttle.reset(`2fa:${auth.user.id}`);
+    await this.resetLoginThrottles(request, auth.user.email);
     return tokens;
   }
 
@@ -816,6 +830,11 @@ export class AuthService {
     for (const key of keys) {
       await this.throttle.reset(key);
     }
+
+    await this.throttle.reset(`2fa:${result.userId}`);
+    await this.throttle.reset(`password:${result.userId}`);
+    await this.throttle.reset(`recovery-codes:${result.userId}`);
+    await this.resetLoginThrottles(request, email);
 
     return { recoveryCodes: result.newCodes };
   }

@@ -61,3 +61,7 @@ Format: date — decision — reason.
 - **Login throttling is per IP and per hashed email.** Unknown emails still pay an Argon2 dummy verification; login counters reset only after 2FA.
 - **Break-glass recovery is an offline runbook.** The setup token is not a recovery path; see `docs/runbooks/auth-recovery.md`.
 - **Phase 2 review fixes are covered by tests.** API auth e2e now covers setup races, lockout, recovery/reset, session revocation, CSRF, audit, and password-change rotation; Playwright covers the browser auth flow.
+- **Login session creation and audit are transactional.** A failed audit write rolls back the login session; this closes the last rule-6 gap.
+- **Login throttling uses per-IP+email keys.** A global per-email lockout was rejected because it would let an unauthenticated attacker deny login to the single owner.
+- **Password reset/change clear auth lockouts.** Recovery after an attacker-triggered 2FA lockout is not blocked; the break-glass runbook also clears `rate_limits`.
+- **Destructive auth tests require `NEXTER_TEST_DB=1`.** CI uses a disposable PostgreSQL service; local runs must use a dedicated test database.

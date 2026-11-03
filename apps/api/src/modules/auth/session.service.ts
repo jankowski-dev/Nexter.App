@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
 import { sessions, users, type Database, type DbExecutor, type Session } from '@nexter/db';
 import { env } from '../../shared/config/env';
@@ -91,7 +91,19 @@ export class SessionService {
     data: { twoFactorVerified: boolean } & SessionMeta,
     executor: DbExecutor = this.db,
   ): Promise<SessionTokens> {
-    await this.revoke(oldSession.id, executor);
+    const [revoked] = await executor
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.id, oldSession.id), isNull(sessions.revokedAt)))
+      .returning({ id: sessions.id });
+
+    if (!revoked) {
+      throw new UnauthorizedException({
+        code: 'AUTH_REQUIRED',
+        message: 'Session is no longer active',
+      });
+    }
+
     return this.create(oldSession.userId, data, executor);
   }
 

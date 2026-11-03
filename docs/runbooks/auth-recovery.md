@@ -34,6 +34,8 @@ SET revoked_at = now()
 WHERE user_id = (SELECT id FROM users WHERE email = 'owner@example.com')
   AND revoked_at IS NULL;
 
+DELETE FROM rate_limits;
+
 INSERT INTO audit_log (user_id, action, entity_type, entity_id, after)
 SELECT id, 'auth.break_glass_totp_disabled', 'user', id::text,
        jsonb_build_object('reason', 'owner lost TOTP device')
@@ -81,6 +83,7 @@ try {
     'update sessions set revoked_at = now() where user_id = \$1 and revoked_at is null',
     [userId],
   );
+  await client.query('delete from rate_limits');
   await client.query(
     'insert into audit_log (user_id, action, entity_type, entity_id, after) values (\$1, \$2, \$3, \$4, \$5)',
     [userId, 'auth.break_glass_password_reset', 'user', userId, JSON.stringify({ reason: 'owner lost password and recovery codes' })],
