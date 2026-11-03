@@ -22,6 +22,20 @@
       "when": 1793692125341,
       "tag": "0002_whole_power_pack",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793695684784,
+      "tag": "0003_numerous_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793708171602,
+      "tag": "0004_clumsy_post",
+      "breakpoints": true
     }
   ]
 }

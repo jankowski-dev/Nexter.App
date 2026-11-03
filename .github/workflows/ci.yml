@@ -74,6 +74,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Install Playwright Chromium
+        run: pnpm --filter @nexter/e2e exec playwright install --with-deps chromium
+
+      - name: Auth browser E2E
+        run: pnpm test:e2e
+
       - name: Compile migration runner and migrate again
         run: pnpm db:migrate:prod
 

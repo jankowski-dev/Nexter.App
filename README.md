@@ -96,13 +96,21 @@ npx pnpm@10.20.0 smoke:static
 npx pnpm@10.20.0 smoke:worker
 ```
 
+Browser auth E2E (requires a running PostgreSQL, `DATABASE_URL`, `SETUP_TOKEN`, `AUTH_ENCRYPTION_KEY`, and Chromium):
+
+```bash
+npx pnpm@10.20.0 --filter @nexter/e2e exec playwright install chromium
+npx pnpm@10.20.0 test:e2e
+```
+
 ## Documentation
 
 - [`docs/mega-prompt.md`](docs/mega-prompt.md) — implementation contract
 - [`docs/specs/`](docs/specs) — product, threat model, accounting, API/UX, KyberSwap
 - [`docs/adr/`](docs/adr) — architecture decisions
-- [`docs/runbooks/`](docs/runbooks) — Railway and restore procedures
+- [`docs/runbooks/`](docs/runbooks) — Railway, restore, and auth break-glass procedures
 - [`docs/phase-1-report.md`](docs/phase-1-report.md) — Phase 1 verification report
+- [`docs/phase-2-report.md`](docs/phase-2-report.md) — Phase 2 verification report
 
 ## Phase status
 
@@ -121,7 +129,7 @@ npx pnpm@10.20.0 smoke:worker
 
 ## Production environment
 
-Production and staging require `DATABASE_URL`, `SETUP_TOKEN`, and `APP_URL`. Set `TRUST_PROXY` to the exact Railway/Cloudflare proxy CIDR (default `false`). See `docs/runbooks/railway.md`.
+Production and staging require `DATABASE_URL`, `SETUP_TOKEN`, `AUTH_ENCRYPTION_KEY`, and `APP_URL`. `AUTH_ENCRYPTION_KEY` must be a 32-byte base64 or 64-char hex key. Set `TRUST_PROXY` to the exact Railway/Cloudflare proxy CIDR (default `false`). See `docs/runbooks/railway.md`.
 
 ## Security notes
 

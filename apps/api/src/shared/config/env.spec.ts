@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from './env';
 
+const validKey = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+
 describe('parseEnv', () => {
   it('treats empty values as undefined in development', () => {
     const parsed = parseEnv({
@@ -36,7 +38,7 @@ describe('parseEnv', () => {
         NODE_ENV: 'production',
         DATABASE_URL: 'postgres://db',
         SETUP_TOKEN: 'setup',
-        AUTH_ENCRYPTION_KEY: 'test-key',
+        AUTH_ENCRYPTION_KEY: validKey,
       }),
     ).toThrow(/APP_URL/);
 
@@ -45,9 +47,21 @@ describe('parseEnv', () => {
         NODE_ENV: 'production',
         DATABASE_URL: 'postgres://db',
         SETUP_TOKEN: 'setup',
-        AUTH_ENCRYPTION_KEY: 'test-key',
+        AUTH_ENCRYPTION_KEY: validKey,
         APP_URL: 'https://example.com',
       }).DATABASE_URL,
     ).toBe('postgres://db');
+  });
+
+  it('rejects malformed encryption keys', () => {
+    expect(() =>
+      parseEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://db',
+        SETUP_TOKEN: 'setup',
+        AUTH_ENCRYPTION_KEY: 'test-key',
+        APP_URL: 'https://example.com',
+      }),
+    ).toThrow(/AUTH_ENCRYPTION_KEY/);
   });
 });

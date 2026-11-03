@@ -5,6 +5,22 @@ loadRootEnv();
 
 const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
+export function isValidAuthEncryptionKey(value: string): boolean {
+  if (/^[0-9a-f]{64}$/i.test(value)) {
+    return true;
+  }
+
+  return Buffer.from(value, 'base64').length === 32;
+}
+
+const authEncryptionKeySchema = z
+  .string()
+  .min(1)
+  .refine(
+    isValidAuthEncryptionKey,
+    'AUTH_ENCRYPTION_KEY must be 32 bytes as base64 or 64 hex chars',
+  );
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
@@ -13,7 +29,7 @@ export const envSchema = z.object({
   SENTRY_DSN: z.preprocess(emptyToUndefined, z.url().optional()),
   APP_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   SETUP_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  AUTH_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  AUTH_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, authEncryptionKeySchema.optional()),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   TOTP_ISSUER: z.string().min(1).default('Nexter'),
   WEB_DIST_PATH: z.preprocess(emptyToUndefined, z.string().optional()),

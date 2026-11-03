@@ -23,9 +23,9 @@ export const messages = {
     version: 'Версия',
     versionHint: 'Текущая версия API',
     phase: 'Фаза',
-    phaseHint: 'Каркас, БД, CI',
+    phaseHint: 'Auth, 2FA, сессии, audit',
     nextPhase: 'Следующая фаза',
-    nextPhaseHint: 'Auth, 2FA, сессии, audit',
+    nextPhaseHint: 'Учёт, FIFO, P&L',
     whatWorks: 'Что уже есть',
   },
 } as const;

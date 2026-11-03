@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
-import { sessions, users, type Database, type Session } from '@nexter/db';
+import { sessions, users, type Database, type DbExecutor, type Session } from '@nexter/db';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { CryptoService } from './crypto.service';
@@ -27,13 +27,14 @@ export class SessionService {
   async create(
     userId: string,
     data: { twoFactorVerified: boolean } & SessionMeta,
+    executor: DbExecutor = this.db,
   ): Promise<SessionTokens> {
     const token = this.crypto.randomToken(32);
     const csrfToken = this.crypto.randomToken(32);
     const now = new Date();
     const expiresAt = new Date(now.getTime() + env.SESSION_TTL_DAYS * 86_400_000);
 
-    const [session] = await this.db
+    const [session] = await executor
       .insert(sessions)
       .values({
         userId,
@@ -88,17 +89,25 @@ export class SessionService {
   async rotate(
     oldSession: Session,
     data: { twoFactorVerified: boolean } & SessionMeta,
+    executor: DbExecutor = this.db,
   ): Promise<SessionTokens> {
-    await this.revoke(oldSession.id);
-    return this.create(oldSession.userId, data);
+    await this.revoke(oldSession.id, executor);
+    return this.create(oldSession.userId, data, executor);
   }
 
-  async revoke(sessionId: string): Promise<void> {
-    await this.db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.id, sessionId));
+  async revoke(sessionId: string, executor: DbExecutor = this.db): Promise<void> {
+    await executor
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(sessions.id, sessionId));
   }
 
-  async revokeOthers(userId: string, currentSessionId: string): Promise<void> {
-    await this.db
+  async revokeOthers(
+    userId: string,
+    currentSessionId: string,
+    executor: DbExecutor = this.db,
+  ): Promise<void> {
+    await executor
       .update(sessions)
       .set({ revokedAt: new Date() })
       .where(
@@ -108,6 +117,13 @@ export class SessionService {
           isNull(sessions.revokedAt),
         ),
       );
+  }
+
+  async revokeAll(userId: string, executor: DbExecutor = this.db): Promise<void> {
+    await executor
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
   async list(userId: string) {

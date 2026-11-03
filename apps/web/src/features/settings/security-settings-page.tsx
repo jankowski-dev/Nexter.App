@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ApiError, apiDelete, apiFetch, apiPost } from '@/lib/api';
+import { apiDelete, apiFetch, apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { Field, FormError, FormSuccess } from '@/features/auth/form-helpers';
 import {
   recoveryCodesResponseSchema,
@@ -27,17 +28,16 @@ export function SecuritySettingsPage() {
 
   const changePassword = useMutation({
     mutationFn: () => apiPost('/api/v1/auth/password', { currentPassword, newPassword }),
-    onSuccess: () => {
+    onSuccess: async () => {
       setCurrentPassword('');
       setNewPassword('');
       setError('');
-      setMessage('Пароль изменён. Остальные сессии отозваны.');
+      setMessage('Пароль изменён. Текущая сессия обновлена, остальные устройства отозваны.');
+      await queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (requestError) => {
       setMessage('');
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось изменить пароль.',
-      );
+      setError(toRussianError(requestError, 'Не удалось изменить пароль.'));
     },
   });
 
@@ -55,11 +55,7 @@ export function SecuritySettingsPage() {
       setNewCodes(result.recoveryCodes);
     },
     onError: (requestError) => {
-      setError(
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'Не удалось перегенерировать recovery codes.',
-      );
+      setError(toRussianError(requestError, 'Не удалось перегенерировать recovery codes.'));
     },
   });
 
@@ -69,9 +65,7 @@ export function SecuritySettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (requestError) => {
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось отозвать сессию.',
-      );
+      setError(toRussianError(requestError, 'Не удалось отозвать сессию.'));
     },
   });
 

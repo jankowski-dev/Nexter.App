@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { env } from '../../shared/config/env';
 import { CSRF_COOKIE, IS_PUBLIC_METADATA, SKIP_CSRF_METADATA } from './auth.constants';
 import type { RequestWithAuth } from './auth.types';
 import { CryptoService } from './crypto.service';
@@ -46,20 +47,24 @@ export class CsrfGuard implements CanActivate {
       });
     }
 
+    this.assertSameOrigin(request);
+
     const headerToken = request.headers['x-csrf-token'];
     const cookieToken = request.cookies?.[CSRF_COOKIE];
 
     if (typeof headerToken !== 'string' || typeof cookieToken !== 'string') {
       throw new ForbiddenException({
-        code: 'CSRF_INVALID',
+        code: 'FORBIDDEN',
         message: 'Missing CSRF token',
+        details: { reason: 'CSRF_MISSING' },
       });
     }
 
     if (!this.crypto.safeEqual(headerToken, cookieToken)) {
       throw new ForbiddenException({
-        code: 'CSRF_INVALID',
+        code: 'FORBIDDEN',
         message: 'CSRF token mismatch',
+        details: { reason: 'CSRF_MISMATCH' },
       });
     }
 
@@ -67,11 +72,38 @@ export class CsrfGuard implements CanActivate {
       !this.crypto.safeEqual(this.crypto.sha256(headerToken), request.auth.session.csrfTokenHash)
     ) {
       throw new ForbiddenException({
-        code: 'CSRF_INVALID',
+        code: 'FORBIDDEN',
         message: 'CSRF token does not match the session',
+        details: { reason: 'CSRF_SESSION_MISMATCH' },
       });
     }
 
     return true;
+  }
+
+  private assertSameOrigin(request: RequestWithAuth): void {
+    const origin = request.headers.origin;
+    const referer = request.headers.referer;
+    const expected = new URL(env.APP_URL).origin;
+
+    let actual: string | undefined;
+
+    if (typeof origin === 'string') {
+      actual = origin;
+    } else if (typeof referer === 'string') {
+      try {
+        actual = new URL(referer).origin;
+      } catch {
+        actual = undefined;
+      }
+    }
+
+    if (actual && actual !== expected) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Cross-origin request rejected',
+        details: { reason: 'ORIGIN_MISMATCH' },
+      });
+    }
   }
 }

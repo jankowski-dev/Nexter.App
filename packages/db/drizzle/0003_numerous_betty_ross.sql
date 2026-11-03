@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "users_singleton_unique" ON "users" USING btree ((true));

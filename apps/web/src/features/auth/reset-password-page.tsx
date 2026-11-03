@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ApiError, apiPost } from '@/lib/api';
+import { apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { FormError, Field } from './form-helpers';
 import { recoveryCodesResponseSchema } from '@nexter/contracts';
 import { Link } from '@tanstack/react-router';
@@ -27,9 +28,7 @@ export function ResetPasswordPage() {
       );
       setNewCodes(result.recoveryCodes);
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось сбросить пароль.',
-      );
+      setError(toRussianError(requestError, 'Не удалось сбросить пароль.'));
     } finally {
       setLoading(false);
     }

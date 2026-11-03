@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ApiError, apiFetch, apiPost } from '@/lib/api';
+import { apiFetch, apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { FormError, Field } from './form-helpers';
 import { authStatusResponseSchema, loginResponseSchema } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -36,11 +37,7 @@ export function LoginPage() {
         await navigate({ to: '/dashboard' });
       }
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError
-          ? requestError.message
-          : 'Не удалось войти. Попробуйте ещё раз.',
-      );
+      setError(toRussianError(requestError, 'Не удалось войти. Попробуйте ещё раз.'));
     } finally {
       setLoading(false);
     }

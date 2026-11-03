@@ -8,5 +8,8 @@ coverage
 .DS_Store
 .tools
 pgdata
+test-results
+playwright-report
+blob-report
 apps/api/public/*
 !apps/api/public/.gitkeep

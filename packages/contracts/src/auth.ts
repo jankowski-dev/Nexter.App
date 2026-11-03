@@ -93,6 +93,10 @@ export const sessionsResponseSchema = z.object({
   sessions: z.array(sessionSummarySchema),
 });
 
+export const csrfTokenResponseSchema = z.object({
+  csrfToken: z.string().min(1),
+});
+
 export type SetupRequest = z.infer<typeof setupRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type TotpCodeRequest = z.infer<typeof totpCodeSchema>;
@@ -110,3 +114,4 @@ export type TwoFactorVerifyResponse = z.infer<typeof twoFactorVerifyResponseSche
 export type RecoveryCodesResponse = z.infer<typeof recoveryCodesResponseSchema>;
 export type SessionSummary = z.infer<typeof sessionSummarySchema>;
 export type SessionsResponse = z.infer<typeof sessionsResponseSchema>;
+export type CsrfTokenResponse = z.infer<typeof csrfTokenResponseSchema>;

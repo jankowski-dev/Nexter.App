@@ -39,9 +39,61 @@ async function bootstrap(): Promise<void> {
 
   const fastify = app.getHttpAdapter().getInstance();
 
-  fastify.addHook('onSend', (_request, reply, payload, done) => {
+  fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+
+    if (request.url.startsWith('/api/v1/auth/')) {
+      void reply.header('Cache-Control', 'no-store');
+    }
+
     done(null, payload);
+  });
+
+  interface RateBucket {
+    count: number;
+    resetAt: number;
+  }
+
+  const rateBuckets = new Map<string, RateBucket>();
+
+  fastify.addHook('onRequest', async (request, reply) => {
+    const now = Date.now();
+    const url = request.url.split('?')[0] ?? '/';
+    const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
+    const isAuthAttempt =
+      url === '/api/v1/auth/login' ||
+      url.startsWith('/api/v1/auth/2fa/') ||
+      url.startsWith('/api/v1/auth/recovery/');
+    const max = isAuthAttempt ? 10 : isMutation ? 60 : 300;
+    const bucketKey = `${request.ip}:${isAuthAttempt ? 'auth' : isMutation ? 'mutation' : 'read'}`;
+    let bucket = rateBuckets.get(bucketKey);
+
+    if (!bucket || bucket.resetAt <= now) {
+      bucket = { count: 0, resetAt: now + 60_000 };
+      rateBuckets.set(bucketKey, bucket);
+    }
+
+    bucket.count += 1;
+
+    if (bucket.count > max) {
+      reply.header('retry-after', Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)));
+      await reply.code(429).send({
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'Too many requests. Try again later.',
+          requestId: request.id,
+        },
+      });
+      return;
+    }
+
+    if (rateBuckets.size > 10_000) {
+      for (const [key, value] of rateBuckets) {
+        if (value.resetAt <= now) {
+          rateBuckets.delete(key);
+        }
+      }
+    }
   });
 
   await app.register(helmet as any, {
@@ -102,7 +154,7 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  if (env.ENABLE_DOCS && env.NODE_ENV !== 'production') {
+  if (env.ENABLE_DOCS && (env.NODE_ENV === 'development' || env.NODE_ENV === 'test')) {
     const config = new DocumentBuilder()
       .setTitle('Nexter API')
       .setDescription('Private personal finance API')

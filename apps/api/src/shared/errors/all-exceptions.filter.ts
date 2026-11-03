@@ -18,8 +18,40 @@ const statusCodes: Record<number, string> = {
   [HttpStatus.CONFLICT]: 'CONFLICT',
   [HttpStatus.UNPROCESSABLE_ENTITY]: 'VALIDATION_ERROR',
   [HttpStatus.TOO_MANY_REQUESTS]: 'RATE_LIMITED',
-  [HttpStatus.SERVICE_UNAVAILABLE]: 'SERVICE_UNAVAILABLE',
+  [HttpStatus.SERVICE_UNAVAILABLE]: 'INTERNAL_ERROR',
 };
+
+const contractCodes = new Set([
+  'AUTH_REQUIRED',
+  'INVALID_CREDENTIALS',
+  'TOTP_REQUIRED',
+  'TOTP_INVALID',
+  'FORBIDDEN',
+  'RATE_LIMITED',
+  'VALIDATION_ERROR',
+  'CONFLICT',
+  'NOT_FOUND',
+  'INSUFFICIENT_LOTS',
+  'NEGATIVE_BALANCE',
+  'IMPORT_PARSE_ERROR',
+  'IMPORT_MAPPING_ERROR',
+  'IMPORT_RECONCILIATION_FAILED',
+  'INTERNAL_ERROR',
+]);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function contractCodeForStatus(status: number): string {
+  if (status === HttpStatus.UNAUTHORIZED) return 'INVALID_CREDENTIALS';
+  if (status === HttpStatus.FORBIDDEN) return 'FORBIDDEN';
+  if (status === HttpStatus.NOT_FOUND) return 'NOT_FOUND';
+  if (status === HttpStatus.CONFLICT) return 'CONFLICT';
+  if (status === HttpStatus.TOO_MANY_REQUESTS) return 'RATE_LIMITED';
+  if (status >= 500) return 'INTERNAL_ERROR';
+  return 'VALIDATION_ERROR';
+}
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -62,6 +94,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
           details = record.details;
         }
       }
+    }
+
+    if (!contractCodes.has(code)) {
+      const reason = code;
+      code = contractCodeForStatus(status);
+      details = {
+        ...(isPlainObject(details) ? details : {}),
+        reason:
+          isPlainObject(details) && typeof details.reason === 'string' ? details.reason : reason,
+        ...(isPlainObject(details) || details === undefined ? {} : { originalDetails: details }),
+      };
     }
 
     if (status >= 500) {

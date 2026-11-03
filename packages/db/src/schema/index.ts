@@ -28,7 +28,10 @@ export const users = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   },
-  (table) => [uniqueIndex('users_email_unique').on(table.email)],
+  (table) => [
+    uniqueIndex('users_email_unique').on(table.email),
+    uniqueIndex('users_singleton_unique').on(sql`(true)`),
+  ],
 );
 
 export const sessions = pgTable(
@@ -39,7 +42,7 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull(),
-    csrfTokenHash: text('csrf_token_hash').notNull().default(''),
+    csrfTokenHash: text('csrf_token_hash').notNull(),
     twoFactorVerified: boolean('two_factor_verified').notNull().default(false),
     ip: text('ip'),
     userAgent: text('user_agent'),

@@ -29,3 +29,5 @@ export function createDb(connectionString: string, options: CreateDbOptions = {}
 }
 
 export type Database = ReturnType<typeof createDb>['db'];
+export type DbTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
+export type DbExecutor = Pick<Database, 'insert' | 'select' | 'update' | 'delete' | 'execute'>;

@@ -3,10 +3,11 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { sessions, settings, users, type Database, type User } from '@nexter/db';
 import type {
   AuthMeResponse,
@@ -41,6 +42,10 @@ export interface AuthResult<T> {
   tokens?: SessionTokens;
 }
 
+const LOGIN_WINDOW = { max: 10, windowSeconds: 900, blockSeconds: 900 };
+const TWO_FACTOR_WINDOW = { max: 5, windowSeconds: 300, blockSeconds: 900 };
+const PASSWORD_WINDOW = { max: 5, windowSeconds: 900, blockSeconds: 900 };
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -68,6 +73,51 @@ export class AuthService {
     };
   }
 
+  private loginKeys(request: FastifyRequest, email: string): string[] {
+    return [`login:${request.ip}`, `login-email:${this.crypto.sha256(email)}`];
+  }
+
+  private async assertLoginNotBlocked(
+    keys: string[],
+    meta: ReturnType<AuthService['meta']>,
+  ): Promise<void> {
+    for (const key of keys) {
+      await this.throttle.assertNotBlocked(key, meta);
+    }
+  }
+
+  private async hitLoginThrottles(
+    keys: string[],
+    meta: ReturnType<AuthService['meta']>,
+  ): Promise<void> {
+    let firstError: unknown;
+
+    for (const key of keys) {
+      try {
+        await this.throttle.hit(key, LOGIN_WINDOW, meta);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    if (firstError) {
+      throw firstError;
+    }
+  }
+
+  private async resetLoginThrottles(request: FastifyRequest, email: string): Promise<void> {
+    await Promise.all(this.loginKeys(request, email).map((key) => this.throttle.reset(key)));
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === '23505'
+    );
+  }
+
   async status(): Promise<AuthStatusResponse> {
     const [row] = await this.db.select({ count: sql<number>`count(*)::int` }).from(users);
 
@@ -76,16 +126,8 @@ export class AuthService {
 
   async setup(dto: SetupRequest, request: FastifyRequest): Promise<AuthResult<SetupResponse>> {
     const key = `setup:${request.ip}`;
-    await this.throttle.assertNotBlocked(key);
-
-    const [row] = await this.db.select({ count: sql<number>`count(*)::int` }).from(users);
-
-    if ((row?.count ?? 0) > 0) {
-      throw new ConflictException({
-        code: 'ALREADY_INITIALIZED',
-        message: 'Nexter is already initialized',
-      });
-    }
+    const meta = this.meta(request);
+    await this.throttle.assertNotBlocked(key, meta);
 
     if (!env.SETUP_TOKEN) {
       throw new ServiceUnavailableException({
@@ -95,7 +137,7 @@ export class AuthService {
     }
 
     if (!this.crypto.safeEqual(dto.setupToken, env.SETUP_TOKEN)) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 900, blockSeconds: 900 });
+      await this.throttle.hit(key, { max: 5, windowSeconds: 900, blockSeconds: 900 }, meta);
       await this.audit.log({
         action: 'auth.setup_failed',
         entityType: 'user',
@@ -108,59 +150,94 @@ export class AuthService {
       });
     }
 
+    this.crypto.assertConfigured();
+
     const passwordHash = await this.crypto.hashPassword(dto.password);
     const recoveryCodes = this.crypto.generateRecoveryCodes();
     const recoveryCodesHash = recoveryCodes.map((code) => this.crypto.hashRecoveryCode(code));
 
-    const [user] = await this.db
-      .insert(users)
-      .values({
-        email: dto.email.toLowerCase(),
-        passwordHash,
-        recoveryCodesHash,
-        role: 'owner',
-        totpEnabled: false,
-      })
-      .returning();
+    try {
+      return await this.db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('nexter:setup')::bigint)`);
 
-    if (!user) {
-      throw new Error('Failed to create owner');
+        const [row] = await tx.select({ count: sql<number>`count(*)::int` }).from(users);
+
+        if ((row?.count ?? 0) > 0) {
+          throw new ConflictException({
+            code: 'ALREADY_INITIALIZED',
+            message: 'Nexter is already initialized',
+          });
+        }
+
+        const [user] = await tx
+          .insert(users)
+          .values({
+            email: dto.email.toLowerCase(),
+            passwordHash,
+            recoveryCodesHash,
+            role: 'owner',
+            totpEnabled: false,
+          })
+          .returning();
+
+        if (!user) {
+          throw new Error('Failed to create owner');
+        }
+
+        await tx.insert(settings).values({ userId: user.id });
+
+        const tokens = await this.sessions.create(
+          user.id,
+          {
+            twoFactorVerified: false,
+            ...meta,
+          },
+          tx,
+        );
+
+        await this.audit.log(
+          {
+            userId: user.id,
+            action: 'auth.setup_completed',
+            entityType: 'user',
+            entityId: user.id,
+            ip: request.ip,
+            userAgent: request.headers['user-agent'],
+          },
+          { executor: tx, strict: true },
+        );
+
+        return {
+          data: {
+            user: this.publicUser(user),
+            recoveryCodes,
+          },
+          tokens,
+        };
+      });
+    } catch (error) {
+      if (this.isUniqueViolation(error)) {
+        throw new ConflictException({
+          code: 'ALREADY_INITIALIZED',
+          message: 'Nexter is already initialized',
+        });
+      }
+
+      throw error;
     }
-
-    await this.db.insert(settings).values({ userId: user.id });
-
-    const tokens = await this.sessions.create(user.id, {
-      twoFactorVerified: false,
-      ...this.meta(request),
-    });
-
-    await this.audit.log({
-      userId: user.id,
-      action: 'auth.setup_completed',
-      entityType: 'user',
-      entityId: user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
-
-    return {
-      data: {
-        user: this.publicUser(user),
-        recoveryCodes,
-      },
-      tokens,
-    };
   }
 
   async login(dto: LoginRequest, request: FastifyRequest): Promise<AuthResult<LoginResponse>> {
-    const key = `login:${request.ip}`;
-    await this.throttle.assertNotBlocked(key);
-
     const email = dto.email.toLowerCase();
-    const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
+    const meta = this.meta(request);
+    const keys = this.loginKeys(request, email);
+    await this.assertLoginNotBlocked(keys, meta);
 
-    if (!user || !(await this.crypto.verifyPassword(user.passwordHash, dto.password))) {
-      await this.throttle.hit(key, { max: 10, windowSeconds: 900, blockSeconds: 900 });
+    const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
+    const valid = await this.crypto.verifyPassword(user?.passwordHash, dto.password);
+
+    if (!user || !valid) {
+      await this.hitLoginThrottles(keys, meta);
       await this.audit.log({
         action: 'auth.login_failed',
         entityType: 'user',
@@ -175,11 +252,9 @@ export class AuthService {
       });
     }
 
-    await this.throttle.reset(key);
-
     const tokens = await this.sessions.create(user.id, {
       twoFactorVerified: false,
-      ...this.meta(request),
+      ...meta,
     });
 
     await this.audit.log({
@@ -209,25 +284,36 @@ export class AuthService {
       });
     }
 
-    const secret = this.totp.generateSecret();
-    const encrypted = this.crypto.encryptSecret(secret);
+    const secret = auth.user.totpSecretEncrypted
+      ? this.crypto.decryptSecret(auth.user.totpSecretEncrypted)
+      : this.totp.generateSecret();
 
-    await this.db
-      .update(users)
-      .set({ totpSecretEncrypted: encrypted, updatedAt: new Date() })
-      .where(eq(users.id, auth.user.id));
+    if (!auth.user.totpSecretEncrypted) {
+      const encrypted = this.crypto.encryptSecret(secret);
+      const now = new Date();
+
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(users)
+          .set({ totpSecretEncrypted: encrypted, updatedAt: now })
+          .where(eq(users.id, auth.user.id));
+
+        await this.audit.log(
+          {
+            userId: auth.user.id,
+            action: 'auth.totp_setup_started',
+            entityType: 'user',
+            entityId: auth.user.id,
+            ip: request.ip,
+            userAgent: request.headers['user-agent'],
+          },
+          { executor: tx, strict: true },
+        );
+      });
+    }
 
     const otpauthUrl = this.totp.uri(auth.user.email, secret);
     const qrDataUrl = await this.totp.qrDataUrl(otpauthUrl);
-
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.totp_setup_started',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
 
     return { secret, otpauthUrl, qrDataUrl };
   }
@@ -251,12 +337,15 @@ export class AuthService {
       });
     }
 
+    const meta = this.meta(request);
+    const key = `2fa:${auth.user.id}`;
+    await this.throttle.assertNotBlocked(key, meta);
+
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
     const valid = await this.totp.verify(dto.code, secret);
-    const key = `2fa:${auth.session.id}`;
 
     if (!valid) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 300, blockSeconds: 900 });
+      await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
         action: 'auth.totp_verify_failed',
@@ -272,32 +361,43 @@ export class AuthService {
     }
 
     await this.throttle.reset(key);
-    const now = new Date();
+    await this.resetLoginThrottles(request, auth.user.email);
 
-    await this.db
-      .update(users)
-      .set({ totpEnabled: true, lastLoginAt: now, updatedAt: now })
-      .where(eq(users.id, auth.user.id));
+    const result = await this.db.transaction(async (tx) => {
+      const now = new Date();
+      const [user] = await tx
+        .update(users)
+        .set({ totpEnabled: true, lastLoginAt: now, updatedAt: now })
+        .where(eq(users.id, auth.user.id))
+        .returning();
 
-    const tokens = await this.sessions.rotate(auth.session, {
-      twoFactorVerified: true,
-      ...this.meta(request),
-    });
+      const tokens = await this.sessions.rotate(
+        auth.session,
+        {
+          twoFactorVerified: true,
+          ...meta,
+        },
+        tx,
+      );
 
-    const [user] = await this.db.select().from(users).where(eq(users.id, auth.user.id)).limit(1);
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.totp_enabled',
+          entityType: 'user',
+          entityId: auth.user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
 
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.totp_enabled',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      return { user: user ?? auth.user, tokens };
     });
 
     return {
-      data: { user: this.publicUser(user ?? auth.user) },
-      tokens,
+      data: { user: this.publicUser(result.user) },
+      tokens: result.tokens,
     };
   }
 
@@ -324,12 +424,15 @@ export class AuthService {
       });
     }
 
+    const meta = this.meta(request);
+    const key = `2fa:${auth.user.id}`;
+    await this.throttle.assertNotBlocked(key, meta);
+
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
     const valid = await this.totp.verify(dto.code, secret);
-    const key = `2fa:${auth.session.id}`;
 
     if (!valid) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 300, blockSeconds: 900 });
+      await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
         action: 'auth.totp_verify_failed',
@@ -345,25 +448,38 @@ export class AuthService {
     }
 
     await this.throttle.reset(key);
-    const now = new Date();
+    await this.resetLoginThrottles(request, auth.user.email);
 
-    await this.db
-      .update(users)
-      .set({ lastLoginAt: now, updatedAt: now })
-      .where(eq(users.id, auth.user.id));
+    const tokens = await this.db.transaction(async (tx) => {
+      const now = new Date();
 
-    const tokens = await this.sessions.rotate(auth.session, {
-      twoFactorVerified: true,
-      ...this.meta(request),
-    });
+      await tx
+        .update(users)
+        .set({ lastLoginAt: now, updatedAt: now })
+        .where(eq(users.id, auth.user.id));
 
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.totp_verified',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      const rotated = await this.sessions.rotate(
+        auth.session,
+        {
+          twoFactorVerified: true,
+          ...meta,
+        },
+        tx,
+      );
+
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.totp_verified',
+          entityType: 'user',
+          entityId: auth.user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+
+      return rotated;
     });
 
     return {
@@ -388,14 +504,60 @@ export class AuthService {
       return { data: { user: this.publicUser(auth.user) } };
     }
 
-    const codeHash = this.crypto.hashRecoveryCode(dto.code);
-    const index = auth.user.recoveryCodesHash.findIndex((hash) =>
-      this.crypto.safeEqual(hash, codeHash),
-    );
-    const key = `2fa:${auth.session.id}`;
+    const meta = this.meta(request);
+    const key = `2fa:${auth.user.id}`;
+    await this.throttle.assertNotBlocked(key, meta);
 
-    if (index === -1) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 300, blockSeconds: 900 });
+    const codeHash = this.crypto.hashRecoveryCode(dto.code);
+    const result = await this.db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.id, auth.user.id)).for('update');
+
+      if (!user || !user.totpEnabled) {
+        return null;
+      }
+
+      const index = user.recoveryCodesHash.findIndex((hash) =>
+        this.crypto.safeEqual(hash, codeHash),
+      );
+
+      if (index === -1) {
+        return null;
+      }
+
+      const remaining = user.recoveryCodesHash.filter((_hash, hashIndex) => hashIndex !== index);
+      const now = new Date();
+
+      await tx
+        .update(users)
+        .set({ recoveryCodesHash: remaining, lastLoginAt: now, updatedAt: now })
+        .where(eq(users.id, user.id));
+
+      const tokens = await this.sessions.rotate(
+        auth.session,
+        {
+          twoFactorVerified: true,
+          ...meta,
+        },
+        tx,
+      );
+
+      await this.audit.log(
+        {
+          userId: user.id,
+          action: 'auth.recovery_code_used',
+          entityType: 'user',
+          entityId: user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+
+      return tokens;
+    });
+
+    if (!result) {
+      await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
         action: 'auth.recovery_verify_failed',
@@ -411,43 +573,28 @@ export class AuthService {
     }
 
     await this.throttle.reset(key);
-    const remaining = auth.user.recoveryCodesHash.filter((_hash, hashIndex) => hashIndex !== index);
-    const now = new Date();
-
-    await this.db
-      .update(users)
-      .set({ recoveryCodesHash: remaining, lastLoginAt: now, updatedAt: now })
-      .where(eq(users.id, auth.user.id));
-
-    const tokens = await this.sessions.rotate(auth.session, {
-      twoFactorVerified: true,
-      ...this.meta(request),
-    });
-
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.recovery_code_used',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
+    await this.resetLoginThrottles(request, auth.user.email);
 
     return {
       data: { user: this.publicUser(auth.user) },
-      tokens,
+      tokens: result,
     };
   }
 
   async logout(auth: AuthContext, request: FastifyRequest): Promise<void> {
-    await this.sessions.revoke(auth.session.id);
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.logout',
-      entityType: 'session',
-      entityId: auth.session.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+    await this.db.transaction(async (tx) => {
+      await this.sessions.revoke(auth.session.id, tx);
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.logout',
+          entityType: 'session',
+          entityId: auth.session.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
     });
   }
 
@@ -475,18 +622,42 @@ export class AuthService {
     };
   }
 
-  async revokeSession(auth: AuthContext, sessionId: string): Promise<void> {
-    await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, auth.user.id)));
+  async revokeSession(
+    auth: AuthContext,
+    sessionId: string,
+    request: FastifyRequest,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const [revoked] = await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(sessions.id, sessionId),
+            eq(sessions.userId, auth.user.id),
+            isNull(sessions.revokedAt),
+          ),
+        )
+        .returning({ id: sessions.id });
 
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.session_revoked',
-      entityType: 'session',
-      entityId: sessionId,
-      ip: undefined,
+      if (!revoked) {
+        throw new NotFoundException({
+          code: 'NOT_FOUND',
+          message: 'Session not found',
+        });
+      }
+
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.session_revoked',
+          entityType: 'session',
+          entityId: sessionId,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
     });
   }
 
@@ -494,16 +665,21 @@ export class AuthService {
     auth: AuthContext,
     dto: ChangePasswordRequest,
     request: FastifyRequest,
-  ): Promise<void> {
+  ): Promise<SessionTokens> {
     const key = `password:${auth.user.id}`;
-    await this.throttle.assertNotBlocked(key);
+    const meta = this.meta(request);
+    await this.throttle.assertNotBlocked(key, meta);
     const valid = await this.crypto.verifyPassword(auth.user.passwordHash, dto.currentPassword);
 
     if (!valid) {
-      await this.throttle.hit(key, {
-        max: 5,
-        windowSeconds: 900,
-        blockSeconds: 900,
+      await this.throttle.hit(key, PASSWORD_WINDOW, meta);
+      await this.audit.log({
+        userId: auth.user.id,
+        action: 'auth.password_change_failed',
+        entityType: 'user',
+        entityId: auth.user.id,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
       });
       throw new UnauthorizedException({
         code: 'INVALID_PASSWORD',
@@ -511,42 +687,114 @@ export class AuthService {
       });
     }
 
-    await this.throttle.reset(key);
     const passwordHash = await this.crypto.hashPassword(dto.newPassword);
 
-    await this.db
-      .update(users)
-      .set({ passwordHash, updatedAt: new Date() })
-      .where(eq(users.id, auth.user.id));
+    const tokens = await this.db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({ passwordHash, updatedAt: new Date() })
+        .where(eq(users.id, auth.user.id));
 
-    await this.sessions.revokeOthers(auth.user.id, auth.session.id);
+      await this.sessions.revokeOthers(auth.user.id, auth.session.id, tx);
+      await this.sessions.revoke(auth.session.id, tx);
 
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.password_changed',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      const rotated = await this.sessions.create(
+        auth.user.id,
+        {
+          twoFactorVerified: true,
+          ...meta,
+        },
+        tx,
+      );
+
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.password_changed',
+          entityType: 'user',
+          entityId: auth.user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+
+      return rotated;
     });
+
+    await this.throttle.reset(key);
+    return tokens;
   }
 
   async resetPassword(
     dto: ResetPasswordRequest,
     request: FastifyRequest,
   ): Promise<RecoveryCodesResponse> {
-    const key = `reset:${request.ip}`;
-    await this.throttle.assertNotBlocked(key);
-
     const email = dto.email.toLowerCase();
-    const [user] = await this.db.select().from(users).where(eq(users.email, email)).limit(1);
-    const codeHash = this.crypto.hashRecoveryCode(dto.recoveryCode);
-    const index = user
-      ? user.recoveryCodesHash.findIndex((hash) => this.crypto.safeEqual(hash, codeHash))
-      : -1;
+    const meta = this.meta(request);
+    const keys = [`reset:${request.ip}`, `reset-email:${this.crypto.sha256(email)}`];
 
-    if (!user || index === -1) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 900, blockSeconds: 900 });
+    for (const key of keys) {
+      await this.throttle.assertNotBlocked(key, meta);
+    }
+
+    const codeHash = this.crypto.hashRecoveryCode(dto.recoveryCode);
+    const result = await this.db.transaction(async (tx) => {
+      const [user] = await tx.select().from(users).where(eq(users.email, email)).for('update');
+
+      if (!user) {
+        return null;
+      }
+
+      const index = user.recoveryCodesHash.findIndex((hash) =>
+        this.crypto.safeEqual(hash, codeHash),
+      );
+
+      if (index === -1) {
+        return null;
+      }
+
+      const newCodes = this.crypto.generateRecoveryCodes();
+      const newHashes = newCodes.map((code) => this.crypto.hashRecoveryCode(code));
+      const passwordHash = await this.crypto.hashPassword(dto.newPassword);
+
+      await tx
+        .update(users)
+        .set({
+          passwordHash,
+          recoveryCodesHash: newHashes,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id));
+
+      await this.sessions.revokeAll(user.id, tx);
+
+      await this.audit.log(
+        {
+          userId: user.id,
+          action: 'auth.password_reset',
+          entityType: 'user',
+          entityId: user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+
+      return { newCodes, userId: user.id };
+    });
+
+    if (!result) {
+      let firstError: unknown;
+
+      for (const key of keys) {
+        try {
+          await this.throttle.hit(key, PASSWORD_WINDOW, meta);
+        } catch (error) {
+          firstError ??= error;
+        }
+      }
+
       await this.audit.log({
         action: 'auth.password_reset_failed',
         entityType: 'user',
@@ -554,41 +802,22 @@ export class AuthService {
         ip: request.ip,
         userAgent: request.headers['user-agent'],
       });
+
+      if (firstError) {
+        throw firstError;
+      }
+
       throw new UnauthorizedException({
         code: 'RECOVERY_CODE_INVALID',
         message: 'Invalid recovery code',
       });
     }
 
-    await this.throttle.reset(key);
-    const newCodes = this.crypto.generateRecoveryCodes();
-    const newHashes = newCodes.map((code) => this.crypto.hashRecoveryCode(code));
-    const passwordHash = await this.crypto.hashPassword(dto.newPassword);
+    for (const key of keys) {
+      await this.throttle.reset(key);
+    }
 
-    await this.db
-      .update(users)
-      .set({
-        passwordHash,
-        recoveryCodesHash: newHashes,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
-
-    await this.db
-      .update(sessions)
-      .set({ revokedAt: new Date() })
-      .where(eq(sessions.userId, user.id));
-
-    await this.audit.log({
-      userId: user.id,
-      action: 'auth.password_reset',
-      entityType: 'user',
-      entityId: user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
-
-    return { recoveryCodes: newCodes };
+    return { recoveryCodes: result.newCodes };
   }
 
   async regenerateRecoveryCodes(
@@ -597,36 +826,49 @@ export class AuthService {
     request: FastifyRequest,
   ): Promise<RecoveryCodesResponse> {
     const key = `recovery-codes:${auth.user.id}`;
-    await this.throttle.assertNotBlocked(key);
+    const meta = this.meta(request);
+    await this.throttle.assertNotBlocked(key, meta);
     const valid = await this.crypto.verifyPassword(auth.user.passwordHash, dto.password);
 
     if (!valid) {
-      await this.throttle.hit(key, { max: 5, windowSeconds: 900, blockSeconds: 900 });
+      await this.throttle.hit(key, PASSWORD_WINDOW, meta);
+      await this.audit.log({
+        userId: auth.user.id,
+        action: 'auth.recovery_codes_regeneration_failed',
+        entityType: 'user',
+        entityId: auth.user.id,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
       throw new UnauthorizedException({
         code: 'INVALID_PASSWORD',
         message: 'Password is invalid',
       });
     }
 
-    await this.throttle.reset(key);
-
     const recoveryCodes = this.crypto.generateRecoveryCodes();
     const recoveryCodesHash = recoveryCodes.map((code) => this.crypto.hashRecoveryCode(code));
 
-    await this.db
-      .update(users)
-      .set({ recoveryCodesHash, updatedAt: new Date() })
-      .where(eq(users.id, auth.user.id));
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(users)
+        .set({ recoveryCodesHash, updatedAt: new Date() })
+        .where(eq(users.id, auth.user.id));
 
-    await this.audit.log({
-      userId: auth.user.id,
-      action: 'auth.recovery_codes_regenerated',
-      entityType: 'user',
-      entityId: auth.user.id,
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.recovery_codes_regenerated',
+          entityType: 'user',
+          entityId: auth.user.id,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
     });
 
+    await this.throttle.reset(key);
     return { recoveryCodes };
   }
 }

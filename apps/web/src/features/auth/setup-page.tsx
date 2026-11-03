@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ApiError, apiFetch, apiPost } from '@/lib/api';
+import { apiFetch, apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { FormError, FormSuccess, Field } from './form-helpers';
 import { authStatusResponseSchema, setupResponseSchema } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
@@ -42,9 +43,7 @@ export function SetupPage() {
       );
       setRecoveryCodes(result.recoveryCodes);
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось создать владельца.',
-      );
+      setError(toRussianError(requestError, 'Не удалось создать владельца.'));
     } finally {
       setLoading(false);
     }

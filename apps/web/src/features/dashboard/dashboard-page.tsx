@@ -49,7 +49,7 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>{messages.dashboard.phase}</CardTitle>
           </CardHeader>
-          <CardValue>1</CardValue>
+          <CardValue>2</CardValue>
           <CardDescription>{messages.dashboard.phaseHint}</CardDescription>
         </Card>
 
@@ -57,7 +57,7 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>{messages.dashboard.nextPhase}</CardTitle>
           </CardHeader>
-          <CardValue>2</CardValue>
+          <CardValue>3</CardValue>
           <CardDescription>{messages.dashboard.nextPhaseHint}</CardDescription>
         </Card>
       </div>
@@ -71,6 +71,7 @@ export function DashboardPage() {
           <li>• Postgres 17 + Drizzle + миграции</li>
           <li>• NestJS + Fastify, health/ready</li>
           <li>• React + Vite + TanStack Router/Query</li>
+          <li>• Auth: пароль, TOTP, recovery codes</li>
           <li>• Tailwind CSS и тёмная тема</li>
           <li>• CI, Dockerfile и Railway-заготовка</li>
         </ul>

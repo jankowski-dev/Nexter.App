@@ -15,8 +15,11 @@ const ARGON_OPTIONS = {
   algorithm: Algorithm.Argon2id,
 };
 
+const DUMMY_PASSWORD = 'nexter-dummy-password-for-timing-safety';
+
 export class CryptoService {
   private readonly key: Buffer | undefined;
+  private dummyPasswordHash: Promise<string> | undefined;
 
   constructor(keyValue: string | undefined) {
     this.key = this.parseKey(keyValue);
@@ -33,6 +36,10 @@ export class CryptoService {
     return decoded.length === 32 ? decoded : undefined;
   }
 
+  assertConfigured(): void {
+    this.requireKey();
+  }
+
   private requireKey(): Buffer {
     if (!this.key) {
       throw new ServiceUnavailableException(
@@ -47,12 +54,23 @@ export class CryptoService {
     return hash(password, ARGON_OPTIONS);
   }
 
-  async verifyPassword(passwordHash: string, password: string): Promise<boolean> {
+  async verifyPassword(
+    passwordHash: string | null | undefined,
+    password: string,
+  ): Promise<boolean> {
+    const target = passwordHash || (await this.getDummyPasswordHash());
+
     try {
-      return await verify(passwordHash, password, ARGON_OPTIONS);
+      const valid = await verify(target, password, ARGON_OPTIONS);
+      return Boolean(passwordHash) && valid;
     } catch {
       return false;
     }
+  }
+
+  private getDummyPasswordHash(): Promise<string> {
+    this.dummyPasswordHash ??= this.hashPassword(DUMMY_PASSWORD);
+    return this.dummyPasswordHash;
   }
 
   sha256(value: string): string {
@@ -64,14 +82,10 @@ export class CryptoService {
   }
 
   safeEqual(left: string, right: string): boolean {
-    const leftBuffer = Buffer.from(left);
-    const rightBuffer = Buffer.from(right);
+    const leftDigest = createHash('sha256').update(left).digest();
+    const rightDigest = createHash('sha256').update(right).digest();
 
-    if (leftBuffer.length !== rightBuffer.length) {
-      return false;
-    }
-
-    return timingSafeEqual(leftBuffer, rightBuffer);
+    return timingSafeEqual(leftDigest, rightDigest);
   }
 
   encryptSecret(plainText: string): string {

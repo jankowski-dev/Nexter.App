@@ -1,7 +1,8 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { rateLimits, type Database } from '@nexter/db';
 import { DB } from '../../shared/db/db.module';
+import { AuditService } from '../../shared/audit/audit.service';
 
 export interface ThrottleOptions {
   max: number;
@@ -9,14 +10,30 @@ export interface ThrottleOptions {
   blockSeconds: number;
 }
 
+export interface ThrottleMeta {
+  ip?: string;
+  userAgent?: string;
+}
+
 @Injectable()
 export class AuthThrottleService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly audit: AuditService,
+  ) {}
 
-  async assertNotBlocked(key: string): Promise<void> {
+  async assertNotBlocked(key: string, meta: ThrottleMeta = {}): Promise<void> {
     const [row] = await this.db.select().from(rateLimits).where(eq(rateLimits.key, key)).limit(1);
 
     if (row?.blockedUntil && row.blockedUntil > new Date()) {
+      await this.audit.log({
+        action: 'auth.rate_limited',
+        entityType: 'rate_limit',
+        entityId: key,
+        after: { key },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
       throw new HttpException(
         { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' },
         HttpStatus.TOO_MANY_REQUESTS,
@@ -24,43 +41,43 @@ export class AuthThrottleService {
     }
   }
 
-  async hit(key: string, options: ThrottleOptions): Promise<void> {
+  async hit(key: string, options: ThrottleOptions, meta: ThrottleMeta = {}): Promise<void> {
     const now = new Date();
     const windowStart = new Date(now.getTime() - options.windowSeconds * 1000);
-    const [row] = await this.db.select().from(rateLimits).where(eq(rateLimits.key, key)).limit(1);
+    const blockedUntil = new Date(now.getTime() + options.blockSeconds * 1000);
 
-    if (!row || row.windowStartedAt < windowStart) {
-      await this.db
-        .insert(rateLimits)
-        .values({
-          key,
-          points: 1,
-          windowStartedAt: now,
-          blockedUntil: null,
+    const reset = sql`((${rateLimits.blockedUntil} is not null and ${rateLimits.blockedUntil} <= ${now}::timestamptz) or ${rateLimits.windowStartedAt} < ${windowStart}::timestamptz)`;
+    const nextPoints = sql`(case when ${reset} then 1 else ${rateLimits.points} + 1 end)`;
+
+    const [row] = await this.db
+      .insert(rateLimits)
+      .values({
+        key,
+        points: 1,
+        windowStartedAt: now,
+        blockedUntil: null,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: rateLimits.key,
+        set: {
+          points: nextPoints,
+          windowStartedAt: sql`case when ${reset} then ${now}::timestamptz else ${rateLimits.windowStartedAt} end`,
+          blockedUntil: sql`case when ${nextPoints} >= ${options.max} then ${blockedUntil}::timestamptz else null::timestamptz end`,
           updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: rateLimits.key,
-          set: {
-            points: 1,
-            windowStartedAt: now,
-            blockedUntil: null,
-            updatedAt: now,
-          },
-        });
-      return;
-    }
+        },
+      })
+      .returning({ points: rateLimits.points, blockedUntil: rateLimits.blockedUntil });
 
-    const points = row.points + 1;
-    const blockedUntil =
-      points >= options.max ? new Date(now.getTime() + options.blockSeconds * 1000) : null;
-
-    await this.db
-      .update(rateLimits)
-      .set({ points, blockedUntil, updatedAt: now })
-      .where(eq(rateLimits.key, key));
-
-    if (blockedUntil) {
+    if (row?.blockedUntil && row.blockedUntil > now) {
+      await this.audit.log({
+        action: 'auth.rate_limited',
+        entityType: 'rate_limit',
+        entityId: key,
+        after: { key, points: row.points },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      });
       throw new HttpException(
         { code: 'RATE_LIMITED', message: 'Too many attempts. Try again later.' },
         HttpStatus.TOO_MANY_REQUESTS,

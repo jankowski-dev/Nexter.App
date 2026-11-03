@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiError, apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { FormError, Field } from './form-helpers';
 import { twoFactorSetupResponseSchema, twoFactorVerifyResponseSchema } from '@nexter/contracts';
 import { useNavigate } from '@tanstack/react-router';
@@ -33,11 +34,7 @@ export function Setup2faPage() {
           void navigate({ to: '/dashboard' });
           return;
         }
-        setError(
-          requestError instanceof ApiError
-            ? requestError.message
-            : 'Не удалось начать настройку 2FA.',
-        );
+        setError(toRussianError(requestError, 'Не удалось начать настройку 2FA.'));
       });
   }, [navigate]);
 
@@ -50,9 +47,7 @@ export function Setup2faPage() {
       await apiPost('/api/v1/auth/2fa/enable', { code }, twoFactorVerifyResponseSchema);
       await navigate({ to: '/dashboard' });
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось включить 2FA.',
-      );
+      setError(toRussianError(requestError, 'Не удалось включить 2FA.'));
     } finally {
       setLoading(false);
     }

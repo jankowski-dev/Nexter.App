@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ApiError, apiPost } from '@/lib/api';
+import { apiPost } from '@/lib/api';
+import { toRussianError } from '@/lib/error-messages';
 import { FormError, Field } from './form-helpers';
 import { twoFactorVerifyResponseSchema } from '@nexter/contracts';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -21,9 +22,7 @@ export function TwoFactorPage() {
       await apiPost('/api/v1/auth/2fa/verify', { code }, twoFactorVerifyResponseSchema);
       await navigate({ to: '/dashboard' });
     } catch (requestError) {
-      setError(
-        requestError instanceof ApiError ? requestError.message : 'Не удалось подтвердить код.',
-      );
+      setError(toRussianError(requestError, 'Не удалось подтвердить код.'));
     } finally {
       setLoading(false);
     }

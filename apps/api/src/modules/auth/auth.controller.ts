@@ -10,12 +10,14 @@ import {
   Post,
   Req,
   Res,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
   AuthMeResponse,
   AuthStatusResponse,
   ChangePasswordRequest,
+  CsrfTokenResponse,
   LoginRequest,
   LoginResponse,
   RecoveryCodeRequest,
@@ -41,6 +43,7 @@ import {
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { clearAuthCookies, setAuthCookies } from './auth.cookies';
+import { CSRF_COOKIE } from './auth.constants';
 import { CurrentAuth } from './current-auth.decorator';
 import { AllowPending2fa, Public } from './public.decorator';
 import type { AuthContext } from './auth.types';
@@ -86,6 +89,21 @@ export class AuthController {
   @Get('me')
   me(@CurrentAuth() auth: AuthContext): AuthMeResponse {
     return this.authService.me(auth);
+  }
+
+  @AllowPending2fa()
+  @Get('csrf')
+  csrf(@Req() request: FastifyRequest): CsrfTokenResponse {
+    const csrfToken = request.cookies?.[CSRF_COOKIE];
+
+    if (typeof csrfToken !== 'string' || csrfToken.length === 0) {
+      throw new UnauthorizedException({
+        code: 'AUTH_REQUIRED',
+        message: 'CSRF token is not available',
+      });
+    }
+
+    return { csrfToken };
   }
 
   @AllowPending2fa()
@@ -162,9 +180,10 @@ export class AuthController {
   async revokeSession(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    await this.authService.revokeSession(auth, id);
+    await this.authService.revokeSession(auth, id, request);
     if (id === auth.session.id) {
       clearAuthCookies(reply);
     }
@@ -172,12 +191,14 @@ export class AuthController {
 
   @Post('password')
   @HttpCode(HttpStatus.NO_CONTENT)
-  changePassword(
+  async changePassword(
     @CurrentAuth() auth: AuthContext,
     @Body(new ZodValidationPipe(changePasswordRequestSchema)) body: ChangePasswordRequest,
     @Req() request: FastifyRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<void> {
-    return this.authService.changePassword(auth, body, request);
+    const tokens = await this.authService.changePassword(auth, body, request);
+    setAuthCookies(reply, tokens);
   }
 
   @Public()

@@ -51,3 +51,13 @@ Format: date — decision — reason.
 - **Auth rate limits are database-backed.** `rate_limits` provides per-IP/per-user lockout without adding Redis.
 - **Pending-2FA sessions are isolated by a global guard.** Only explicitly allowed auth endpoints can be used before TOTP verification.
 - **No email is sent.** Setup, login, TOTP, recovery, and password reset are fully self-hosted.
+- **TOTP lockout is per-user and enforced before verification.** The counter is keyed `2fa:<user_id>`, checked before decrypting a code, and not reset by a password-only login. A valid code cannot bypass an active block.
+- **First-run setup is single-owner at the database level.** `users_singleton_unique` plus an advisory-lock transaction prevents two owners under concurrency; the loser receives `409`.
+- **Password change rotates the current session.** The old session and all other sessions are revoked, and a new verified session is issued. This resolves the contract/spec conflict in favor of rotation.
+- **Recovery-code consumption is atomic.** Verification and reset use row locks, so a code cannot be consumed twice under concurrency.
+- **Credential/session mutations and their audit rows share a transaction.** If the audit insert fails, the mutation rolls back; failed attempts remain best-effort audit writes.
+- **Session TTL is absolute 30 days.** Sliding renewal is deferred; see ADR 0005. Activity updates `last_seen_at`, not `expires_at`.
+- **`AUTH_ENCRYPTION_KEY` is validated at startup and before setup.** A malformed key cannot create an owner that then cannot complete TOTP setup.
+- **Login throttling is per IP and per hashed email.** Unknown emails still pay an Argon2 dummy verification; login counters reset only after 2FA.
+- **Break-glass recovery is an offline runbook.** The setup token is not a recovery path; see `docs/runbooks/auth-recovery.md`.
+- **Phase 2 review fixes are covered by tests.** API auth e2e now covers setup races, lockout, recovery/reset, session revocation, CSRF, audit, and password-change rotation; Playwright covers the browser auth flow.

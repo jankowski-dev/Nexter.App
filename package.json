@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm build:packages && pnpm -r typecheck",
     "test": "pnpm build:packages && pnpm -r test",
+    "test:e2e": "pnpm --filter @nexter/e2e test:e2e",
     "db:generate": "pnpm --filter @nexter/config build && pnpm --filter @nexter/db db:generate",
     "db:migrate": "pnpm --filter @nexter/config build && pnpm --filter @nexter/db db:migrate",
     "db:migrate:prod": "node packages/db/dist/migrate.js",

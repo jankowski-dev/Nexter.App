@@ -22,6 +22,10 @@ Variables:
 - `WEB_DIST_PATH=/app/apps/api/public`
 - `TRUST_PROXY` — set to the exact Railway/Cloudflare proxy CIDR or use `true` only when the origin is unreachable except through the trusted proxy. Default `false`.
 
+Break-glass recovery is documented in [`auth-recovery.md`](auth-recovery.md). The setup token is not a recovery mechanism.
+
+Auth rate-limit and session rows are not cleaned automatically yet; add a scheduled maintenance job before long-term production use.
+
 Healthcheck: `/ready` (requires database).
 
 ## Worker service

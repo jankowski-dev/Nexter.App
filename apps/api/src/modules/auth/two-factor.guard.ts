@@ -30,7 +30,7 @@ export class TwoFactorGuard implements CanActivate {
 
     if (!request.auth?.session.twoFactorVerified) {
       throw new ForbiddenException({
-        code: 'TWO_FACTOR_REQUIRED',
+        code: 'TOTP_REQUIRED',
         message: 'Two-factor authentication is required',
       });
     }

@@ -1,5 +1,9 @@
 import { SetMetadata } from '@nestjs/common';
-import { ALLOW_PENDING_2FA_METADATA, IS_PUBLIC_METADATA, SKIP_CSRF_METADATA } from './auth.constants';
+import {
+  ALLOW_PENDING_2FA_METADATA,
+  IS_PUBLIC_METADATA,
+  SKIP_CSRF_METADATA,
+} from './auth.constants';
 
 export const Public = () => SetMetadata(IS_PUBLIC_METADATA, true);
 
