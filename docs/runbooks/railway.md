@@ -79,6 +79,18 @@ Before deploying:
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
 
+### Phase 5 migration 0008 preflight
+
+Migration `0008_common_the_spike.sql` is additive: it creates `watchlist` and adds nullable `trade_groups.notes`. It does not rewrite ledger data.
+
+Before deploying:
+
+1. Take a PostgreSQL backup.
+2. Run the pre-deploy migration command.
+3. Deploy Phase 5 API/worker and the rebuilt SPA.
+4. Verify `/ready`, then open `/dashboard`, `/portfolio`, `/trades`, `/watchlist`, and `/settings`.
+5. Check that the production watchlist backfills from the latest committed Notion import on first read.
+
 ### Phase 2 migration 0003 preflight
 
 Migration `0003` creates `users_singleton_unique` and aborts with a clear error if more than one owner exists (possible only if an old deployment hit the pre-fix setup race).

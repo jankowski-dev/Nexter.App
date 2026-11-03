@@ -2,9 +2,9 @@ export const messages = {
   app: {
     name: 'Nexter',
     tagline: 'личные финансы',
-    phase: 'Фаза 4 · Импорт Notion',
+    phase: 'Фаза 5 · MVP-1 UI',
     header: 'Личный финансовый учёт',
-    status: 'MVP-1: импорт',
+    status: 'MVP-1: полный UI',
   },
   nav: {
     dashboard: 'Дашборд',

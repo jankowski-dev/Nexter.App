@@ -98,3 +98,15 @@ Format: date — decision — reason.
 - **Import commit checks final wallet balances only.** The Notion journal has buys before the first recorded deposit, so chronological non-negativity would require inventing an opening balance.
 - **Phase 4 UI is limited to `/import`.** Upload, preview, control reconciliation, commit/rollback, history, and a compact post-commit accounting summary. Full dashboard/portfolio/trades UI remains Phase 5.
 - **Phase 4 accepted.** Three independent reviews (FAIL → PASS WITH CHANGES → PASS), owner sign-off on the documented scope deviations, and the production 431-row import applied on 2026-11-03. Merge commit `12bfbb0`; main CI passed. Next phase: Phase 5 — MVP-1 UI.
+
+## Phase 5 — MVP-1 UI
+
+- **Watchlist is a separate soft-archived table.** `(user_id, asset_id)` is unique; `DELETE` archives. The first read backfills from the latest committed Notion Source rows (thesis from `Описание`, tags from `Топ`/`Дашборд`/`П-Мкап`).
+- **Trade groups expose read/detail/sell/notes APIs.** Notes are product metadata on `trade_groups`; `POST /trade-groups/:id/sells` delegates to the append-only manual sell path with `tradeGroupId`. Trade reversal is deferred to Phase 6.
+- **Dashboard aggregates are derived from the ledger.** Allocation, monthly P&L, active positions, recent trades, data quality, and an equity curve are read-only. The equity curve is explicitly valued at current prices because historical prices are unavailable; true historical valuation needs snapshots.
+- **Settings remain narrow in MVP-1.** USD and FIFO are fixed; timezone and `includeGasInCostBasis` are editable and audited. Account management is read-only for now.
+- **Audit log has a read API.** The owner sees their entries and system entries; filters and cursor pagination are supported.
+- **Export is server-side CSV/JSON.** Transactions, positions, and trade groups are exported with quoting and an `export.generated` audit entry.
+- **Manual entry is a global dialog using the existing ledger API.** The dialog supports all eight manual types; the server remains the authority for validation, FIFO, fees, and postings.
+- **The running Swagger document is the API reference; shared Zod contracts are the typed client.** A generated OpenAPI client is deferred to Phase 6 tooling.
+- **Test-only auth rate limit is raised.** Playwright runs multiple setup flows from one IP; `NODE_ENV=test` allows 100 auth attempts/minute instead of 10. Production remains at 10. The DB-backed auth lockout tests still exercise 429 behavior through the service layer.

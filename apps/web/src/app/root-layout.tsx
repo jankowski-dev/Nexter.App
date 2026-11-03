@@ -1,9 +1,11 @@
 import { Button } from '@/components/ui/button';
+import { ManualEntryDialog } from '@/features/manual/manual-entry-dialog';
 import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { useState } from 'react';
 
 const navigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
@@ -26,6 +28,7 @@ const inactiveLinkProps = {
 export function RootLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [manualOpen, setManualOpen] = useState(false);
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
@@ -92,6 +95,9 @@ export function RootLayout() {
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 {messages.app.status}
               </div>
+              <Button className="h-8 px-3 text-xs" onClick={() => setManualOpen(true)}>
+                + Операция
+              </Button>
               <Button className="md:hidden" variant="ghost" onClick={() => void logout()}>
                 Выйти
               </Button>
@@ -120,6 +126,7 @@ export function RootLayout() {
           </main>
         </div>
       </div>
+      <ManualEntryDialog open={manualOpen} onClose={() => setManualOpen(false)} />
     </div>
   );
 }

@@ -12,7 +12,13 @@ import {
 } from '@nexter/db';
 import type {
   Asset as AssetContract,
+  DashboardActivePositions,
+  DashboardAllocation,
+  DashboardDataQuality,
+  DashboardPnl,
+  DashboardRecentTrades,
   DashboardSummary,
+  EquityCurve,
   Position,
   PositionsResponse,
 } from '@nexter/contracts';
@@ -20,6 +26,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { PricingService } from './pricing.service';
+import { TradeGroupsService } from './trade-groups.service';
 
 @Injectable()
 export class ReportingService {
@@ -27,6 +34,7 @@ export class ReportingService {
     @Inject(DB) private readonly db: Database,
     private readonly bootstrap: AccountingBootstrapService,
     private readonly pricing: PricingService,
+    private readonly tradeGroups: TradeGroupsService,
   ) {}
 
   async positions(userId: string): Promise<PositionsResponse> {
@@ -154,6 +162,9 @@ export class ReportingService {
     );
     const netDeposits = await this.netDeposits(userId);
 
+    const totalPnl = realized.plus(unrealized).plus(income).plus(adjustments).minus(fees);
+    const roiPct = netDeposits.gt(0) ? totalPnl.div(netDeposits).mul(100).toFixed(2) : null;
+
     return {
       cashUsd: positions.cashUsd,
       positionsValueUsd: positions.positionsValueUsd,
@@ -164,8 +175,323 @@ export class ReportingService {
       feesUsd: usdString(fees),
       realizedPnlUsd: usdString(realized),
       unrealizedPnlUsd: usdString(unrealized),
-      totalPnlUsd: usdString(realized.plus(unrealized).plus(income).plus(adjustments).minus(fees)),
+      totalPnlUsd: usdString(totalPnl),
+      roiPct,
+      activePositionsCount: positions.positions.length,
       missingPrices: positions.missingPrices,
+    };
+  }
+
+  async allocation(userId: string): Promise<DashboardAllocation> {
+    const positions = await this.positions(userId);
+    const total = decimal(positions.equityUsd);
+    const slices: DashboardAllocation['slices'] = [];
+
+    if (decimal(positions.cashUsd).gt(0)) {
+      slices.push({
+        key: 'cash',
+        label: 'USDT / cash',
+        kind: 'cash',
+        valueUsd: positions.cashUsd,
+        percent: total.gt(0) ? decimal(positions.cashUsd).div(total).mul(100).toFixed(2) : '0.00',
+      });
+    }
+
+    for (const position of positions.positions) {
+      if (!position.valueUsd || decimal(position.valueUsd).lte(0)) continue;
+
+      slices.push({
+        key: position.asset.id,
+        label: position.asset.symbol,
+        kind: 'asset',
+        valueUsd: position.valueUsd,
+        percent: total.gt(0) ? decimal(position.valueUsd).div(total).mul(100).toFixed(2) : '0.00',
+      });
+    }
+
+    slices.sort((a, b) => decimal(b.valueUsd).comparedTo(decimal(a.valueUsd)));
+
+    return {
+      totalUsd: positions.equityUsd,
+      slices,
+      missingPrices: positions.missingPrices,
+    };
+  }
+
+  async pnlByMonth(userId: string): Promise<DashboardPnl> {
+    const realizedRows = await this.db
+      .select({
+        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        total: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`,
+      })
+      .from(lotConsumptions)
+      .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
+      .innerJoin(transactions, eq(lotConsumptions.disposalTransactionId, transactions.id))
+      .where(eq(lots.userId, userId))
+      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`);
+
+    const cashRows = await this.db
+      .select({
+        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        type: transactions.type,
+        total: sql<string>`coalesce(sum(${postings.usdValue}), 0)::text`,
+      })
+      .from(postings)
+      .innerJoin(transactions, eq(postings.transactionId, transactions.id))
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(accounts.type, 'wallet'),
+          inArray(transactions.type, ['income', 'adjustment']),
+        ),
+      )
+      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`, transactions.type);
+
+    const feeRows = await this.db
+      .select({
+        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        total: sql<string>`coalesce(sum(${transactions.feesUsd}), 0)::text`,
+      })
+      .from(transactions)
+      .where(eq(transactions.userId, userId))
+      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`);
+
+    const months = new Map<
+      string,
+      { realized: Decimal; income: Decimal; adjustments: Decimal; fees: Decimal }
+    >();
+
+    const bucket = (month: string) => {
+      const existing = months.get(month);
+      if (existing) return existing;
+
+      const created = {
+        realized: new Decimal(0),
+        income: new Decimal(0),
+        adjustments: new Decimal(0),
+        fees: new Decimal(0),
+      };
+      months.set(month, created);
+      return created;
+    };
+
+    for (const row of realizedRows) bucket(row.month).realized = decimal(row.total);
+    for (const row of cashRows) {
+      const entry = bucket(row.month);
+      if (row.type === 'income') entry.income = entry.income.plus(row.total);
+      else entry.adjustments = entry.adjustments.plus(row.total);
+    }
+    for (const row of feeRows) bucket(row.month).fees = decimal(row.total);
+
+    return {
+      months: [...months.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([month, value]) => ({
+          month,
+          realizedUsd: usdString(value.realized),
+          incomeUsd: usdString(value.income),
+          adjustmentsUsd: usdString(value.adjustments),
+          feesUsd: usdString(value.fees),
+          totalUsd: usdString(
+            value.realized.plus(value.income).plus(value.adjustments).minus(value.fees),
+          ),
+        })),
+    };
+  }
+
+  async activePositions(userId: string): Promise<DashboardActivePositions> {
+    const positions = await this.positions(userId);
+    return {
+      positions: positions.positions,
+      missingPrices: positions.missingPrices,
+    };
+  }
+
+  async recentTrades(userId: string): Promise<DashboardRecentTrades> {
+    const result = await this.tradeGroups.list(userId, { limit: 5 });
+    return { data: result.data };
+  }
+
+  async dataQuality(userId: string): Promise<DashboardDataQuality> {
+    const positions = await this.positions(userId);
+    const assetRows = await this.db.select().from(assets);
+    const transactionRows = await this.db
+      .select({
+        id: transactions.id,
+        source: transactions.source,
+        sourceId: transactions.sourceId,
+        dataQuality: transactions.dataQuality,
+      })
+      .from(transactions)
+      .where(eq(transactions.userId, userId));
+
+    const unverifiedAssets = assetRows
+      .filter((asset) => !asset.isVerified)
+      .map((asset) => asset.symbol);
+    const unknownChain = assetRows
+      .filter((asset) => asset.dataQuality.chainKnown === false)
+      .map((asset) => asset.symbol);
+    const unknownContract = assetRows
+      .filter((asset) => asset.dataQuality.contractKnown === false)
+      .map((asset) => asset.symbol);
+    const missingGas = transactionRows
+      .filter((row) => row.dataQuality.networkFeeIncluded === false)
+      .map((row) => row.sourceId ?? row.id);
+    const unreconciled = transactionRows
+      .filter((row) => row.dataQuality.reconciled === false)
+      .map((row) => row.sourceId ?? row.id);
+
+    const negativeRows = await this.db
+      .select({
+        accountId: accounts.id,
+        accountName: accounts.name,
+        assetId: assets.id,
+        symbol: assets.symbol,
+        amount: sql<string>`coalesce(sum(${postings.amount}), 0)::text`,
+      })
+      .from(postings)
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .innerJoin(assets, eq(postings.assetId, assets.id))
+      .where(and(eq(accounts.userId, userId), eq(accounts.type, 'wallet')))
+      .groupBy(accounts.id, accounts.name, assets.id, assets.symbol)
+      .having(sql`sum(${postings.amount}) < 0`);
+
+    const issues: DashboardDataQuality['issues'] = [];
+    const addIssue = (
+      code: string,
+      label: string,
+      severity: 'info' | 'warning' | 'error',
+      values: string[],
+    ) => {
+      if (values.length === 0) return;
+      issues.push({
+        code,
+        label,
+        severity,
+        count: values.length,
+        details: values.slice(0, 20),
+      });
+    };
+
+    addIssue(
+      'negative_balances',
+      'Отрицательные балансы кошельков',
+      'error',
+      negativeRows.map((row) => `${row.accountName}: ${row.symbol} ${row.amount}`),
+    );
+    addIssue('missing_prices', 'Нет цены для активов', 'warning', positions.missingPrices);
+    addIssue('unverified_assets', 'Непроверенные активы', 'warning', unverifiedAssets);
+    addIssue(
+      'unknown_chain',
+      'Неизвестная сеть у импортированных активов',
+      'warning',
+      unknownChain,
+    );
+    addIssue(
+      'unknown_contract',
+      'Неизвестный контракт у импортированных активов',
+      'warning',
+      unknownContract,
+    );
+    addIssue('missing_gas', 'Не указан сетевой сбор', 'warning', missingGas);
+    addIssue('unreconciled', 'Не сверено с ончейн-данными', 'info', unreconciled);
+
+    return {
+      issues,
+      missingPrices: positions.missingPrices,
+      unverifiedAssets,
+      negativeBalances: negativeRows,
+    };
+  }
+
+  async equityCurve(userId: string): Promise<EquityCurve> {
+    const rows = await this.db
+      .select({
+        assetId: postings.assetId,
+        amount: postings.amount,
+        occurredAt: transactions.occurredAt,
+        isCashEquivalent: assets.isCashEquivalent,
+      })
+      .from(postings)
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .innerJoin(transactions, eq(postings.transactionId, transactions.id))
+      .innerJoin(assets, eq(postings.assetId, assets.id))
+      .where(and(eq(accounts.userId, userId), eq(accounts.type, 'wallet')))
+      .orderBy(transactions.occurredAt, transactions.createdAt);
+
+    if (rows.length === 0) {
+      return {
+        valuation: 'current-prices',
+        note: 'Нет проводок для построения кривой.',
+        points: [],
+      };
+    }
+
+    const nonCashAssetIds = [
+      ...new Set(rows.filter((row) => !row.isCashEquivalent).map((row) => row.assetId)),
+    ];
+    const priceByAsset = await this.pricing.latestForAssets(nonCashAssetIds);
+    const balances = new Map<string, Decimal>();
+    let cursor = 0;
+    const points: EquityCurve['points'] = [];
+    const first = rows[0]?.occurredAt ?? new Date();
+    const now = new Date();
+    let year = first.getUTCFullYear();
+    let month = first.getUTCMonth();
+
+    while (points.length < 36) {
+      const monthEnd = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));
+      const isCurrentPoint = monthEnd.getTime() >= now.getTime();
+      const pointDate = isCurrentPoint ? now : monthEnd;
+
+      // The current point represents the current ledger state. Some imported
+      // date-only closes are normalized to end of day and can be a few hours
+      // ahead of the clock; include all recorded postings for "now".
+      while (
+        cursor < rows.length &&
+        (isCurrentPoint || (rows[cursor]?.occurredAt.getTime() ?? 0) <= pointDate.getTime())
+      ) {
+        const row = rows[cursor];
+        if (!row) break;
+        balances.set(row.assetId, (balances.get(row.assetId) ?? new Decimal(0)).plus(row.amount));
+        cursor += 1;
+      }
+
+      let cash = new Decimal(0);
+      let positionsValue = new Decimal(0);
+
+      for (const [assetId, amount] of balances) {
+        const row = rows.find((item) => item.assetId === assetId);
+        if (row?.isCashEquivalent) {
+          cash = cash.plus(decimal(usdString(amount)));
+          continue;
+        }
+        const price = priceByAsset.get(assetId);
+        if (price) {
+          positionsValue = positionsValue.plus(decimal(usdString(amount.mul(decimal(price)))));
+        }
+      }
+
+      points.push({
+        date: pointDate.toISOString(),
+        cashUsd: usdString(cash),
+        positionsValueUsd: usdString(positionsValue),
+        equityUsd: usdString(cash.plus(positionsValue)),
+      });
+
+      if (monthEnd.getTime() >= now.getTime()) break;
+      month += 1;
+      if (month > 11) {
+        month = 0;
+        year += 1;
+      }
+    }
+
+    return {
+      valuation: 'current-prices',
+      note: 'Исторические остатки оценены по текущим ценам; точная историческая переоценка появится после ежедневных снимков.',
+      points,
     };
   }
 

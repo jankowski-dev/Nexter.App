@@ -152,12 +152,16 @@ function relationIds(row: Record<string, unknown>, key: string): string[] {
     .filter((item): item is string => Boolean(item));
 }
 
-function iso(value: string | null, endOfDay = false): string | null {
+function iso(value: string | null, endOfDay = false, capAtNow = false): string | null {
   if (!value) return null;
 
   const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const parsed = new Date(dateOnly && endOfDay ? `${value}T23:59:59.999Z` : value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  let parsed = new Date(dateOnly && endOfDay ? `${value}T23:59:59.999Z` : value);
+
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (capAtNow && parsed.getTime() > Date.now()) parsed = new Date();
+
+  return parsed.toISOString();
 }
 
 function mapStatus(value: string | null): NotionOrderStatus | null {
@@ -454,7 +458,7 @@ export function parseNotionExport(input: {
     const orderId = idValue(row['userDefined:ID']);
     const status = mapStatus(text(row, 'Статус'));
     const openedAt = iso(text(row, 'date:Открытие:start'));
-    const closedAt = iso(text(row, 'date:Закрытие:start'), true);
+    const closedAt = iso(text(row, 'date:Закрытие:start'), true, true);
     const sourceIds = relationIds(row, 'Счет источника');
     const destinationIds = relationIds(row, 'Счет назначения');
     const sourceSymbol = sourceIds[0] ? text(sourceById.get(sourceIds[0]) ?? {}, 'Название') : null;

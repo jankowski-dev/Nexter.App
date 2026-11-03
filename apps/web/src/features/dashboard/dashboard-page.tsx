@@ -1,84 +1,405 @@
+import { AllocationBar } from '@/components/charts/allocation-bar';
+import { BarChart } from '@/components/charts/bar-chart';
+import { LineChart } from '@/components/charts/line-chart';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardHeader, CardTitle, CardValue } from '@/components/ui/card';
-import { apiFetch, healthResponseSchema } from '@/lib/api';
-import { messages } from '@/lib/i18n';
-import type { HealthResponse } from '@nexter/contracts';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageHeader } from '@/components/ui/page-header';
+import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { toRussianError } from '@/lib/error-messages';
+import {
+  fetchDashboardActivePositions,
+  fetchDashboardAllocation,
+  fetchDashboardDataQuality,
+  fetchDashboardPnl,
+  fetchDashboardRecentTrades,
+  fetchDashboardSummary,
+  fetchEquityCurve,
+} from '@/lib/api';
+import {
+  formatCount,
+  formatDate,
+  formatPct,
+  formatSignedUsd,
+  formatTokenAmount,
+  formatUsd,
+  pnlTone,
+} from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
+
+const statusLabels: Record<string, string> = {
+  open: 'Открыта',
+  partial: 'Частично',
+  closed: 'Закрыта',
+  reserve: 'Резерв',
+  for_sale: 'В продажу',
+};
+
+function Metric({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: string;
+}) {
+  return (
+    <Card>
+      <CardTitle>{label}</CardTitle>
+      <div
+        className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-50'}`}
+      >
+        {value}
+      </div>
+      {hint ? <CardDescription>{hint}</CardDescription> : null}
+    </Card>
+  );
+}
+
+function Section({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div>
+          <CardTitle>{title}</CardTitle>
+          {description ? <CardDescription>{description}</CardDescription> : null}
+        </div>
+        {action}
+      </CardHeader>
+      {children}
+    </Card>
+  );
+}
+
+function DataQualityBanner() {
+  const query = useQuery({
+    queryKey: ['dashboard-data-quality'],
+    queryFn: fetchDashboardDataQuality,
+  });
+
+  if (query.isPending) return null;
+  if (query.isError || !query.data) return null;
+  if (query.data.issues.length === 0) {
+    return (
+      <Card className="border-emerald-900/60 bg-emerald-950/20">
+        <div className="flex items-center gap-2 text-sm text-emerald-200">
+          <Badge tone="success">OK</Badge>
+          Качество данных: критичных предупреждений нет.
+        </div>
+      </Card>
+    );
+  }
+
+  const errors = query.data.issues.filter((issue) => issue.severity === 'error');
+  const warnings = query.data.issues.filter((issue) => issue.severity !== 'error');
+
+  return (
+    <Card className="border-amber-900/60 bg-amber-950/20">
+      <CardHeader>
+        <div>
+          <CardTitle className="text-amber-100">Качество данных</CardTitle>
+          <CardDescription className="text-amber-100/80">
+            {errors.length > 0
+              ? `Есть ${formatCount(errors.length)} критичных проблем.`
+              : `Есть ${formatCount(warnings.length)} предупреждений.`}
+          </CardDescription>
+        </div>
+        <Link
+          to="/settings/data-quality"
+          className="text-sm font-medium text-amber-200 hover:text-amber-100"
+        >
+          Подробнее →
+        </Link>
+      </CardHeader>
+      <div className="flex flex-wrap gap-2">
+        {query.data.issues.map((issue) => (
+          <Badge key={issue.code} tone={issue.severity === 'error' ? 'danger' : 'warning'}>
+            {issue.label}: {formatCount(issue.count)}
+          </Badge>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 export function DashboardPage() {
-  const health = useQuery({
-    queryKey: ['health'],
-    queryFn: () => apiFetch<HealthResponse>('/health', {}, healthResponseSchema),
-    refetchInterval: 30_000,
+  const summary = useQuery({ queryKey: ['dashboard-summary'], queryFn: fetchDashboardSummary });
+  const allocation = useQuery({
+    queryKey: ['dashboard-allocation'],
+    queryFn: fetchDashboardAllocation,
   });
+  const pnl = useQuery({ queryKey: ['dashboard-pnl'], queryFn: fetchDashboardPnl });
+  const active = useQuery({
+    queryKey: ['dashboard-active-positions'],
+    queryFn: fetchDashboardActivePositions,
+  });
+  const recent = useQuery({
+    queryKey: ['dashboard-recent-trades'],
+    queryFn: fetchDashboardRecentTrades,
+  });
+  const curve = useQuery({ queryKey: ['dashboard-equity-curve'], queryFn: fetchEquityCurve });
+
+  const isLoading =
+    summary.isPending ||
+    allocation.isPending ||
+    pnl.isPending ||
+    active.isPending ||
+    recent.isPending ||
+    curve.isPending;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Дашборд" subtitle="Загружаю данные учёта…" />
+        <LoadingRows rows={8} />
+      </div>
+    );
+  }
+
+  if (summary.isError || !summary.data) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Дашборд" />
+        <ErrorState
+          message={toRussianError(summary.error, 'Не удалось загрузить дашборд')}
+          onRetry={() => void summary.refetch()}
+        />
+      </div>
+    );
+  }
+
+  const data = summary.data;
+  const curvePoints = (curve.data?.points ?? []).slice(-12).map((point) => ({
+    label: new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
+      new Date(point.date),
+    ),
+    value: Number(point.equityUsd),
+  }));
+  const pnlPoints = (pnl.data?.months ?? []).slice(-12).map((month) => ({
+    label: month.month.slice(5),
+    value: Number(month.totalUsd),
+  }));
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{messages.dashboard.title}</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Полный дашборд появится в Phase 5. Импорт Notion и итоги учёта уже доступны в разделе
-            «Импорт».
-          </p>
-        </div>
-        <Button variant="secondary" onClick={() => void health.refetch()}>
-          {messages.dashboard.checkApi}
-        </Button>
-      </div>
+      <PageHeader
+        title="Дашборд"
+        subtitle="Текущий портфель, P&L и качество данных."
+        actions={
+          <>
+            <Button variant="secondary" asChild>
+              <Link to="/portfolio">Портфель</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/trades">Сделки</Link>
+            </Button>
+          </>
+        }
+      />
+
+      <DataQualityBanner />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>{messages.dashboard.api}</CardTitle>
-          </CardHeader>
-          <CardValue>
-            {health.isPending ? '...' : health.isError ? 'offline' : health.data?.status}
-          </CardValue>
-          <CardDescription>
-            {health.isError ? 'API недоступен. Запустите backend.' : messages.dashboard.apiHint}
-          </CardDescription>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{messages.dashboard.version}</CardTitle>
-          </CardHeader>
-          <CardValue>{health.data?.version ?? '—'}</CardValue>
-          <CardDescription>{messages.dashboard.versionHint}</CardDescription>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{messages.dashboard.phase}</CardTitle>
-          </CardHeader>
-          <CardValue>4</CardValue>
-          <CardDescription>Импорт Notion</CardDescription>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{messages.dashboard.nextPhase}</CardTitle>
-          </CardHeader>
-          <CardValue>5</CardValue>
-          <CardDescription>UI MVP-1</CardDescription>
-        </Card>
+        <Metric
+          label="Капитал"
+          value={formatUsd(data.equityUsd)}
+          hint={`Кэш ${formatUsd(data.cashUsd)} · позиции ${formatUsd(data.positionsValueUsd)}`}
+        />
+        <Metric
+          label="Итого P&L"
+          value={formatSignedUsd(data.totalPnlUsd)}
+          tone={pnlTone(data.totalPnlUsd)}
+          hint={`ROI ${formatPct(data.roiPct)}`}
+        />
+        <Metric
+          label="Реализованный P&L"
+          value={formatSignedUsd(data.realizedPnlUsd)}
+          tone={pnlTone(data.realizedPnlUsd)}
+        />
+        <Metric
+          label="Нереализованный P&L"
+          value={formatSignedUsd(data.unrealizedPnlUsd)}
+          tone={pnlTone(data.unrealizedPnlUsd)}
+          hint={
+            data.missingPrices.length > 0 ? `Без цен: ${data.missingPrices.join(', ')}` : undefined
+          }
+        />
+        <Metric label="Net deposits" value={formatUsd(data.netDepositsUsd)} />
+        <Metric label="Кэш" value={formatUsd(data.cashUsd)} />
+        <Metric
+          label="Активные позиции"
+          value={formatCount(data.activePositionsCount)}
+          hint={`Стоимость ${formatUsd(data.positionsValueUsd)}`}
+        />
+        <Metric
+          label="Доход / корректировки"
+          value={`${formatUsd(data.incomeUsd)} / ${formatUsd(data.adjustmentsUsd)}`}
+          hint={`Сборы: ${formatUsd(data.feesUsd)}`}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{messages.dashboard.whatWorks}</CardTitle>
-        </CardHeader>
-        <ul className="grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
-          <li>• pnpm workspace и строгая типизация</li>
-          <li>• Postgres 17 + Drizzle + миграции</li>
-          <li>• NestJS + Fastify, health/ready</li>
-          <li>• React + Vite + TanStack Router/Query</li>
-          <li>• Auth: пароль, TOTP, recovery codes</li>
-          <li>• Tailwind CSS и тёмная тема</li>
-          <li>• CI, Dockerfile и Railway-заготовка</li>
-        </ul>
-      </Card>
+      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+        <Section
+          title="Кривая капитала"
+          description="Исторические остатки, оцененные по текущим ценам."
+        >
+          <LineChart points={curvePoints} />
+          <p className="mt-2 text-xs text-zinc-500">
+            {curve.data?.note ?? 'Историческая переоценка по текущим ценам.'}
+          </p>
+        </Section>
+
+        <Section title="Аллокация" description="Текущая структура капитала.">
+          <AllocationBar slices={allocation.data?.slices ?? []} />
+        </Section>
+      </div>
+
+      <Section
+        title="P&L по месяцам"
+        description="Реализованный P&L, доход, корректировки и сборы."
+      >
+        <BarChart points={pnlPoints} />
+      </Section>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section
+          title="Активные позиции"
+          description="Непогашенные лоты по текущим ценам."
+          action={
+            <Link to="/portfolio" className="text-sm text-emerald-400 hover:text-emerald-300">
+              Все позиции →
+            </Link>
+          }
+        >
+          {active.data?.positions.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                    <th className="py-2 pr-3 font-medium">Актив</th>
+                    <th className="py-2 pr-3 text-right font-medium">Количество</th>
+                    <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
+                    <th className="py-2 text-right font-medium">P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {active.data.positions.map((position) => (
+                    <tr
+                      key={position.asset.id}
+                      className="border-b border-zinc-800/60 last:border-0"
+                    >
+                      <td className="py-2 pr-3">
+                        <Link
+                          to="/portfolio/assets/$assetId"
+                          params={{ assetId: position.asset.id }}
+                          className="font-medium text-zinc-200 hover:text-emerald-300"
+                        >
+                          {position.asset.symbol}
+                        </Link>
+                        <div className="text-xs text-zinc-500">{position.asset.chainCode}</div>
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                        {formatTokenAmount(position.amount)}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                        {formatUsd(position.valueUsd)}
+                      </td>
+                      <td
+                        className={`py-2 text-right font-mono tabular-nums ${pnlTone(position.unrealizedPnlUsd)}`}
+                      >
+                        {formatSignedUsd(position.unrealizedPnlUsd)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">Активных позиций нет.</p>
+          )}
+        </Section>
+
+        <Section
+          title="Последние сделки"
+          description="Последние торговые группы."
+          action={
+            <Link to="/trades" className="text-sm text-emerald-400 hover:text-emerald-300">
+              Все сделки →
+            </Link>
+          }
+        >
+          {recent.data?.data.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                    <th className="py-2 pr-3 font-medium">Актив</th>
+                    <th className="py-2 pr-3 font-medium">Статус</th>
+                    <th className="py-2 pr-3 text-right font-medium">P&L</th>
+                    <th className="py-2 text-right font-medium">Return</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.data.data.map((group) => (
+                    <tr key={group.id} className="border-b border-zinc-800/60 last:border-0">
+                      <td className="py-2 pr-3">
+                        <Link
+                          to="/trades/$tradeId"
+                          params={{ tradeId: group.id }}
+                          className="font-medium text-zinc-200 hover:text-emerald-300"
+                        >
+                          {group.asset.symbol}
+                        </Link>
+                        <div className="text-xs text-zinc-500">{formatDate(group.openedAt)}</div>
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Badge
+                          tone={
+                            group.status === 'closed'
+                              ? 'neutral'
+                              : group.status === 'partial'
+                                ? 'warning'
+                                : 'info'
+                          }
+                        >
+                          {statusLabels[group.status] ?? group.status}
+                        </Badge>
+                      </td>
+                      <td
+                        className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(group.totalPnlUsd)}`}
+                      >
+                        {formatSignedUsd(group.totalPnlUsd)}
+                      </td>
+                      <td
+                        className={`py-2 text-right font-mono tabular-nums ${pnlTone(group.returnPct)}`}
+                      >
+                        {group.returnPct ? `${group.returnPct}%` : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-zinc-400">Сделок пока нет.</p>
+          )}
+        </Section>
+      </div>
     </div>
   );
 }

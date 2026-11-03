@@ -57,6 +57,13 @@
       "when": 1793731447038,
       "tag": "0007_wild_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793740929310,
+      "tag": "0008_common_the_spike",
+      "breakpoints": true
     }
   ]
 }

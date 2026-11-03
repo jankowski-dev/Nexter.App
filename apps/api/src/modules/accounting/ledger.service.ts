@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import {
   accounts,
   assets,
@@ -19,6 +19,8 @@ import type {
   ManualTransactionResponse,
   Posting as PostingContract,
   Transaction as TransactionContract,
+  TransactionsListQuery,
+  TransactionsPageResponse,
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
@@ -30,6 +32,7 @@ import {
   decimal,
   usdString,
 } from '../../shared/money/decimal';
+import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsService } from './accounts.service';
 import { AssetsService } from './assets.service';
@@ -720,16 +723,58 @@ export class LedgerService {
     };
   }
 
-  async list(userId: string): Promise<TransactionContract[]> {
+  async list(userId: string, query: TransactionsListQuery): Promise<TransactionsPageResponse> {
+    const conditions = [eq(transactions.userId, userId)];
+
+    if (query.type) conditions.push(eq(transactions.type, query.type));
+    if (query.subtype) conditions.push(eq(transactions.subtype, query.subtype));
+    if (query.source) conditions.push(eq(transactions.source, query.source));
+    if (query.tradeGroupId) conditions.push(eq(transactions.tradeGroupId, query.tradeGroupId));
+    if (query.from) conditions.push(gte(transactions.occurredAt, new Date(query.from)));
+    if (query.to) conditions.push(lte(transactions.occurredAt, new Date(query.to)));
+    if (query.assetId) {
+      conditions.push(
+        inArray(
+          transactions.id,
+          this.db
+            .select({ id: postings.transactionId })
+            .from(postings)
+            .where(eq(postings.assetId, query.assetId)),
+        ),
+      );
+    }
+    if (query.search) {
+      const pattern = `%${query.search}%`;
+      conditions.push(
+        or(ilike(transactions.notes, pattern), ilike(transactions.sourceId, pattern))!,
+      );
+    }
+    if (query.cursor) {
+      const cursor = decodeCursor<{ occurredAt: string; id: string }>(query.cursor);
+      const cursorDate = new Date(cursor.occurredAt);
+      conditions.push(
+        or(
+          lt(transactions.occurredAt, cursorDate),
+          and(eq(transactions.occurredAt, cursorDate), lt(transactions.id, cursor.id)),
+        )!,
+      );
+    }
+
     const rows = await this.db
       .select()
       .from(transactions)
-      .where(eq(transactions.userId, userId))
-      .orderBy(desc(transactions.occurredAt), desc(transactions.createdAt))
-      .limit(200);
+      .where(and(...conditions))
+      .orderBy(desc(transactions.occurredAt), desc(transactions.id))
+      .limit(query.limit + 1);
+    const page = makePage(rows, query.limit, (row) =>
+      encodeCursor({ occurredAt: row.occurredAt.toISOString(), id: row.id }),
+    );
 
-    if (rows.length === 0) {
-      return [];
+    if (page.data.length === 0) {
+      return {
+        transactions: [],
+        page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
+      };
     }
 
     const postingRows = await this.db
@@ -738,7 +783,7 @@ export class LedgerService {
       .where(
         inArray(
           postings.transactionId,
-          rows.map((row) => row.id),
+          page.data.map((row) => row.id),
         ),
       );
 
@@ -756,7 +801,10 @@ export class LedgerService {
       byTransaction.set(posting.transactionId, list);
     }
 
-    return rows.map((row) => this.toContract(row, byTransaction.get(row.id) ?? []));
+    return {
+      transactions: page.data.map((row) => this.toContract(row, byTransaction.get(row.id) ?? [])),
+      page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
+    };
   }
 
   async get(userId: string, transactionId: string): Promise<TransactionContract> {

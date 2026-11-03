@@ -260,6 +260,8 @@ export const dashboardSummarySchema = z.object({
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string(),
   totalPnlUsd: z.string(),
+  roiPct: z.string().nullable(),
+  activePositionsCount: z.number().int().nonnegative(),
   missingPrices: z.array(z.string()),
 });
 
