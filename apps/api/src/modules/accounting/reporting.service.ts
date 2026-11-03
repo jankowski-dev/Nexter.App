@@ -147,6 +147,8 @@ export class ReportingService {
     const positions = await this.positions(userId);
     const realized = await this.realizedPnl(userId);
     const income = await this.income(userId);
+    const adjustments = await this.adjustments(userId);
+    const fees = await this.fees(userId);
     const unrealized = positions.positions.reduce(
       (total, position) => total.plus(decimal(position.unrealizedPnlUsd ?? '0')),
       new Decimal(0),
@@ -159,9 +161,11 @@ export class ReportingService {
       equityUsd: positions.equityUsd,
       netDepositsUsd: usdString(netDeposits),
       incomeUsd: usdString(income),
+      adjustmentsUsd: usdString(adjustments),
+      feesUsd: usdString(fees),
       realizedPnlUsd: usdString(realized),
       unrealizedPnlUsd: usdString(unrealized),
-      totalPnlUsd: usdString(realized.plus(unrealized).plus(income)),
+      totalPnlUsd: usdString(realized.plus(unrealized).plus(income).plus(adjustments).minus(fees)),
       missingPrices: positions.missingPrices,
     };
   }
@@ -193,6 +197,36 @@ export class ReportingService {
           eq(transactions.type, 'income'),
         ),
       );
+
+    return decimal(row?.total ?? '0');
+  }
+
+  private async adjustments(userId: string): Promise<Decimal> {
+    const [row] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${postings.usdValue}), 0)::text`,
+      })
+      .from(postings)
+      .innerJoin(transactions, eq(postings.transactionId, transactions.id))
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(accounts.type, 'wallet'),
+          eq(transactions.type, 'adjustment'),
+        ),
+      );
+
+    return decimal(row?.total ?? '0');
+  }
+
+  private async fees(userId: string): Promise<Decimal> {
+    const [row] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${transactions.feesUsd}), 0)::text`,
+      })
+      .from(transactions)
+      .where(eq(transactions.userId, userId));
 
     return decimal(row?.total ?? '0');
   }

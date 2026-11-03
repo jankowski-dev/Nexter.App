@@ -210,6 +210,7 @@ export const transactions = pgTable(
     }),
     occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
     notes: text('notes'),
+    feesUsd: numeric('fees_usd', { precision: 24, scale: 8 }).notNull().default('0'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

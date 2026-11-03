@@ -86,13 +86,13 @@ export const transactionSchema = z.object({
   tradeGroupId: z.uuid().nullable(),
   occurredAt: z.iso.datetime(),
   notes: z.string().nullable(),
+  feesUsd: z.string(),
   postings: z.array(postingSchema),
 });
 
 const manualBase = {
   occurredAt: z.iso.datetime().optional(),
   notes: z.string().max(2000).optional(),
-  tradeGroupId: z.uuid().optional(),
 };
 
 const feeFields = {
@@ -108,7 +108,7 @@ export const manualBuySchema = z.object({
   amount: positiveDecimalSchema,
   quoteAssetId: z.uuid(),
   quoteAmount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema.optional(),
+  usdValue: positiveDecimalSchema.optional(),
   ...feeFields,
   ...manualBase,
 });
@@ -120,7 +120,8 @@ export const manualSellSchema = z.object({
   amount: positiveDecimalSchema,
   proceedsAssetId: z.uuid(),
   proceedsAmount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema.optional(),
+  tradeGroupId: z.uuid().optional(),
+  usdValue: positiveDecimalSchema.optional(),
   ...feeFields,
   ...manualBase,
 });
@@ -132,8 +133,8 @@ export const manualSwapSchema = z.object({
   amountIn: positiveDecimalSchema,
   assetOutId: z.uuid(),
   amountOut: positiveDecimalSchema,
-  usdValueIn: nonNegativeDecimalSchema.optional(),
-  usdValueOut: nonNegativeDecimalSchema.optional(),
+  usdValueIn: positiveDecimalSchema.optional(),
+  usdValueOut: positiveDecimalSchema.optional(),
   ...feeFields,
   ...manualBase,
 });
@@ -144,7 +145,7 @@ export const manualTransferSchema = z.object({
   toAccountId: z.uuid(),
   assetId: z.uuid(),
   amount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema.optional(),
+  usdValue: positiveDecimalSchema.optional(),
   ...feeFields,
   ...manualBase,
 });
@@ -154,7 +155,7 @@ export const manualDepositSchema = z.object({
   accountId: z.uuid(),
   assetId: z.uuid(),
   amount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema,
+  usdValue: positiveDecimalSchema,
   ...manualBase,
 });
 
@@ -163,7 +164,7 @@ export const manualWithdrawalSchema = z.object({
   accountId: z.uuid(),
   assetId: z.uuid(),
   amount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema,
+  usdValue: positiveDecimalSchema,
   ...manualBase,
 });
 
@@ -172,7 +173,7 @@ export const manualIncomeSchema = z.object({
   accountId: z.uuid(),
   assetId: z.uuid(),
   amount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema,
+  usdValue: positiveDecimalSchema,
   ...manualBase,
 });
 
@@ -181,7 +182,7 @@ export const manualAdjustmentSchema = z.object({
   accountId: z.uuid(),
   assetId: z.uuid(),
   amount: positiveDecimalSchema,
-  usdValue: nonNegativeDecimalSchema,
+  usdValue: positiveDecimalSchema,
   reason: z.string().min(1).max(1000),
   ...manualBase,
 });
@@ -254,6 +255,8 @@ export const dashboardSummarySchema = z.object({
   equityUsd: z.string(),
   netDepositsUsd: z.string(),
   incomeUsd: z.string(),
+  adjustmentsUsd: z.string(),
+  feesUsd: z.string(),
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string(),
   totalPnlUsd: z.string(),

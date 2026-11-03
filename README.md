@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 3 — Accounting core**. Phase 2 auth/security is accepted.
+Current phase: **Phase 3 — Accounting core (in review)**. Phase 2 auth/security is accepted.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 

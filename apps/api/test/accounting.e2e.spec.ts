@@ -1,11 +1,22 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { accounts, auditLog, createDb, users, type Database } from '@nexter/db';
+import {
+  accounts,
+  auditLog,
+  createDb,
+  lots,
+  postings,
+  tradeGroups,
+  transactions,
+  users,
+  type Database,
+} from '@nexter/db';
 import { Decimal } from 'decimal.js';
+import fc from 'fast-check';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -73,6 +84,34 @@ describe.runIf(canRun)('Accounting e2e', () => {
 
   async function create(agent: SuperAgentTest, csrf: string, body: Record<string, unknown>) {
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
+  }
+
+  async function getAssets(agent: SuperAgentTest) {
+    const response = await agent.get('/api/v1/assets').expect(200);
+    return response.body.assets as Array<{
+      id: string;
+      chainId: string;
+      chainCode: string;
+      symbol: string;
+    }>;
+  }
+
+  async function getAccounts(agent: SuperAgentTest) {
+    const response = await agent.get('/api/v1/accounts').expect(200);
+    return response.body.accounts as Array<{
+      id: string;
+      name: string;
+      type: string;
+      chainId: string | null;
+    }>;
+  }
+
+  async function setPrice(agent: SuperAgentTest, csrf: string, assetId: string, priceUsd: string) {
+    return agent
+      .post(`/api/v1/prices/${assetId}`)
+      .set('x-csrf-token', csrf)
+      .send({ priceUsd })
+      .expect(201);
   }
 
   beforeAll(async () => {
@@ -286,24 +325,26 @@ describe.runIf(canRun)('Accounting e2e', () => {
     const audits = await db.select().from(auditLog);
     expect(audits.filter((row) => row.action === 'accounting.transaction_created')).toHaveLength(7);
     expect(audits.some((row) => row.action === 'accounting.price_set')).toBe(true);
+
+    const unbalanced = await db.execute(
+      sql`select count(*)::int as n from (
+        select transaction_id, asset_id
+        from postings
+        group by transaction_id, asset_id
+        having sum(amount) <> 0
+      ) q`,
+    );
+    expect((unbalanced.rows[0] as { n: number } | undefined)?.n).toBe(0);
   }, 60_000);
 
   it('rejects a transaction that would make a wallet balance negative', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
 
-    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
-    const assets = assetsResponse.body.assets as Array<{
-      id: string;
-      chainCode: string;
-      symbol: string;
-    }>;
+    const assets = await getAssets(agent);
     const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
     const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
-    const accountsResponse = await agent.get('/api/v1/accounts').expect(200);
-    const wallet = (accountsResponse.body.accounts as Array<{ id: string; name: string }>).find(
-      (account) => account.name === 'Tangem BSC',
-    );
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
 
     await create(agent, owner.csrf, {
       type: 'deposit',
@@ -328,7 +369,356 @@ describe.runIf(canRun)('Accounting e2e', () => {
 
     expect(response.body.error.code).toBe('NEGATIVE_BALANCE');
 
-    const [count] = await db.select({ count: sql<number>`count(*)::int` }).from(users);
-    expect(count?.count).toBe(1);
+    const [userCount] = await db.select({ count: sql<number>`count(*)::int` }).from(users);
+    const [transactionCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions);
+    expect(userCount?.count).toBe(1);
+    expect(transactionCount?.count).toBe(1);
   }, 30_000);
+
+  it('serializes concurrent cash spends so cash cannot go negative', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc?.id,
+      amount: '100',
+      usdValue: '100',
+    });
+
+    const body = {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '8',
+      quoteAssetId: usdc?.id,
+      quoteAmount: '80',
+    };
+
+    const [first, second] = await Promise.all([
+      agent.post('/api/v1/transactions').set('x-csrf-token', owner.csrf).send(body),
+      agent.post('/api/v1/transactions').set('x-csrf-token', owner.csrf).send(body),
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([201, 400]);
+
+    const failed = first.status === 400 ? first : second;
+    expect(failed.body.error.code).toBe('NEGATIVE_BALANCE');
+
+    const summary = await agent.get('/api/v1/dashboard/summary').expect(200);
+    expect(summary.body.cashUsd).toBe('20.00000000');
+
+    const [transactionCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions);
+    expect(transactionCount?.count).toBe(2);
+  }, 60_000);
+
+  it('reconciles withdrawals, adjustments and non-capitalized fees', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const bnb = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'BNB');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const accountRows = await getAccounts(agent);
+    const wallet = accountRows.find((account) => account.name === 'Tangem BSC');
+    expect(wallet).toBeDefined();
+
+    const [secondWallet] = await db
+      .insert(accounts)
+      .values({
+        userId: owner.userId,
+        name: 'Test BSC 2',
+        type: 'wallet',
+        chainId: link?.chainId,
+        isSystem: false,
+      })
+      .returning();
+    expect(secondWallet).toBeDefined();
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc?.id,
+      amount: '100',
+      usdValue: '100',
+    });
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: bnb?.id,
+      amount: '1',
+      usdValue: '600',
+    });
+
+    await setPrice(agent, owner.csrf, link?.id, '10');
+    await setPrice(agent, owner.csrf, bnb?.id, '600');
+
+    await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '10',
+      quoteAssetId: usdc?.id,
+      quoteAmount: '50',
+    });
+
+    await create(agent, owner.csrf, {
+      type: 'withdrawal',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '5',
+      usdValue: '50',
+    });
+
+    const adjustment = await create(agent, owner.csrf, {
+      type: 'adjustment',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '1',
+      usdValue: '10',
+      reason: 'test adjustment reason',
+    });
+    expect(adjustment.body.transaction.notes).toBe('test adjustment reason');
+
+    await create(agent, owner.csrf, {
+      type: 'transfer',
+      fromAccountId: wallet?.id,
+      toAccountId: secondWallet?.id,
+      assetId: link?.id,
+      amount: '1',
+      usdValue: '10',
+      feeAssetId: bnb?.id,
+      feeAmount: '0.001',
+      feeUsdValue: '0.6',
+    });
+
+    await create(agent, owner.csrf, {
+      type: 'swap',
+      accountId: wallet?.id,
+      assetInId: link?.id,
+      amountIn: '1',
+      assetOutId: usdc?.id,
+      amountOut: '10',
+      usdValueIn: '10',
+      usdValueOut: '10',
+      feeAssetId: bnb?.id,
+      feeAmount: '0.001',
+      feeUsdValue: '0.6',
+    });
+
+    const summary = await agent.get('/api/v1/dashboard/summary').expect(200);
+    const equity = new Decimal(summary.body.equityUsd);
+    const netDeposits = new Decimal(summary.body.netDepositsUsd);
+    const totalPnl = new Decimal(summary.body.totalPnlUsd);
+
+    expect(summary.body.adjustmentsUsd).toBe('10.00000000');
+    expect(summary.body.feesUsd).toBe('1.20000000');
+    expect(equity.minus(netDeposits).toFixed(8)).toBe(totalPnl.toFixed(8));
+
+    const groups = await db
+      .select()
+      .from(tradeGroups)
+      .where(eq(tradeGroups.assetId, link?.id ?? ''));
+    expect(groups.some((group) => group.status === 'partial')).toBe(true);
+
+    const audits = await db.select().from(auditLog);
+    expect(
+      audits.some(
+        (row) =>
+          row.action === 'accounting.transaction_created' &&
+          row.entityId === adjustment.body.transaction.id &&
+          (row.after as { reason?: string } | null)?.reason === 'test adjustment reason',
+      ),
+    ).toBe(true);
+  }, 60_000);
+
+  it('validates asset decimals, chain consistency and idempotency', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const ethUsdc = assets.find(
+      (asset) => asset.chainCode === 'ethereum' && asset.symbol === 'USDC',
+    );
+    const bscLink = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const bscUsdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const accounts = await getAccounts(agent);
+    const bscWallet = accounts.find((account) => account.name === 'Tangem BSC');
+    const ethWallet = accounts.find((account) => account.name === 'Tangem Ethereum');
+
+    const decimalError = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'deposit',
+        accountId: ethWallet?.id,
+        assetId: ethUsdc?.id,
+        amount: '1.123456789',
+        usdValue: '1.13',
+      })
+      .expect(400);
+    expect(decimalError.body.error.code).toBe('VALIDATION_ERROR');
+
+    const chainError = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'transfer',
+        fromAccountId: bscWallet?.id,
+        toAccountId: ethWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        usdValue: '10',
+      })
+      .expect(400);
+    expect(chainError.body.error.code).toBe('VALIDATION_ERROR');
+
+    const zeroUsdError = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'income',
+        accountId: bscWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        usdValue: '0',
+      })
+      .expect(400);
+    expect(zeroUsdError.body.error.code).toBe('VALIDATION_ERROR');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: bscWallet?.id,
+      assetId: bscUsdc?.id,
+      amount: '100',
+      usdValue: '100',
+    });
+
+    const highPrecision = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: bscWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        quoteAssetId: bscUsdc?.id,
+        quoteAmount: '40.123456789012345678',
+      })
+      .expect(201);
+    expect(highPrecision.body.transaction.postings.length).toBeGreaterThan(0);
+
+    const idempotencyKey = `accounting-e2e-${Date.now()}`;
+    const purchaseBody = {
+      type: 'buy',
+      accountId: bscWallet?.id,
+      assetId: bscLink?.id,
+      amount: '1',
+      quoteAssetId: bscUsdc?.id,
+      quoteAmount: '10',
+    };
+
+    const first = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .set('idempotency-key', idempotencyKey)
+      .send(purchaseBody)
+      .expect(201);
+    const second = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .set('idempotency-key', idempotencyKey)
+      .send(purchaseBody)
+      .expect(201);
+
+    expect(second.body.transaction.id).toBe(first.body.transaction.id);
+
+    const [transactionCount] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions);
+    expect(transactionCount?.count).toBe(3);
+  }, 60_000);
+
+  it('keeps lots equal to balances across generated buy/sell sequences', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc?.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+    await setPrice(agent, owner.csrf, link?.id, '10');
+
+    const sequences = fc.sample(
+      fc.array(fc.integer({ min: 1, max: 5 }), { minLength: 1, maxLength: 3 }),
+      { numRuns: 3 },
+    );
+
+    for (const sequence of sequences) {
+      for (const amount of sequence) {
+        await create(agent, owner.csrf, {
+          type: 'buy',
+          accountId: wallet?.id,
+          assetId: link?.id,
+          amount: String(amount * 2),
+          quoteAssetId: usdc?.id,
+          quoteAmount: String(amount * 20),
+        });
+        await create(agent, owner.csrf, {
+          type: 'sell',
+          accountId: wallet?.id,
+          assetId: link?.id,
+          amount: String(amount),
+          proceedsAssetId: usdc?.id,
+          proceedsAmount: String(amount * 10),
+        });
+      }
+    }
+
+    const [lotTotal] = await db
+      .select({ total: sql<string>`coalesce(sum(${lots.remainingAmount}), 0)::text` })
+      .from(lots)
+      .where(and(eq(lots.userId, owner.userId), eq(lots.assetId, link?.id ?? '')));
+    const [balanceTotal] = await db
+      .select({ total: sql<string>`coalesce(sum(${postings.amount}), 0)::text` })
+      .from(postings)
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .where(
+        and(
+          eq(accounts.userId, owner.userId),
+          eq(accounts.type, 'wallet'),
+          eq(postings.assetId, link?.id ?? ''),
+        ),
+      );
+
+    expect(new Decimal(lotTotal?.total ?? '0').toFixed(18)).toBe(
+      new Decimal(balanceTotal?.total ?? '0').toFixed(18),
+    );
+
+    const summary = await agent.get('/api/v1/dashboard/summary').expect(200);
+    const equity = new Decimal(summary.body.equityUsd);
+    const netDeposits = new Decimal(summary.body.netDepositsUsd);
+    const totalPnl = new Decimal(summary.body.totalPnlUsd);
+    expect(equity.minus(netDeposits).toFixed(8)).toBe(totalPnl.toFixed(8));
+  }, 60_000);
 });

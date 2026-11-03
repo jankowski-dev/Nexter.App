@@ -73,3 +73,8 @@ Format: date — decision — reason.
 - **Income is separate from disposal P&L.** `incomeUsd` is included in total P&L; realized disposal P&L remains `proceeds − cost basis − selling fees`.
 - **MVP manual buys/sells require a cash-equivalent quote/proceeds asset.** Token-to-token swaps remain supported; broader quote assets are a later extension.
 - **Manual transactions are audited in the same transaction as the ledger writes.** Price changes are audited too; account bootstrap writes audit rows.
+- **Manual writes are serialized per user.** A PostgreSQL advisory transaction lock makes the balance re-check safe under concurrent cash spends.
+- **Withdrawals of non-cash assets realize disposal P&L.** Cash withdrawals remain capital flows; this keeps `equity − netDeposits = totalPnl`.
+- **Positive adjustments and non-capitalized fees are explicit P&L components.** `adjustmentsUsd` and `feesUsd` are reported separately; fee amounts already capitalized or deducted from realized P&L are not counted twice. Adjustment reasons are persisted and audited.
+- **Manual POSTs accept an `Idempotency-Key`.** Transaction `source_id` plus the unique user/source index makes retries replay the original transaction.
+- **Asset decimals and wallet chain consistency are validated.** Amounts may not exceed `assets.decimals`; a wallet may only hold assets from its chain.

@@ -2,26 +2,31 @@
 
 Date: 2026-11-03
 
-Status: implemented, pending independent review
+Status: review findings fixed, pending re-review
 
 ## Scope completed
 
 - Accounting schema: `chains`, `assets`, `accounts`, `transactions`, `postings`, `trade_groups`, `trade_details`, `lots`, `lot_consumptions`, `prices`.
-- Migration `0005_cute_agent_brand.sql` plus seed chains and per-chain assets.
+- Migrations `0005_cute_agent_brand.sql` (accounting schema and seed data) and `0006_cold_captain_midlands.sql` (`transactions.fees_usd`, USDT seeds).
 - ADR `0006-accounting-ledger.md`.
 - Idempotent account bootstrap: `External`, `Income`, `Expense`, `Equity`, `Tangem BSC`, `Tangem Ethereum`.
 - Append-only manual transaction API:
   - buy, sell, swap, transfer, deposit, withdrawal, income, adjustment;
   - signed postings with per-asset balance validation;
-  - negative wallet balances rejected before insert;
-  - all ledger writes and audit in one transaction.
+  - negative wallet balances rejected before insert under a per-user advisory lock;
+  - asset decimals and wallet/asset chain consistency validated;
+  - manual POSTs support `Idempotency-Key` replay;
+  - all ledger writes and audit in one transaction;
+  - adjustment reasons persisted in notes and audit.
 - Global FIFO per asset:
   - lots created for acquisitions;
   - oldest lots consumed first;
   - partial cost-basis allocation;
   - stablecoins excluded from lots;
-  - withdrawals reduce lots without realized P&L;
-  - gas/fee asset movements consume lots without double-counting.
+  - withdrawals of non-cash assets realize P&L at the provided USD value;
+  - positive adjustments are reported in `adjustmentsUsd` and included in total P&L;
+  - non-capitalized fees are reported in `feesUsd` and subtracted from total P&L;
+  - transfer and swap-to-cash fees are covered by reconciliation tests.
 - Trade groups and lots linked to acquisitions; group status updates after disposals.
 - Manual prices API and latest-price lookup.
 - Positions and dashboard summary:
@@ -35,7 +40,7 @@ Status: implemented, pending independent review
 ## Verification
 
 - `pnpm typecheck`, `pnpm lint`, `pnpm format:check` pass.
-- API tests: 33 pass with PostgreSQL, including accounting e2e and FIFO property tests.
+- API tests: 37 pass with PostgreSQL, including accounting e2e and FIFO property tests.
 - Accounting e2e:
   - deposit USDC and BNB;
   - buy LINK with USDC and BNB gas;
@@ -45,6 +50,11 @@ Status: implemented, pending independent review
   - token-to-token swap creates an outbound lot and consumes the inbound lot;
   - transfer does not change global lots;
   - income creates a lot and is included in total P&L;
+  - withdrawals, adjustments, transfer fees and swap-to-cash fees reconcile `equity − netDeposits = totalPnl`;
+  - concurrent cash spends are serialized and cannot produce a negative balance;
+  - asset decimals, chain consistency and zero-USD inputs are rejected;
+  - `Idempotency-Key` replays do not create duplicate transactions;
+  - generated buy/sell sequences keep lots equal to balances;
   - dashboard reconciles `equity − netDeposits = totalPnl`;
   - negative wallet balance returns `400 NEGATIVE_BALANCE` without creating a transaction.
 - Fresh migration applies all migrations and seeds chains/assets.
@@ -54,12 +64,23 @@ Status: implemented, pending independent review
 
 - No manual-entry UI yet; Phase 5 owns the UI.
 - No trade-group list/detail/reverse endpoints yet; Phase 5/6.
-- No transaction reversal endpoint yet; adjustments are positive additions in MVP-1.
+- No transaction reversal endpoint yet; negative adjustments are not supported in MVP-1.
 - No external price provider; prices are manual in Phase 3.
 - Unknown token decimals default to 18 and are marked unverified until the token registry phase.
+- No depeg flag yet; manual prices can reflect a depeg.
+- `GET /transactions` is capped at 200 rows and has no cursor pagination yet.
 - Portfolio snapshots, watchlist, imports, swaps, and on-chain reconciliation are later phases.
-- Income treatment is documented in ADR 0006; total P&L includes income separately from disposal realized P&L.
+- Income, adjustments and non-capitalized fees are reported separately and included in total P&L as documented in ADR 0006.
+
+## Review history
+
+Independent review returned **FAIL** with:
+
+- High: concurrent cash spends could go negative; withdrawals/adjustments broke equity/P&L reconciliation; transfer and swap-to-cash fees were not recognized; adjustment reasons were discarded.
+- Medium: asset decimals/chain consistency, derived USD scale, zero-USD inputs, idempotency, property/e2e coverage, and report accuracy.
+
+All High findings and the actionable Medium findings were fixed in this revision. Remaining limitations are listed above and in ADR 0006.
 
 ## Next phase
 
-Phase 4 — Notion import, after Phase 3 review.
+Phase 4 — Notion import, after Phase 3 re-review.

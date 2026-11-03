@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
   ManualTransactionRequest,
@@ -37,10 +37,16 @@ export class TransactionsController {
     @Body(new ZodValidationPipe(manualTransactionRequestSchema))
     body: ManualTransactionRequest,
     @Req() request: FastifyRequest,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ): Promise<ManualTransactionResponse> {
-    return this.ledger.createManual(auth.user.id, body, {
-      ip: request.ip,
-      userAgent: request.headers['user-agent'],
-    });
+    return this.ledger.createManual(
+      auth.user.id,
+      body,
+      {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      },
+      idempotencyKey?.slice(0, 200),
+    );
   }
 }

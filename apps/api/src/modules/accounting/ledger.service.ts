@@ -1,7 +1,8 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   accounts,
+  assets,
   lots,
   postings,
   settings as settingsTable,
@@ -78,10 +79,38 @@ export class LedgerService {
     userId: string,
     input: ManualTransactionRequest,
     meta: LedgerMeta,
+    idempotencyKey?: string,
   ): Promise<ManualTransactionResponse> {
     await this.bootstrap.ensureDefaults(userId);
 
     const result = await this.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${`accounting:${userId}`})::bigint)`,
+      );
+
+      if (idempotencyKey) {
+        const [existing] = await tx
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.userId, userId),
+              eq(transactions.source, 'manual'),
+              eq(transactions.sourceId, idempotencyKey),
+            ),
+          )
+          .limit(1);
+
+        if (existing) {
+          const existingPostings = await tx
+            .select()
+            .from(postings)
+            .where(eq(postings.transactionId, existing.id));
+
+          return { transaction: existing, postings: existingPostings };
+        }
+      }
+
       const [settings] = await tx
         .select()
         .from(settingsTable)
@@ -90,14 +119,28 @@ export class LedgerService {
 
       const includeGas = settings?.includeGasInCostBasis ?? true;
       const occurredAt = input.occurredAt ? new Date(input.occurredAt) : new Date();
+      const notes = input.type === 'adjustment' ? input.reason : (input.notes ?? null);
       const drafts: PostingDraft[] = [];
       const work: LotWork[] = [];
+      let feesUsd = new Decimal(0);
       let tradeGroupId: string | null = null;
       let tradeDetail: {
         groupId: string;
         referencePriceUsd: Decimal | null;
         executionCostUsd: Decimal | null;
       } | null = null;
+
+      const toUsd = (value: Decimal): Decimal => new Decimal(usdString(value));
+
+      const assertAmount = (asset: Asset, amount: Decimal, label: string): void => {
+        if (amount.decimalPlaces() > asset.decimals) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: `${label} supports at most ${asset.decimals} decimal places for ${asset.symbol}`,
+            details: { assetId: asset.id, decimals: asset.decimals },
+          });
+        }
+      };
 
       const add = (accountId: string, assetId: string, amount: Decimal, usdValue: Decimal) => {
         drafts.push({ accountId, assetId, amount, usdValue });
@@ -114,7 +157,7 @@ export class LedgerService {
         }
 
         if (asset.isCashEquivalent) {
-          return amount;
+          return toUsd(amount);
         }
 
         throw new BadRequestException({
@@ -130,6 +173,13 @@ export class LedgerService {
         feeUsdValue: string | undefined,
       ): Promise<{ asset: Asset; amount: Decimal; usd: Decimal } | null> => {
         if (!feeAssetId && !feeAmount) {
+          if (feeUsdValue !== undefined) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: 'feeUsdValue requires feeAssetId and feeAmount',
+            });
+          }
+
           return null;
         }
 
@@ -142,6 +192,7 @@ export class LedgerService {
 
         const feeAsset = await this.assets.require(feeAssetId, tx);
         const amount = decimal(feeAmount);
+        assertAmount(feeAsset, amount, 'feeAmount');
         const usd = resolveUsd(feeAsset, amount, feeUsdValue, 'feeUsdValue');
         return { asset: feeAsset, amount, usd };
       };
@@ -177,20 +228,24 @@ export class LedgerService {
 
           const quoteAmount = decimal(input.quoteAmount);
           const baseAmount = decimal(input.amount);
+          assertAmount(base, baseAmount, 'amount');
+          assertAmount(quote, quoteAmount, 'quoteAmount');
           const tradeUsd = input.usdValue
             ? decimal(input.usdValue)
             : quote.isCashEquivalent
-              ? quoteAmount
+              ? toUsd(quoteAmount)
               : null;
 
-          if (!tradeUsd) {
+          if (!tradeUsd || tradeUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
-              message: 'usdValue is required when the quote asset is not a cash equivalent',
+              message: 'A positive usdValue is required for a trade',
             });
           }
 
           const fee = await resolveFee(input.feeAssetId, input.feeAmount, input.feeUsdValue);
+          const feeCapitalized = !base.isCashEquivalent && includeGas;
+          feesUsd = fee && !feeCapitalized ? fee.usd : new Decimal(0);
 
           add(account.id, base.id, baseAmount, tradeUsd);
           addExternal(base.id, baseAmount.negated(), tradeUsd.negated());
@@ -242,20 +297,24 @@ export class LedgerService {
 
           const baseAmount = decimal(input.amount);
           const proceedsAmount = decimal(input.proceedsAmount);
+          assertAmount(base, baseAmount, 'amount');
+          assertAmount(proceedsAsset, proceedsAmount, 'proceedsAmount');
           const proceedsUsd = input.usdValue
             ? decimal(input.usdValue)
             : proceedsAsset.isCashEquivalent
-              ? proceedsAmount
+              ? toUsd(proceedsAmount)
               : null;
 
-          if (!proceedsUsd) {
+          if (!proceedsUsd || proceedsUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
-              message: 'usdValue is required when the proceeds asset is not a cash equivalent',
+              message: 'A positive usdValue is required for a trade',
             });
           }
 
           const fee = await resolveFee(input.feeAssetId, input.feeAmount, input.feeUsdValue);
+          const feeCapitalized = !base.isCashEquivalent && includeGas;
+          feesUsd = fee && !feeCapitalized ? fee.usd : new Decimal(0);
 
           add(account.id, base.id, baseAmount.negated(), proceedsUsd.negated());
           addExternal(base.id, baseAmount, proceedsUsd);
@@ -319,27 +378,39 @@ export class LedgerService {
           const account = await this.accounts.requireWallet(userId, input.accountId, tx);
           const tokenIn = await this.assets.require(input.assetInId, tx);
           const tokenOut = await this.assets.require(input.assetOutId, tx);
+
+          if (tokenIn.id === tokenOut.id) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: 'Swap assets must be different',
+            });
+          }
+
           const amountIn = decimal(input.amountIn);
           const amountOut = decimal(input.amountOut);
+          assertAmount(tokenIn, amountIn, 'amountIn');
+          assertAmount(tokenOut, amountOut, 'amountOut');
           const inUsd = input.usdValueIn
             ? decimal(input.usdValueIn)
             : tokenIn.isCashEquivalent
-              ? amountIn
+              ? toUsd(amountIn)
               : null;
           const outUsd = input.usdValueOut
             ? decimal(input.usdValueOut)
             : tokenOut.isCashEquivalent
-              ? amountOut
+              ? toUsd(amountOut)
               : null;
 
-          if (!inUsd || !outUsd) {
+          if (!inUsd || !outUsd || inUsd.lte(0) || outUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
-              message: 'usdValueIn/usdValueOut are required for non-cash swap legs',
+              message: 'Positive usdValueIn and usdValueOut are required for a swap',
             });
           }
 
           const fee = await resolveFee(input.feeAssetId, input.feeAmount, input.feeUsdValue);
+          const feeCapitalized = !tokenOut.isCashEquivalent && includeGas;
+          feesUsd = fee && !feeCapitalized ? fee.usd : new Decimal(0);
 
           add(account.id, tokenIn.id, amountIn.negated(), inUsd.negated());
           addExternal(tokenIn.id, amountIn, inUsd);
@@ -394,9 +465,27 @@ export class LedgerService {
           const from = await this.accounts.requireWallet(userId, input.fromAccountId, tx);
           const to = await this.accounts.requireWallet(userId, input.toAccountId, tx);
           const asset = await this.assets.require(input.assetId, tx);
+
+          if (from.id === to.id) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: 'Transfer accounts must be different',
+            });
+          }
+
           const amount = decimal(input.amount);
+          assertAmount(asset, amount, 'amount');
           const transferUsd = resolveUsd(asset, amount, input.usdValue, 'usdValue');
+
+          if (transferUsd.lte(0)) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: 'A positive usdValue is required for a transfer',
+            });
+          }
+
           const fee = await resolveFee(input.feeAssetId, input.feeAmount, input.feeUsdValue);
+          feesUsd = fee?.usd ?? new Decimal(0);
 
           add(from.id, asset.id, amount.negated(), transferUsd.negated());
           add(to.id, asset.id, amount, transferUsd);
@@ -419,6 +508,7 @@ export class LedgerService {
           const account = await this.accounts.requireWallet(userId, input.accountId, tx);
           const asset = await this.assets.require(input.assetId, tx);
           const amount = decimal(input.amount);
+          assertAmount(asset, amount, 'amount');
           const usd = decimal(input.usdValue);
 
           add(account.id, asset.id, amount, usd);
@@ -440,6 +530,7 @@ export class LedgerService {
           const account = await this.accounts.requireWallet(userId, input.accountId, tx);
           const asset = await this.assets.require(input.assetId, tx);
           const amount = decimal(input.amount);
+          assertAmount(asset, amount, 'amount');
           const usd = decimal(input.usdValue);
 
           add(account.id, asset.id, amount.negated(), usd.negated());
@@ -450,9 +541,9 @@ export class LedgerService {
               kind: 'consume',
               asset,
               amount,
-              proceedsUsd: new Decimal(0),
+              proceedsUsd: usd,
               feeUsd: new Decimal(0),
-              realize: false,
+              realize: true,
             });
           }
           break;
@@ -463,6 +554,7 @@ export class LedgerService {
           const asset = await this.assets.require(input.assetId, tx);
           const income = await this.accounts.systemAccount(userId, 'income', tx);
           const amount = decimal(input.amount);
+          assertAmount(asset, amount, 'amount');
           const usd = decimal(input.usdValue);
 
           add(account.id, asset.id, amount, usd);
@@ -485,6 +577,7 @@ export class LedgerService {
           const asset = await this.assets.require(input.assetId, tx);
           const equity = await this.accounts.systemAccount(userId, 'equity', tx);
           const amount = decimal(input.amount);
+          assertAmount(asset, amount, 'amount');
           const usd = decimal(input.usdValue);
 
           add(account.id, asset.id, amount, usd);
@@ -525,9 +618,11 @@ export class LedgerService {
           type,
           subtype: input.type,
           source: 'manual',
+          sourceId: idempotencyKey ?? null,
           tradeGroupId,
           occurredAt,
-          notes: input.notes ?? null,
+          notes,
+          feesUsd: usdString(feesUsd),
         })
         .returning();
 
@@ -599,6 +694,14 @@ export class LedgerService {
             type,
             subtype: input.type,
             occurredAt: occurredAt.toISOString(),
+            feesUsd: usdString(feesUsd),
+            reason: input.type === 'adjustment' ? input.reason : null,
+            postings: drafts.map((draft) => ({
+              accountId: draft.accountId,
+              assetId: draft.assetId,
+              amount: amountString(draft.amount),
+              usdValue: usdString(draft.usdValue),
+            })),
           },
           ip: meta.ip,
           userAgent: meta.userAgent,
@@ -703,6 +806,7 @@ export class LedgerService {
       tradeGroupId: transaction.tradeGroupId,
       occurredAt: transaction.occurredAt.toISOString(),
       notes: transaction.notes,
+      feesUsd: transaction.feesUsd,
       postings: postingRows.map((posting) => ({
         id: posting.id,
         accountId: posting.accountId,
@@ -731,6 +835,20 @@ export class LedgerService {
         });
       }
 
+      if (draft.amount.abs().gte(new Decimal('1e18'))) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Amount is too large',
+        });
+      }
+
+      if (draft.usdValue.abs().gte(new Decimal('1e16'))) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'USD value is too large',
+        });
+      }
+
       byAsset.set(draft.assetId, (byAsset.get(draft.assetId) ?? new Decimal(0)).plus(draft.amount));
     }
 
@@ -752,6 +870,37 @@ export class LedgerService {
       .from(accounts)
       .where(and(eq(accounts.userId, userId), inArray(accounts.id, accountIds)));
     const accountById = new Map(accountRows.map((account) => [account.id, account]));
+    const assetRows = await executor
+      .select({ id: assets.id, chainId: assets.chainId, symbol: assets.symbol })
+      .from(assets)
+      .where(inArray(assets.id, [...new Set(drafts.map((draft) => draft.assetId))]));
+    const assetById = new Map(assetRows.map((asset) => [asset.id, asset]));
+
+    for (const draft of drafts) {
+      const account = accountById.get(draft.accountId);
+      const asset = assetById.get(draft.assetId);
+
+      if (!asset) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Asset not found',
+          details: { assetId: draft.assetId },
+        });
+      }
+
+      if (account?.type === 'wallet' && account.chainId && account.chainId !== asset.chainId) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: `Asset ${asset.symbol} does not belong to the selected wallet chain`,
+          details: {
+            accountId: account.id,
+            assetId: asset.id,
+            accountChainId: account.chainId,
+            assetChainId: asset.chainId,
+          },
+        });
+      }
+    }
 
     const deltas = new Map<string, { accountId: string; assetId: string; amount: Decimal }>();
 

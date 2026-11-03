@@ -40,13 +40,16 @@ Imported rows are flagged: `chain_known=false`, `contract_known=false`, `network
 ## Phase 3 implementation notes
 
 - Seed chains: `bsc`, `ethereum`.
-- Seed assets are per chain. BSC: USDC (18 decimals), XNY, BASED, APR, POP, LINK, BNB (18). Ethereum: USDC (6), LINK, BASED, APR, ETH (18).
-- USDC is a stablecoin and cash equivalent. Unknown token decimals default to 18 and are marked `is_verified = false` until the token registry is populated.
+- Seed assets are per chain. BSC: USDC (18), USDT (18), XNY, BASED, APR, POP, LINK, BNB (18). Ethereum: USDC (6), USDT (6), LINK, BASED, APR, ETH (18).
+- USDC and USDT are stablecoins and cash equivalents. Unknown token decimals default to 18 and are marked `is_verified = false` until the token registry is populated.
 - Default accounts per owner: `External`, `Income`, `Expense`, `Equity`, `Tangem BSC`, `Tangem Ethereum`.
 - Manual buys and sells require a cash-equivalent quote/proceeds asset in MVP-1; token-to-token swaps support two non-cash legs.
 - Manual prices are stored with `source = manual`; missing prices make position value/unrealized P&L `null` and are listed in `missingPrices`.
 - Income is tracked separately (`incomeUsd`) and included in total P&L, so `equity − netDeposits = totalPnl`; the disposal formula is unchanged.
-- Adjustments are positive additions in MVP-1; negative corrections are deferred to a later transaction-reversal workflow.
+- Withdrawals of non-cash assets are disposals at the provided USD value and realize P&L; cash withdrawals remain capital flows.
+- Positive adjustments are tracked separately (`adjustmentsUsd`), included in total P&L, and their reasons are stored in notes and audit.
+- Non-capitalized fees are tracked in `feesUsd` and subtracted from total P&L; capitalized/deducted fees remain in cost basis or realized P&L and are not counted twice.
+- Manual writes are serialized per user with a PostgreSQL advisory lock, validate asset decimals and wallet chain consistency, and accept `Idempotency-Key` for safe retries.
 
 ## Invariants
 
