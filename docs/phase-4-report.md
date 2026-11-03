@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Status: **implementation complete; pending independent review and acceptance.**
+Status: **accepted after three independent reviews and owner sign-off; production import applied on 2026-11-03.**
 
 ## Scope completed
 
@@ -116,27 +116,30 @@ The transaction-based baseline (counts, deposits, withdrawals, buy, sell, realiz
 - Import commit is one transaction and takes several seconds for 431 orders; the UI shows a loading state.
 - The temporary Notion view `Nexter Import` used for the 431-row export must be deleted manually.
 
-## Accepted scope deviations (pending Phase 4 sign-off)
+## Accepted scope deviations (owner sign-off)
 
-The original mega-prompt contains three broader requirements that Phase 4 intentionally narrows. These follow the owner's Phase 4 scope decisions and are documented in ADR 0007:
+The original mega-prompt contains broader requirements that Phase 4 intentionally narrows. These follow the owner's Phase 4 scope decisions, were accepted at sign-off, and are documented in ADR 0007:
 
 - **431 current orders, not only the 429 audit snapshot.** The 429 control is reconstructed from the current export with the four known order changes.
 - **Per-order lots for closed Notion orders + global FIFO for manual flows.** Historical Notion cost basis is preserved for closed orders; imported active lots remain in the manual global-FIFO pool.
 - **Transaction-based control plus active cost are gated.** Price-dependent Phase 3 snapshot metrics (active value, equity, unrealized/total P&L, ROI, win rate, profit factor, XIRR) were calculated at audit-time prices and cannot be reconstructed from current Source prices without inventing historical prices; they are reported for context, not gated.
 - **Source watchlist theses/tags are deferred to Phase 5.** Assets are imported; descriptions stay in staging.
 
-These deviations need explicit acceptance at Phase 4 sign-off or a later contract update.
+These deviations were accepted at Phase 4 sign-off.
 
 ## Production import
 
-The API/worker are deployed on Railway. The production import path is the `/import` UI:
+The API is deployed on Railway from merge commit `12bfbb0`. Main CI run [41710033984](https://github.com/jankowski-dev/Nexter.App/actions/runs/41710033984) passed. The pre-deploy migration applied `0007_wild_leper_queen.sql` (`Migrations applied` in the API logs).
 
-1. Take a PostgreSQL backup.
-2. Deploy the Phase 4 migration through the normal pre-deploy command.
-3. Sign in at the production URL.
-4. Open `/import`, upload the three export files, and confirm the preview matches the control numbers above.
-5. Commit; verify the post-commit summary and `/api/v1/dashboard/summary`.
-6. Keep the import record and audit log.
+Production import result:
+
+- Notion preview: HTTP 200 at `2026-11-03T20:30:42Z` (1.56 s; one aborted browser attempt was retried successfully).
+- Import commit: HTTP 200 at `2026-11-03T20:32:02Z` in 17.85 s.
+- Dashboard summary after commit: HTTP 200.
+- No 4xx/5xx responses on the import preview/commit/rollback routes; the only 4xx entries are unauthenticated probes.
+- Owner confirmed the preview and applied the import through `/import`.
+
+The migration is additive. The production import is reversible through `/import` while it remains the newest ledger activity. A manual pre-import dump was not taken; Railway's normal backup/PITR should be used for disaster recovery.
 
 Do not upload real export files to the repository or to a shared chat.
 
@@ -176,4 +179,4 @@ Fixes:
 - accepted scope deviations are listed above and in ADR 0007;
 - docs use the actual migration filename and include the reconciliation endpoint, status restoration, and the new error code.
 
-A third review verified the content-type case-normalization fix and returned **PASS** with no remaining code blockers. Phase 4 is ready for owner sign-off on the documented scope deviations.
+A third review verified the content-type case-normalization fix and returned **PASS** with no remaining code blockers. The owner accepted the documented scope deviations and applied the production import on 2026-11-03. **Phase 4 accepted.**

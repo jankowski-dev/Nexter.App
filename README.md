@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 4 — Notion import (implementation complete, under review)**. Phase 3 accounting core is accepted.
+Current phase: **Phase 4 — Notion import (accepted; production import applied on 2026-11-03)**. Next: Phase 5 — MVP-1 UI. Phase 3 accounting core is accepted.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
