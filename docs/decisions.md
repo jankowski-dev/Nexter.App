@@ -118,3 +118,5 @@ Format: date — decision — reason.
 - **Authenticated API responses are no-store.** CSV cells beginning with formula characters are prefixed with `'`; manual prices must be positive; cursor and watchlist race errors are mapped to 400/409.
 - **Monthly P&L uses the configured IANA timezone.** UI date labels use the browser timezone; this distinction is shown in settings.
 - **Phase 5 deferrals:** trade reverse/compensating reversal, standalone manual Fee type, dashboard account/asset filters and holding-period buckets, portfolio account grouping, accounts CRUD, watchlist drag-sort, and generated OpenAPI client are Phase 6 items.
+- **CSV protection preserves numeric cells.** Only formula-like text is prefixed with `'`; negative decimal values remain numeric in spreadsheets.
+- **Microsecond timestamps are paged at millisecond precision.** Audit and watchlist cursors use `date_trunc('milliseconds', ...)` for ordering and predicates, so rows sharing the cursor's millisecond are not skipped. Settings creation is audited as `settings.created`; monthly P&L falls back to `Europe/Minsk`.

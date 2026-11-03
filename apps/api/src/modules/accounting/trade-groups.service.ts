@@ -109,7 +109,7 @@ export class TradeGroupsService {
       .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
       .innerJoin(transactions, eq(lotConsumptions.disposalTransactionId, transactions.id))
       .where(and(eq(lots.userId, userId), eq(lots.tradeGroupId, groupId)))
-      .orderBy(lotConsumptions.createdAt);
+      .orderBy(transactions.occurredAt, lotConsumptions.createdAt, lotConsumptions.id);
 
     const linkedLegIds = new Set(legRows.map((leg) => leg.id));
     const disposalIds = [

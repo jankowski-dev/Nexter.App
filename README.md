@@ -20,7 +20,7 @@ DB-backed tests and the real 431-row import check are opt-in:
 
 ```bash
 NEXTER_TEST_DB=1 \
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/nexter_p4 \
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/nexter_local \
 SETUP_TOKEN=test-setup-token \
 AUTH_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
 NOTION_EXPORT_DIR=/path/to/notion-export \

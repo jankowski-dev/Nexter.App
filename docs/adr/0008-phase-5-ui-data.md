@@ -71,10 +71,11 @@ Phase 5 must not invent financial values. Historical market prices are not avail
 ### Security and data handling
 
 - All authenticated `/api/v1/*` responses are `Cache-Control: no-store`.
-- CSV exports prefix cells beginning with `=`, `+`, `-`, or `@` with `'` to prevent spreadsheet formula injection.
+- CSV exports prefix text cells beginning with `=`, `+`, `-`, or `@` with `'` to prevent spreadsheet formula injection. Negative numeric values (`-60.00000000`, `-15.00`) are not prefixed and remain numeric.
 - Manual prices must be positive; zero is rejected by the API.
-- Cursor payloads are shape/date validated and return `400` rather than a database error.
+- Cursor payloads are shape/date validated and return `400` rather than a database error. Audit and watchlist paging order and filter on millisecond-truncated timestamps, matching the ISO cursor precision; rows written with microsecond timestamps cannot be skipped.
 - Watchlist concurrent creates map a unique violation to `409`.
+- Settings row creation is audited (`settings.created`) in addition to updates.
 
 ## Consequences
 

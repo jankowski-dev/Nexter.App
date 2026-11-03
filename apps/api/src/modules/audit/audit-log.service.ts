@@ -1,9 +1,16 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, isNull, lt, lte, or, type SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNull, lt, lte, or, sql, type SQL } from 'drizzle-orm';
 import { auditLog, type Database } from '@nexter/db';
 import type { AuditEntry, AuditLogQuery, AuditLogResponse } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
+
+/**
+ * Cursors are ISO strings (millisecond precision) while `timestamptz` stores
+ * microseconds. Comparing raw columns would skip rows that share the cursor's
+ * millisecond, so both ordering and predicate use the truncated expression.
+ */
+const createdAtMs = sql`date_trunc('milliseconds', ${auditLog.createdAt})`;
 
 @Injectable()
 export class AuditLogService {
@@ -33,8 +40,8 @@ export class AuditLogService {
       const cursorDate = new Date(cursor.createdAt);
       conditions.push(
         or(
-          lt(auditLog.createdAt, cursorDate),
-          and(eq(auditLog.createdAt, cursorDate), lt(auditLog.id, cursor.id)),
+          lt(createdAtMs, cursorDate),
+          and(eq(createdAtMs, cursorDate), lt(auditLog.id, cursor.id)),
         )!,
       );
     }
@@ -43,7 +50,7 @@ export class AuditLogService {
       .select()
       .from(auditLog)
       .where(and(...conditions))
-      .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+      .orderBy(desc(createdAtMs), desc(auditLog.id))
       .limit(query.limit + 1);
     const page = makePage(rows, query.limit, (row) =>
       encodeCursor({ createdAt: row.createdAt.toISOString(), id: row.id }),

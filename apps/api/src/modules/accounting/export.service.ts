@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { TradeGroupSummary, Transaction } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
+import { toCsv } from './csv';
 import { LedgerService } from './ledger.service';
 import { ReportingService } from './reporting.service';
 import { TradeGroupsService } from './trade-groups.service';
@@ -127,7 +128,7 @@ export class ExportService {
       contentType:
         typedFormat === 'csv' ? 'text/csv; charset=utf-8' : 'application/json; charset=utf-8',
       fileName: `nexter-${typedDataset}-${date}.${typedFormat}`,
-      body: typedFormat === 'csv' ? this.toCsv(rows) : JSON.stringify(json, null, 2),
+      body: typedFormat === 'csv' ? toCsv(rows) : JSON.stringify(json, null, 2),
     };
   }
 
@@ -157,22 +158,5 @@ export class ExportService {
     } while (cursor);
 
     return all;
-  }
-
-  private toCsv(rows: Array<Record<string, unknown>>): string {
-    if (rows.length === 0) return '';
-
-    const headers = Object.keys(rows[0] ?? {});
-    const escape = (value: unknown) => {
-      const text = value === null || value === undefined ? '' : String(value);
-      // CSV formula injection: Excel/Sheets evaluate leading =, +, - and @.
-      const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
-      return `"${safe.replaceAll('"', '""')}"`;
-    };
-
-    return [
-      headers.map(escape).join(','),
-      ...rows.map((row) => headers.map((header) => escape(row[header])).join(',')),
-    ].join('\r\n');
   }
 }

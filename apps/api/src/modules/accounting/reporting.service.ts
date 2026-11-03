@@ -281,14 +281,14 @@ export class ReportingService {
       .from(settingsTable)
       .where(eq(settingsTable.userId, userId))
       .limit(1);
-    const configuredTimezone = settingsRow?.timezone ?? 'UTC';
-    let timezone = 'UTC';
+    const configuredTimezone = settingsRow?.timezone ?? 'Europe/Minsk';
+    let timezone = 'Europe/Minsk';
 
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: configuredTimezone }).format();
       timezone = configuredTimezone;
     } catch {
-      timezone = 'UTC';
+      timezone = 'Europe/Minsk';
     }
 
     // Use a validated literal so the SELECT and GROUP BY expressions are

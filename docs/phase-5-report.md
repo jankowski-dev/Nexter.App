@@ -36,7 +36,7 @@ Status: **implementation complete; pending independent review and acceptance.**
 - `pnpm lint` — pass.
 - `pnpm format:check` — pass.
 - `pnpm build` — pass.
-- API tests — **52 passed, 1 skipped** with the disposable PostgreSQL test database. The skipped test is the opt-in real 431-row import test.
+- API tests — **55 passed, 1 skipped** with the disposable PostgreSQL test database. The skipped test is the opt-in real 431-row import test.
 - Real 431-row import e2e (`NOTION_EXPORT_DIR`) — import plus Phase 5 dashboard/trade-group/portfolio/watchlist/audit/export/equity-curve assertions pass.
 - Playwright — **3 tests pass**: auth flow, Notion import UI, and the Phase 5 MVP-1 UI flow (dashboard, portfolio asset detail, trades, trade note, watchlist CRUD, settings save, CSV download, manual deposit).
 
@@ -83,4 +83,11 @@ First independent Phase 5 review returned **PASS WITH CHANGES** with no Critical
 - watchlist restore/cursor, trades filters/columns, asset thesis, and dashboard range filters;
 - cursor validation, watchlist unique-race mapping, and positive manual prices.
 
-Remaining explicit deferrals are listed above and in ADR 0008. Pending re-review.
+Second review re-check confirmed those fixes and raised three material Mediums, now addressed:
+
+- CSV formula protection keeps negative numeric values numeric (`-60.00000000` stays numeric) while still prefixing formula-like text; covered by `csv.spec.ts`.
+- Watchlist and audit cursors order and filter on `date_trunc('milliseconds', ...)` so rows sharing the cursor's microsecond/millisecond are not skipped; pagination tests cover 36 backfilled watchlist rows at limit 10 and audit pages at limit 5.
+- P&L month grouping falls back to `Europe/Minsk` (the schema default) instead of UTC.
+- Lower-priority items: asset detail loads all asset transactions instead of the first 100; lot consumptions are ordered by disposal time; settings creation is audited; README local database name updated; trades date filters use local-day boundaries.
+
+Remaining explicit deferrals are listed above and in ADR 0008. Pending final re-review.

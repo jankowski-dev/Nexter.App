@@ -315,6 +315,30 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     );
     expect(basedWatchlist.tags).toContain('Дашбоард');
 
+    // Backfilled entries share one insert timestamp; pagination must not skip
+    // rows that only differ by id within the same microsecond.
+    const watchlistPageIds: string[] = [];
+    let watchlistCursor: string | undefined;
+    let watchlistPages = 0;
+
+    do {
+      const page = await agent
+        .get(
+          `/api/v1/watchlist?limit=10${
+            watchlistCursor ? `&cursor=${encodeURIComponent(watchlistCursor)}` : ''
+          }`,
+        )
+        .expect(200);
+      watchlistPageIds.push(...(page.body.data as Array<{ id: string }>).map((entry) => entry.id));
+      watchlistCursor = page.body.page.nextCursor ?? undefined;
+      watchlistPages += 1;
+
+      if (!page.body.page.hasMore) break;
+    } while (watchlistCursor && watchlistPages < 10);
+
+    expect(watchlistPageIds).toHaveLength(36);
+    expect(new Set(watchlistPageIds).size).toBe(36);
+
     const dataQuality = await agent.get('/api/v1/dashboard/data-quality').expect(200);
     expect(dataQuality.body.issues).toEqual(
       expect.arrayContaining([

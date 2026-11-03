@@ -427,6 +427,21 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     expect(audit.body.data.length).toBeGreaterThan(0);
     expect(audit.body.data[0].action).toBe('watchlist.created');
 
+    // Audit rows are written at microsecond precision; paging must use the
+    // same millisecond-truncated ordering as the cursor.
+    const auditPage1 = await agent.get('/api/v1/audit-log?limit=5').expect(200);
+    expect(auditPage1.body.data).toHaveLength(5);
+    expect(auditPage1.body.page.hasMore).toBe(true);
+    const auditPage2 = await agent
+      .get(
+        `/api/v1/audit-log?limit=5&cursor=${encodeURIComponent(auditPage1.body.page.nextCursor)}`,
+      )
+      .expect(200);
+    const auditIds = new Set(
+      [...auditPage1.body.data, ...auditPage2.body.data].map((entry: { id: string }) => entry.id),
+    );
+    expect(auditIds.size).toBe(10);
+
     const exportCsv = await agent.get('/api/v1/export/transactions.csv').expect(200);
     expect(exportCsv.headers['content-type']).toContain('text/csv');
     expect(exportCsv.text).toContain('occurredAt');

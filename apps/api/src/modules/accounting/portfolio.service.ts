@@ -1,7 +1,12 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { lots, watchlist, type Database } from '@nexter/db';
-import type { PortfolioAssetDetail, Position, TradeGroupSummary } from '@nexter/contracts';
+import type {
+  PortfolioAssetDetail,
+  Position,
+  TradeGroupSummary,
+  Transaction,
+} from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { AssetsService } from './assets.service';
 import { LedgerService } from './ledger.service';
@@ -40,9 +45,9 @@ export class PortfolioService {
       .from(watchlist)
       .where(and(eq(watchlist.userId, userId), eq(watchlist.assetId, assetId)))
       .limit(1);
-    const [allGroups, transactions, prices] = await Promise.all([
+    const [allGroups, allTransactions, prices] = await Promise.all([
       this.allTradeGroups(userId, assetId),
-      this.ledger.list(userId, { limit: 100, assetId }),
+      this.allTransactions(userId, assetId),
       this.pricing.list(assetId),
     ]);
 
@@ -63,7 +68,7 @@ export class PortfolioService {
         acquiredAt: lot.acquiredAt.toISOString(),
       })),
       tradeGroups: allGroups,
-      transactions: transactions.transactions,
+      transactions: allTransactions,
       prices,
     };
   }
@@ -79,6 +84,24 @@ export class PortfolioService {
         cursor,
       });
       all.push(...page.data);
+      cursor = page.page.nextCursor ?? undefined;
+      if (!page.page.hasMore) break;
+    } while (cursor);
+
+    return all;
+  }
+
+  private async allTransactions(userId: string, assetId: string): Promise<Transaction[]> {
+    const all: Transaction[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const page = await this.ledger.list(userId, {
+        limit: 100,
+        assetId,
+        cursor,
+      });
+      all.push(...page.transactions);
       cursor = page.page.nextCursor ?? undefined;
       if (!page.page.hasMore) break;
     } while (cursor);

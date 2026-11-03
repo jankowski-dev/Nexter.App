@@ -22,22 +22,38 @@ export class SettingsService {
 
     if (row) return this.toContract(row);
 
-    const [created] = await this.db
-      .insert(settings)
-      .values({ userId })
-      .onConflictDoNothing()
-      .returning();
+    return this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(settings)
+        .values({ userId })
+        .onConflictDoNothing()
+        .returning();
 
-    if (created) return this.toContract(created);
+      if (!created) {
+        const [existing] = await tx
+          .select()
+          .from(settings)
+          .where(eq(settings.userId, userId))
+          .limit(1);
 
-    const [existing] = await this.db
-      .select()
-      .from(settings)
-      .where(eq(settings.userId, userId))
-      .limit(1);
+        if (!existing) throw new Error('Failed to create settings');
+        return this.toContract(existing);
+      }
 
-    if (!existing) throw new Error('Failed to create settings');
-    return this.toContract(existing);
+      const contract = this.toContract(created);
+      await this.audit.log(
+        {
+          userId,
+          action: 'settings.created',
+          entityType: 'settings',
+          entityId: userId,
+          after: contract,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return contract;
+    });
   }
 
   async update(

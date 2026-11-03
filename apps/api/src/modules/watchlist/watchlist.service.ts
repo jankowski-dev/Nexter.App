@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, isNull, lt, or } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import {
   assets,
   auditLog,
@@ -38,6 +38,12 @@ interface SourceImportData {
   description?: unknown;
   raw?: unknown;
 }
+
+/**
+ * Cursors carry millisecond ISO dates; `timestamptz` stores microseconds.
+ * Use the same truncated expression for ordering and the page predicate.
+ */
+const createdAtMs = sql`date_trunc('milliseconds', ${watchlist.createdAt})`;
 
 @Injectable()
 export class WatchlistService {
@@ -78,10 +84,10 @@ export class WatchlistService {
       conditions.push(
         or(
           lt(watchlist.priority, cursor.priority),
-          and(eq(watchlist.priority, cursor.priority), lt(watchlist.createdAt, cursorDate)),
+          and(eq(watchlist.priority, cursor.priority), lt(createdAtMs, cursorDate)),
           and(
             eq(watchlist.priority, cursor.priority),
-            eq(watchlist.createdAt, cursorDate),
+            eq(createdAtMs, cursorDate),
             lt(watchlist.id, cursor.id),
           ),
         )!,
@@ -94,7 +100,7 @@ export class WatchlistService {
       .innerJoin(assets, eq(watchlist.assetId, assets.id))
       .innerJoin(chains, eq(assets.chainId, chains.id))
       .where(and(...conditions))
-      .orderBy(desc(watchlist.priority), desc(watchlist.createdAt), desc(watchlist.id))
+      .orderBy(desc(watchlist.priority), desc(createdAtMs), desc(watchlist.id))
       .limit(query.limit + 1);
     const page = makePage(rows, query.limit, (row) =>
       encodeCursor({

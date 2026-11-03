@@ -42,8 +42,8 @@ export function TradesPage() {
     status: status ? (status as 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale') : undefined,
     source: source ? (source as 'manual' | 'notion' | 'onchain' | 'system') : undefined,
     assetId: assetId || undefined,
-    from: from ? new Date(`${from}T00:00:00.000Z`).toISOString() : undefined,
-    to: to ? new Date(`${to}T23:59:59.999Z`).toISOString() : undefined,
+    from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
+    to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
     pnl: pnl ? (pnl as 'positive' | 'negative') : undefined,
     search: deferredSearch || undefined,
   };
