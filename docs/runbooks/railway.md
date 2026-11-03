@@ -65,6 +65,20 @@ The command requires `DATABASE_URL`. It resolves migrations from `packages/db/dr
 
 Do not run migrations automatically on every API boot.
 
+### Phase 4 migration 0007 preflight
+
+Migration `0007_wild_leper_queen.sql` is additive: it creates `imports`/`import_rows` and adds nullable `import_id`/`source_id` columns plus JSONB data-quality defaults. It does not delete or rewrite existing ledger data.
+
+Before deploying:
+
+1. Take a PostgreSQL backup.
+2. Confirm the previous API/worker deployment is healthy.
+3. Run the pre-deploy migration command `node packages/db/dist/migrate.js`.
+4. Deploy the Phase 4 API/worker and the rebuilt SPA.
+5. Verify `/ready`, then import through `/import` per `docs/runbooks/notion-import.md`.
+
+The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
+
 ### Phase 2 migration 0003 preflight
 
 Migration `0003` creates `users_singleton_unique` and aborts with a clear error if more than one owner exists (possible only if an old deployment hit the pre-fix setup race).

@@ -84,4 +84,4 @@ All High findings and the actionable Medium findings were fixed. A second review
 
 ## Next phase
 
-Phase 4 — Notion import, after Phase 3 re-review.
+Phase 4 — Notion import. See [`docs/phase-4-report.md`](phase-4-report.md).

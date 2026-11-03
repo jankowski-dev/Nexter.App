@@ -27,6 +27,7 @@
     "dotenv": "^18.0.9",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.8",
+    "lossless-json": "4.3.3",
     "nestjs-pino": "^5.3.1",
     "otplib": "13.6.0",
     "pg": "^8.23.1",

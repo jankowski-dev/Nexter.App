@@ -17,7 +17,10 @@ export function DashboardPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{messages.dashboard.title}</h1>
-          <p className="mt-1 text-sm text-zinc-400">{messages.dashboard.subtitle}</p>
+          <p className="mt-1 text-sm text-zinc-400">
+            Полный дашборд появится в Phase 5. Импорт Notion и итоги учёта уже доступны в разделе
+            «Импорт».
+          </p>
         </div>
         <Button variant="secondary" onClick={() => void health.refetch()}>
           {messages.dashboard.checkApi}
@@ -49,16 +52,16 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>{messages.dashboard.phase}</CardTitle>
           </CardHeader>
-          <CardValue>2</CardValue>
-          <CardDescription>{messages.dashboard.phaseHint}</CardDescription>
+          <CardValue>4</CardValue>
+          <CardDescription>Импорт Notion</CardDescription>
         </Card>
 
         <Card>
           <CardHeader>
             <CardTitle>{messages.dashboard.nextPhase}</CardTitle>
           </CardHeader>
-          <CardValue>3</CardValue>
-          <CardDescription>{messages.dashboard.nextPhaseHint}</CardDescription>
+          <CardValue>5</CardValue>
+          <CardDescription>UI MVP-1</CardDescription>
         </Card>
       </div>
 
