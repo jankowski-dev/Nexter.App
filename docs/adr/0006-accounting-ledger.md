@@ -15,7 +15,7 @@ Phase 2 established authentication and security. Phase 3 adds the append-only ac
 - `chains` stores `bsc` and `ethereum`; BSC is the primary chain.
 - `assets` are per chain (`chain_id`, `symbol` unique). This lets the same ticker have different decimals on BSC and Ethereum.
 - Seed assets: BSC — USDC, USDT, XNY, BASED, APR, POP, LINK, BNB; Ethereum — USDC, USDT, LINK, BASED, APR, ETH.
-- USDC is a stablecoin and a cash equivalent on both chains. Contract addresses are intentionally left unset until the token registry phase; unknown token decimals default to 18 and can be corrected before import.
+- USDC and USDT are stablecoins and cash equivalents on both chains. Contract addresses are intentionally left unset until the token registry phase; unknown token decimals default to 18 and can be corrected before import.
 
 ### Accounts
 
@@ -38,7 +38,7 @@ Phase 2 established authentication and security. Phase 3 adds the append-only ac
 
 - A `trade_group` represents a user-facing trade/round trip. Manual buys create a group; sells consume global FIFO lots and update group status.
 - `lots` are global per asset, not per account. Acquisitions create lots; disposals consume oldest lots first.
-- `lot_consumptions` records amount, cost basis, proceeds, and realized P&L per consumed lot. Withdrawals reduce lots with zero realized P&L.
+- `lot_consumptions` records amount, cost basis, proceeds, and realized P&L per consumed lot. Withdrawals of non-cash assets are disposals at the provided USD value and realize P&L; cash withdrawals remain capital flows.
 - Stablecoins do not create lots; their balances are tracked by postings.
 - Gas is posted as a movement of the gas asset. By default it is included in acquisition cost basis and deducted from sale proceeds according to `settings.include_gas_in_cost_basis`.
 - Fees that are not capitalized into a lot or deducted from realized disposal P&L are recorded in `transactions.fees_usd` and subtracted in dashboard total P&L.
@@ -47,9 +47,11 @@ Phase 2 established authentication and security. Phase 3 adds the append-only ac
 ### Prices and reporting
 
 - Phase 3 uses manual prices in `prices` (`source = manual`). No third-party price API is added in this phase.
+- Cash equivalents are valued at $1 in Phase 3; explicit USD for cash legs must equal the token amount. Manual prices for cash equivalents are ignored until a depeg flag is implemented.
+- Fee USD values must be positive when a fee is present; for a cash fee asset they must equal the fee amount.
 - Positions and dashboard summaries are derived from postings, lots, and the latest manual price.
-- Equity = cash equivalents + positions at the latest price.
-- Net deposits = deposits − withdrawals; total P&L = realized disposals + unrealized + income.
+- Equity = cash equivalents at $1 + positions at the latest price.
+- Net deposits = deposits − withdrawals; total P&L = realized disposals + unrealized + income + adjustments − non-capitalized fees.
 - Income is reported separately (`incomeUsd`) so equity − net deposits reconciles with total P&L; the disposal formula `realized = proceeds − cost basis − fees` is unchanged.
 - Withdrawals of non-cash assets are treated as disposals at the provided USD value and realize P&L (cash withdrawals remain capital flows).
 - Positive adjustments are reported separately (`adjustmentsUsd`) and included in total P&L; adjustment reasons are audited.

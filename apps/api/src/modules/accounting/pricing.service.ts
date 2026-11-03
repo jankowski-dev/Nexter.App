@@ -1,10 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { prices, type Database } from '@nexter/db';
 import type { Price, SetPriceRequest } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
-import { decimal, usdString } from '../../shared/money/decimal';
+import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { AssetsService } from './assets.service';
 
 export interface PriceMeta {
@@ -28,19 +28,27 @@ export class PricingService {
   ): Promise<Price> {
     const asset = await this.assets.require(assetId);
     const observedAt = input.observedAt ? new Date(input.observedAt) : new Date();
+    const price = decimal(input.priceUsd);
+
+    if (price.gte(new Decimal('1e16'))) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Price is too large',
+      });
+    }
 
     const result = await this.db.transaction(async (tx) => {
-      const [price] = await tx
+      const [priceRow] = await tx
         .insert(prices)
         .values({
           assetId: asset.id,
-          priceUsd: usdString(decimal(input.priceUsd)),
+          priceUsd: usdString(price),
           observedAt,
           source: 'manual',
         })
         .returning();
 
-      if (!price) {
+      if (!priceRow) {
         throw new Error('Failed to save price');
       }
 
@@ -50,14 +58,14 @@ export class PricingService {
           action: 'accounting.price_set',
           entityType: 'asset',
           entityId: asset.id,
-          after: { priceUsd: price.priceUsd, observedAt: observedAt.toISOString() },
+          after: { priceUsd: priceRow.priceUsd, observedAt: observedAt.toISOString() },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
         { executor: tx, strict: true },
       );
 
-      return price;
+      return priceRow;
     });
 
     return this.toContract(result);

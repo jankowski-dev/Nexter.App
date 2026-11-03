@@ -152,12 +152,31 @@ export class LedgerService {
         provided: string | undefined,
         label: string,
       ): Decimal => {
-        if (provided !== undefined) {
-          return decimal(provided);
+        if (asset.isCashEquivalent) {
+          const derived = toUsd(amount);
+
+          if (provided !== undefined && !toUsd(decimal(provided)).eq(derived)) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: `${label} must equal the cash amount for ${asset.symbol}`,
+              details: { assetId: asset.id, expected: derived.toFixed(8) },
+            });
+          }
+
+          return derived;
         }
 
-        if (asset.isCashEquivalent) {
-          return toUsd(amount);
+        if (provided !== undefined) {
+          const value = decimal(provided);
+
+          if (value.lte(0)) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: `${label} must be positive`,
+            });
+          }
+
+          return value;
         }
 
         throw new BadRequestException({
@@ -230,13 +249,9 @@ export class LedgerService {
           const baseAmount = decimal(input.amount);
           assertAmount(base, baseAmount, 'amount');
           assertAmount(quote, quoteAmount, 'quoteAmount');
-          const tradeUsd = input.usdValue
-            ? decimal(input.usdValue)
-            : quote.isCashEquivalent
-              ? toUsd(quoteAmount)
-              : null;
+          const tradeUsd = resolveUsd(quote, quoteAmount, input.usdValue, 'usdValue');
 
-          if (!tradeUsd || tradeUsd.lte(0)) {
+          if (tradeUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
               message: 'A positive usdValue is required for a trade',
@@ -299,13 +314,9 @@ export class LedgerService {
           const proceedsAmount = decimal(input.proceedsAmount);
           assertAmount(base, baseAmount, 'amount');
           assertAmount(proceedsAsset, proceedsAmount, 'proceedsAmount');
-          const proceedsUsd = input.usdValue
-            ? decimal(input.usdValue)
-            : proceedsAsset.isCashEquivalent
-              ? toUsd(proceedsAmount)
-              : null;
+          const proceedsUsd = resolveUsd(proceedsAsset, proceedsAmount, input.usdValue, 'usdValue');
 
-          if (!proceedsUsd || proceedsUsd.lte(0)) {
+          if (proceedsUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
               message: 'A positive usdValue is required for a trade',
@@ -390,18 +401,10 @@ export class LedgerService {
           const amountOut = decimal(input.amountOut);
           assertAmount(tokenIn, amountIn, 'amountIn');
           assertAmount(tokenOut, amountOut, 'amountOut');
-          const inUsd = input.usdValueIn
-            ? decimal(input.usdValueIn)
-            : tokenIn.isCashEquivalent
-              ? toUsd(amountIn)
-              : null;
-          const outUsd = input.usdValueOut
-            ? decimal(input.usdValueOut)
-            : tokenOut.isCashEquivalent
-              ? toUsd(amountOut)
-              : null;
+          const inUsd = resolveUsd(tokenIn, amountIn, input.usdValueIn, 'usdValueIn');
+          const outUsd = resolveUsd(tokenOut, amountOut, input.usdValueOut, 'usdValueOut');
 
-          if (!inUsd || !outUsd || inUsd.lte(0) || outUsd.lte(0)) {
+          if (inUsd.lte(0) || outUsd.lte(0)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
               message: 'Positive usdValueIn and usdValueOut are required for a swap',
@@ -509,7 +512,7 @@ export class LedgerService {
           const asset = await this.assets.require(input.assetId, tx);
           const amount = decimal(input.amount);
           assertAmount(asset, amount, 'amount');
-          const usd = decimal(input.usdValue);
+          const usd = resolveUsd(asset, amount, input.usdValue, 'usdValue');
 
           add(account.id, asset.id, amount, usd);
           addExternal(asset.id, amount.negated(), usd.negated());
@@ -531,7 +534,7 @@ export class LedgerService {
           const asset = await this.assets.require(input.assetId, tx);
           const amount = decimal(input.amount);
           assertAmount(asset, amount, 'amount');
-          const usd = decimal(input.usdValue);
+          const usd = resolveUsd(asset, amount, input.usdValue, 'usdValue');
 
           add(account.id, asset.id, amount.negated(), usd.negated());
           addExternal(asset.id, amount, usd);
@@ -555,7 +558,7 @@ export class LedgerService {
           const income = await this.accounts.systemAccount(userId, 'income', tx);
           const amount = decimal(input.amount);
           assertAmount(asset, amount, 'amount');
-          const usd = decimal(input.usdValue);
+          const usd = resolveUsd(asset, amount, input.usdValue, 'usdValue');
 
           add(account.id, asset.id, amount, usd);
           add(income.id, asset.id, amount.negated(), usd.negated());
@@ -578,7 +581,7 @@ export class LedgerService {
           const equity = await this.accounts.systemAccount(userId, 'equity', tx);
           const amount = decimal(input.amount);
           assertAmount(asset, amount, 'amount');
-          const usd = decimal(input.usdValue);
+          const usd = resolveUsd(asset, amount, input.usdValue, 'usdValue');
 
           add(account.id, asset.id, amount, usd);
           add(equity.id, asset.id, amount.negated(), usd.negated());

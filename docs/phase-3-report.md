@@ -67,7 +67,8 @@ Status: review findings fixed, pending re-review
 - No transaction reversal endpoint yet; negative adjustments are not supported in MVP-1.
 - No external price provider; prices are manual in Phase 3.
 - Unknown token decimals default to 18 and are marked unverified until the token registry phase.
-- No depeg flag yet; manual prices can reflect a depeg.
+- No depeg flag yet; cash equivalents are valued at $1 and explicit cash USD must equal the cash amount.
+- Fee USD values must be positive; cash-fee USD must equal the cash fee amount.
 - `GET /transactions` is capped at 200 rows and has no cursor pagination yet.
 - Portfolio snapshots, watchlist, imports, swaps, and on-chain reconciliation are later phases.
 - Income, adjustments and non-capitalized fees are reported separately and included in total P&L as documented in ADR 0006.
@@ -79,7 +80,7 @@ Independent review returned **FAIL** with:
 - High: concurrent cash spends could go negative; withdrawals/adjustments broke equity/P&L reconciliation; transfer and swap-to-cash fees were not recognized; adjustment reasons were discarded.
 - Medium: asset decimals/chain consistency, derived USD scale, zero-USD inputs, idempotency, property/e2e coverage, and report accuracy.
 
-All High findings and the actionable Medium findings were fixed in this revision. Remaining limitations are listed above and in ADR 0006.
+All High findings and the actionable Medium findings were fixed in this revision. A second review returned **PASS WITH CHANGES** with remaining input-consistency issues; those were fixed by requiring positive fee USD, enforcing cash-equivalent USD = token amount, updating ADR/report claims, and adding fee/cash reconciliation tests. Remaining limitations are listed above and in ADR 0006.
 
 ## Next phase
 

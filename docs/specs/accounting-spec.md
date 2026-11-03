@@ -45,6 +45,8 @@ Imported rows are flagged: `chain_known=false`, `contract_known=false`, `network
 - Default accounts per owner: `External`, `Income`, `Expense`, `Equity`, `Tangem BSC`, `Tangem Ethereum`.
 - Manual buys and sells require a cash-equivalent quote/proceeds asset in MVP-1; token-to-token swaps support two non-cash legs.
 - Manual prices are stored with `source = manual`; missing prices make position value/unrealized P&L `null` and are listed in `missingPrices`.
+- Cash equivalents are valued at $1 in Phase 3; explicit USD for cash legs must equal the token amount. Manual prices for cash equivalents are ignored until a depeg flag is implemented.
+- Fee USD values must be positive when a fee is present; for a cash fee asset they must equal the fee amount.
 - Income is tracked separately (`incomeUsd`) and included in total P&L, so `equity − netDeposits = totalPnl`; the disposal formula is unchanged.
 - Withdrawals of non-cash assets are disposals at the provided USD value and realize P&L; cash withdrawals remain capital flows.
 - Positive adjustments are tracked separately (`adjustmentsUsd`), included in total P&L, and their reasons are stored in notes and audit.

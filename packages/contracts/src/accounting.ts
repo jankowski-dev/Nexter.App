@@ -98,7 +98,7 @@ const manualBase = {
 const feeFields = {
   feeAssetId: z.uuid().optional(),
   feeAmount: positiveDecimalSchema.optional(),
-  feeUsdValue: nonNegativeDecimalSchema.optional(),
+  feeUsdValue: positiveDecimalSchema.optional(),
 };
 
 export const manualBuySchema = z.object({

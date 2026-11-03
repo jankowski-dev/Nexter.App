@@ -554,6 +554,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
     );
     const bscLink = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
     const bscUsdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const bscBnb = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'BNB');
     const accounts = await getAccounts(agent);
     const bscWallet = accounts.find((account) => account.name === 'Tangem BSC');
     const ethWallet = accounts.find((account) => account.name === 'Tangem Ethereum');
@@ -597,6 +598,90 @@ describe.runIf(canRun)('Accounting e2e', () => {
       })
       .expect(400);
     expect(zeroUsdError.body.error.code).toBe('VALIDATION_ERROR');
+
+    const cashMismatch = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'deposit',
+        accountId: bscWallet?.id,
+        assetId: bscUsdc?.id,
+        amount: '100',
+        usdValue: '90',
+      })
+      .expect(400);
+    expect(cashMismatch.body.error.code).toBe('VALIDATION_ERROR');
+
+    const zeroFee = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: bscWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        quoteAssetId: bscUsdc?.id,
+        quoteAmount: '10',
+        feeAssetId: bscBnb?.id,
+        feeAmount: '0.001',
+        feeUsdValue: '0',
+      })
+      .expect(400);
+    expect(zeroFee.body.error.code).toBe('VALIDATION_ERROR');
+
+    const cashFeeMismatch = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: bscWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        quoteAssetId: bscUsdc?.id,
+        quoteAmount: '10',
+        feeAssetId: bscUsdc?.id,
+        feeAmount: '1',
+        feeUsdValue: '0.5',
+      })
+      .expect(400);
+    expect(cashFeeMismatch.body.error.code).toBe('VALIDATION_ERROR');
+
+    const sameTransfer = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'transfer',
+        fromAccountId: bscWallet?.id,
+        toAccountId: bscWallet?.id,
+        assetId: bscLink?.id,
+        amount: '1',
+        usdValue: '10',
+      })
+      .expect(400);
+    expect(sameTransfer.body.error.code).toBe('VALIDATION_ERROR');
+
+    const sameSwap = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'swap',
+        accountId: bscWallet?.id,
+        assetInId: bscLink?.id,
+        amountIn: '1',
+        assetOutId: bscLink?.id,
+        amountOut: '1',
+        usdValueIn: '10',
+        usdValueOut: '10',
+      })
+      .expect(400);
+    expect(sameSwap.body.error.code).toBe('VALIDATION_ERROR');
+
+    const priceTooLarge = await agent
+      .post(`/api/v1/prices/${bscLink?.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ priceUsd: '10000000000000000' })
+      .expect(400);
+    expect(priceTooLarge.body.error.code).toBe('VALIDATION_ERROR');
 
     await create(agent, owner.csrf, {
       type: 'deposit',

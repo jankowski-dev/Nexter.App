@@ -97,8 +97,7 @@ export class ReportingService {
       const costBasis = decimal(costByAsset.get(row.assetId) ?? '0');
 
       if (assetRow.asset.isCashEquivalent) {
-        const cashPrice = priceValue ?? new Decimal(1);
-        cashUsd = cashUsd.plus(amount.mul(cashPrice));
+        cashUsd = cashUsd.plus(amount);
         continue;
       }
 

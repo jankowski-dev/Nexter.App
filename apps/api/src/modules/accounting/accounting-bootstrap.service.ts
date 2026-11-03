@@ -102,7 +102,9 @@ export class AccountingBootstrapService implements OnApplicationBootstrap {
     const rows = await this.db.select({ id: users.id }).from(users);
 
     for (const row of rows) {
-      await this.ensureDefaults(row.id);
+      await this.db.transaction(async (tx) => {
+        await this.ensureDefaults(row.id, tx, {}, true);
+      });
     }
   }
 }

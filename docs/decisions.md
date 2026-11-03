@@ -78,3 +78,5 @@ Format: date — decision — reason.
 - **Positive adjustments and non-capitalized fees are explicit P&L components.** `adjustmentsUsd` and `feesUsd` are reported separately; fee amounts already capitalized or deducted from realized P&L are not counted twice. Adjustment reasons are persisted and audited.
 - **Manual POSTs accept an `Idempotency-Key`.** Transaction `source_id` plus the unique user/source index makes retries replay the original transaction.
 - **Asset decimals and wallet chain consistency are validated.** Amounts may not exceed `assets.decimals`; a wallet may only hold assets from its chain.
+- **Cash-equivalent USD is derived and enforced.** Cash equivalents are valued at $1 in Phase 3; explicit USD for a cash leg must equal the token amount. Manual cash prices are ignored until a depeg flag exists.
+- **Fee USD must be positive and consistent with cash fees.** A zero fee USD is rejected; a cash fee USD must equal the cash fee amount.
