@@ -65,3 +65,4 @@ Format: date — decision — reason.
 - **Login throttling uses per-IP+email keys.** A global per-email lockout was rejected because it would let an unauthenticated attacker deny login to the single owner.
 - **Password reset/change clear auth lockouts.** Recovery after an attacker-triggered 2FA lockout is not blocked; the break-glass runbook also clears `rate_limits`.
 - **Destructive auth tests require `NEXTER_TEST_DB=1`.** CI uses a disposable PostgreSQL service; local runs must use a dedicated test database.
+- **Phase 2 accepted.** Three independent reviews: FAIL → PASS WITH CHANGES → PASS WITH CHANGES; all Critical/High and actionable Medium findings fixed. Final green CI: `6d09b82`. Next phase: Phase 3 — Accounting core.

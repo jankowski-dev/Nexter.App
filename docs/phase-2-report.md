@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Status: implemented, independent review findings fixed, pending re-review
+Status: **accepted** after three independent reviews. Final green CI run: `6d09b82`.
 
 ## Scope completed
 
@@ -75,7 +75,7 @@ Status: implemented, independent review findings fixed, pending re-review
 - Step-up TOTP for swaps is deferred to MVP-2.
 - Cloudflare Access remains an optional deployment layer.
 - Auth UI is functional but intentionally minimal.
-- CI run on `0fcde16` passed, including typecheck, lint, format, tests, Playwright auth E2E, Docker build, secret scan, and dependency audit. The final follow-up commit only adds `Cache-Control: no-store` to auth error responses and a test-safety guard.
+- CI run on `6d09b82` passed, including typecheck, lint, format, tests, Playwright auth E2E, Docker build, secret scan, and dependency audit.
 
 ## Review history
 
@@ -85,18 +85,19 @@ Independent review returned **FAIL** with:
 - High: setup could create two owners under concurrency; security-test exit criterion not met.
 - Medium: login timing enumeration, password-change session semantics, absolute TTL, non-atomic recovery consumption, best-effort audit, non-transactional mutations, missing key validation, no break-glass runbook, no ADR, English server messages in Russian UI, missing global/per-email limits.
 
-All Critical and High findings from the first review are fixed. The second review returned **PASS WITH CHANGES**; its remaining Medium items were fixed in this revision:
+- The second review returned **PASS WITH CHANGES** and its Medium items were fixed:
+  - login session creation and audit now share a transaction;
+  - password reset/change clear the per-user 2FA lockout;
+  - login throttling uses per-IP+email keys to avoid a global email lockout DoS;
+  - destructive tests require an explicit disposable test DB (`NEXTER_TEST_DB=1`);
+  - migration `0003` has a duplicate-owner preflight and runbook;
+  - `setup-2fa` checks the normalized `details.reason`;
+  - additional tests cover CSRF session-hash mismatch, re-login while blocked, reset-after-lockout, concurrent recovery consumption, and password-change revocation with a live session.
 
-- login session creation and audit now share a transaction;
-- password reset/change clear the per-user 2FA lockout;
-- login throttling uses per-IP+email keys to avoid a global email lockout DoS;
-- destructive tests require an explicit disposable test DB (`NEXTER_TEST_DB=1`);
-- migration `0003` has a duplicate-owner preflight and runbook;
-- `setup-2fa` checks the normalized `details.reason`;
-- additional tests cover CSRF session-hash mismatch, re-login while blocked, reset-after-lockout, concurrent recovery consumption, and password-change revocation with a live session.
+- The third review returned **PASS WITH CHANGES** with one remaining Medium: password reset still used a global per-email throttle key (same DoS class as login). It was fixed by switching reset throttling to per-IP+email and per-IP keys. The same revision made current-session revocation on password change atomic, added expiry checks to session rotation, and completed the 401/429 `no-store` and security-header coverage.
 
 Residual Low items and operational limitations are listed above and in ADR 0005.
 
 ## Next phase
 
-Phase 3 — Accounting core, after Phase 2 re-review.
+Phase 3 — Accounting core.

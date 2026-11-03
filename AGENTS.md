@@ -6,7 +6,7 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 2 — Auth & Security (review fixes applied, pending re-acceptance).
+Phase 2 — Auth & Security (accepted). Next: Phase 3 — Accounting core.
 
 Phase 1 foundation is accepted with operational follow-ups. Do not implement accounting, imports, or swap features until Phase 2 is reviewed and accepted.
 
