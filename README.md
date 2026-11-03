@@ -98,7 +98,7 @@ npx pnpm@10.20.0 smoke:worker
 ## Phase status
 
 - [x] Phase 0 — Design
-- [ ] Phase 1 — Foundation (in review)
+- [x] Phase 1 — Foundation (accepted with operational follow-ups)
 - [ ] Phase 2 — Auth and security
 - [ ] Phase 3 — Accounting core
 - [ ] Phase 4 — Notion import

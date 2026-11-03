@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Status: **in review**
+Status: **accepted with changes** — no Critical or High findings remain. Operational follow-ups are listed below.
 
 ## Scope completed
 
@@ -114,7 +114,19 @@ Medium findings included gitleaks fragility, unresolved production proxy CIDRs, 
 - Sentry scrubbing now removes `event.user` and recurses arrays; worker pino redaction covers more secret-shaped keys.
 - Updated CI container checks and worker startup wait.
 
-A fourth independent review is required before Phase 1 is accepted.
+### Fourth review — PASS WITH CHANGES
+
+No Critical or High findings remained. The reviewer verified the clean checkout, Docker deps/build simulation, migrations, runtime headers, SPA deep links, gzip static assets, env loading, Sentry scrubbing, contracts, and audit.
+
+Remaining items are operational/hardening:
+
+- set actual `TRUST_PROXY` CIDRs/hops for Railway/Cloudflare and verify `request.ip` before IP rate limits;
+- deploy and verify Railway staging, including the worker service and migration release step;
+- execute the real Docker/CI/gitleaks/PostgreSQL gates;
+- add broader PostgreSQL auth/session integration tests before Phase 2;
+- complete exact version/base-image pinning and production dependency pruning.
+
+Phase 1 is accepted for code/runtime foundation. The operational items above should be completed before or alongside Phase 2 auth.
 
 ## Known limitations
 

@@ -43,3 +43,4 @@ Format: date — decision — reason.
 - **Secret scan is pinned and redacted.** gitleaks `v8.28.0`, `dir` mode, `--redact`, and path allowlists for generated/dependency directories.
 - **PostgreSQL readiness is tested in CI.** The API e2e suite runs a DB-backed `/ready` test when `DATABASE_URL` is set and skips it locally.
 - **Sentry scrubbing includes user context and arrays.** `event.user` is removed and nested arrays are recursively scrubbed.
+- **Phase 1 accepted with operational follow-ups.** Independent review round 4 returned PASS WITH CHANGES: no Critical/High findings. Remaining work is Railway staging, actual proxy CIDRs, real CI/Docker execution, broader DB auth tests, and version/digest hardening.
