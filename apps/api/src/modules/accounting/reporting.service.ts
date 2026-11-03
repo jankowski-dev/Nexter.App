@@ -7,6 +7,7 @@ import {
   lotConsumptions,
   lots,
   postings,
+  settings as settingsTable,
   transactions,
   type Database,
 } from '@nexter/db';
@@ -124,6 +125,7 @@ export class ReportingService {
         amount: amount.toFixed(18),
         priceUsd: price ?? null,
         valueUsd: value ? usdString(value) : null,
+        avgCostUsd: amount.gt(0) ? usdString(costBasis.div(amount)) : null,
         costBasisUsd: usdString(costBasis),
         unrealizedPnlUsd: unrealized ? usdString(unrealized) : null,
         isCashEquivalent: false,
@@ -140,6 +142,61 @@ export class ReportingService {
   }
 
   async position(userId: string, assetId: string): Promise<Position> {
+    await this.bootstrap.ensureDefaults(userId);
+
+    const [assetRow] = await this.db
+      .select({ asset: assets, chainCode: chains.code })
+      .from(assets)
+      .innerJoin(chains, eq(assets.chainId, chains.id))
+      .where(eq(assets.id, assetId))
+      .limit(1);
+
+    if (!assetRow) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Position not found' });
+    }
+
+    const assetContract: AssetContract = {
+      id: assetRow.asset.id,
+      chainId: assetRow.asset.chainId,
+      chainCode: assetRow.chainCode,
+      symbol: assetRow.asset.symbol,
+      name: assetRow.asset.name,
+      decimals: assetRow.asset.decimals,
+      contractAddress: assetRow.asset.contractAddress,
+      coingeckoId: assetRow.asset.coingeckoId,
+      isStablecoin: assetRow.asset.isStablecoin,
+      isCashEquivalent: assetRow.asset.isCashEquivalent,
+      isVerified: assetRow.asset.isVerified,
+    };
+
+    if (assetRow.asset.isCashEquivalent) {
+      const [balance] = await this.db
+        .select({
+          amount: sql<string>`coalesce(sum(${postings.amount}), 0)::text`,
+        })
+        .from(postings)
+        .innerJoin(accounts, eq(postings.accountId, accounts.id))
+        .where(
+          and(
+            eq(accounts.userId, userId),
+            eq(accounts.type, 'wallet'),
+            eq(postings.assetId, assetId),
+          ),
+        );
+      const amount = decimal(balance?.amount ?? '0');
+
+      return {
+        asset: assetContract,
+        amount: amount.toFixed(18),
+        priceUsd: '1.00000000',
+        valueUsd: usdString(amount),
+        avgCostUsd: '1.00000000',
+        costBasisUsd: usdString(amount),
+        unrealizedPnlUsd: '0.00000000',
+        isCashEquivalent: true,
+      };
+    }
+
     const result = await this.positions(userId);
     const position = result.positions.find((item) => item.asset.id === assetId);
 
@@ -219,20 +276,41 @@ export class ReportingService {
   }
 
   async pnlByMonth(userId: string): Promise<DashboardPnl> {
+    const [settingsRow] = await this.db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.userId, userId))
+      .limit(1);
+    const configuredTimezone = settingsRow?.timezone ?? 'UTC';
+    let timezone = 'UTC';
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: configuredTimezone }).format();
+      timezone = configuredTimezone;
+    } catch {
+      timezone = 'UTC';
+    }
+
+    // Use a validated literal so the SELECT and GROUP BY expressions are
+    // syntactically identical (separate bind placeholders are not).
+    const timezoneLiteral = sql.raw(`'${timezone.replaceAll("'", "''")}'`);
+    const monthExpression = sql<string>`to_char(date_trunc('month', ${transactions.occurredAt} AT TIME ZONE ${timezoneLiteral}), 'YYYY-MM')`;
+    const monthGroup = sql`date_trunc('month', ${transactions.occurredAt} AT TIME ZONE ${timezoneLiteral})`;
+
     const realizedRows = await this.db
       .select({
-        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        month: monthExpression,
         total: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`,
       })
       .from(lotConsumptions)
       .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
       .innerJoin(transactions, eq(lotConsumptions.disposalTransactionId, transactions.id))
       .where(eq(lots.userId, userId))
-      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`);
+      .groupBy(monthGroup);
 
     const cashRows = await this.db
       .select({
-        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        month: monthExpression,
         type: transactions.type,
         total: sql<string>`coalesce(sum(${postings.usdValue}), 0)::text`,
       })
@@ -246,16 +324,16 @@ export class ReportingService {
           inArray(transactions.type, ['income', 'adjustment']),
         ),
       )
-      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`, transactions.type);
+      .groupBy(monthGroup, transactions.type);
 
     const feeRows = await this.db
       .select({
-        month: sql<string>`to_char(date_trunc('month', ${transactions.occurredAt}), 'YYYY-MM')`,
+        month: monthExpression,
         total: sql<string>`coalesce(sum(${transactions.feesUsd}), 0)::text`,
       })
       .from(transactions)
       .where(eq(transactions.userId, userId))
-      .groupBy(sql`date_trunc('month', ${transactions.occurredAt})`);
+      .groupBy(monthGroup);
 
     const months = new Map<
       string,
@@ -435,10 +513,12 @@ export class ReportingService {
     const balances = new Map<string, Decimal>();
     let cursor = 0;
     const points: EquityCurve['points'] = [];
-    const first = rows[0]?.occurredAt ?? new Date();
     const now = new Date();
-    let year = first.getUTCFullYear();
-    let month = first.getUTCMonth();
+    const first = rows[0]?.occurredAt ?? now;
+    const earliestStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 35, 1));
+    const start = first.getTime() < earliestStart.getTime() ? earliestStart : first;
+    let year = start.getUTCFullYear();
+    let month = start.getUTCMonth();
 
     while (points.length < 36) {
       const monthEnd = new Date(Date.UTC(year, month + 1, 0, 23, 59, 59, 999));

@@ -16,7 +16,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatUsd, pnlTone } from '@/lib/format';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import type { WatchlistEntry } from '@nexter/contracts';
@@ -40,11 +40,14 @@ export function WatchlistPage() {
   const [priority, setPriority] = useState('0');
   const [error, setError] = useState<string | null>(null);
 
-  const watchlist = useQuery({
+  const watchlist = useInfiniteQuery({
     queryKey: ['watchlist', includeArchived],
-    queryFn: () => fetchWatchlist(includeArchived),
+    queryFn: ({ pageParam }) => fetchWatchlist(includeArchived, pageParam ?? undefined),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.page.hasMore ? last.page.nextCursor : undefined),
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
+  const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
@@ -76,8 +79,20 @@ export function WatchlistPage() {
 
   const archiveMutation = useMutation({
     mutationFn: (id: string) => archiveWatchlist(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
     onError: (err) => setError(toRussianError(err, 'Не удалось архивировать запись')),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => updateWatchlist(id, { archived: false }),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось вернуть запись')),
   });
 
   function openCreate() {
@@ -121,6 +136,12 @@ export function WatchlistPage() {
         }
       />
 
+      {error && !dialogOpen ? (
+        <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+          {error}
+        </div>
+      ) : null}
+
       {watchlist.isPending ? <LoadingRows rows={5} /> : null}
       {watchlist.isError ? (
         <ErrorState
@@ -130,7 +151,7 @@ export function WatchlistPage() {
       ) : null}
 
       {!watchlist.isPending && !watchlist.isError ? (
-        (watchlist.data?.data.length ?? 0) === 0 ? (
+        entries.length === 0 ? (
           <Card>
             <CardTitle>Список пуст</CardTitle>
             <CardDescription>
@@ -143,7 +164,7 @@ export function WatchlistPage() {
           </Card>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
-            {watchlist.data?.data.map((entry) => (
+            {entries.map((entry) => (
               <Card key={entry.id} className={entry.archivedAt ? 'opacity-60' : undefined}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -206,12 +227,33 @@ export function WatchlistPage() {
                     >
                       В архив
                     </Button>
-                  ) : null}
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => restoreMutation.mutate(entry.id)}
+                      disabled={restoreMutation.isPending}
+                    >
+                      Вернуть
+                    </Button>
+                  )}
                 </div>
               </Card>
             ))}
           </div>
         )
+      ) : null}
+
+      {watchlist.hasNextPage ? (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            onClick={() => void watchlist.fetchNextPage()}
+            disabled={watchlist.isFetchingNextPage}
+          >
+            {watchlist.isFetchingNextPage ? 'Загружаю…' : 'Загрузить ещё'}
+          </Button>
+        </div>
       ) : null}
 
       <Dialog

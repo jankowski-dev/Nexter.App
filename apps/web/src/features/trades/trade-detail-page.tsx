@@ -51,6 +51,7 @@ export function TradeDetailPage() {
   const [proceedsAmount, setProceedsAmount] = useState('');
   const [sellNotes, setSellNotes] = useState('');
   const [sellError, setSellError] = useState<string | null>(null);
+  const [sellIdempotencyKey, setSellIdempotencyKey] = useState(() => crypto.randomUUID());
   const [notesError, setNotesError] = useState<string | null>(null);
 
   const detail = useQuery({
@@ -82,23 +83,30 @@ export function TradeDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['dashboard-active-positions'] });
     void queryClient.invalidateQueries({ queryKey: ['dashboard-recent-trades'] });
     void queryClient.invalidateQueries({ queryKey: ['dashboard-pnl'] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard-equity-curve'] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard-data-quality'] });
   };
 
   const sellMutation = useMutation({
     mutationFn: () =>
-      sellTradeGroup(tradeId, {
-        accountId,
-        amount,
-        proceedsAssetId,
-        proceedsAmount,
-        notes: sellNotes || undefined,
-      }),
+      sellTradeGroup(
+        tradeId,
+        {
+          accountId,
+          amount,
+          proceedsAssetId,
+          proceedsAmount,
+          notes: sellNotes || undefined,
+        },
+        sellIdempotencyKey,
+      ),
     onSuccess: () => {
       setSellOpen(false);
       setAmount('');
       setProceedsAmount('');
       setSellNotes('');
       setSellError(null);
+      setSellIdempotencyKey(crypto.randomUUID());
       invalidate();
     },
     onError: (error) => {
@@ -155,7 +163,13 @@ export function TradeDetailPage() {
             <Button variant="secondary" asChild>
               <Link to="/trades">Назад</Link>
             </Button>
-            <Button onClick={() => setSellOpen(true)} disabled={group.status === 'closed'}>
+            <Button
+              onClick={() => {
+                setSellIdempotencyKey(crypto.randomUUID());
+                setSellOpen(true);
+              }}
+              disabled={group.status === 'closed'}
+            >
               Добавить продажу
             </Button>
             <Button variant="secondary" onClick={() => setNotesOpen(true)}>
@@ -289,7 +303,7 @@ export function TradeDetailPage() {
                   {consumptions.map((consumption) => (
                     <tr key={consumption.id} className="border-b border-zinc-800/60 last:border-0">
                       <td className="py-2 pr-3 text-zinc-400">
-                        {formatDate(consumption.createdAt)}
+                        {formatDateTime(consumption.disposalOccurredAt)}
                       </td>
                       <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
                         {formatTokenAmount(consumption.amount)}

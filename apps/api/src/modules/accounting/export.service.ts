@@ -165,7 +165,9 @@ export class ExportService {
     const headers = Object.keys(rows[0] ?? {});
     const escape = (value: unknown) => {
       const text = value === null || value === undefined ? '' : String(value);
-      return `"${text.replaceAll('"', '""')}"`;
+      // CSV formula injection: Excel/Sheets evaluate leading =, +, - and @.
+      const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+      return `"${safe.replaceAll('"', '""')}"`;
     };
 
     return [

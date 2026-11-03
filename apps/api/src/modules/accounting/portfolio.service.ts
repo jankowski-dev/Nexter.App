@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { lots, type Database } from '@nexter/db';
-import type { PortfolioAssetDetail, Position } from '@nexter/contracts';
+import { lots, watchlist, type Database } from '@nexter/db';
+import type { PortfolioAssetDetail, Position, TradeGroupSummary } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { AssetsService } from './assets.service';
 import { LedgerService } from './ledger.service';
@@ -35,15 +35,22 @@ export class PortfolioService {
       .from(lots)
       .where(and(eq(lots.userId, userId), eq(lots.assetId, assetId)))
       .orderBy(lots.acquiredAt, lots.createdAt);
-    const [tradeGroups, transactions, prices] = await Promise.all([
-      this.tradeGroups.list(userId, { limit: 50, assetId }),
-      this.ledger.list(userId, { limit: 50, assetId }),
+    const [watched] = await this.db
+      .select()
+      .from(watchlist)
+      .where(and(eq(watchlist.userId, userId), eq(watchlist.assetId, assetId)))
+      .limit(1);
+    const [allGroups, transactions, prices] = await Promise.all([
+      this.allTradeGroups(userId, assetId),
+      this.ledger.list(userId, { limit: 100, assetId }),
       this.pricing.list(assetId),
     ]);
 
     return {
       asset,
       position,
+      thesis: watched?.thesis ?? null,
+      tags: watched?.tags ?? [],
       lots: lotRows.map((lot) => ({
         id: lot.id,
         assetId: lot.assetId,
@@ -55,9 +62,27 @@ export class PortfolioService {
         remainingCostBasisUsd: lot.remainingCostBasisUsd,
         acquiredAt: lot.acquiredAt.toISOString(),
       })),
-      tradeGroups: tradeGroups.data,
+      tradeGroups: allGroups,
       transactions: transactions.transactions,
       prices,
     };
+  }
+
+  private async allTradeGroups(userId: string, assetId: string): Promise<TradeGroupSummary[]> {
+    const all: TradeGroupSummary[] = [];
+    let cursor: string | undefined;
+
+    do {
+      const page = await this.tradeGroups.list(userId, {
+        limit: 100,
+        assetId,
+        cursor,
+      });
+      all.push(...page.data);
+      cursor = page.page.nextCursor ?? undefined;
+      if (!page.page.hasMore) break;
+    } while (cursor);
+
+    return all;
   }
 }

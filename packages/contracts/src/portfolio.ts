@@ -26,6 +26,7 @@ export const lotConsumptionSchema = z.object({
   id: z.uuid(),
   lotId: z.uuid(),
   disposalTransactionId: z.uuid(),
+  disposalOccurredAt: z.iso.datetime(),
   amount: z.string(),
   costBasisUsd: z.string(),
   proceedsUsd: z.string(),
@@ -139,6 +140,8 @@ export const transactionsListQuerySchema = z.object({
 export const portfolioAssetDetailSchema = z.object({
   asset: assetSchema,
   position: positionSchema.nullable(),
+  thesis: z.string().nullable(),
+  tags: z.array(z.string()),
   lots: z.array(lotSchema),
   tradeGroups: z.array(tradeGroupSummarySchema),
   transactions: z.array(transactionSchema),

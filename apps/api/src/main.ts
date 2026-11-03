@@ -45,7 +45,7 @@ async function bootstrap(): Promise<void> {
   fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-    if (request.url.startsWith('/api/v1/auth/')) {
+    if (request.url.startsWith('/api/v1/')) {
       void reply.header('Cache-Control', 'no-store');
     }
 

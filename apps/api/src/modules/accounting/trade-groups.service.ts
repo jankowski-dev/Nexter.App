@@ -103,9 +103,11 @@ export class TradeGroupsService {
     const consumptionRows = await this.db
       .select({
         consumption: lotConsumptions,
+        disposalOccurredAt: transactions.occurredAt,
       })
       .from(lotConsumptions)
       .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
+      .innerJoin(transactions, eq(lotConsumptions.disposalTransactionId, transactions.id))
       .where(and(eq(lots.userId, userId), eq(lots.tradeGroupId, groupId)))
       .orderBy(lotConsumptions.createdAt);
 
@@ -191,10 +193,11 @@ export class TradeGroupsService {
         remainingCostBasisUsd: lot.remainingCostBasisUsd,
         acquiredAt: lot.acquiredAt.toISOString(),
       })),
-      consumptions: consumptionRows.map(({ consumption }) => ({
+      consumptions: consumptionRows.map(({ consumption, disposalOccurredAt }) => ({
         id: consumption.id,
         lotId: consumption.lotId,
         disposalTransactionId: consumption.disposalTransactionId,
+        disposalOccurredAt: disposalOccurredAt.toISOString(),
         amount: consumption.amount,
         costBasisUsd: consumption.costBasisUsd,
         proceedsUsd: consumption.proceedsUsd,
@@ -348,6 +351,18 @@ export class TradeGroupsService {
     }
     if (query.cursor) {
       const cursor = decodeCursor<{ openedAt: string; id: string }>(query.cursor);
+
+      if (
+        typeof cursor.openedAt !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        Number.isNaN(new Date(cursor.openedAt).getTime())
+      ) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pagination cursor',
+        });
+      }
+
       const cursorDate = new Date(cursor.openedAt);
       conditions.push(
         or(

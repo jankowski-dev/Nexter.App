@@ -751,6 +751,18 @@ export class LedgerService {
     }
     if (query.cursor) {
       const cursor = decodeCursor<{ occurredAt: string; id: string }>(query.cursor);
+
+      if (
+        typeof cursor.occurredAt !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        Number.isNaN(new Date(cursor.occurredAt).getTime())
+      ) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pagination cursor',
+        });
+      }
+
       const cursorDate = new Date(cursor.occurredAt);
       conditions.push(
         or(

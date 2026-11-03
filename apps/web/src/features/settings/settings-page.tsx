@@ -139,6 +139,10 @@ export function SettingsPage() {
               onChange={(event) => setTimezone(event.target.value)}
               placeholder="Europe/Minsk"
             />
+            <span className="mt-1 block text-xs text-zinc-500">
+              Используется для группировки P&L по месяцам; даты в интерфейсе показываются в часовом
+              поясе браузера.
+            </span>
           </label>
           <label className="mt-7 flex items-center gap-2 text-sm text-zinc-300">
             <input

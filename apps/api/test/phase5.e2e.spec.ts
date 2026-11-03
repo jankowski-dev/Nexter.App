@@ -135,6 +135,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       assetId: usdt.id,
       amount: '1000',
       usdValue: '1000',
+      notes: '=cmd',
     });
     await createTransaction(agent, owner.csrf, {
       type: 'buy',
@@ -170,6 +171,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     });
 
     const summary = await agent.get('/api/v1/dashboard/summary').expect(200);
+    expect(summary.headers['cache-control']).toBe('no-store');
     expect(summary.body).toMatchObject({
       cashUsd: '1015.00000000',
       positionsValueUsd: '120.00000000',
@@ -246,16 +248,18 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       .expect(200);
     expect(notes.body.group.notes).toBe('Test trade note');
 
+    const groupSellBody = {
+      accountId: wallet?.id,
+      amount: '10',
+      proceedsAssetId: usdt.id,
+      proceedsAmount: '25',
+      usdValue: '25',
+    };
     const groupSell = await agent
       .post(`/api/v1/trade-groups/${groupId}/sells`)
       .set('x-csrf-token', owner.csrf)
-      .send({
-        accountId: wallet?.id,
-        amount: '10',
-        proceedsAssetId: usdt.id,
-        proceedsAmount: '25',
-        usdValue: '25',
-      })
+      .set('Idempotency-Key', 'phase5-sell-replay')
+      .send(groupSellBody)
       .expect(201);
     expect(groupSell.body.group).toMatchObject({
       status: 'partial',
@@ -264,6 +268,22 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       unrealizedPnlUsd: '50.00000000',
       totalPnlUsd: '125.00000000',
       returnPct: '125.00',
+    });
+
+    const replay = await agent
+      .post(`/api/v1/trade-groups/${groupId}/sells`)
+      .set('x-csrf-token', owner.csrf)
+      .set('Idempotency-Key', 'phase5-sell-replay')
+      .send(groupSellBody)
+      .expect(201);
+    expect(replay.body.group.remainingAmount).toBe('50.000000000000000000');
+    expect(replay.body.consumptions).toHaveLength(2);
+
+    const cashAsset = await agent.get(`/api/v1/portfolio/assets/${usdt.id}`).expect(200);
+    expect(cashAsset.body.position).toMatchObject({
+      isCashEquivalent: true,
+      amount: '1040.000000000000000000',
+      priceUsd: '1.00000000',
     });
 
     const portfolio = await agent.get(`/api/v1/portfolio/assets/${based.id}`).expect(200);
@@ -310,8 +330,45 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       change24hPct: null,
     });
 
+    const link = asset('LINK');
+    await agent
+      .post(`/api/v1/prices/${link.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        priceUsd: '1.00',
+        observedAt: new Date(Date.now() - 4 * 86_400_000).toISOString(),
+      })
+      .expect(201);
+    await agent
+      .post(`/api/v1/prices/${link.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        priceUsd: '2.00',
+        observedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      })
+      .expect(201);
+    const staleEntry = await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link.id, thesis: 'Stale price test' })
+      .expect(201);
+    expect(staleEntry.body).toMatchObject({
+      priceUsd: '2.00000000',
+      change24hPct: null,
+    });
+
+    await agent
+      .post(`/api/v1/prices/${link.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ priceUsd: '3.00' })
+      .expect(201);
+    const freshWatchlist = await agent.get('/api/v1/watchlist').expect(200);
+    expect(
+      freshWatchlist.body.data.find((entry: { id: string }) => entry.id === staleEntry.body.id),
+    ).toMatchObject({ priceUsd: '3.00000000', change24hPct: '50.00' });
+
     const watchlist = await agent.get('/api/v1/watchlist').expect(200);
-    expect(watchlist.body.data).toHaveLength(1);
+    expect(watchlist.body.data).toHaveLength(2);
 
     const watchlistUpdated = await agent
       .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
@@ -328,8 +385,18 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(204);
     const watchlistArchived = await agent.get('/api/v1/watchlist?includeArchived=true').expect(200);
-    expect(watchlistArchived.body.data).toHaveLength(1);
-    expect(watchlistArchived.body.data[0].archivedAt).toBeTruthy();
+    expect(watchlistArchived.body.data).toHaveLength(2);
+    const archivedBased = watchlistArchived.body.data.find(
+      (entry: { id: string }) => entry.id === watchlistCreated.body.id,
+    );
+    expect(archivedBased.archivedAt).toBeTruthy();
+
+    const restored = await agent
+      .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: false })
+      .expect(200);
+    expect(restored.body.archivedAt).toBeNull();
 
     const settings = await agent.get('/api/v1/settings').expect(200);
     expect(settings.body).toMatchObject({
@@ -364,6 +431,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     expect(exportCsv.headers['content-type']).toContain('text/csv');
     expect(exportCsv.text).toContain('occurredAt');
     expect(exportCsv.text).toContain('deposit');
+    expect(exportCsv.text).toContain("'=cmd");
 
     const exportJson = await agent.get('/api/v1/export/positions.json').expect(200);
     expect(exportJson.body.positions).toEqual(

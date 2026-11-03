@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, gte, ilike, isNull, lt, lte, or, type SQL } from 'drizzle-orm';
 import { auditLog, type Database } from '@nexter/db';
 import type { AuditEntry, AuditLogQuery, AuditLogResponse } from '@nexter/contracts';
@@ -18,6 +18,18 @@ export class AuditLogService {
     if (query.to) conditions.push(lte(auditLog.createdAt, new Date(query.to)));
     if (query.cursor) {
       const cursor = decodeCursor<{ createdAt: string; id: string }>(query.cursor);
+
+      if (
+        typeof cursor.createdAt !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        Number.isNaN(new Date(cursor.createdAt).getTime())
+      ) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pagination cursor',
+        });
+      }
+
       const cursorDate = new Date(cursor.createdAt);
       conditions.push(
         or(

@@ -34,13 +34,20 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
   const [type, setType] = useState<ManualType>('buy');
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts, enabled: open });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets, enabled: open });
 
   useEffect(() => {
     if (!open) return;
-    const wallet = accounts.data?.accounts.find((account) => account.type === 'wallet');
-    const external = accounts.data?.accounts.find((account) => account.type === 'external');
+    setIdempotencyKey(crypto.randomUUID());
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const wallets = accounts.data?.accounts.filter((account) => account.type === 'wallet') ?? [];
+    const wallet = wallets[0];
+    const secondWallet = wallets[1];
     const usdt = assets.data?.assets.find(
       (asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT',
     );
@@ -48,7 +55,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
     setForm((current) => ({
       accountId: current.accountId || wallet?.id || '',
       fromAccountId: current.fromAccountId || wallet?.id || '',
-      toAccountId: current.toAccountId || external?.id || '',
+      toAccountId: current.toAccountId || secondWallet?.id || '',
       quoteAssetId: current.quoteAssetId || usdt?.id || '',
       proceedsAssetId: current.proceedsAssetId || usdt?.id || '',
       ...current,
@@ -64,7 +71,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Idempotency-Key': crypto.randomUUID(),
+            'Idempotency-Key': idempotencyKey,
           },
           body: JSON.stringify(body),
         },
@@ -75,6 +82,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
       onClose();
       setForm({});
       setError(null);
+      setIdempotencyKey(crypto.randomUUID());
       void queryClient.invalidateQueries({ queryKey: ['positions'] });
       void queryClient.invalidateQueries({ queryKey: ['transactions'] });
       void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
@@ -83,6 +91,8 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
       void queryClient.invalidateQueries({ queryKey: ['dashboard-active-positions'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-recent-trades'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-pnl'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-equity-curve'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-data-quality'] });
       void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось создать операцию')),
@@ -146,6 +156,8 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
   }
 
   const assetOptions = assets.data?.assets ?? [];
+  const walletAccounts =
+    accounts.data?.accounts.filter((account) => account.type === 'wallet') ?? [];
   const cashAssets = assetOptions.filter((asset) => asset.isCashEquivalent);
   const nonCashAssets = assetOptions.filter((asset) => !asset.isCashEquivalent);
 
@@ -190,13 +202,13 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
                 label="Со счёта"
                 value={form.fromAccountId ?? ''}
                 onChange={(value) => set('fromAccountId', value)}
-                accounts={accounts.data?.accounts ?? []}
+                accounts={walletAccounts}
               />
               <AccountSelect
                 label="На счёт"
                 value={form.toAccountId ?? ''}
                 onChange={(value) => set('toAccountId', value)}
-                accounts={accounts.data?.accounts ?? []}
+                accounts={walletAccounts}
               />
             </>
           ) : (
@@ -204,7 +216,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
               label="Кошелёк"
               value={form.accountId ?? ''}
               onChange={(value) => set('accountId', value)}
-              accounts={accounts.data?.accounts ?? []}
+              accounts={walletAccounts}
             />
           )}
 

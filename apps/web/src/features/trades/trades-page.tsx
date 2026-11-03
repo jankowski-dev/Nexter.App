@@ -5,10 +5,10 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { fetchTradeGroups, fetchTransactions } from '@/lib/api';
+import { fetchAssets, fetchTradeGroups, fetchTransactions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useDeferredValue, useState } from 'react';
 
@@ -32,13 +32,22 @@ export function TradesPage() {
   const [tab, setTab] = useState<'groups' | 'activity'>('groups');
   const [status, setStatus] = useState('');
   const [source, setSource] = useState('');
+  const [assetId, setAssetId] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [pnl, setPnl] = useState('');
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const filters = {
     status: status ? (status as 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale') : undefined,
     source: source ? (source as 'manual' | 'notion' | 'onchain' | 'system') : undefined,
+    assetId: assetId || undefined,
+    from: from ? new Date(`${from}T00:00:00.000Z`).toISOString() : undefined,
+    to: to ? new Date(`${to}T23:59:59.999Z`).toISOString() : undefined,
+    pnl: pnl ? (pnl as 'positive' | 'negative') : undefined,
     search: deferredSearch || undefined,
   };
+  const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
 
   const groups = useInfiniteQuery({
     queryKey: ['trade-groups', filters],
@@ -95,13 +104,25 @@ export function TradesPage() {
       {tab === 'groups' ? (
         <>
           <Card>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
               <Input
                 placeholder="Поиск по активу"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 aria-label="Поиск по активу"
               />
+              <Select
+                value={assetId}
+                onChange={(event) => setAssetId(event.target.value)}
+                aria-label="Актив"
+              >
+                <option value="">Все активы</option>
+                {assets.data?.assets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.symbol} · {asset.chainCode}
+                  </option>
+                ))}
+              </Select>
               <Select
                 value={status}
                 onChange={(event) => setStatus(event.target.value)}
@@ -123,6 +144,25 @@ export function TradesPage() {
                 <option value="manual">Ручные</option>
                 <option value="notion">Notion</option>
               </Select>
+              <Select value={pnl} onChange={(event) => setPnl(event.target.value)} aria-label="P&L">
+                <option value="">Любой P&L</option>
+                <option value="positive">Положительный</option>
+                <option value="negative">Отрицательный</option>
+              </Select>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={from}
+                  onChange={(event) => setFrom(event.target.value)}
+                  aria-label="С даты"
+                />
+                <Input
+                  type="date"
+                  value={to}
+                  onChange={(event) => setTo(event.target.value)}
+                  aria-label="По дату"
+                />
+              </div>
             </div>
           </Card>
 
@@ -148,12 +188,16 @@ export function TradesPage() {
                     <thead>
                       <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
                         <th className="py-2 pr-3 font-medium">Актив</th>
+                        <th className="py-2 pr-3 font-medium">ID</th>
                         <th className="py-2 pr-3 font-medium">Статус</th>
                         <th className="py-2 pr-3 font-medium">Открыта</th>
+                        <th className="py-2 pr-3 font-medium">Закрыта</th>
+                        <th className="py-2 pr-3 text-right font-medium">Дней</th>
                         <th className="py-2 pr-3 text-right font-medium">Покупка</th>
                         <th className="py-2 pr-3 text-right font-medium">Продажа</th>
                         <th className="py-2 pr-3 text-right font-medium">P&L</th>
                         <th className="py-2 pr-3 text-right font-medium">Return</th>
+                        <th className="py-2 pr-3 font-medium">Качество</th>
                         <th className="py-2 text-right font-medium">Источник</th>
                       </tr>
                     </thead>
@@ -170,12 +214,19 @@ export function TradesPage() {
                             </Link>
                             <div className="text-xs text-zinc-500">{group.asset.chainCode}</div>
                           </td>
+                          <td className="py-2 pr-3 font-mono text-xs text-zinc-500">
+                            {group.id.slice(0, 8)}
+                          </td>
                           <td className="py-2 pr-3">
                             <Badge tone={statusTones[group.status] ?? 'neutral'}>
                               {statusLabels[group.status] ?? group.status}
                             </Badge>
                           </td>
                           <td className="py-2 pr-3 text-zinc-400">{formatDate(group.openedAt)}</td>
+                          <td className="py-2 pr-3 text-zinc-400">{formatDate(group.closedAt)}</td>
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
+                            {group.holdingDays}
+                          </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
                             {formatUsd(group.buyUsd)}
                           </td>
@@ -191,6 +242,21 @@ export function TradesPage() {
                             className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(group.returnPct)}`}
                           >
                             {group.returnPct ? `${group.returnPct}%` : '—'}
+                          </td>
+                          <td className="py-2 pr-3">
+                            {group.quality.assetVerified &&
+                            group.quality.chainKnown &&
+                            group.quality.contractKnown ? (
+                              <Badge tone="success">OK</Badge>
+                            ) : (
+                              <Badge tone="warning">
+                                {!group.quality.assetVerified
+                                  ? 'unverified'
+                                  : !group.quality.chainKnown
+                                    ? 'no chain'
+                                    : 'no contract'}
+                              </Badge>
+                            )}
                           </td>
                           <td className="py-2 text-right">
                             <Badge tone={group.source === 'notion' ? 'info' : 'neutral'}>

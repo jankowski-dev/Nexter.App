@@ -274,22 +274,46 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     const groups = await agent.get('/api/v1/trade-groups?limit=5').expect(200);
     expect(groups.body.data).toHaveLength(5);
     expect(groups.body.page.hasMore).toBe(true);
-    const groupDetail = await agent
-      .get(`/api/v1/trade-groups/${groups.body.data[0].id}`)
-      .expect(200);
+    const closedGroup = groups.body.data.find(
+      (group: { status: string }) => group.status === 'closed',
+    );
+    if (!closedGroup) throw new Error('Expected a closed group in the first page');
+    const groupDetail = await agent.get(`/api/v1/trade-groups/${closedGroup.id}`).expect(200);
     expect(groupDetail.body.group.source).toBe('notion');
     expect(groupDetail.body.legs.length).toBeGreaterThan(0);
     expect(groupDetail.body.lots).toHaveLength(1);
     expect(groupDetail.body.audit.length).toBeGreaterThan(0);
+    const sellLeg = groupDetail.body.legs.find(
+      (leg: { subtype: string }) => leg.subtype === 'sell',
+    );
+    expect(sellLeg).toBeDefined();
+    expect(groupDetail.body.consumptions[0].disposalOccurredAt).toBe(sellLeg.occurredAt);
 
+    const xnyAsset = (assetResponse.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'XNY',
+    );
+    const usdtAsset = (assetResponse.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'USDT',
+    );
     const portfolioAsset = await agent.get(`/api/v1/portfolio/assets/${popAsset?.id}`).expect(200);
     expect(portfolioAsset.body.asset.symbol).toBe('POP');
     expect(portfolioAsset.body.position).not.toBeNull();
     expect(portfolioAsset.body.lots.length).toBeGreaterThan(0);
+    const xnyDetail = await agent.get(`/api/v1/portfolio/assets/${xnyAsset?.id}`).expect(200);
+    expect(xnyDetail.body.tradeGroups.length).toBeGreaterThan(50);
+    const cashDetail = await agent.get(`/api/v1/portfolio/assets/${usdtAsset?.id}`).expect(200);
+    expect(cashDetail.body.position).toMatchObject({
+      isCashEquivalent: true,
+      priceUsd: '1.00000000',
+    });
 
     const watchlist = await agent.get('/api/v1/watchlist').expect(200);
     expect(watchlist.body.data).toHaveLength(36);
     expect(watchlist.body.data.some((entry: { thesis: string | null }) => entry.thesis)).toBe(true);
+    const basedWatchlist = watchlist.body.data.find(
+      (entry: { asset: { symbol: string } }) => entry.asset.symbol === 'BASED',
+    );
+    expect(basedWatchlist.tags).toContain('Дашбоард');
 
     const dataQuality = await agent.get('/api/v1/dashboard/data-quality').expect(200);
     expect(dataQuality.body.issues).toEqual(

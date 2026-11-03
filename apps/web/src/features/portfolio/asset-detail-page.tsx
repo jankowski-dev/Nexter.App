@@ -83,6 +83,22 @@ export function AssetDetailPage() {
         }
       />
 
+      {data.thesis || data.tags.length > 0 ? (
+        <Card>
+          <CardTitle>Тезис наблюдения</CardTitle>
+          <CardDescription>{data.thesis ?? 'Тезис не заполнен.'}</CardDescription>
+          {data.tags.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {data.tags.map((tag) => (
+                <Badge key={tag} tone="info">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardTitle>Количество</CardTitle>
@@ -198,7 +214,7 @@ export function AssetDetailPage() {
 
         <Card>
           <CardTitle>Сделки</CardTitle>
-          <CardDescription>Торговые группы по активу.</CardDescription>
+          <CardDescription>{data.tradeGroups.length} торговых групп по активу.</CardDescription>
           {data.tradeGroups.length === 0 ? (
             <p className="mt-4 text-sm text-zinc-400">Сделок нет.</p>
           ) : (

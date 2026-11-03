@@ -172,6 +172,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.getByRole('button', { name: 'В архив' }).click();
   await expect(page.getByText('Updated Playwright thesis')).toHaveCount(0);
 
+  await page.getByLabel('Архив').check();
+  await expect(page.getByRole('button', { name: 'Вернуть' })).toBeVisible();
+  await page.getByRole('button', { name: 'Вернуть' }).click();
+  await page.getByLabel('Архив').uncheck();
+  await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
+
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
   await expect(page.getByText('Общие').first()).toBeVisible();

@@ -1,6 +1,21 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
-import { assets, chains, importRows, imports, prices, watchlist, type Database } from '@nexter/db';
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, desc, eq, ilike, inArray, isNull, lt, or } from 'drizzle-orm';
+import {
+  assets,
+  auditLog,
+  chains,
+  importRows,
+  imports,
+  prices,
+  watchlist,
+  type Database,
+} from '@nexter/db';
 import type {
   WatchlistCreateRequest,
   WatchlistEntry,
@@ -11,6 +26,7 @@ import type {
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { decimal } from '../../shared/money/decimal';
+import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
 
 interface WatchlistMeta {
   ip?: string;
@@ -39,6 +55,38 @@ export class WatchlistService {
       const pattern = `%${query.search}%`;
       conditions.push(or(ilike(assets.symbol, pattern), ilike(assets.name, pattern))!);
     }
+    if (query.cursor) {
+      const cursor = decodeCursor<{
+        priority: number;
+        createdAt: string;
+        id: string;
+      }>(query.cursor);
+
+      if (
+        typeof cursor.priority !== 'number' ||
+        typeof cursor.createdAt !== 'string' ||
+        typeof cursor.id !== 'string' ||
+        Number.isNaN(new Date(cursor.createdAt).getTime())
+      ) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pagination cursor',
+        });
+      }
+
+      const cursorDate = new Date(cursor.createdAt);
+      conditions.push(
+        or(
+          lt(watchlist.priority, cursor.priority),
+          and(eq(watchlist.priority, cursor.priority), lt(watchlist.createdAt, cursorDate)),
+          and(
+            eq(watchlist.priority, cursor.priority),
+            eq(watchlist.createdAt, cursorDate),
+            lt(watchlist.id, cursor.id),
+          ),
+        )!,
+      );
+    }
 
     const rows = await this.db
       .select({ entry: watchlist, asset: assets, chainCode: chains.code })
@@ -47,13 +95,19 @@ export class WatchlistService {
       .innerJoin(chains, eq(assets.chainId, chains.id))
       .where(and(...conditions))
       .orderBy(desc(watchlist.priority), desc(watchlist.createdAt), desc(watchlist.id))
-      .limit(query.limit);
-
-    const priceByAsset = await this.priceContext(rows.map((row) => row.entry.assetId));
+      .limit(query.limit + 1);
+    const page = makePage(rows, query.limit, (row) =>
+      encodeCursor({
+        priority: row.entry.priority,
+        createdAt: row.entry.createdAt.toISOString(),
+        id: row.entry.id,
+      }),
+    );
+    const priceByAsset = await this.priceContext(page.data.map((row) => row.entry.assetId));
 
     return {
-      data: rows.map((row) => this.toContract(row, priceByAsset.get(row.entry.assetId))),
-      page: { nextCursor: null, hasMore: false },
+      data: page.data.map((row) => this.toContract(row, priceByAsset.get(row.entry.assetId))),
+      page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
     };
   }
 
@@ -77,35 +131,52 @@ export class WatchlistService {
       });
     }
 
-    const createdId = await this.db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(watchlist)
-        .values({
-          userId,
-          assetId: input.assetId,
-          thesis: input.thesis ?? null,
-          tags: input.tags ?? [],
-          priority: input.priority ?? 0,
-        })
-        .returning({ id: watchlist.id });
+    let createdId: string;
 
-      if (!created) throw new Error('Failed to create watchlist entry');
+    try {
+      createdId = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(watchlist)
+          .values({
+            userId,
+            assetId: input.assetId,
+            thesis: input.thesis ?? null,
+            tags: input.tags ?? [],
+            priority: input.priority ?? 0,
+          })
+          .returning({ id: watchlist.id });
 
-      await this.audit.log(
-        {
-          userId,
-          action: 'watchlist.created',
-          entityType: 'watchlist',
-          entityId: created.id,
-          after: input,
-          ip: meta.ip,
-          userAgent: meta.userAgent,
-        },
-        { executor: tx, strict: true },
-      );
+        if (!created) throw new Error('Failed to create watchlist entry');
 
-      return created.id;
-    });
+        await this.audit.log(
+          {
+            userId,
+            action: 'watchlist.created',
+            entityType: 'watchlist',
+            entityId: created.id,
+            after: input,
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+
+        return created.id;
+      });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505'
+      ) {
+        throw new ConflictException({
+          code: 'CONFLICT',
+          message: 'Asset is already in the watchlist',
+        });
+      }
+      throw error;
+    }
 
     return this.requireEntry(userId, createdId);
   }
@@ -192,13 +263,13 @@ export class WatchlistService {
   }
 
   private async backfillFromNotion(userId: string): Promise<void> {
-    const [existing] = await this.db
-      .select({ id: watchlist.id })
-      .from(watchlist)
-      .where(eq(watchlist.userId, userId))
+    const [alreadyBackfilled] = await this.db
+      .select({ id: auditLog.id })
+      .from(auditLog)
+      .where(and(eq(auditLog.userId, userId), eq(auditLog.action, 'watchlist.backfilled')))
       .limit(1);
 
-    if (existing) return;
+    if (alreadyBackfilled) return;
 
     const [importRow] = await this.db
       .select()
@@ -245,7 +316,8 @@ export class WatchlistService {
       const tags: string[] = [];
       for (const [key, label] of [
         ['Топ', 'Топ'],
-        ['Дашборд', 'Дашборд'],
+        ['Дашбоард', 'Дашбоард'],
+        ['Дашборд', 'Дашбоард'],
         ['П-Мкап', 'П-Мкап'],
       ] as const) {
         const value = raw[key];
@@ -269,13 +341,17 @@ export class WatchlistService {
     if (values.length === 0) return;
 
     await this.db.transaction(async (tx) => {
-      await tx.insert(watchlist).values(values).onConflictDoNothing();
+      const inserted = await tx
+        .insert(watchlist)
+        .values(values)
+        .onConflictDoNothing()
+        .returning({ id: watchlist.id });
       await this.audit.log(
         {
           userId,
           action: 'watchlist.backfilled',
           entityType: 'watchlist',
-          after: { count: values.length, importId: importRow.id },
+          after: { count: inserted.length, importId: importRow.id },
         },
         { executor: tx, strict: true },
       );
@@ -308,7 +384,9 @@ export class WatchlistService {
 
   private async priceContext(
     assetIds: string[],
-  ): Promise<Map<string, { latest: string | null; previous: string | null }>> {
+  ): Promise<
+    Map<string, { latest: string | null; latestObservedAt: Date | null; previous: string | null }>
+  > {
     if (assetIds.length === 0) return new Map();
 
     const rows = await this.db
@@ -317,14 +395,30 @@ export class WatchlistService {
       .where(inArray(prices.assetId, [...new Set(assetIds)]))
       .orderBy(desc(prices.observedAt));
     const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    const result = new Map<string, { latest: string | null; previous: string | null }>();
+    const result = new Map<
+      string,
+      { latest: string | null; latestObservedAt: Date | null; previous: string | null }
+    >();
 
     for (const row of rows) {
-      const current = result.get(row.assetId) ?? { latest: null, previous: null };
-      if (!current.latest) current.latest = row.priceUsd;
-      if (!current.previous && row.observedAt.getTime() <= cutoff) {
+      const current = result.get(row.assetId) ?? {
+        latest: null,
+        latestObservedAt: null,
+        previous: null,
+      };
+
+      if (!current.latest) {
+        current.latest = row.priceUsd;
+        current.latestObservedAt = row.observedAt;
+      } else if (
+        current.latestObservedAt &&
+        current.latestObservedAt.getTime() >= cutoff &&
+        !current.previous &&
+        row.observedAt.getTime() <= current.latestObservedAt.getTime() - 24 * 60 * 60 * 1000
+      ) {
         current.previous = row.priceUsd;
       }
+
       result.set(row.assetId, current);
     }
 
@@ -337,7 +431,11 @@ export class WatchlistService {
       asset: typeof assets.$inferSelect;
       chainCode: string;
     },
-    price?: { latest: string | null; previous: string | null },
+    price?: {
+      latest: string | null;
+      latestObservedAt: Date | null;
+      previous: string | null;
+    },
   ): WatchlistEntry {
     const latest = price?.latest ?? null;
     const previous = price?.previous ?? null;

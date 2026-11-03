@@ -312,8 +312,20 @@ export async function updateTradeGroupNotes(
 export async function sellTradeGroup(
   id: string,
   body: TradeGroupSellRequest,
+  idempotencyKey?: string,
 ): Promise<TradeGroupDetail> {
-  return apiPost(`/api/v1/trade-groups/${id}/sells`, body, tradeGroupDetailSchema);
+  return apiFetch(
+    `/api/v1/trade-groups/${id}/sells`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      },
+      body: JSON.stringify(body),
+    },
+    tradeGroupDetailSchema,
+  );
 }
 
 export async function fetchPortfolioAsset(id: string): Promise<PortfolioAssetDetail> {
@@ -330,9 +342,12 @@ export async function fetchTransactions(
   return apiFetch(`/api/v1/transactions${queryString(params)}`, {}, transactionsPageResponseSchema);
 }
 
-export async function fetchWatchlist(includeArchived = false): Promise<WatchlistResponse> {
+export async function fetchWatchlist(
+  includeArchived = false,
+  cursor?: string,
+): Promise<WatchlistResponse> {
   return apiFetch(
-    `/api/v1/watchlist${queryString({ includeArchived })}`,
+    `/api/v1/watchlist${queryString({ includeArchived, cursor })}`,
     {},
     watchlistResponseSchema,
   );

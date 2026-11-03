@@ -27,7 +27,7 @@ import {
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 const statusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -93,7 +93,18 @@ function DataQualityBanner() {
   });
 
   if (query.isPending) return null;
-  if (query.isError || !query.data) return null;
+  if (query.isError || !query.data) {
+    return (
+      <Card className="border-amber-900/60 bg-amber-950/20">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-100">
+          <span>Не удалось загрузить качество данных.</span>
+          <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => void query.refetch()}>
+            Повторить
+          </Button>
+        </div>
+      </Card>
+    );
+  }
   if (query.data.issues.length === 0) {
     return (
       <Card className="border-emerald-900/60 bg-emerald-950/20">
@@ -138,6 +149,7 @@ function DataQualityBanner() {
 }
 
 export function DashboardPage() {
+  const [range, setRange] = useState<'30' | '90' | '365' | 'all'>('365');
   const summary = useQuery({ queryKey: ['dashboard-summary'], queryFn: fetchDashboardSummary });
   const allocation = useQuery({
     queryKey: ['dashboard-allocation'],
@@ -184,13 +196,21 @@ export function DashboardPage() {
   }
 
   const data = summary.data;
-  const curvePoints = (curve.data?.points ?? []).slice(-12).map((point) => ({
-    label: new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
-      new Date(point.date),
-    ),
-    value: Number(point.equityUsd),
-  }));
-  const pnlPoints = (pnl.data?.months ?? []).slice(-12).map((month) => ({
+  const failedAuxiliaryCount = [allocation, pnl, active, recent, curve].filter(
+    (query) => query.isError,
+  ).length;
+  const rangeDays = range === '30' ? 30 : range === '90' ? 90 : range === '365' ? 365 : null;
+  const cutoff = rangeDays ? Date.now() - rangeDays * 86_400_000 : null;
+  const curvePoints = (curve.data?.points ?? [])
+    .filter((point) => !cutoff || new Date(point.date).getTime() >= cutoff)
+    .map((point) => ({
+      label: new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
+        new Date(point.date),
+      ),
+      value: Number(point.equityUsd),
+    }));
+  const pnlMonths = range === '30' ? 1 : range === '90' ? 3 : range === '365' ? 12 : 24;
+  const pnlPoints = (pnl.data?.months ?? []).slice(-pnlMonths).map((month) => ({
     label: month.month.slice(5),
     value: Number(month.totalUsd),
   }));
@@ -211,6 +231,51 @@ export function DashboardPage() {
           </>
         }
       />
+
+      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/40 p-1">
+        {(
+          [
+            ['30', '30D'],
+            ['90', '90D'],
+            ['365', '1Y'],
+            ['all', 'All'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setRange(value)}
+            className={`rounded-md px-3 py-1.5 text-xs ${range === value ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200'}`}
+            aria-pressed={range === value}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {failedAuxiliaryCount > 0 ? (
+        <Card className="border-amber-900/60 bg-amber-950/20">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-100">
+            <span>
+              Часть данных дашборда недоступна ({failedAuxiliaryCount} из 5 блоков). Показаны
+              доступные значения.
+            </span>
+            <Button
+              variant="ghost"
+              className="h-8 px-3 text-xs"
+              onClick={() => {
+                void allocation.refetch();
+                void pnl.refetch();
+                void active.refetch();
+                void recent.refetch();
+                void curve.refetch();
+              }}
+            >
+              Повторить
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <DataQualityBanner />
 

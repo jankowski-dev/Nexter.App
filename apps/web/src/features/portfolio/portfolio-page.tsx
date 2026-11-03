@@ -114,6 +114,7 @@ export function PortfolioPage() {
                       <th className="py-2 pr-3 font-medium">Актив</th>
                       <th className="py-2 pr-3 text-right font-medium">Количество</th>
                       <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                      <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
                       <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
                       <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
                       <th className="py-2 pr-3 text-right font-medium">P&L</th>
@@ -150,6 +151,9 @@ export function PortfolioPage() {
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
                             {formatUsd(position.priceUsd)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
+                            {formatUsd(position.avgCostUsd)}
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-200">
                             {formatUsd(position.valueUsd)}

@@ -215,7 +215,7 @@ export const assetsResponseSchema = z.object({
 });
 
 export const setPriceRequestSchema = z.object({
-  priceUsd: nonNegativeDecimalSchema,
+  priceUsd: positiveDecimalSchema,
   observedAt: z.iso.datetime().optional(),
 });
 
@@ -236,6 +236,7 @@ export const positionSchema = z.object({
   amount: z.string(),
   priceUsd: z.string().nullable(),
   valueUsd: z.string().nullable(),
+  avgCostUsd: z.string().nullable(),
   costBasisUsd: z.string(),
   unrealizedPnlUsd: z.string().nullable(),
   isCashEquivalent: z.boolean(),

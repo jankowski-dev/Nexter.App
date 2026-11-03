@@ -44,23 +44,43 @@ Status: **implementation complete; pending independent review and acceptance.**
 
 - The equity curve is explicitly valued at **current prices** (`valuation = current-prices`). Historical market prices are unavailable for the imported history; the UI labels the curve rather than inventing historical prices.
 - Closed imported orders keep their per-order lot; imported active lots remain in the manual global-FIFO pool, as documented in ADR 0007.
-- Watchlist backfill uses the latest committed Notion import's Source rows once per owner; thesis comes from `Описание`, tags from `Топ`/`Дашборд`/`П-Мкап`.
+- Watchlist backfill uses the latest committed Notion import's Source rows once per owner; thesis comes from `Описание`, tags from `Топ`/`Дашбоард`/`П-Мкап`.
 - Settings remain intentionally narrow for MVP-1: USD and FIFO are fixed; timezone and gas-in-cost-basis are editable.
 - Trade reversal is deferred to Phase 6; notes are editable and audited, but ledger corrections remain append-only.
 - The runtime Swagger document remains the API documentation; the shared Zod contracts remain the typed client. A separate generated OpenAPI client is a Phase 6 tooling improvement.
 
 ## Known limitations
 
-- Trade-group reverse/compensating reversal is not implemented.
-- Equity curve uses current prices for historical holdings; true historical valuation needs daily snapshots (Phase 6).
-- Watchlist priority is editable but not drag-sorted; list is priority-desc then newest.
+- Trade-group reverse/compensating reversal is not implemented (Phase 6).
+- Standalone manual `Fee` type is not implemented; fee fields on buy/sell/swap/transfer are supported. A dedicated fee transaction needs a ledger rule (Phase 6).
+- Dashboard account/asset filters and holding-period buckets are Phase 6; 30D/90D/1Y/All range filters are implemented client-side.
+- Portfolio account grouping and per-account position breakdown are Phase 6; average cost is shown.
+- Equity curve uses current prices for historical holdings; true historical valuation needs daily snapshots (Phase 6). The curve covers at most the most recent 36 months.
+- Watchlist priority is editable but not drag-sorted; list is priority-desc then newest. Archive/restore and cursor pagination are implemented.
 - Settings accounts are read-only; account creation/renaming is deferred.
-- Manual-entry preview is approximate; the server remains the authority for FIFO, fees, and validation.
-- Trade-group list P&L-sign filtering is applied after the page query; the UI does not expose it yet.
+- Manual-entry preview is approximate; the server remains the authority for FIFO, fees, and validation. Account selectors are wallet-only; internal transfers need a second wallet on the same chain.
+- Trade-group list P&L-sign filtering is applied after the page query; the UI exposes it as a filter.
 - Export is server-generated and audited; very large exports may take longer than the normal list budget.
 - OpenAPI client generation is deferred as documented in ADR 0008.
 - Full UAT, performance hardening, backup restore test, and security review remain Phase 6.
 
 ## Review history
 
-Pending independent Phase 5 review.
+First independent Phase 5 review returned **PASS WITH CHANGES** with no Critical/High findings. Medium findings addressed:
+
+- stable per-dialog idempotency keys and `Idempotency-Key` on trade-group sells;
+- 24h watchlist change returns `null` for stale prices instead of inventing `0.00`;
+- Notion tag spelling corrected to `Дашбоард`;
+- watchlist backfill marked by audit and safe when a manual entry exists;
+- equity curve capped to the most recent 36 months and ending at the current month;
+- cash asset detail and all trade groups for an asset;
+- transfer defaults/account selectors restricted to wallets;
+- dashboard partial-error handling and curve/quality invalidation;
+- P&L grouped by configured timezone;
+- disposal dates from the disposal transaction;
+- CSV formula-injection prefixing;
+- `Cache-Control: no-store` for authenticated API responses;
+- watchlist restore/cursor, trades filters/columns, asset thesis, and dashboard range filters;
+- cursor validation, watchlist unique-race mapping, and positive manual prices.
+
+Remaining explicit deferrals are listed above and in ADR 0008. Pending re-review.
