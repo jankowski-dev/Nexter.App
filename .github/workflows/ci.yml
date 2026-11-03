@@ -28,6 +28,8 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexter
       NODE_ENV: test
+      SETUP_TOKEN: test-setup-token
+      AUTH_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
 
     steps:
       - name: Checkout
@@ -63,14 +65,14 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Migrate database
+        run: pnpm db:migrate
+
       - name: Test
         run: pnpm test
 
       - name: Build
         run: pnpm build
-
-      - name: Migrate database
-        run: pnpm db:migrate
 
       - name: Compile migration runner and migrate again
         run: pnpm db:migrate:prod
@@ -90,6 +92,7 @@ jobs:
             -e NODE_ENV=production \
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter \
             -e SETUP_TOKEN=test-setup-token \
+            -e AUTH_ENCRYPTION_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY= \
             -e APP_URL=http://127.0.0.1:3000 \
             nexter:ci
           for attempt in $(seq 1 30); do

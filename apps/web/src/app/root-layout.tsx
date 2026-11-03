@@ -1,5 +1,9 @@
+import { Button } from '@/components/ui/button';
+import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
-import { Link, Outlet } from '@tanstack/react-router';
+import { authMeResponseSchema } from '@nexter/contracts';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link, Outlet, useNavigate } from '@tanstack/react-router';
 
 const navigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
@@ -20,6 +24,23 @@ const inactiveLinkProps = {
 };
 
 export function RootLayout() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const me = useQuery({
+    queryKey: ['me'],
+    queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
+    retry: false,
+  });
+
+  async function logout() {
+    try {
+      await apiPost('/api/v1/auth/logout', {});
+    } finally {
+      queryClient.clear();
+      await navigate({ to: '/login' });
+    }
+  }
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-100">
       <a
@@ -52,17 +73,28 @@ export function RootLayout() {
             ))}
           </nav>
 
-          <div className="mt-auto rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-500">
-            {messages.app.phase}
+          <div className="mt-auto space-y-2">
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 text-xs text-zinc-500">
+              {messages.app.phase}
+            </div>
+            <div className="truncate px-2 text-xs text-zinc-500">{me.data?.user.email}</div>
+            <Button className="w-full" variant="ghost" onClick={() => void logout()}>
+              Выйти
+            </Button>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-14 items-center justify-between border-b border-zinc-800 px-4 md:px-6">
             <div className="text-sm text-zinc-400">{messages.app.header}</div>
-            <div className="hidden items-center gap-2 text-xs text-zinc-500 sm:flex">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              {messages.app.status}
+            <div className="flex items-center gap-3">
+              <div className="hidden items-center gap-2 text-xs text-zinc-500 sm:flex">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {messages.app.status}
+              </div>
+              <Button className="md:hidden" variant="ghost" onClick={() => void logout()}>
+                Выйти
+              </Button>
             </div>
           </header>
 

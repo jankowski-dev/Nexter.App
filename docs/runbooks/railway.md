@@ -16,7 +16,8 @@ Variables:
 - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
 - `SENTRY_DSN` (optional)
 - `APP_URL=https://<your-domain>`
-- `SETUP_TOKEN` (required before first setup in Phase 2)
+- `SETUP_TOKEN` (required before first setup)
+- `AUTH_ENCRYPTION_KEY` (32-byte base64 or hex; required for TOTP encryption)
 - `ENABLE_DOCS=false`
 - `WEB_DIST_PATH=/app/apps/api/public`
 - `TRUST_PROXY` — set to the exact Railway/Cloudflare proxy CIDR or use `true` only when the origin is unreachable except through the trusted proxy. Default `false`.

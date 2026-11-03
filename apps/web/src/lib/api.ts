@@ -1,4 +1,9 @@
-import { errorEnvelopeSchema, healthResponseSchema, type HealthResponse } from '@nexter/contracts';
+import {
+  authMeResponseSchema,
+  errorEnvelopeSchema,
+  healthResponseSchema,
+  type HealthResponse,
+} from '@nexter/contracts';
 
 export { healthResponseSchema };
 export type { HealthResponse };
@@ -15,18 +20,36 @@ export class ApiError extends Error {
   }
 }
 
+function readCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+
+  return document.cookie
+    .split('; ')
+    .find((entry) => entry.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
   schema?: { parse: (value: unknown) => T },
 ): Promise<T> {
+  const method = (init.method ?? 'GET').toUpperCase();
+  const csrfToken = readCookie('nexter_csrf');
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(init.headers as Record<string, string> | undefined),
+  };
+
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers['x-csrf-token'] = csrfToken;
+  }
+
   const response = await fetch(path, {
     credentials: 'include',
     ...init,
-    headers: {
-      Accept: 'application/json',
-      ...init.headers,
-    },
+    method,
+    headers,
   });
 
   const text = await response.text();
@@ -60,4 +83,33 @@ export async function apiFetch<T>(
   }
 
   return payload as T;
+}
+
+export async function apiPost<T>(
+  path: string,
+  body: unknown,
+  schema?: { parse: (value: unknown) => T },
+): Promise<T> {
+  return apiFetch<T>(
+    path,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+    schema,
+  );
+}
+
+export async function apiDelete<T>(
+  path: string,
+  schema?: { parse: (value: unknown) => T },
+): Promise<T> {
+  return apiFetch<T>(path, { method: 'DELETE' }, schema);
+}
+
+export async function fetchMe() {
+  return apiFetch('/api/v1/auth/me', {}, authMeResponseSchema);
 }

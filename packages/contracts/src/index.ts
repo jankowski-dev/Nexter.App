@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export { scrubSentryBreadcrumb, scrubSentryEvent } from './sentry';
+export * from './auth';
 
 export const uuidSchema = z.uuid();
 

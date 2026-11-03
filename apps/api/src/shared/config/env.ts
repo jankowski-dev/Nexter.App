@@ -13,6 +13,9 @@ export const envSchema = z.object({
   SENTRY_DSN: z.preprocess(emptyToUndefined, z.url().optional()),
   APP_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   SETUP_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  AUTH_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  TOTP_ISSUER: z.string().min(1).default('Nexter'),
   WEB_DIST_PATH: z.preprocess(emptyToUndefined, z.string().optional()),
   TRUST_PROXY: z.preprocess(emptyToUndefined, z.string().default('false')),
   ENABLE_DOCS: z
@@ -33,6 +36,9 @@ export function parseEnv(raw: Record<string, string | undefined>) {
     }
     if (!parsed.SETUP_TOKEN) {
       throw new Error('SETUP_TOKEN is required in production and staging');
+    }
+    if (!parsed.AUTH_ENCRYPTION_KEY) {
+      throw new Error('AUTH_ENCRYPTION_KEY is required in production and staging');
     }
     if (!parsed.APP_URL) {
       throw new Error('APP_URL is required in production and staging');

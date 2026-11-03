@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -38,6 +39,8 @@ export const sessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     tokenHash: text('token_hash').notNull(),
+    csrfTokenHash: text('csrf_token_hash').notNull().default(''),
+    twoFactorVerified: boolean('two_factor_verified').notNull().default(false),
     ip: text('ip'),
     userAgent: text('user_agent'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
@@ -71,6 +74,14 @@ export const auditLog = pgTable(
     index('audit_log_entity_idx').on(table.entityType, table.entityId),
   ],
 );
+
+export const rateLimits = pgTable('rate_limits', {
+  key: text('key').primaryKey(),
+  points: integer('points').notNull().default(0),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull().defaultNow(),
+  blockedUntil: timestamp('blocked_until', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const settings = pgTable('settings', {
   userId: uuid('user_id')

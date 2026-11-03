@@ -15,6 +15,13 @@
       "when": 1793660122069,
       "tag": "0001_quick_maelstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793692125341,
+      "tag": "0002_whole_power_pack",
+      "breakpoints": true
     }
   ]
 }

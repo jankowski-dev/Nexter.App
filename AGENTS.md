@@ -6,9 +6,9 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 1 — Foundation.
+Phase 2 — Auth & Security (in review).
 
-Do not implement auth, accounting, imports, or swap features until Phase 1 is reviewed and accepted.
+Phase 1 foundation is accepted with operational follow-ups. Do not implement accounting, imports, or swap features until Phase 2 is reviewed and accepted.
 
 ## Non-negotiable rules
 

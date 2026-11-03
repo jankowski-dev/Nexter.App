@@ -13,6 +13,7 @@ const child = spawn(process.execPath, ['apps/api/dist/main.js'], {
     PORT: String(port),
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/nexter',
     SETUP_TOKEN: 'test-setup-token',
+    AUTH_ENCRYPTION_KEY: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
     APP_URL: `http://127.0.0.1:${port}`,
     WEB_DIST_PATH: 'apps/web/dist',
     ENABLE_DOCS: 'false',

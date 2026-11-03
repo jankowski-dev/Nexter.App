@@ -29,6 +29,15 @@ describe('parseEnv', () => {
         DATABASE_URL: 'postgres://db',
         SETUP_TOKEN: 'setup',
       }),
+    ).toThrow(/AUTH_ENCRYPTION_KEY/);
+
+    expect(() =>
+      parseEnv({
+        NODE_ENV: 'production',
+        DATABASE_URL: 'postgres://db',
+        SETUP_TOKEN: 'setup',
+        AUTH_ENCRYPTION_KEY: 'test-key',
+      }),
     ).toThrow(/APP_URL/);
 
     expect(
@@ -36,6 +45,7 @@ describe('parseEnv', () => {
         NODE_ENV: 'production',
         DATABASE_URL: 'postgres://db',
         SETUP_TOKEN: 'setup',
+        AUTH_ENCRYPTION_KEY: 'test-key',
         APP_URL: 'https://example.com',
       }).DATABASE_URL,
     ).toBe('postgres://db');

@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 1 — Foundation (in review)**.
+Current phase: **Phase 2 — Auth & Security (in review)**.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -41,6 +41,15 @@ docs           specs, ADRs, runbooks
 
    ```dotenv
    DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter
+   ```
+
+   Generate local auth secrets:
+
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   # use as SETUP_TOKEN
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   # use as AUTH_ENCRYPTION_KEY
    ```
 
 2. Start Postgres:
@@ -99,7 +108,7 @@ npx pnpm@10.20.0 smoke:worker
 
 - [x] Phase 0 — Design
 - [x] Phase 1 — Foundation (accepted with operational follow-ups)
-- [ ] Phase 2 — Auth and security
+- [ ] Phase 2 — Auth and security (in review)
 - [ ] Phase 3 — Accounting core
 - [ ] Phase 4 — Notion import
 - [ ] Phase 5 — MVP-1 UI

@@ -44,3 +44,10 @@ Format: date — decision — reason.
 - **PostgreSQL readiness is tested in CI.** The API e2e suite runs a DB-backed `/ready` test when `DATABASE_URL` is set and skips it locally.
 - **Sentry scrubbing includes user context and arrays.** `event.user` is removed and nested arrays are recursively scrubbed.
 - **Phase 1 accepted with operational follow-ups.** Independent review round 4 returned PASS WITH CHANGES: no Critical/High findings. Remaining work is Railway staging, actual proxy CIDRs, real CI/Docker execution, broader DB auth tests, and version/digest hardening.
+- **Custom auth module instead of a framework.** Argon2id, TOTP, recovery codes, server-side sessions, and explicit guards keep the security model auditable and avoid a large auth dependency.
+- **CSRF uses a double-submit cookie plus a session hash.** The SPA reads `nexter_csrf`; the API requires `X-CSRF-Token`, compares it to the cookie, and verifies its hash against the session.
+- **TOTP secrets are encrypted with AES-256-GCM.** `AUTH_ENCRYPTION_KEY` is a 32-byte base64/hex secret and is required in production/staging.
+- **Recovery codes are one-time and hashed.** Password reset consumes a code, revokes all sessions, and issues ten new codes.
+- **Auth rate limits are database-backed.** `rate_limits` provides per-IP/per-user lockout without adding Redis.
+- **Pending-2FA sessions are isolated by a global guard.** Only explicitly allowed auth endpoints can be used before TOTP verification.
+- **No email is sent.** Setup, login, TOTP, recovery, and password reset are fully self-hosted.
