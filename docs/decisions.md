@@ -97,3 +97,4 @@ Format: date — decision — reason.
 - **Source watchlist theses/tags are deferred to Phase 5.** Phase 4 imports assets and keeps descriptions in staging; the watchlist table/UI is not part of this phase.
 - **Import commit checks final wallet balances only.** The Notion journal has buys before the first recorded deposit, so chronological non-negativity would require inventing an opening balance.
 - **Phase 4 UI is limited to `/import`.** Upload, preview, control reconciliation, commit/rollback, history, and a compact post-commit accounting summary. Full dashboard/portfolio/trades UI remains Phase 5.
+- **Phase 4 accepted.** Three independent reviews (FAIL → PASS WITH CHANGES → PASS), owner sign-off on the documented scope deviations, and the production 431-row import applied on 2026-11-03. Merge commit `12bfbb0`; main CI passed. Next phase: Phase 5 — MVP-1 UI.
