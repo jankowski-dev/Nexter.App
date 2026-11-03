@@ -30,8 +30,9 @@ Set **Root Directory** to the repository root for both `api` and `worker`. If Ra
   - `SETUP_TOKEN` (required before first setup)
   - `AUTH_ENCRYPTION_KEY` (32-byte base64 or 64-char hex)
   - `ENABLE_DOCS=false`
-  - `WEB_DIST_PATH=/app/apps/api/public`
   - `TRUST_PROXY` — exact Railway/Cloudflare proxy CIDR, or `true` only behind a trusted proxy. Default `false`.
+
+`WEB_DIST_PATH` is already set in the Dockerfile (`/app/apps/api/public`); do not set it manually. On Git Bash/Windows, setting Unix paths through `railway variable set` can be mangled by MSYS path conversion — use the Railway dashboard or `--stdin` if you must set one.
 
 ### worker
 
