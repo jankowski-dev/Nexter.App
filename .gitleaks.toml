@@ -16,5 +16,5 @@ regexes = [
   '''postgres://postgres:postgres@''',
   '''test-setup-token''',
   '''change-me''',
-  '''MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=''',
+  '''AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=''',
 ]
