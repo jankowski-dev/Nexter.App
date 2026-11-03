@@ -1,12 +1,25 @@
 import {
   authMeResponseSchema,
+  dashboardSummarySchema,
   errorEnvelopeSchema,
   healthResponseSchema,
+  importResponseSchema,
+  importsResponseSchema,
+  type DashboardSummary,
   type HealthResponse,
+  type ImportResponse,
+  type ImportsResponse,
 } from '@nexter/contracts';
 
 export { healthResponseSchema };
-export type { HealthResponse };
+export type { DashboardSummary, HealthResponse, ImportResponse, ImportsResponse };
+
+export interface NotionImportRawPayload {
+  fileName: string;
+  source: string;
+  orders: string;
+  transactions: string;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -112,4 +125,42 @@ export async function apiDelete<T>(
 
 export async function fetchMe() {
   return apiFetch('/api/v1/auth/me', {}, authMeResponseSchema);
+}
+
+export async function fetchImports(): Promise<ImportsResponse> {
+  return apiFetch('/api/v1/imports', {}, importsResponseSchema);
+}
+
+export async function fetchImport(importId: string): Promise<ImportResponse> {
+  return apiFetch(`/api/v1/imports/${importId}`, {}, importResponseSchema);
+}
+
+export async function previewNotionImport(
+  payload: NotionImportRawPayload,
+): Promise<ImportResponse> {
+  const body = `{"fileName":${JSON.stringify(payload.fileName)},"source":${payload.source},"orders":${payload.orders},"transactions":${payload.transactions}}`;
+
+  return apiFetch(
+    '/api/v1/imports/notion/preview',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-notion-import+json',
+      },
+      body,
+    },
+    importResponseSchema,
+  );
+}
+
+export async function commitImport(importId: string): Promise<ImportResponse> {
+  return apiPost(`/api/v1/imports/${importId}/commit`, {}, importResponseSchema);
+}
+
+export async function rollbackImport(importId: string): Promise<ImportResponse> {
+  return apiPost(`/api/v1/imports/${importId}/rollback`, {}, importResponseSchema);
+}
+
+export async function fetchDashboardSummary(): Promise<DashboardSummary> {
+  return apiFetch('/api/v1/dashboard/summary', {}, dashboardSummarySchema);
 }

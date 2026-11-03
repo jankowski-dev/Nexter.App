@@ -2,9 +2,30 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 4 — Notion import (next)**. Phase 3 accounting core is accepted.
+Current phase: **Phase 4 — Notion import (implementation complete, under review)**. Phase 3 accounting core is accepted.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
+
+## Notion import
+
+The `/import` page accepts three JSON arrays exported from Notion:
+
+- `Source.json` — assets, CoinGecko IDs, and current prices;
+- `Orders.json` — buy/sell order groups;
+- `Transactions.json` — USDT deposits and withdrawals.
+
+Preview is non-destructive: it stages normalized rows and reconciles the 429-order Phase 3 control snapshot. Commit applies the import in one transaction; rollback is allowed only while no later ledger activity exists. See [`docs/adr/0007-notion-import.md`](docs/adr/0007-notion-import.md) and [`docs/runbooks/notion-import.md`](docs/runbooks/notion-import.md).
+
+DB-backed tests and the real 431-row import check are opt-in:
+
+```bash
+NEXTER_TEST_DB=1 \
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/nexter_p4 \
+SETUP_TOKEN=test-setup-token \
+AUTH_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+NOTION_EXPORT_DIR=/path/to/notion-export \
+npx pnpm@10.20.0 --filter @nexter/api test
+```
 
 ## Stack
 

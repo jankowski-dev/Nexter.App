@@ -28,14 +28,36 @@
 
 ## Notion mapping
 
-- `Source` → assets + watchlist; `Символ [P]` → CoinGecko ID.
-- `Orders` → trade group + buy transaction + optional sell transaction.
-- `Transactions` → deposit/withdrawal.
+- `Source` → assets; `Символ [P]` → CoinGecko ID. Existing seeded BSC assets are reused; unknown assets are unverified BSC assets with 18 decimals and no contract.
+- `Orders` → trade group + buy transaction + optional sell transaction. Closed orders consume their own group lot directly at import time, preserving the historical Notion basis. Imported active lots remain in the normal global FIFO pool; later manual sells may consume them and update the group to `partial`/`closed`. A later Notion close for an order whose lot was partially consumed by a manual sell is rejected as an import conflict, because the same disposal must not be recorded twice.
+- `Transactions` → deposit/withdrawal of USDT.
 - `Statistics` → recompute, never import.
+- Notion date-only close values are normalized to end of day UTC so a same-day close follows its buy.
+- USDT prices from `Source` are ignored because cash equivalents are valued at $1. Non-cash `Курс [1]` values are stored as `source=notion` prices.
+- Imported transactions and assets are flagged `chain_known=false`, `contract_known=false`, `network_fee_included=false`, `price_source=notion`, `reconciled=false`; new assets are `is_verified=false`.
+- The import preview content type is parsed with `lossless-json`; numeric literals remain strings until `decimal.js`, so no money value passes through a JS number.
 
-Control sums: 429 orders, 410 closed, 19 active, deposits 2519.80, withdrawals 57.00, net 2462.80, buy 54955.30, sell 52508.0139345416, cash 15.513934541602794, equity 2075.937588921603, total P&L -386.86241107839714, realized 69.81393454159962, unrealized -456.67634561999995, ROI -15.70823497963282%, win rate 54.87804878048781%, profit factor 1.0189656366911293.
+Control sums (429-order Phase 3 snapshot): 429 orders, 410 closed, 19 active, deposits 2519.80, withdrawals 57.00, net 2462.80, buy 54955.30, sell 52508.0139345416, cash 15.513934541602794, equity 2075.937588921603, total P&L -386.86241107839714, realized 69.81393454159962, unrealized -456.67634561999995, ROI -15.70823497963282%, win rate 54.87804878048781%, profit factor 1.0189656366911293.
 
-Imported rows are flagged: `chain_known=false`, `contract_known=false`, `network_fee_included=false`, `reconciled=false`.
+The current Notion export has 431 orders (412 closed, 19 active). Preview reconstructs the 429-order baseline by excluding new orders `465`/`466` and treating `450`/`463` as still active. The baseline must match the transaction-based control sums, cash, and active cost within ±0.01 USD; otherwise commit is blocked. Current 431 totals are shown separately.
+
+The Phase 3 snapshot also contains price-dependent metrics (active value, equity, unrealized P&L, total P&L, ROI, win rate, profit factor, XIRR). Those were calculated at audit-time prices. The current export contains current Source `Курс [1]` prices, so the preview reports current valuation separately and does not use it for commit gating. The audit-time active value was 2060.42365438 and current active value at Source prices is 1829.88804762; the difference is price movement, not a cost-basis or transaction mismatch. Active cost (2517.10) is invariant and is reconciled.
+
+Current 431 control totals (expected ledger output):
+
+- Orders: 431 (412 closed, 19 active).
+- Buy: 55293.10 USD.
+- Sell: 52846.0362995416 USD.
+- Realized: 55.6362995416 USD (8-decimal ledger sum: 55.63629954).
+- Cash: 15.7362995416 USD (8-decimal ledger: 15.73629954).
+- Active cost: 2502.70 USD.
+- Positions value at current Source prices: 1829.88804762 USD.
+- Equity: 1845.62434716 USD.
+- Unrealized: -672.81195238 USD.
+- Total P&L: -617.17565284 USD.
+- Net deposits: 2462.80 USD.
+
+Import commit checks final wallet balances, not chronological interim balances. The Notion journal records early buys before the first USDT deposit; enforcing interim non-negativity would require inventing an opening balance.
 
 ## Phase 3 implementation notes
 
@@ -64,4 +86,6 @@ Imported rows are flagged: `chain_known=false`, `contract_known=false`, `network
 7. Equity = cash + positions at market.
 8. Equity − net deposits = total P&L within visible tolerance.
 9. Imports are idempotent by `(source, source_id)`.
-10. Every mutation is audited.
+10. Import commit is blocked when the reconstructed 429-order control baseline is outside tolerance.
+11. Import rollback is allowed only for the newest committed import with no later non-import ledger activity.
+12. Every mutation is audited.

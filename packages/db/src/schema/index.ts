@@ -143,6 +143,8 @@ export const assets = pgTable(
     isStablecoin: boolean('is_stablecoin').notNull().default(false),
     isCashEquivalent: boolean('is_cash_equivalent').notNull().default(false),
     isVerified: boolean('is_verified').notNull().default(false),
+    sourceId: text('source_id'),
+    dataQuality: jsonb('data_quality').$type<Record<string, unknown>>().notNull().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -194,6 +196,28 @@ export const tradeGroups = pgTable(
   ],
 );
 
+export const imports = pgTable(
+  'imports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    source: text('source').notNull().default('notion'),
+    status: text('status').notNull().default('preview'),
+    sourceHash: text('source_hash').notNull(),
+    fileName: text('file_name'),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    rolledBackAt: timestamp('rolled_back_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('imports_user_idx').on(table.userId, table.createdAt),
+    uniqueIndex('imports_user_source_hash_unique').on(table.userId, table.source, table.sourceHash),
+  ],
+);
+
 export const transactions = pgTable(
   'transactions',
   {
@@ -205,6 +229,8 @@ export const transactions = pgTable(
     subtype: text('subtype').$type<TransactionSubtype>().notNull(),
     source: text('source').$type<TransactionSource>().notNull().default('manual'),
     sourceId: text('source_id'),
+    importId: uuid('import_id').references(() => imports.id, { onDelete: 'set null' }),
+    dataQuality: jsonb('data_quality').$type<Record<string, unknown>>().notNull().default({}),
     tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
       onDelete: 'set null',
     }),
@@ -216,9 +242,35 @@ export const transactions = pgTable(
   (table) => [
     index('transactions_user_time_idx').on(table.userId, table.occurredAt),
     index('transactions_trade_group_idx').on(table.tradeGroupId),
+    index('transactions_import_idx').on(table.importId),
     uniqueIndex('transactions_source_unique')
       .on(table.userId, table.source, table.sourceId)
       .where(sql`${table.sourceId} is not null`),
+  ],
+);
+
+export const importRows = pgTable(
+  'import_rows',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => imports.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    sourceId: text('source_id').notNull(),
+    sourceHash: text('source_hash').notNull(),
+    status: text('status').notNull().default('pending'),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    transactionId: uuid('transaction_id').references(() => transactions.id, {
+      onDelete: 'set null',
+    }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('import_rows_source_unique').on(table.importId, table.entityType, table.sourceId),
+    index('import_rows_import_idx').on(table.importId),
   ],
 );
 
@@ -330,9 +382,13 @@ export const prices = pgTable(
     priceUsd: numeric('price_usd', { precision: 24, scale: 8 }).notNull(),
     observedAt: timestamp('observed_at', { withTimezone: true }).notNull(),
     source: text('source').notNull().default('manual'),
+    importId: uuid('import_id').references(() => imports.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('prices_asset_observed_idx').on(table.assetId, table.observedAt)],
+  (table) => [
+    index('prices_asset_observed_idx').on(table.assetId, table.observedAt),
+    index('prices_import_idx').on(table.importId),
+  ],
 );
 
 export type Chain = typeof chains.$inferSelect;
@@ -345,3 +401,5 @@ export type TradeDetail = typeof tradeDetails.$inferSelect;
 export type Lot = typeof lots.$inferSelect;
 export type LotConsumption = typeof lotConsumptions.$inferSelect;
 export type Price = typeof prices.$inferSelect;
+export type Import = typeof imports.$inferSelect;
+export type ImportRow = typeof importRows.$inferSelect;

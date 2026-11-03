@@ -1,4 +1,5 @@
 import { DashboardPage } from '@/features/dashboard/dashboard-page';
+import { ImportPage } from '@/features/import/import-page';
 import { LoginPage } from '@/features/auth/login-page';
 import { RecoveryPage } from '@/features/auth/recovery-page';
 import { ResetPasswordPage } from '@/features/auth/reset-password-page';
@@ -125,7 +126,7 @@ const tradesRoute = createRoute({
 const importRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/import',
-  component: () => <PlaceholderPage title="Импорт" />,
+  component: ImportPage,
 });
 
 const watchlistRoute = createRoute({

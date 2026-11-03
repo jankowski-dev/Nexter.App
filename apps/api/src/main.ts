@@ -11,6 +11,7 @@ import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { registerNotionImportBodyParser } from './modules/imports/import-body-parser';
 import { env } from './shared/config/env';
 import { AllExceptionsFilter } from './shared/errors/all-exceptions.filter';
 import { scrubSentryBreadcrumb, scrubSentryEvent } from './shared/security/sentry';
@@ -38,6 +39,8 @@ async function bootstrap(): Promise<void> {
   app.useLogger(app.get(Logger));
 
   const fastify = app.getHttpAdapter().getInstance();
+
+  registerNotionImportBodyParser(fastify);
 
   fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
