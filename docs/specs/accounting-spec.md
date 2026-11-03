@@ -20,7 +20,7 @@
 ## Cost basis
 
 - Global FIFO per asset for MVP.
-- Stablecoins (USDT/USDC) are cash equivalents: no lots, depeg flag.
+- Stablecoins (USDT/USDC) are cash equivalents: no lots; depeg flag is deferred until a later phase.
 - Gas is added to acquisition cost basis by default and deducted from sale proceeds; configurable.
 - Execution cost = `amount_in_usd - amount_out * reference_price`; informational, already embedded in actual token amounts, never deducted twice.
 - `realized_pnl = proceeds_usd - cost_basis_usd - selling_fees_usd`.

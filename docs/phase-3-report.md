@@ -2,7 +2,7 @@
 
 Date: 2026-11-03
 
-Status: review findings fixed, pending re-review
+Status: **accepted** after three independent reviews.
 
 ## Scope completed
 
@@ -16,7 +16,7 @@ Status: review findings fixed, pending re-review
   - negative wallet balances rejected before insert under a per-user advisory lock;
   - asset decimals and wallet/asset chain consistency validated;
   - manual POSTs support `Idempotency-Key` replay;
-  - all ledger writes and audit in one transaction;
+  - all manual ledger writes and their audit in one transaction (account bootstrap is a separate audited system path);
   - adjustment reasons persisted in notes and audit.
 - Global FIFO per asset:
   - lots created for acquisitions;
@@ -80,7 +80,7 @@ Independent review returned **FAIL** with:
 - High: concurrent cash spends could go negative; withdrawals/adjustments broke equity/P&L reconciliation; transfer and swap-to-cash fees were not recognized; adjustment reasons were discarded.
 - Medium: asset decimals/chain consistency, derived USD scale, zero-USD inputs, idempotency, property/e2e coverage, and report accuracy.
 
-All High findings and the actionable Medium findings were fixed in this revision. A second review returned **PASS WITH CHANGES** with remaining input-consistency issues; those were fixed by requiring positive fee USD, enforcing cash-equivalent USD = token amount, updating ADR/report claims, and adding fee/cash reconciliation tests. Remaining limitations are listed above and in ADR 0006.
+All High findings and the actionable Medium findings were fixed. A second review returned **PASS WITH CHANGES** with input-consistency issues; those were fixed by requiring positive fee USD, enforcing cash-equivalent USD = token amount, updating ADR/report claims, and adding fee/cash reconciliation tests. A third review returned **PASS** with no required changes; remaining Low items are listed as follow-ups. See ADR 0006.
 
 ## Next phase
 

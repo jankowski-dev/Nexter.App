@@ -97,12 +97,12 @@ export class ReportingService {
       const costBasis = decimal(costByAsset.get(row.assetId) ?? '0');
 
       if (assetRow.asset.isCashEquivalent) {
-        cashUsd = cashUsd.plus(amount);
+        cashUsd = cashUsd.plus(decimal(usdString(amount)));
         continue;
       }
 
-      const value = priceValue ? amount.mul(priceValue) : null;
-      const unrealized = value ? value.minus(costBasis) : null;
+      const value = priceValue ? decimal(usdString(amount.mul(priceValue))) : null;
+      const unrealized = value ? decimal(usdString(value.minus(costBasis))) : null;
 
       if (!priceValue) {
         missingPrices.push(assetRow.asset.symbol);

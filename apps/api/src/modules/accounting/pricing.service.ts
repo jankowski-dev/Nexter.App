@@ -29,8 +29,9 @@ export class PricingService {
     const asset = await this.assets.require(assetId);
     const observedAt = input.observedAt ? new Date(input.observedAt) : new Date();
     const price = decimal(input.priceUsd);
+    const roundedPrice = decimal(usdString(price));
 
-    if (price.gte(new Decimal('1e16'))) {
+    if (roundedPrice.gte(new Decimal('1e16'))) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
         message: 'Price is too large',
@@ -42,7 +43,7 @@ export class PricingService {
         .insert(prices)
         .values({
           assetId: asset.id,
-          priceUsd: usdString(price),
+          priceUsd: usdString(roundedPrice),
           observedAt,
           source: 'manual',
         })

@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 3 — Accounting core (in review)**. Phase 2 auth/security is accepted.
+Current phase: **Phase 4 — Notion import (next)**. Phase 3 accounting core is accepted.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -125,7 +125,7 @@ npx pnpm@10.20.0 test:e2e
 - [x] Phase 0 — Design
 - [x] Phase 1 — Foundation (accepted with operational follow-ups)
 - [x] Phase 2 — Auth and security (accepted)
-- [ ] Phase 3 — Accounting core (in review)
+- [x] Phase 3 — Accounting core (accepted)
 - [ ] Phase 4 — Notion import
 - [ ] Phase 5 — MVP-1 UI
 - [ ] Phase 6 — MVP-1 hardening

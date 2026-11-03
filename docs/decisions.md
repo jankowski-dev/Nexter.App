@@ -80,3 +80,4 @@ Format: date — decision — reason.
 - **Asset decimals and wallet chain consistency are validated.** Amounts may not exceed `assets.decimals`; a wallet may only hold assets from its chain.
 - **Cash-equivalent USD is derived and enforced.** Cash equivalents are valued at $1 in Phase 3; explicit USD for a cash leg must equal the token amount. Manual cash prices are ignored until a depeg flag exists.
 - **Fee USD must be positive and consistent with cash fees.** A zero fee USD is rejected; a cash fee USD must equal the cash fee amount.
+- **Phase 3 accepted.** Three independent reviews: FAIL → PASS WITH CHANGES → PASS; all required findings fixed. Next phase: Phase 4 — Notion import.

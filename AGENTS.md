@@ -6,9 +6,9 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 3 — Accounting core (implemented, pending independent review).
+Phase 3 — Accounting core (accepted). Next: Phase 4 — Notion import.
 
-Phase 2 is accepted. Do not implement imports, UI phases, or swap features until Phase 3 is reviewed and accepted.
+Phase 2 is accepted. Do not implement imports, UI phases, or swap features until Phase 4 is started and scoped.
 
 ## Non-negotiable rules
 
