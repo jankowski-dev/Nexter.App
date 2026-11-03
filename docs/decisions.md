@@ -98,3 +98,25 @@ Format: date — decision — reason.
 - **Import commit checks final wallet balances only.** The Notion journal has buys before the first recorded deposit, so chronological non-negativity would require inventing an opening balance.
 - **Phase 4 UI is limited to `/import`.** Upload, preview, control reconciliation, commit/rollback, history, and a compact post-commit accounting summary. Full dashboard/portfolio/trades UI remains Phase 5.
 - **Phase 4 accepted.** Three independent reviews (FAIL → PASS WITH CHANGES → PASS), owner sign-off on the documented scope deviations, and the production 431-row import applied on 2026-11-03. Merge commit `12bfbb0`; main CI passed. Next phase: Phase 5 — MVP-1 UI.
+
+## Phase 5 — MVP-1 UI
+
+- **Watchlist is a separate soft-archived table.** `(user_id, asset_id)` is unique; `DELETE` archives. The first read backfills from the latest committed Notion Source rows (thesis from `Описание`, tags from `Топ`/`Дашбоард`/`П-Мкап`).
+- **Trade groups expose read/detail/sell/notes APIs.** Notes are product metadata on `trade_groups`; `POST /trade-groups/:id/sells` delegates to the append-only manual sell path with `tradeGroupId`. Trade reversal is deferred to Phase 6.
+- **Dashboard aggregates are derived from the ledger.** Allocation, monthly P&L, active positions, recent trades, data quality, and an equity curve are read-only. The equity curve is explicitly valued at current prices because historical prices are unavailable; true historical valuation needs snapshots.
+- **Settings remain narrow in MVP-1.** USD and FIFO are fixed; timezone and `includeGasInCostBasis` are editable and audited. Account management is read-only for now.
+- **Audit log has a read API.** The owner sees their entries and system entries; filters and cursor pagination are supported.
+- **Export is server-side CSV/JSON.** Transactions, positions, and trade groups are exported with quoting and an `export.generated` audit entry.
+- **Manual entry is a global dialog using the existing ledger API.** The dialog supports all eight manual types; the server remains the authority for validation, FIFO, fees, and postings.
+- **The running Swagger document is the API reference; shared Zod contracts are the typed client.** A generated OpenAPI client is deferred to Phase 6 tooling.
+- **Test-only auth rate limit is raised.** Playwright runs multiple setup flows from one IP; `NODE_ENV=test` allows 100 auth attempts/minute instead of 10. Production remains at 10. The DB-backed auth lockout tests still exercise 429 behavior through the service layer.
+- **Watchlist prices are not invented.** 24h change is `null` unless the latest price is less than 24h old and an older price exists. Backfill is marked by audit, runs with `onConflictDoNothing`, and archived entries can be restored.
+- **Manual-entry idempotency keys are stable per dialog attempt.** The key is generated when the dialog opens, reused on retries, and reset after success. Trade-group sell accepts the same header.
+- **The equity curve is capped to the most recent 36 months** and ends at the current month; older history is folded into the first balance rather than dropping recent months.
+- **Cash asset detail is available.** USDT/USDC positions are returned at $1 for the asset detail page; non-cash asset detail loads all trade groups, not just the first 50.
+- **Manual transfer account selectors only offer wallets.** The destination defaults to a second wallet or empty; the current one-wallet-per-chain setup means internal transfers are usable only after account management lands.
+- **Authenticated API responses are no-store.** CSV cells beginning with formula characters are prefixed with `'`; manual prices must be positive; cursor and watchlist race errors are mapped to 400/409.
+- **Monthly P&L uses the configured IANA timezone.** UI date labels use the browser timezone; this distinction is shown in settings.
+- **Phase 5 deferrals:** trade reverse/compensating reversal, standalone manual Fee type, dashboard account/asset filters and holding-period buckets, portfolio account grouping, accounts CRUD, watchlist drag-sort, and generated OpenAPI client are Phase 6 items.
+- **CSV protection preserves numeric cells.** Only formula-like text is prefixed with `'`; negative decimal values remain numeric in spreadsheets.
+- **Microsecond timestamps are paged at millisecond precision.** Audit and watchlist cursors use `date_trunc('milliseconds', ...)` for ordering and predicates, so rows sharing the cursor's millisecond are not skipped. Settings creation is audited as `settings.created`; monthly P&L falls back to `Europe/Minsk`.

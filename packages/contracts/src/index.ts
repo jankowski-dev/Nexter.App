@@ -3,7 +3,12 @@ import { z } from 'zod';
 export { scrubSentryBreadcrumb, scrubSentryEvent } from './sentry';
 export * from './auth';
 export * from './accounting';
+export * from './audit';
 export * from './imports';
+export * from './pagination';
+export * from './portfolio';
+export * from './settings';
+export * from './watchlist';
 
 export const uuidSchema = z.uuid();
 

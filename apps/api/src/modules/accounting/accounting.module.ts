@@ -5,12 +5,18 @@ import { AccountsService } from './accounts.service';
 import { AssetsController } from './assets.controller';
 import { AssetsService } from './assets.service';
 import { DashboardController } from './dashboard.controller';
+import { ExportController } from './export.controller';
+import { ExportService } from './export.service';
 import { FifoService } from './fifo.service';
 import { LedgerService } from './ledger.service';
+import { PortfolioController } from './portfolio.controller';
+import { PortfolioService } from './portfolio.service';
 import { PositionsController } from './positions.controller';
 import { PricingService } from './pricing.service';
 import { PricesController } from './prices.controller';
 import { ReportingService } from './reporting.service';
+import { TradeGroupsController } from './trade-groups.controller';
+import { TradeGroupsService } from './trade-groups.service';
 import { TransactionsController } from './transactions.controller';
 
 @Module({
@@ -18,18 +24,24 @@ import { TransactionsController } from './transactions.controller';
     AccountsController,
     AssetsController,
     DashboardController,
+    ExportController,
+    PortfolioController,
     PositionsController,
     PricesController,
+    TradeGroupsController,
     TransactionsController,
   ],
   providers: [
     AccountingBootstrapService,
     AccountsService,
     AssetsService,
+    ExportService,
     FifoService,
     LedgerService,
+    PortfolioService,
     PricingService,
     ReportingService,
+    TradeGroupsService,
   ],
   exports: [AccountingBootstrapService],
 })

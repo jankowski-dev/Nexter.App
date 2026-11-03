@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 4 — Notion import (accepted; production import applied on 2026-11-03)**. Next: Phase 5 — MVP-1 UI. Phase 3 accounting core is accepted.
+Current phase: **Phase 5 — MVP-1 UI (implementation complete, under review)**. Next: Phase 6 — MVP-1 hardening. Phase 3 accounting core and Phase 4 Notion import are accepted.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -20,7 +20,7 @@ DB-backed tests and the real 431-row import check are opt-in:
 
 ```bash
 NEXTER_TEST_DB=1 \
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/nexter_p4 \
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/nexter_local \
 SETUP_TOKEN=test-setup-token \
 AUTH_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
 NOTION_EXPORT_DIR=/path/to/notion-export \

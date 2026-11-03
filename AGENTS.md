@@ -6,9 +6,9 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 4 — Notion import (accepted; production import applied on 2026-11-03). Next: Phase 5 — MVP-1 UI.
+Phase 5 — MVP-1 UI (implementation complete, under review). Next: Phase 6 — MVP-1 hardening.
 
-Phase 3 — Accounting core and Phase 4 — Notion import are accepted. Phase 5 owns the full dashboard, portfolio, trades, trade detail, watchlist, export, and settings UI. Do not implement swaps until Phase 7 is started and scoped.
+Phase 3 — Accounting core and Phase 4 — Notion import are accepted. Phase 5 owns the full dashboard, portfolio, trades, trade detail, watchlist, export, settings, audit, data quality, and manual-entry UI. Do not implement swaps until Phase 7 is started and scoped.
 
 ## Non-negotiable rules
 

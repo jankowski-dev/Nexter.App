@@ -33,7 +33,7 @@ At the time of implementation, the Notion workspace contained 431 orders (412 cl
   - A closed order's group lot is consumed directly at import time, preserving the historical Notion cost basis for that order.
   - Imported active lots remain part of the normal global FIFO pool. A later manual sell may consume them and update the imported trade group to `partial`/`closed`, because manual trades use the Phase 3 global-FIFO policy. A later Notion close for an order whose lot was partially consumed by a manual sell is rejected as `IMPORT_CONFLICT`: the same disposal must not be recorded twice.
   - Active orders create a buy and an open lot. Notion `Активна`, `В продажу`, and `Резерв` map to `open`, `for_sale`, and `reserve`.
-  - Notion date-only close values are normalized to `23:59:59.999Z` on that date, so a same-day close is not ordered before its buy.
+  - Notion date-only close values are normalized to `23:59:59.999Z` on that date, capped at preview time, so a same-day close is not ordered before its buy and a today close is not future-dated.
 - `Transactions` → USDT deposit/withdrawal. The amount is `Сумма пополнения` or `Сумма вывода`; the Notion account must resolve to USDT.
 - Notion has no gas/fee data in these rows. Fees are not invented. Every imported transaction carries `network_fee_included=false`.
 

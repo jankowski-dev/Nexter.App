@@ -187,12 +187,40 @@ export const tradeGroups = pgTable(
     status: text('status').$type<TradeGroupStatus>().notNull().default('open'),
     openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
+    notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('trade_groups_user_id_idx').on(table.userId),
     index('trade_groups_asset_id_idx').on(table.assetId),
+  ],
+);
+
+export const watchlist = pgTable(
+  'watchlist',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    thesis: text('thesis'),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    priority: integer('priority').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('watchlist_user_asset_unique').on(table.userId, table.assetId),
+    index('watchlist_user_priority_idx').on(table.userId, table.priority),
+    index('watchlist_user_archived_idx').on(table.userId, table.archivedAt),
   ],
 );
 
@@ -395,6 +423,7 @@ export type Chain = typeof chains.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
 export type TradeGroup = typeof tradeGroups.$inferSelect;
+export type WatchlistEntry = typeof watchlist.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type Posting = typeof postings.$inferSelect;
 export type TradeDetail = typeof tradeDetails.$inferSelect;

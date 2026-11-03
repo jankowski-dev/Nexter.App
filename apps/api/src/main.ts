@@ -45,7 +45,7 @@ async function bootstrap(): Promise<void> {
   fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-    if (request.url.startsWith('/api/v1/auth/')) {
+    if (request.url.startsWith('/api/v1/')) {
       void reply.header('Cache-Control', 'no-store');
     }
 
@@ -67,7 +67,7 @@ async function bootstrap(): Promise<void> {
       url === '/api/v1/auth/login' ||
       url.startsWith('/api/v1/auth/2fa/') ||
       url.startsWith('/api/v1/auth/recovery/');
-    const max = isAuthAttempt ? 10 : isMutation ? 60 : 300;
+    const max = isAuthAttempt ? (env.NODE_ENV === 'test' ? 100 : 10) : isMutation ? 60 : 300;
     const bucketKey = `${request.ip}:${isAuthAttempt ? 'auth' : isMutation ? 'mutation' : 'read'}`;
     let bucket = rateBuckets.get(bucketKey);
 

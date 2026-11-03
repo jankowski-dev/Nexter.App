@@ -23,6 +23,17 @@
 
 Auth, dashboard, positions, accounts, assets, trade groups, transactions, imports, watchlist, settings, audit, health, readiness.
 
+Phase 5 additions:
+
+- Dashboard: `GET /dashboard/summary`, `/equity-curve`, `/allocation`, `/pnl`, `/active-positions`, `/recent-trades`, `/data-quality`.
+- Portfolio: `GET /positions`, `/positions/:assetId`, `/portfolio/assets/:assetId`, `/accounts`, `/accounts/:id`, `/assets`, `/assets/:id`.
+- Trades: `GET /trade-groups` (cursor/filters), `GET /trade-groups/:id`, `PATCH /trade-groups/:id` (notes), `POST /trade-groups/:id/sells`.
+- Transactions: `GET /transactions?limit&cursor&type&subtype&source&assetId&tradeGroupId&from&to&search` returns `{ transactions, page }`.
+- Watchlist: `GET /watchlist`, `POST /watchlist`, `PATCH /watchlist/:id`, `DELETE /watchlist/:id` (soft archive).
+- Settings/audit/export: `GET/PATCH /settings`, `GET /audit-log`, `GET /export/transactions.csv|json`, `/export/positions.csv|json`, `/export/trade-groups.csv|json`.
+- The equity curve uses current prices for historical holdings (`valuation = current-prices`) because historical prices are unavailable; the UI labels this explicitly.
+- Trade reversal is deferred to Phase 6.
+
 Notion import endpoints:
 
 - `POST /api/v1/imports/notion/preview` — accepts `{ fileName?, source[], orders[], transactions[] }`, stages the export, returns summary and row statuses. It never writes the ledger.
@@ -56,3 +67,5 @@ Keyboard navigation, focus rings, ARIA labels, `aria-current`, skip link, contra
 ## Performance
 
 Dashboard <1s, lists <500ms, import preview <5s on 429 rows. Server-side aggregation, cursor pagination, virtualized tables, short-lived cache.
+
+Phase 5 dashboard aggregate endpoints are read-only and derived from the ledger. Trade-group list uses a single aggregate query; the recent-trades dashboard card reuses it with limit 5. Export streams the same service data and is audited per generation.

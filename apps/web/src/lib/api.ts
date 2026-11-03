@@ -1,18 +1,80 @@
 import {
+  accountsResponseSchema,
+  assetsResponseSchema,
+  auditLogResponseSchema,
   authMeResponseSchema,
+  dashboardActivePositionsSchema,
+  dashboardAllocationSchema,
+  dashboardDataQualitySchema,
+  dashboardPnlSchema,
+  dashboardRecentTradesSchema,
   dashboardSummarySchema,
+  equityCurveSchema,
   errorEnvelopeSchema,
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
+  portfolioAssetDetailSchema,
+  positionsResponseSchema,
+  settingsSchema,
+  tradeGroupDetailSchema,
+  tradeGroupsResponseSchema,
+  transactionsPageResponseSchema,
+  watchlistEntrySchema,
+  watchlistResponseSchema,
+  type AccountsResponse,
+  type AssetsResponse,
+  type AuditLogResponse,
+  type DashboardActivePositions,
+  type DashboardAllocation,
+  type DashboardDataQuality,
+  type DashboardPnl,
+  type DashboardRecentTrades,
   type DashboardSummary,
+  type EquityCurve,
   type HealthResponse,
   type ImportResponse,
   type ImportsResponse,
+  type PortfolioAssetDetail,
+  type PositionsResponse,
+  type Settings,
+  type TradeGroupDetail,
+  type TradeGroupListQuery,
+  type TradeGroupSellRequest,
+  type TradeGroupsResponse,
+  type TransactionsListQuery,
+  type TransactionsPageResponse,
+  type UpdateSettingsRequest,
+  type WatchlistCreateRequest,
+  type WatchlistEntry,
+  type WatchlistResponse,
+  type WatchlistUpdateRequest,
 } from '@nexter/contracts';
 
 export { healthResponseSchema };
-export type { DashboardSummary, HealthResponse, ImportResponse, ImportsResponse };
+export type {
+  AccountsResponse,
+  AssetsResponse,
+  AuditLogResponse,
+  DashboardActivePositions,
+  DashboardAllocation,
+  DashboardDataQuality,
+  DashboardPnl,
+  DashboardRecentTrades,
+  DashboardSummary,
+  EquityCurve,
+  HealthResponse,
+  ImportResponse,
+  ImportsResponse,
+  PortfolioAssetDetail,
+  PositionsResponse,
+  Settings,
+  TradeGroupDetail,
+  TradeGroupsResponse,
+  TransactionsPageResponse,
+  WatchlistEntry,
+  WatchlistResponse,
+};
 
 export interface NotionImportRawPayload {
   fileName: string;
@@ -116,6 +178,24 @@ export async function apiPost<T>(
   );
 }
 
+export async function apiPatch<T>(
+  path: string,
+  body: unknown,
+  schema?: { parse: (value: unknown) => T },
+): Promise<T> {
+  return apiFetch<T>(
+    path,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+    schema,
+  );
+}
+
 export async function apiDelete<T>(
   path: string,
   schema?: { parse: (value: unknown) => T },
@@ -123,8 +203,31 @@ export async function apiDelete<T>(
   return apiFetch<T>(path, { method: 'DELETE' }, schema);
 }
 
+function queryString(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  }
+
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
 export async function fetchMe() {
   return apiFetch('/api/v1/auth/me', {}, authMeResponseSchema);
+}
+
+export async function fetchPositions(): Promise<PositionsResponse> {
+  return apiFetch('/api/v1/positions', {}, positionsResponseSchema);
+}
+
+export async function fetchAccounts(): Promise<AccountsResponse> {
+  return apiFetch('/api/v1/accounts', {}, accountsResponseSchema);
+}
+
+export async function fetchAssets(): Promise<AssetsResponse> {
+  return apiFetch('/api/v1/assets', {}, assetsResponseSchema);
 }
 
 export async function fetchImports(): Promise<ImportsResponse> {
@@ -163,4 +266,151 @@ export async function rollbackImport(importId: string): Promise<ImportResponse> 
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {
   return apiFetch('/api/v1/dashboard/summary', {}, dashboardSummarySchema);
+}
+
+export async function fetchDashboardAllocation(): Promise<DashboardAllocation> {
+  return apiFetch('/api/v1/dashboard/allocation', {}, dashboardAllocationSchema);
+}
+
+export async function fetchDashboardPnl(): Promise<DashboardPnl> {
+  return apiFetch('/api/v1/dashboard/pnl', {}, dashboardPnlSchema);
+}
+
+export async function fetchDashboardActivePositions(): Promise<DashboardActivePositions> {
+  return apiFetch('/api/v1/dashboard/active-positions', {}, dashboardActivePositionsSchema);
+}
+
+export async function fetchDashboardRecentTrades(): Promise<DashboardRecentTrades> {
+  return apiFetch('/api/v1/dashboard/recent-trades', {}, dashboardRecentTradesSchema);
+}
+
+export async function fetchDashboardDataQuality(): Promise<DashboardDataQuality> {
+  return apiFetch('/api/v1/dashboard/data-quality', {}, dashboardDataQualitySchema);
+}
+
+export async function fetchEquityCurve(): Promise<EquityCurve> {
+  return apiFetch('/api/v1/dashboard/equity-curve', {}, equityCurveSchema);
+}
+
+export async function fetchTradeGroups(
+  params: Partial<TradeGroupListQuery> = {},
+): Promise<TradeGroupsResponse> {
+  return apiFetch(`/api/v1/trade-groups${queryString(params)}`, {}, tradeGroupsResponseSchema);
+}
+
+export async function fetchTradeGroup(id: string): Promise<TradeGroupDetail> {
+  return apiFetch(`/api/v1/trade-groups/${id}`, {}, tradeGroupDetailSchema);
+}
+
+export async function updateTradeGroupNotes(
+  id: string,
+  notes: string | null,
+): Promise<TradeGroupDetail> {
+  return apiPatch(`/api/v1/trade-groups/${id}`, { notes }, tradeGroupDetailSchema);
+}
+
+export async function sellTradeGroup(
+  id: string,
+  body: TradeGroupSellRequest,
+  idempotencyKey?: string,
+): Promise<TradeGroupDetail> {
+  return apiFetch(
+    `/api/v1/trade-groups/${id}/sells`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+      },
+      body: JSON.stringify(body),
+    },
+    tradeGroupDetailSchema,
+  );
+}
+
+export async function fetchPortfolioAsset(id: string): Promise<PortfolioAssetDetail> {
+  return apiFetch(`/api/v1/portfolio/assets/${id}`, {}, portfolioAssetDetailSchema);
+}
+
+export async function setPrice(assetId: string, priceUsd: string): Promise<void> {
+  await apiPost(`/api/v1/prices/${assetId}`, { priceUsd });
+}
+
+export async function fetchTransactions(
+  params: Partial<TransactionsListQuery> = {},
+): Promise<TransactionsPageResponse> {
+  return apiFetch(`/api/v1/transactions${queryString(params)}`, {}, transactionsPageResponseSchema);
+}
+
+export async function fetchWatchlist(
+  includeArchived = false,
+  cursor?: string,
+): Promise<WatchlistResponse> {
+  return apiFetch(
+    `/api/v1/watchlist${queryString({ includeArchived, cursor })}`,
+    {},
+    watchlistResponseSchema,
+  );
+}
+
+export async function createWatchlist(body: WatchlistCreateRequest): Promise<WatchlistEntry> {
+  return apiPost('/api/v1/watchlist', body, watchlistEntrySchema);
+}
+
+export async function updateWatchlist(
+  id: string,
+  body: WatchlistUpdateRequest,
+): Promise<WatchlistEntry> {
+  return apiPatch(`/api/v1/watchlist/${id}`, body, watchlistEntrySchema);
+}
+
+export async function archiveWatchlist(id: string): Promise<void> {
+  await apiDelete(`/api/v1/watchlist/${id}`);
+}
+
+export async function fetchSettings(): Promise<Settings> {
+  return apiFetch('/api/v1/settings', {}, settingsSchema);
+}
+
+export async function updateSettings(body: UpdateSettingsRequest): Promise<Settings> {
+  return apiPatch('/api/v1/settings', body, settingsSchema);
+}
+
+export async function fetchAuditLog(
+  params: {
+    limit?: number;
+    cursor?: string;
+    action?: string;
+    entityType?: string;
+    from?: string;
+    to?: string;
+  } = {},
+): Promise<AuditLogResponse> {
+  return apiFetch(`/api/v1/audit-log${queryString(params)}`, {}, auditLogResponseSchema);
+}
+
+export async function downloadExport(
+  dataset: 'transactions' | 'positions' | 'trade-groups',
+  format: 'csv' | 'json',
+): Promise<void> {
+  const response = await fetch(`/api/v1/export/${dataset}.${format}`, {
+    credentials: 'include',
+    headers: { Accept: '*/*' },
+  });
+
+  if (!response.ok) {
+    throw new ApiError('EXPORT_FAILED', 'Не удалось скачать экспорт');
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? `nexter-${dataset}.${format}`;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }

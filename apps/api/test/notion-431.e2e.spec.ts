@@ -241,6 +241,133 @@ describe.runIf(canRun)('Notion 431-row import', () => {
       new Decimal(dashboard.body.equityUsd).minus(dashboard.body.netDepositsUsd).toFixed(8),
     ).toBe(new Decimal(dashboard.body.totalPnlUsd).toFixed(8));
 
+    const assetResponse = await agent.get('/api/v1/assets').expect(200);
+    const popAsset = (assetResponse.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'POP',
+    );
+    expect(popAsset).toBeDefined();
+
+    const allocation = await agent.get('/api/v1/dashboard/allocation').expect(200);
+    expect(allocation.body.totalUsd).toBe('1845.62434716');
+    expect(allocation.body.slices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'cash', valueUsd: '15.73629954' }),
+        expect.objectContaining({ key: popAsset?.id }),
+      ]),
+    );
+
+    const pnlMonths = await agent.get('/api/v1/dashboard/pnl').expect(200);
+    expect(pnlMonths.body.months.length).toBeGreaterThan(0);
+    const pnlTotal = pnlMonths.body.months.reduce(
+      (total: Decimal, month: { realizedUsd: string }) => total.plus(month.realizedUsd),
+      new Decimal(0),
+    );
+    expect(pnlTotal.toFixed(8)).toBe('55.63629954');
+
+    const activePositions = await agent.get('/api/v1/dashboard/active-positions').expect(200);
+    expect(activePositions.body.positions).toHaveLength(4);
+
+    const recentTrades = await agent.get('/api/v1/dashboard/recent-trades').expect(200);
+    expect(recentTrades.body.data).toHaveLength(5);
+    expect(recentTrades.body.data[0].source).toBe('notion');
+
+    const groups = await agent.get('/api/v1/trade-groups?limit=5').expect(200);
+    expect(groups.body.data).toHaveLength(5);
+    expect(groups.body.page.hasMore).toBe(true);
+    const closedGroup = groups.body.data.find(
+      (group: { status: string }) => group.status === 'closed',
+    );
+    if (!closedGroup) throw new Error('Expected a closed group in the first page');
+    const groupDetail = await agent.get(`/api/v1/trade-groups/${closedGroup.id}`).expect(200);
+    expect(groupDetail.body.group.source).toBe('notion');
+    expect(groupDetail.body.legs.length).toBeGreaterThan(0);
+    expect(groupDetail.body.lots).toHaveLength(1);
+    expect(groupDetail.body.audit.length).toBeGreaterThan(0);
+    const sellLeg = groupDetail.body.legs.find(
+      (leg: { subtype: string }) => leg.subtype === 'sell',
+    );
+    expect(sellLeg).toBeDefined();
+    expect(groupDetail.body.consumptions[0].disposalOccurredAt).toBe(sellLeg.occurredAt);
+
+    const xnyAsset = (assetResponse.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'XNY',
+    );
+    const usdtAsset = (assetResponse.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'USDT',
+    );
+    const portfolioAsset = await agent.get(`/api/v1/portfolio/assets/${popAsset?.id}`).expect(200);
+    expect(portfolioAsset.body.asset.symbol).toBe('POP');
+    expect(portfolioAsset.body.position).not.toBeNull();
+    expect(portfolioAsset.body.lots.length).toBeGreaterThan(0);
+    const xnyDetail = await agent.get(`/api/v1/portfolio/assets/${xnyAsset?.id}`).expect(200);
+    expect(xnyDetail.body.tradeGroups.length).toBeGreaterThan(50);
+    const cashDetail = await agent.get(`/api/v1/portfolio/assets/${usdtAsset?.id}`).expect(200);
+    expect(cashDetail.body.position).toMatchObject({
+      isCashEquivalent: true,
+      priceUsd: '1.00000000',
+    });
+
+    const watchlist = await agent.get('/api/v1/watchlist').expect(200);
+    expect(watchlist.body.data).toHaveLength(36);
+    expect(watchlist.body.data.some((entry: { thesis: string | null }) => entry.thesis)).toBe(true);
+    const basedWatchlist = watchlist.body.data.find(
+      (entry: { asset: { symbol: string } }) => entry.asset.symbol === 'BASED',
+    );
+    expect(basedWatchlist.tags).toContain('Дашбоард');
+
+    // Backfilled entries share one insert timestamp; pagination must not skip
+    // rows that only differ by id within the same microsecond.
+    const watchlistPageIds: string[] = [];
+    let watchlistCursor: string | undefined;
+    let watchlistPages = 0;
+
+    do {
+      const page = await agent
+        .get(
+          `/api/v1/watchlist?limit=10${
+            watchlistCursor ? `&cursor=${encodeURIComponent(watchlistCursor)}` : ''
+          }`,
+        )
+        .expect(200);
+      watchlistPageIds.push(...(page.body.data as Array<{ id: string }>).map((entry) => entry.id));
+      watchlistCursor = page.body.page.nextCursor ?? undefined;
+      watchlistPages += 1;
+
+      if (!page.body.page.hasMore) break;
+    } while (watchlistCursor && watchlistPages < 10);
+
+    expect(watchlistPageIds).toHaveLength(36);
+    expect(new Set(watchlistPageIds).size).toBe(36);
+
+    const dataQuality = await agent.get('/api/v1/dashboard/data-quality').expect(200);
+    expect(dataQuality.body.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'unverified_assets' }),
+        expect.objectContaining({ code: 'missing_gas' }),
+        expect.objectContaining({ code: 'unreconciled' }),
+      ]),
+    );
+    expect(dataQuality.body.negativeBalances).toEqual([]);
+
+    const audit = await agent.get('/api/v1/audit-log?action=import.notion_committed').expect(200);
+    expect(audit.body.data).toHaveLength(1);
+
+    const exportTransactions = await agent.get('/api/v1/export/transactions.json').expect(200);
+    expect(exportTransactions.body).toHaveLength(852);
+    const exportGroups = await agent.get('/api/v1/export/trade-groups.csv').expect(200);
+    expect(exportGroups.text).toContain('POP');
+
+    const equityCurve = await agent.get('/api/v1/dashboard/equity-curve').expect(200);
+    expect(equityCurve.body.valuation).toBe('current-prices');
+    expect(equityCurve.body.points.length).toBeGreaterThan(0);
+    expect(equityCurve.body.points.at(-1).equityUsd).toBe('1845.62434716');
+
+    const settings = await agent.get('/api/v1/settings').expect(200);
+    expect(settings.body).toMatchObject({
+      baseCurrency: 'USD',
+      taxMethod: 'FIFO',
+    });
+
     await agent
       .post(`/api/v1/imports/${importId}/rollback`)
       .set('x-csrf-token', owner.csrf)

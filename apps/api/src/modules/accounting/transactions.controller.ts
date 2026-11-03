@@ -1,12 +1,23 @@
-import { Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
   ManualTransactionRequest,
   ManualTransactionResponse,
   Transaction,
-  TransactionsResponse,
+  TransactionsListQuery,
+  TransactionsPageResponse,
 } from '@nexter/contracts';
-import { manualTransactionRequestSchema } from '@nexter/contracts';
+import { manualTransactionRequestSchema, transactionsListQuerySchema } from '@nexter/contracts';
 import type { FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
@@ -19,8 +30,12 @@ export class TransactionsController {
   constructor(private readonly ledger: LedgerService) {}
 
   @Get()
-  async list(@CurrentAuth() auth: AuthContext): Promise<TransactionsResponse> {
-    return { transactions: await this.ledger.list(auth.user.id) };
+  list(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(transactionsListQuerySchema))
+    query: TransactionsListQuery,
+  ): Promise<TransactionsPageResponse> {
+    return this.ledger.list(auth.user.id, query);
   }
 
   @Get(':id')
