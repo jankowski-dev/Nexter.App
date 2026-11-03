@@ -5,40 +5,52 @@
 Create these Railway services in one project:
 
 1. **Postgres** — Railway PostgreSQL 17, private networking, PITR/backups enabled.
-2. **api** — this repository, Dockerfile builder, start command `node apps/api/dist/main.js`.
-3. **worker** — same image, start command `node apps/worker/dist/main.js`.
+2. **api** — repository root, Dockerfile builder, start command `node apps/api/dist/main.js`.
+3. **worker** — repository root, same Dockerfile, start command `node apps/worker/dist/main.js`.
 
-## API service
+Do **not** create a separate `@nexter/web` service. The API serves the built SPA from `WEB_DIST_PATH=/app/apps/api/public`.
 
-Variables:
+Set **Root Directory** to the repository root for both `api` and `worker`. If Railway created services with root directories `apps/api`, `apps/worker`, or `apps/web`, delete/recreate them or change the root to `/`; otherwise the root `Dockerfile` and `railway.json` are ignored and Railway falls back to Nixpacks.
 
-- `NODE_ENV=production`
-- `DATABASE_URL=${{Postgres.DATABASE_URL}}`
-- `SENTRY_DSN` (optional)
-- `APP_URL=https://<your-domain>`
-- `SETUP_TOKEN` (required before first setup)
-- `AUTH_ENCRYPTION_KEY` (32-byte base64 or hex; required for TOTP encryption)
-- `ENABLE_DOCS=false`
-- `WEB_DIST_PATH=/app/apps/api/public`
-- `TRUST_PROXY` — set to the exact Railway/Cloudflare proxy CIDR or use `true` only when the origin is unreachable except through the trusted proxy. Default `false`.
+## Railway service settings
 
-Break-glass recovery is documented in [`auth-recovery.md`](auth-recovery.md). The setup token is not a recovery mechanism.
+### api
 
-Auth rate-limit and session rows are not cleaned automatically yet; add a scheduled maintenance job before long-term production use.
+- Builder: **Dockerfile**
+- Dockerfile path: `Dockerfile`
+- Config-as-code path: `railway.json` (or leave default)
+- Start command: `node apps/api/dist/main.js`
+- Healthcheck path: `/ready`
+- Public networking: generate a domain on **api** (not on worker)
+- Variables:
+  - `NODE_ENV=production`
+  - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+  - `SENTRY_DSN` (optional)
+  - `APP_URL=https://<api-domain>`
+  - `SETUP_TOKEN` (required before first setup)
+  - `AUTH_ENCRYPTION_KEY` (32-byte base64 or 64-char hex)
+  - `ENABLE_DOCS=false`
+  - `WEB_DIST_PATH=/app/apps/api/public`
+  - `TRUST_PROXY` — exact Railway/Cloudflare proxy CIDR, or `true` only behind a trusted proxy. Default `false`.
 
-Healthcheck: `/ready` (requires database).
+### worker
 
-## Worker service
+- Builder: **Dockerfile**
+- Dockerfile path: `Dockerfile`
+- Config-as-code path: `railway.worker.json`
+- Start command: `node apps/worker/dist/main.js`
+- No public domain, no HTTP healthcheck.
+- Variables: `NODE_ENV=production`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `SENTRY_DSN` (optional).
 
-Use the same Docker image. Start command:
+## Troubleshooting: `The executable pnpm could not be found`
 
-```bash
-node apps/worker/dist/main.js
-```
+This error means the service start command is still `pnpm ...` while the runtime image contains only Node. It is not an application build failure.
 
-Variables: `NODE_ENV=production`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `SENTRY_DSN`.
-
-No HTTP healthcheck is required for the worker.
+1. Confirm the service **Root Directory** is `/`, not `apps/api` or `apps/worker`.
+2. Set the service start command to `node apps/api/dist/main.js` (api) or `node apps/worker/dist/main.js` (worker).
+3. Use the root `Dockerfile` as the builder.
+4. Delete the separate `@nexter/web` service; the API serves the SPA.
+5. Redeploy api and worker.
 
 ## Migrations
 
