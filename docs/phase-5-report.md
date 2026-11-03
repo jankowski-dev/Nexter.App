@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **implementation complete; pending independent review and acceptance.**
+Status: **review PASS; deployed to production on 2026-11-04 (merge `a731457`). Owner sign-off on the documented Phase 6 deferrals is pending.**
 
 ## Scope completed
 
@@ -39,6 +39,15 @@ Status: **implementation complete; pending independent review and acceptance.**
 - API tests — **55 passed, 1 skipped** with the disposable PostgreSQL test database. The skipped test is the opt-in real 431-row import test.
 - Real 431-row import e2e (`NOTION_EXPORT_DIR`) — import plus Phase 5 dashboard/trade-group/portfolio/watchlist/audit/export/equity-curve assertions pass.
 - Playwright — **3 tests pass**: auth flow, Notion import UI, and the Phase 5 MVP-1 UI flow (dashboard, portfolio asset detail, trades, trade note, watchlist CRUD, settings save, CSV download, manual deposit).
+
+## Production deployment
+
+- PR #3 merged to `main` as `a731457` after independent **PASS**.
+- Railway `@nexter/api` deployment `f99e06cd-fd9a-4ad2-8057-cdf63b7a32eb` succeeded on 2026-11-04; pre-deploy log shows `Migrations applied` (migration `0008`).
+- `@nexter/worker` was skipped because no worker code changed.
+- `/health` and `/ready` return `200`; the SPA is served at `/dashboard` and the deployed bundle contains the Phase 5 routes.
+- All new API routes (`/dashboard/*`, `/trade-groups`, `/watchlist`, `/settings`, `/audit-log`, `/export/*`, `/portfolio/assets/:id`) return `401` without a session, confirming they are registered and auth-protected.
+- Authenticated production spot-check remains the owner's login step; no production credentials were used by the agent.
 
 ## Design decisions
 

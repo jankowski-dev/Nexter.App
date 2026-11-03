@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 5 — MVP-1 UI (implementation complete, under review)**. Next: Phase 6 — MVP-1 hardening. Phase 3 accounting core and Phase 4 Notion import are accepted.
+Current phase: **Phase 5 — MVP-1 UI (independent review PASS; deployed to production on 2026-11-04)**. Next: Phase 6 — MVP-1 hardening. Phase 3 accounting core and Phase 4 Notion import are accepted. Owner sign-off on the documented Phase 6 deferrals is pending.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
