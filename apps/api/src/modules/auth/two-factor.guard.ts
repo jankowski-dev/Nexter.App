@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ALLOW_PENDING_2FA_KEY, IS_PUBLIC_KEY } from './auth.constants';
+import { ALLOW_PENDING_2FA_METADATA, IS_PUBLIC_METADATA } from './auth.constants';
 import type { RequestWithAuth } from './auth.types';
 
 @Injectable()
@@ -13,11 +13,11 @@ export class TwoFactorGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_METADATA, [
       context.getHandler(),
       context.getClass(),
     ]);
-    const allowPending = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_2FA_KEY, [
+    const allowPending = this.reflector.getAllAndOverride<boolean>(ALLOW_PENDING_2FA_METADATA, [
       context.getHandler(),
       context.getClass(),
     ]);

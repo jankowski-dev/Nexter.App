@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_KEY, SESSION_COOKIE } from './auth.constants';
+import { IS_PUBLIC_METADATA, SESSION_COOKIE } from './auth.constants';
 import type { RequestWithAuth } from './auth.types';
 import { SessionService } from './session.service';
 
@@ -17,7 +17,7 @@ export class AuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_METADATA, [
       context.getHandler(),
       context.getClass(),
     ]);

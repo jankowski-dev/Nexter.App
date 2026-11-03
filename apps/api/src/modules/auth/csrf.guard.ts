@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { CSRF_COOKIE, IS_PUBLIC_KEY, SKIP_CSRF_KEY } from './auth.constants';
+import { CSRF_COOKIE, IS_PUBLIC_METADATA, SKIP_CSRF_METADATA } from './auth.constants';
 import type { RequestWithAuth } from './auth.types';
 import { CryptoService } from './crypto.service';
 
@@ -26,11 +26,11 @@ export class CsrfGuard implements CanActivate {
       return true;
     }
 
-    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_METADATA, [
       context.getHandler(),
       context.getClass(),
     ]);
-    const skipCsrf = this.reflector.getAllAndOverride<boolean>(SKIP_CSRF_KEY, [
+    const skipCsrf = this.reflector.getAllAndOverride<boolean>(SKIP_CSRF_METADATA, [
       context.getHandler(),
       context.getClass(),
     ]);
