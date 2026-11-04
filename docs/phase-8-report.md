@@ -18,6 +18,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 ## Implemented slice
 
 - WalletConnect v2 connection UI on `/swap` using the public `WALLETCONNECT_PROJECT_ID` (QR/modal, BSC chain check, address display, disconnect). Signing remains disabled until the remaining gates.
+- CSP now allowlists the WalletConnect relay/AppKit origins (`connect-src` and `frame-src`); without them the QR modal opens but never receives a pairing URI.
 - `GET /swap/config` exposes `walletConnectProjectId` and `buildEnabled` (requires wallet + selector allowlists).
 
 - Migration `0010_careless_pet_avengers.sql` plus hardening migration `0011_closed_namor.sql` (additive):
