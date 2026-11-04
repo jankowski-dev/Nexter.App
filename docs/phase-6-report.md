@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **implementation and security review PASS; deployed to production on 2026-11-04. Owner UAT and production app-role provisioning are pending.**
+Status: **accepted on 2026-11-04.** Independent security review PASS; deployed to production; owner UAT confirmed. App-role provisioning and backup cron/R2 retention remain operational follow-ups.
 
 ## Scope
 
@@ -93,13 +93,13 @@ First review: **FAIL** — one High (H1) and eight Mediums. H1 and the material 
 - Production pre-auth import probe: a 2 MiB unauthenticated body returned `401 AUTH_REQUIRED` before parsing, confirming the M1 hook in the deployed build.
 - `TRUST_PROXY=1` is applied in production; IP-based limits now use the Railway-appended client IP rather than the shared edge address.
 
-## Remaining acceptance steps
+## Acceptance and operational follow-ups
 
-1. Owner completes `docs/uat.md` (authenticated production or staging walkthrough).
-2. Owner runs `db:provision-app` with the owner/migration connection and switches the API/worker `DATABASE_URL` to the `nexter_app` role; keep `MIGRATION_DATABASE_URL` on the owner role.
-3. Schedule the encrypted backup cron and R2 upload/retention, then record the first production backup drill.
-4. Record Phase 6 acceptance in `AGENTS.md`/`README.md`/`decisions.md`.
+- **Accepted 2026-11-04.** Owner confirmed UAT; automated E2E covers auth, import, manual accounting flows, dashboard/portfolio/trades/watchlist/settings, and export.
+- **Operational follow-up:** run `db:provision-app` with the owner/migration connection and switch the API/worker `DATABASE_URL` to the `nexter_app` role; keep `MIGRATION_DATABASE_URL` on the owner role.
+- **Operational follow-up:** schedule the encrypted backup cron and R2 upload/retention, then record the first production backup drill.
+- **Operational follow-up:** apply retention jobs for sessions/rate limits/imports, pin Docker/action digests, and add schema-aware readiness/Argon2 concurrency hardening in a later hardening pass.
 
 ## Next
 
-Owner UAT and acceptance.
+Phase 7 — Swap foundation, only after it is started and scoped. No swap execution is part of MVP-1.

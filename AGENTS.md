@@ -6,9 +6,9 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 6 — MVP-1 hardening (independent security review PASS; deployed to production on 2026-11-04). Owner UAT and the production app-role provisioning step are pending. Next: Phase 7 only after Phase 6 acceptance.
+Phase 7 — Swap foundation (next; not started). Phase 6 — MVP-1 hardening is accepted as of 2026-11-04: independent security review PASS, production deployed, owner UAT confirmed.
 
-Phase 3 — Accounting core, Phase 4 — Notion import, and Phase 5 — MVP-1 UI are accepted. Phase 6 covers security hardening, performance, backup/restore, E2E, UAT, and runbooks. Do not implement swaps until Phase 7 is started and scoped.
+Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, and Phase 6 — MVP-1 hardening are accepted. MVP-1 is complete. Do not implement swaps until Phase 7 is started and scoped.
 
 ## Non-negotiable rules
 
