@@ -11,9 +11,10 @@ Phase 7 is read-only: quotes and calldata building only. The server never signs,
 3. Set `BSC_RPC_URL` for build/simulation (quotes work without it).
 4. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
 5. Set `SWAP_SELECTOR_ALLOWLIST` to the reviewed Kyber router selectors. An empty allowlist disables builds.
-6. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
-7. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
-8. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
+6. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required.
+7. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
+8. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
+9. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
 
 ## Kill switch
 
@@ -34,8 +35,16 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Allowlist changes
 
 - Token addresses are code-owned and require review; do not add arbitrary tokens in production.
-- Wallet/router/selector allowlists are environment-owned. Changing them requires a redeploy and a new quote/build check. The application role must not have DELETE on swap tables.
+- Wallet/router/selector allowlists are environment-owned. Changing them requires a redeploy and a new quote/build check. The application role must not have DELETE on swap tables, approvals, or events.
+- Step-up TOTP is required above the configured threshold; the session window is five minutes. Missing/invalid provider USD fails closed.
 - Phase 8 must add full calldata decoding, exact approvals, step-up TOTP above $500, submission/tracking, and accounting integration before any signing is enabled.
+
+## Execution slice (Phase 8a)
+
+- `POST /auth/step-up` sets a five-minute step-up window; builds/submissions/approvals above `SWAP_STEP_UP_THRESHOLD_USD` require it.
+- Exact approvals use the router/spender allowlist; native inputs do not need approval; already-sufficient allowance returns 409.
+- `POST /swap/orders/:id/submitted` and approvals/:id/submitted only record hashes in this slice; on-chain verification and confirmation tracking land in the tracking slice.
+- All execution endpoints remain disabled until `SWAP_ENABLED=true`, wallet/router/selector allowlists are set, and the remaining Phase 8 slices are reviewed. No signing UI exists yet.
 
 ## Verification
 

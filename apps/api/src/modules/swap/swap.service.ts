@@ -29,6 +29,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { BscRpcService } from './bsc-rpc.service';
+import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import {
   DEFAULT_BSC_ROUTER,
@@ -160,6 +161,7 @@ export class SwapService {
       chains: SWAP_CHAINS,
       quoteTtlSeconds: env.SWAP_QUOTE_TTL_SECONDS,
       maxPriceImpactBps: env.SWAP_MAX_PRICE_IMPACT_BPS,
+      stepUpThresholdUsd: env.SWAP_STEP_UP_THRESHOLD_USD.toFixed(2),
       defaultSlippageBps: env.SWAP_DEFAULT_SLIPPAGE_BPS,
       maxSlippageBps: env.SWAP_MAX_SLIPPAGE_BPS,
     };
@@ -262,8 +264,17 @@ export class SwapService {
       });
     }
 
+    const amountInUsd = normalizeUsd(route.amountInUsd);
+    if (!amountInUsd) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid input USD value',
+      });
+    }
+    const amountOutUsd = normalizeUsd(route.amountOutUsd);
+
     const providerImpactBps = fractionToPriceImpactBps(route.priceImpact);
-    const usdImpactBps = usdToPriceImpactBps(route.amountInUsd, route.amountOutUsd);
+    const usdImpactBps = usdToPriceImpactBps(amountInUsd, amountOutUsd);
     const priceImpactBps =
       providerImpactBps === null
         ? usdImpactBps
@@ -314,6 +325,7 @@ export class SwapService {
           tokenInSymbol: tokenIn.symbol,
           tokenOutSymbol: tokenOut.symbol,
           amountIn: input.amountIn,
+          amountInUsd,
           amountOut: fromBaseUnits(amountOutBase, tokenOut.decimals),
           minOut: fromBaseUnits(minOutBase.toString(), tokenOut.decimals),
           slippageBps,
@@ -384,7 +396,7 @@ export class SwapService {
       });
     }
 
-    this.assertStepUp(auth, order);
+    assertStepUp(auth, order);
 
     const selectors = selectorAllowlist();
     if (selectors.length === 0) {
@@ -556,6 +568,7 @@ export class SwapService {
           transactionValue: built.transactionValue,
           gasEstimate,
           gasUsd,
+          deadline,
           status: 'BUILT',
           errors: [],
           builtAt: new Date(),
@@ -584,6 +597,7 @@ export class SwapService {
         payload: {
           routerAddress: row.routerAddress,
           gasEstimate: row.gasEstimate,
+          deadline: row.deadline,
           simulation: { success: true, gasEstimate: simulation.gasEstimate },
         },
       });
@@ -632,54 +646,78 @@ export class SwapService {
       });
     }
 
-    this.assertStepUp(auth, order);
+    assertStepUp(auth, order);
+    this.assertWallet(order.walletAddress ?? undefined, true);
+
+    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_ROUTER_NOT_ALLOWED',
+        message: 'Router is not in the allowlist',
+      });
+    }
+
     const txHash = input.txHash.toLowerCase();
 
-    await this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(swapOrders)
-        .set({
-          status: 'SUBMITTED',
-          txHash,
-          submittedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(swapOrders.id, orderId),
-            eq(swapOrders.userId, userId),
-            eq(swapOrders.status, 'BUILT'),
-          ),
-        )
-        .returning({ id: swapOrders.id });
+    try {
+      await this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(swapOrders)
+          .set({
+            status: 'SUBMITTED',
+            txHash,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(swapOrders.id, orderId),
+              eq(swapOrders.userId, userId),
+              eq(swapOrders.status, 'BUILT'),
+            ),
+          )
+          .returning({ id: swapOrders.id });
 
-      if (!row) {
+        if (!row) {
+          throw new ConflictException({
+            code: 'SWAP_STATE_INVALID',
+            message: 'Swap order is no longer submittable',
+          });
+        }
+
+        await tx.insert(swapEvents).values({
+          orderId,
+          type: 'submitted',
+          payload: { txHash },
+        });
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'swap.order_submitted',
+            entityType: 'swap_order',
+            entityId: orderId,
+            before: { status: 'BUILT' },
+            after: { status: 'SUBMITTED', txHash },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+      });
+    } catch (error) {
+      const candidate =
+        typeof error === 'object' && error !== null
+          ? (error as { code?: string; cause?: { code?: string } })
+          : null;
+
+      if (candidate?.code === '23505' || candidate?.cause?.code === '23505') {
         throw new ConflictException({
-          code: 'SWAP_STATE_INVALID',
-          message: 'Swap order is no longer submittable',
+          code: 'CONFLICT',
+          message: 'Transaction hash is already attached to another swap',
         });
       }
-
-      await tx.insert(swapEvents).values({
-        orderId,
-        type: 'submitted',
-        payload: { txHash },
-      });
-
-      await this.audit.log(
-        {
-          userId,
-          action: 'swap.order_submitted',
-          entityType: 'swap_order',
-          entityId: orderId,
-          before: { status: 'BUILT' },
-          after: { status: 'SUBMITTED', txHash },
-          ip: meta.ip,
-          userAgent: meta.userAgent,
-        },
-        { executor: tx, strict: true },
-      );
-    });
+      throw error;
+    }
 
     return this.detail(userId, orderId, []);
   }
@@ -835,7 +873,7 @@ export class SwapService {
       tokenOut: tokenFor(order.tokenOut, order.chain, order.tokenOutSymbol),
       amountIn: order.amountIn,
       amountOut: order.amountOut,
-      amountInUsd: routeValue(routeSummary.amountInUsd),
+      amountInUsd: order.amountInUsd ?? routeValue(routeSummary.amountInUsd),
       amountOutUsd: routeValue(routeSummary.amountOutUsd),
       minOut: order.minOut,
       slippageBps: order.slippageBps,
@@ -845,6 +883,7 @@ export class SwapService {
       status: order.status,
       quoteExpiresAt: order.quoteExpiresAt.toISOString(),
       builtAt: order.builtAt?.toISOString() ?? null,
+      deadline: order.deadline,
       submittedAt: order.submittedAt?.toISOString() ?? null,
       confirmedAt: order.confirmedAt?.toISOString() ?? null,
       cancelledAt: order.cancelledAt?.toISOString() ?? null,
@@ -951,21 +990,6 @@ export class SwapService {
         { executor: tx, strict: true },
       );
     });
-  }
-
-  private assertStepUp(auth: AuthContext, order: SwapOrder): void {
-    const routeSummary = order.routeSummary as Record<string, unknown>;
-    const rawUsd = routeSummary.amountInUsd;
-    const usd = typeof rawUsd === 'string' ? decimal(rawUsd) : null;
-
-    if (usd === null || usd.lte(500)) return;
-
-    if (!auth.session.stepUpUntil || auth.session.stepUpUntil.getTime() <= Date.now()) {
-      throw new ForbiddenException({
-        code: 'SWAP_STEP_UP_REQUIRED',
-        message: 'Step-up TOTP is required for this swap',
-      });
-    }
   }
 
   private assertEnabled(): void {

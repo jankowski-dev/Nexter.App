@@ -49,7 +49,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 
 - Add `sessions.step_up_until`.
 - `POST /auth/step-up` accepts a current TOTP code, verifies it with the existing TOTP service, and sets a 5-minute step-up window on the current session.
-- Build and submit require a fresh step-up when the order's `amountInUsd > 500`; the threshold is configurable (`SWAP_STEP_UP_THRESHOLD_USD`, default 500).
+- Build and submit require a fresh step-up when the order's `amountInUsd > SWAP_STEP_UP_THRESHOLD_USD` (default 500). A missing/invalid USD value fails closed and requires step-up; quotes require a valid provider `amountInUsd` and store it on the order.
 - Step-up attempts use the existing 2FA throttle; every success/failure is audited.
 - The UI prompts for a TOTP code only when the threshold is crossed.
 
@@ -85,11 +85,12 @@ Failure/replaced/dropped never creates a transaction.
 
 ### Persistence
 
-Migration `0010` adds:
+Migrations `0010` and `0011` add:
 
 - `sessions.step_up_until`;
 - `token_approvals`;
-- swap execution fields: `account_id`, `tx_hash`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`.
+- swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
+- unique partial indexes on non-null tx hashes and active approvals.
 
 Additive only.
 

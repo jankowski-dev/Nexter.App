@@ -15,6 +15,7 @@ import type {
   ApprovalBuildRequest,
   ApprovalBuildResponse,
   ApprovalSubmittedRequest,
+  ApprovalsQuery,
   ApprovalsResponse,
   SwapBuildRequest,
   SwapBuildResponse,
@@ -29,6 +30,7 @@ import type {
 import {
   approvalBuildRequestSchema,
   approvalSubmittedRequestSchema,
+  approvalsQuerySchema,
   swapBuildRequestSchema,
   swapOrdersQuerySchema,
   swapQuoteRequestSchema,
@@ -95,8 +97,11 @@ export class SwapController {
   }
 
   @Get('approvals')
-  approvalsList(@CurrentAuth() auth: AuthContext): Promise<ApprovalsResponse> {
-    return this.approvals.list(auth.user.id);
+  approvalsList(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(approvalsQuerySchema)) query: ApprovalsQuery,
+  ): Promise<ApprovalsResponse> {
+    return this.approvals.list(auth.user.id, query);
   }
 
   @Post('approvals/build')

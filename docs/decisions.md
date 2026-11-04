@@ -151,6 +151,6 @@ Format: date — decision — reason.
 ## Phase 8 — Swap execution
 
 - **Execution is split into slices.** ADR 0010 covers WalletConnect/Tangem, exact approvals, step-up TOTP, worker tracking, and confirmed-swap accounting. The first slice adds step-up TOTP, exact approval build/submission, and order submission state; it does not sign, track, or write accounting yet.
-- **Step-up is session-bound.** `sessions.step_up_until` is set by a TOTP verification for five minutes and required for build/submit when the quote input exceeds $500. Failures use the existing 2FA throttle and are audited.
+- **Step-up is session-bound and fails closed.** `sessions.step_up_until` is set by a TOTP verification for five minutes and required for build/submit/approval build when the stored input USD value exceeds `SWAP_STEP_UP_THRESHOLD_USD` (default $500). Missing/invalid USD requires step-up; quotes reject a missing provider `amountInUsd`. Failures use the existing 2FA throttle and are audited.
 - **Approvals are exact.** The server emits `approve(router, exactAmount)` only, validates the router allowlist and simulation, and never emits unlimited approvals.
-- **Submission is idempotent-by-state.** `POST /swap/orders/:id/submitted` only accepts `BUILT` orders, requires step-up, and records a hash/event/audit; worker tracking and accounting remain the next slice.
+- **Submission is idempotent-by-state.** `POST /swap/orders/:id/submitted` only accepts `BUILT` orders, requires step-up and wallet/router allowlists, and records a hash/event/audit. Tx hashes are unique; on-chain verification/correction and worker tracking are the next slice. Deadline is persisted on build. Approvals are exact, unique while active, and require the router/wallet allowlists and a live deadline.

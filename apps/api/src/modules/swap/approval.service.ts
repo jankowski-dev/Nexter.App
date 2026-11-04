@@ -7,15 +7,21 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
 import { swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
-import type { ApprovalBuildResponse, ApprovalsResponse, TokenApproval } from '@nexter/contracts';
+import type {
+  ApprovalBuildResponse,
+  ApprovalsQuery,
+  ApprovalsResponse,
+  TokenApproval,
+} from '@nexter/contracts';
 import type { AuthContext } from '../auth/auth.types';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
-import { decimal } from '../../shared/money/decimal';
+import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { BscRpcService, padUint } from './bsc-rpc.service';
+import { assertStepUp } from './swap-step-up';
 import {
   DEFAULT_BSC_ROUTER,
   getSwapToken,
@@ -32,6 +38,12 @@ function padAddress(address: string): string {
   return address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { code?: string; cause?: { code?: string } };
+  return candidate.code === '23505' || candidate.cause?.code === '23505';
+}
+
 function routerAllowlist(): string[] {
   const configured = parseAddressList(env.SWAP_ROUTER_ALLOWLIST);
   return configured.length > 0 ? configured : [DEFAULT_BSC_ROUTER.toLowerCase()];
@@ -45,17 +57,45 @@ export class ApprovalService {
     private readonly audit: AuditService,
   ) {}
 
-  async list(userId: string): Promise<ApprovalsResponse> {
+  async list(userId: string, query: ApprovalsQuery): Promise<ApprovalsResponse> {
+    const conditions = [eq(tokenApprovals.userId, userId)];
+
+    if (query.cursor) {
+      const cursor = decodeCursor<{ createdAt: string; id: string }>(query.cursor);
+
+      if (
+        typeof cursor.createdAt !== 'string' ||
+        !isUuid(cursor.id) ||
+        Number.isNaN(new Date(cursor.createdAt).getTime())
+      ) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Invalid pagination cursor',
+        });
+      }
+
+      const cursorDate = new Date(cursor.createdAt);
+      conditions.push(
+        or(
+          lt(tokenApprovals.createdAt, cursorDate),
+          and(eq(tokenApprovals.createdAt, cursorDate), lt(tokenApprovals.id, cursor.id)),
+        )!,
+      );
+    }
+
     const rows = await this.db
       .select()
       .from(tokenApprovals)
-      .where(eq(tokenApprovals.userId, userId))
-      .orderBy(desc(tokenApprovals.createdAt))
-      .limit(50);
+      .where(and(...conditions))
+      .orderBy(desc(tokenApprovals.createdAt), desc(tokenApprovals.id))
+      .limit(query.limit + 1);
+    const page = makePage(rows, query.limit, (row) =>
+      encodeCursor({ createdAt: row.createdAt.toISOString(), id: row.id }),
+    );
 
     return {
-      data: rows.map((row) => this.toContract(row)),
-      page: { nextCursor: null, hasMore: false },
+      data: page.data.map((row) => this.toContract(row)),
+      page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
     };
   }
 
@@ -104,7 +144,15 @@ export class ApprovalService {
       });
     }
 
-    this.assertStepUp(auth, order);
+    if (!order.deadline || order.deadline < Math.floor(Date.now() / 1000)) {
+      throw new ConflictException({
+        code: 'SWAP_APPROVAL_EXPIRED',
+        message: 'Swap order deadline has passed',
+      });
+    }
+
+    this.assertWallet(order.walletAddress);
+    assertStepUp(auth, order);
 
     let allowance: string | null;
 
@@ -147,43 +195,56 @@ export class ApprovalService {
       });
     }
 
-    const approval = await this.db.transaction(async (tx) => {
-      const [created] = await tx
-        .insert(tokenApprovals)
-        .values({
-          userId,
-          orderId,
-          chain: order.chain,
-          walletAddress: order.walletAddress as string,
-          tokenAddress: token.address.toLowerCase(),
-          spenderAddress: spender,
-          amountWei,
-          status: 'BUILT',
-        })
-        .returning();
+    let approval;
 
-      if (!created) throw new Error('Failed to create token approval');
-
-      await this.audit.log(
-        {
-          userId,
-          action: 'swap.approval_built',
-          entityType: 'token_approval',
-          entityId: created.id,
-          after: {
+    try {
+      approval = await this.db.transaction(async (tx) => {
+        const [created] = await tx
+          .insert(tokenApprovals)
+          .values({
+            userId,
             orderId,
-            token: token.symbol,
-            spender,
+            chain: order.chain,
+            walletAddress: order.walletAddress as string,
+            tokenAddress: token.address.toLowerCase(),
+            spenderAddress: spender,
             amountWei,
-          },
-          ip: meta.ip,
-          userAgent: meta.userAgent,
-        },
-        { executor: tx, strict: true },
-      );
+            calldata,
+            status: 'BUILT',
+          })
+          .returning();
 
-      return created;
-    });
+        if (!created) throw new Error('Failed to create token approval');
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'swap.approval_built',
+            entityType: 'token_approval',
+            entityId: created.id,
+            after: {
+              orderId,
+              token: token.symbol,
+              spender,
+              amountWei,
+            },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+
+        return created;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException({
+          code: 'CONFLICT',
+          message: 'An active approval already exists for this order',
+        });
+      }
+      throw error;
+    }
 
     return {
       approval: this.toContract(approval),
@@ -204,6 +265,7 @@ export class ApprovalService {
     txHash: string,
     meta: SwapMeta,
   ): Promise<TokenApproval> {
+    this.assertEnabled();
     const [approval] = await this.db
       .select()
       .from(tokenApprovals)
@@ -225,46 +287,58 @@ export class ApprovalService {
     }
 
     const normalized = txHash.toLowerCase();
-    const updated = await this.db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(tokenApprovals)
-        .set({
-          status: 'SUBMITTED',
-          txHash: normalized,
-          submittedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(tokenApprovals.id, approvalId),
-            eq(tokenApprovals.userId, userId),
-            eq(tokenApprovals.status, 'BUILT'),
-          ),
-        )
-        .returning();
+    let updated;
 
-      if (!row) {
+    try {
+      updated = await this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(tokenApprovals)
+          .set({
+            status: 'SUBMITTED',
+            txHash: normalized,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(tokenApprovals.id, approvalId),
+              eq(tokenApprovals.userId, userId),
+              eq(tokenApprovals.status, 'BUILT'),
+            ),
+          )
+          .returning();
+
+        if (!row) {
+          throw new ConflictException({
+            code: 'SWAP_STATE_INVALID',
+            message: 'Token approval is no longer submittable',
+          });
+        }
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'swap.approval_submitted',
+            entityType: 'token_approval',
+            entityId: approvalId,
+            after: { status: 'SUBMITTED', txHash: normalized },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+
+        return row;
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
         throw new ConflictException({
-          code: 'SWAP_STATE_INVALID',
-          message: 'Token approval is no longer submittable',
+          code: 'CONFLICT',
+          message: 'Transaction hash is already attached to another approval',
         });
       }
-
-      await this.audit.log(
-        {
-          userId,
-          action: 'swap.approval_submitted',
-          entityType: 'token_approval',
-          entityId: approvalId,
-          after: { status: 'SUBMITTED', txHash: normalized },
-          ip: meta.ip,
-          userAgent: meta.userAgent,
-        },
-        { executor: tx, strict: true },
-      );
-
-      return row;
-    });
+      throw error;
+    }
 
     return this.toContract(updated);
   }
@@ -283,17 +357,13 @@ export class ApprovalService {
     return order;
   }
 
-  private assertStepUp(auth: AuthContext, order: SwapOrder): void {
-    const routeSummary = order.routeSummary as Record<string, unknown>;
-    const rawUsd = routeSummary.amountInUsd;
-    const usd = typeof rawUsd === 'string' ? decimal(rawUsd) : null;
+  private assertWallet(address: string | null): void {
+    const allowlist = parseAddressList(env.SWAP_WALLET_ALLOWLIST);
 
-    if (usd === null || usd.lte(500)) return;
-
-    if (!auth.session.stepUpUntil || auth.session.stepUpUntil.getTime() <= Date.now()) {
+    if (!address || allowlist.length === 0 || !allowlist.includes(address.toLowerCase())) {
       throw new ForbiddenException({
-        code: 'SWAP_STEP_UP_REQUIRED',
-        message: 'Step-up TOTP is required for this swap',
+        code: 'SWAP_WALLET_NOT_ALLOWED',
+        message: 'Wallet is not in the swap allowlist',
       });
     }
   }

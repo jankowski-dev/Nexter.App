@@ -450,6 +450,7 @@ export const swapOrders = pgTable(
     tokenInSymbol: text('token_in_symbol').notNull(),
     tokenOutSymbol: text('token_out_symbol').notNull(),
     amountIn: numeric('amount_in', { precision: 36, scale: 18 }).notNull(),
+    amountInUsd: numeric('amount_in_usd', { precision: 24, scale: 8 }),
     amountOut: numeric('amount_out', { precision: 36, scale: 18 }).notNull(),
     minOut: numeric('min_out', { precision: 36, scale: 18 }).notNull(),
     slippageBps: integer('slippage_bps').notNull(),
@@ -490,6 +491,9 @@ export const swapOrders = pgTable(
   (table) => [
     index('swap_orders_user_created_idx').on(table.userId, table.createdAt),
     index('swap_orders_status_idx').on(table.status),
+    uniqueIndex('swap_orders_tx_hash_unique')
+      .on(table.txHash)
+      .where(sql`${table.txHash} is not null`),
   ],
 );
 
@@ -525,6 +529,7 @@ export const tokenApprovals = pgTable(
     tokenAddress: text('token_address').notNull(),
     spenderAddress: text('spender_address').notNull(),
     amountWei: numeric('amount_wei', { precision: 78, scale: 0 }).notNull(),
+    calldata: text('calldata'),
     status: text('status').notNull().default('BUILT'),
     txHash: text('tx_hash'),
     blockNumber: integer('block_number'),
@@ -536,6 +541,12 @@ export const tokenApprovals = pgTable(
   (table) => [
     index('token_approvals_user_created_idx').on(table.userId, table.createdAt),
     index('token_approvals_order_idx').on(table.orderId),
+    uniqueIndex('token_approvals_tx_hash_unique')
+      .on(table.txHash)
+      .where(sql`${table.txHash} is not null`),
+    uniqueIndex('token_approvals_active_unique')
+      .on(table.orderId, table.tokenAddress, table.spenderAddress)
+      .where(sql`${table.status} in ('BUILT', 'SUBMITTED', 'CONFIRMED')`),
   ],
 );
 

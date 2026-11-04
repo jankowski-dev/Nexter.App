@@ -45,6 +45,7 @@ export const swapConfigResponseSchema = z.object({
   chains: z.array(swapChainConfigSchema),
   quoteTtlSeconds: z.number().int().positive(),
   maxPriceImpactBps: z.number().int().nonnegative(),
+  stepUpThresholdUsd: z.string(),
   defaultSlippageBps: z.number().int().positive(),
   maxSlippageBps: z.number().int().positive(),
 });
@@ -86,6 +87,7 @@ export const swapOrderSummarySchema = z.object({
   status: swapStatusSchema,
   quoteExpiresAt: z.iso.datetime(),
   builtAt: z.iso.datetime().nullable(),
+  deadline: z.number().int().nullable(),
   submittedAt: z.iso.datetime().nullable(),
   confirmedAt: z.iso.datetime().nullable(),
   cancelledAt: z.iso.datetime().nullable(),
@@ -172,6 +174,11 @@ export const approvalBuildResponseSchema = z.object({
   }),
 });
 
+export const approvalsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).optional(),
+});
+
 export const approvalsResponseSchema = z.object({
   data: z.array(tokenApprovalSchema),
   page: pageMetaSchema,
@@ -209,5 +216,6 @@ export type TokenApproval = z.infer<typeof tokenApprovalSchema>;
 export type ApprovalBuildRequest = z.infer<typeof approvalBuildRequestSchema>;
 export type ApprovalSubmittedRequest = z.infer<typeof approvalSubmittedRequestSchema>;
 export type ApprovalBuildResponse = z.infer<typeof approvalBuildResponseSchema>;
+export type ApprovalsQuery = z.infer<typeof approvalsQuerySchema>;
 export type ApprovalsResponse = z.infer<typeof approvalsResponseSchema>;
 export type SwapBuildResponse = z.infer<typeof swapBuildResponseSchema>;

@@ -78,6 +78,13 @@
       "when": 1793810441140,
       "tag": "0010_careless_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793812868972,
+      "tag": "0011_closed_namor",
+      "breakpoints": true
     }
   ]
 }

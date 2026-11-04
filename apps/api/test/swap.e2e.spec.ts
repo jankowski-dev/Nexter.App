@@ -45,8 +45,8 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   let buildValue = '0';
   let buildAmountOut = '2000000000000000000';
   let quotePriceImpact: string | null = '0.0010';
-  let quoteAmountInUsd: string | null = '1.00';
-  let quoteAmountOutUsd: string | null = '0.999';
+  let quoteAmountInUsd: string | number | null = '1.00';
+  let quoteAmountOutUsd: string | number | null = '0.999';
   let allowance = '0';
 
   const kyber = {
@@ -207,7 +207,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       status: 'QUOTED',
       amountIn: '1.000000000000000000',
       amountOut: '2.000000000000000000',
-      amountInUsd: '1.00',
+      amountInUsd: '1.00000000',
       amountOutUsd: '0.999',
       minOut: '1.990000000000000000',
       slippageBps: 50,
@@ -235,6 +235,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       simulation: { success: true },
     });
     expect(built.body.calldata).toBe(buildData);
+    expect(built.body.deadline).toBeGreaterThan(Math.floor(Date.now() / 1000));
     expect(built.body.validation).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ check: 'router', passed: true }),
@@ -419,6 +420,33 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
   }, 60_000);
 
+  it('fails closed when the provider omits USD and normalizes numeric USD', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    quoteAmountInUsd = null;
+    await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(400);
+
+    quoteAmountInUsd = 600;
+    quoteAmountOutUsd = 599.4;
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    expect(quoted.body.amountInUsd).toBe('600.00000000');
+
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(403);
+  }, 60_000);
+
   it('requires step-up TOTP above $500 and builds/submits exact approvals', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -451,6 +479,19 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .send({ orderId, walletAddress: wallet })
       .expect(201);
 
+    env.SWAP_WALLET_ALLOWLIST = '';
+    await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(403);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'d'.repeat(64)}` })
+      .expect(403);
+    env.SWAP_WALLET_ALLOWLIST = wallet;
+
     const approval = await agent
       .post('/api/v1/swap/approvals/build')
       .set('x-csrf-token', owner.csrf)
@@ -463,6 +504,24 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       spenderAddress: router.toLowerCase(),
     });
     expect(approval.body.approval.amountWei).toBe('1000000000000000000');
+
+    const encoded = approval.body.calldata.slice(2);
+    expect(`0x${encoded.slice(8 + 24, 8 + 64)}`).toBe(router.toLowerCase());
+    expect(BigInt(`0x${encoded.slice(72, 136)}`).toString()).toBe('1000000000000000000');
+
+    const duplicateApproval = await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId });
+    expect([409, 400]).toContain(duplicateApproval.status);
+
+    allowance = '1000000000000000000';
+    await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(409);
+    allowance = '0';
 
     const approvals = await agent.get('/api/v1/swap/approvals').expect(200);
     expect(approvals.body.data).toHaveLength(1);
