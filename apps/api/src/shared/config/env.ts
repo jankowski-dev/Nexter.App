@@ -70,6 +70,7 @@ export const envSchema = z.object({
   KYBERSWAP_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   KYBERSWAP_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   KYBERSWAP_CLIENT_ID: z.string().min(1).default('nexter'),
+  WALLETCONNECT_PROJECT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   BSC_RPC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   VERSION: z.string().default('0.1.0'),
 });

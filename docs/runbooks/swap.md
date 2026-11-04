@@ -5,16 +5,17 @@ Phase 7 is read-only: quotes and calldata building only. The server never signs,
 ## Enable quotes
 
 1. Set `SWAP_ENABLED=false` while configuring.
-2. Set the provider:
+2. Set `WALLETCONNECT_PROJECT_ID` (public Reown/WalletConnect project id) for the `/swap` connection UI.
+3. Set the provider:
    - `KYBERSWAP_API_KEY` and optionally `KYBERSWAP_BASE_URL=https://api.kyberswap.com/swap` (gateway), or
    - leave the key empty to use the public `https://aggregator-api.kyberswap.com` fallback.
-3. Set `BSC_RPC_URL` for build/simulation (quotes work without it).
-4. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
-5. Set `SWAP_SELECTOR_ALLOWLIST` to the reviewed Kyber router selectors. An empty allowlist disables builds.
-6. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required.
-7. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
-8. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
-9. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
+4. Set `BSC_RPC_URL` for build/simulation (quotes work without it).
+5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
+6. Set `SWAP_SELECTOR_ALLOWLIST` to the reviewed Kyber router selectors. An empty allowlist disables builds.
+7. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required.
+8. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
+9. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
+10. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
 
 ## Kill switch
 

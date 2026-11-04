@@ -9,8 +9,9 @@ import { fetchSwapConfig, quoteSwap } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { useWalletConnect } from '@/lib/walletconnect';
 import { Decimal } from 'decimal.js';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 function isPositiveDecimal(value: string): boolean {
   return /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0;
@@ -23,6 +24,12 @@ export function SwapPage() {
   const [amountIn, setAmountIn] = useState('1');
   const [walletAddress, setWalletAddress] = useState('');
   const [slippageBps, setSlippageBps] = useState<number | null>(null);
+
+  const wallet = useWalletConnect(config.data?.walletConnectProjectId ?? null);
+
+  useEffect(() => {
+    if (wallet.address) setWalletAddress(wallet.address);
+  }, [wallet.address]);
 
   const quote = useMutation({
     mutationFn: () =>
@@ -89,7 +96,7 @@ export function SwapPage() {
     <div className="space-y-6">
       <PageHeader
         title="Своп"
-        subtitle="Phase 7: только котировки KyberSwap на BSC. Подпись и отправка появятся в Phase 8."
+        subtitle="Phase 8: котировки KyberSwap на BSC и подключение Tangem. Подпись и отправка включатся после allowlist/full calldata review."
         actions={
           <Badge tone={data.enabled ? 'success' : 'warning'}>
             {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
@@ -107,6 +114,59 @@ export function SwapPage() {
           </CardDescription>
         </Card>
       ) : null}
+
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Кошелёк Tangem</CardTitle>
+            <CardDescription>
+              WalletConnect v2 · BSC only. Приватные ключи и seed-фраза не передаются серверу.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {wallet.connected ? (
+              <Badge tone={wallet.onBsc ? 'success' : 'warning'}>
+                {wallet.onBsc ? 'BSC' : `chain ${wallet.chainId ?? '—'}`}
+              </Badge>
+            ) : null}
+            {wallet.connected ? (
+              <>
+                {!wallet.onBsc ? (
+                  <Button variant="secondary" onClick={() => void wallet.switchToBsc()}>
+                    Переключить на BSC
+                  </Button>
+                ) : null}
+                <Button variant="ghost" onClick={() => void wallet.disconnect()}>
+                  Отключить
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => void wallet.connect()}
+                disabled={wallet.connecting || !data.walletConnectProjectId}
+              >
+                {wallet.connecting ? 'Подключаю…' : 'Подключить Tangem'}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {wallet.connected ? (
+          <div className="mt-3 font-mono text-xs text-zinc-400">{wallet.address}</div>
+        ) : null}
+        {wallet.error ? <p className="mt-2 text-sm text-red-300">{wallet.error}</p> : null}
+        {!data.walletConnectProjectId ? (
+          <p className="mt-2 text-sm text-amber-300">
+            WalletConnect Project ID не настроен на сервере.
+          </p>
+        ) : null}
+        {!data.buildEnabled ? (
+          <p className="mt-2 text-sm text-zinc-500">
+            Подпись и отправка выключены до завершения allowlist/full calldata review. Сейчас
+            доступна только котировка.
+          </p>
+        ) : null}
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card>
