@@ -84,7 +84,7 @@ export class TradeGroupsController {
         ip: request.ip,
         userAgent: request.headers['user-agent'],
       },
-      idempotencyKey?.slice(0, 200),
+      idempotencyKey?.trim().slice(0, 200) || undefined,
     );
   }
 }

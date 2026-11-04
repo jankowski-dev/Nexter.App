@@ -13,6 +13,18 @@ export function isValidAuthEncryptionKey(value: string): boolean {
   return Buffer.from(value, 'base64').length === 32;
 }
 
+function decodeAuthEncryptionKey(value: string): Buffer {
+  return /^[0-9a-f]{64}$/i.test(value) ? Buffer.from(value, 'hex') : Buffer.from(value, 'base64');
+}
+
+function isWeakAuthEncryptionKey(value: string): boolean {
+  const bytes = decodeAuthEncryptionKey(value);
+
+  if (bytes.length !== 32) return true;
+
+  return bytes.every((byte) => byte === bytes[0]);
+}
+
 const authEncryptionKeySchema = z
   .string()
   .min(1)
@@ -58,6 +70,24 @@ export function parseEnv(raw: Record<string, string | undefined>) {
     }
     if (!parsed.APP_URL) {
       throw new Error('APP_URL is required in production and staging');
+    }
+    if (
+      parsed.SETUP_TOKEN.length < 32 ||
+      ['test-setup-token', 'change-me'].includes(parsed.SETUP_TOKEN)
+    ) {
+      throw new Error('SETUP_TOKEN must be at least 32 characters and not a known test value');
+    }
+    if (isWeakAuthEncryptionKey(parsed.AUTH_ENCRYPTION_KEY)) {
+      throw new Error('AUTH_ENCRYPTION_KEY must not be a single repeated byte');
+    }
+    if (parsed.TRUST_PROXY === 'true') {
+      throw new Error('TRUST_PROXY=true is unsafe; use the exact proxy CIDR or a hop count');
+    }
+    if (/^\d+$/.test(parsed.TRUST_PROXY) && Number(parsed.TRUST_PROXY) > 10) {
+      throw new Error('TRUST_PROXY hop count must be between 0 and 10');
+    }
+    if (new URL(parsed.APP_URL).protocol !== 'https:') {
+      throw new Error('APP_URL must use HTTPS in production and staging');
     }
   }
 

@@ -26,7 +26,7 @@ import type {
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { decimal } from '../../shared/money/decimal';
-import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
+import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 
 interface WatchlistMeta {
   ip?: string;
@@ -71,7 +71,7 @@ export class WatchlistService {
       if (
         typeof cursor.priority !== 'number' ||
         typeof cursor.createdAt !== 'string' ||
-        typeof cursor.id !== 'string' ||
+        !isUuid(cursor.id) ||
         Number.isNaN(new Date(cursor.createdAt).getTime())
       ) {
         throw new BadRequestException({

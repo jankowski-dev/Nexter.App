@@ -5,7 +5,7 @@ export function toCsv(rows: Array<Record<string, unknown>>): string {
   const escape = (value: unknown) => {
     const text = value === null || value === undefined ? '' : String(value);
     const isNumeric = /^-?\d+(?:\.\d+)?$/.test(text);
-    const safe = !isNumeric && /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+    const safe = !isNumeric && /^[=+\-@\t\r\n]/.test(text) ? `'${text}` : text;
     return `"${safe.replaceAll('"', '""')}"`;
   };
 

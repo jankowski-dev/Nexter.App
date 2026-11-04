@@ -13,7 +13,11 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "restore:drill": "node scripts/restore-drill.mjs",
+    "backup": "node scripts/backup.mjs",
+    "backup:selftest": "node scripts/backup.mjs --self-test",
+    "db:provision-app": "node scripts/provision-app-role.mjs"
   },
   "dependencies": {
     "@nexter/config": "workspace:*",
@@ -25,6 +29,6 @@
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",
     "typescript": "5.9.3",
-    "vitest": "^3.2.7"
+    "vitest": "^5.1.0"
   }
 }

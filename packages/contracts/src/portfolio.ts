@@ -3,6 +3,7 @@ import { auditEntrySchema } from './audit';
 import {
   assetSchema,
   positionSchema,
+  positiveDecimalSchema,
   priceSchema,
   tradeGroupStatusSchema,
   transactionSchema,
@@ -78,13 +79,13 @@ export const tradeGroupDetailSchema = z.object({
 
 export const tradeGroupSellRequestSchema = z.object({
   accountId: z.uuid(),
-  amount: z.string().min(1),
+  amount: positiveDecimalSchema,
   proceedsAssetId: z.uuid(),
-  proceedsAmount: z.string().min(1),
-  usdValue: z.string().min(1).optional(),
+  proceedsAmount: positiveDecimalSchema,
+  usdValue: positiveDecimalSchema.optional(),
   feeAssetId: z.uuid().optional(),
-  feeAmount: z.string().min(1).optional(),
-  feeUsdValue: z.string().min(1).optional(),
+  feeAmount: positiveDecimalSchema.optional(),
+  feeUsdValue: positiveDecimalSchema.optional(),
   occurredAt: z.iso.datetime().optional(),
   notes: z.string().max(2000).optional(),
 });

@@ -96,7 +96,12 @@ const CONTROL_VALUATION = {
   note: 'Phase 3 snapshot valuation at audit-time prices; current Source prices are expected to differ.',
 } as const;
 
-const DECIMAL_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
+const DECIMAL_PATTERN = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d{1,3})?$/;
+const MAX_DECIMAL_EXPONENT = 30;
+const MAX_DECIMAL_LENGTH = 80;
+const MAX_TEXT_LENGTH = 5000;
+const MAX_ID_LENGTH = 200;
+const MAX_MESSAGES = 200;
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -106,7 +111,11 @@ function record(value: unknown): Record<string, unknown> {
 
 function text(row: Record<string, unknown>, key: string): string | null {
   const value = row[key];
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+  if (typeof value !== 'string') return null;
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, MAX_TEXT_LENGTH) : null;
 }
 
 function number(row: Record<string, unknown>, key: string): string | null {
@@ -115,14 +124,37 @@ function number(row: Record<string, unknown>, key: string): string | null {
 
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (trimmed.length > 0 && DECIMAL_PATTERN.test(trimmed)) return trimmed;
+
+    if (
+      trimmed.length === 0 ||
+      trimmed.length > MAX_DECIMAL_LENGTH ||
+      !DECIMAL_PATTERN.test(trimmed)
+    ) {
+      return null;
+    }
+
+    const exponent = /[eE]([+-]?\d+)/.exec(trimmed)?.[1];
+
+    if (exponent && Math.abs(Number(exponent)) > MAX_DECIMAL_EXPONENT) {
+      return null;
+    }
+
+    try {
+      return new Decimal(trimmed).toFixed();
+    } catch {
+      return null;
+    }
   }
 
   return null;
 }
 
 function idValue(value: unknown): string | null {
-  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 && trimmed.length <= MAX_ID_LENGTH ? trimmed : null;
+  }
+
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return null;
 }
@@ -181,6 +213,12 @@ function mapStatus(value: string | null): NotionOrderStatus | null {
 
 function fullString(value: Decimal): string {
   return value.toFixed();
+}
+
+function capMessages(messages: string[]): string[] {
+  if (messages.length <= MAX_MESSAGES) return messages;
+
+  return [...messages.slice(0, MAX_MESSAGES), `... and ${messages.length - MAX_MESSAGES} more`];
 }
 
 function sum(values: Iterable<Decimal>): Decimal {
@@ -697,10 +735,15 @@ export function parseNotionExport(input: {
     );
   }
 
+  const cappedErrors = capMessages(errors);
+  const cappedWarnings = capMessages(warnings);
+  summary.errors = cappedErrors;
+  summary.warnings = cappedWarnings;
+
   return {
     parsed: { source, orders, transactions, summary },
-    errors: summary.errors,
-    warnings: summary.warnings,
+    errors: cappedErrors,
+    warnings: cappedWarnings,
   };
 }
 

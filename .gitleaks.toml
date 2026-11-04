@@ -17,4 +17,6 @@ regexes = [
   '''test-setup-token''',
   '''change-me''',
   '''AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=''',
+  '''ci-setup-token-0123456789abcdef0123456789abcdef''',
+  '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
 ]

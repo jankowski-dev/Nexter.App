@@ -6,9 +6,10 @@ import { createDb } from './client';
 loadRootEnv();
 
 const connectionString: string =
+  process.env.MIGRATION_DATABASE_URL ??
   process.env.DATABASE_URL ??
   (() => {
-    throw new Error('DATABASE_URL is required to run migrations');
+    throw new Error('MIGRATION_DATABASE_URL or DATABASE_URL is required to run migrations');
   })();
 
 async function main() {

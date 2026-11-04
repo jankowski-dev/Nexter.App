@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { auditLog, type Database, type DbExecutor } from '@nexter/db';
 import { DB } from '../db/db.module';
+import { safeErrorForTelemetry } from '../errors/safe-error';
 
 export interface AuditInput {
   userId?: string | null;
@@ -47,10 +48,8 @@ export class AuditService {
         throw error;
       }
 
-      this.logger.error(
-        'Failed to write audit log',
-        error instanceof Error ? error.stack : undefined,
-      );
+      const safe = safeErrorForTelemetry(error);
+      this.logger.error(`Failed to write audit log: ${safe.message}`, safe.stack);
     }
   }
 }

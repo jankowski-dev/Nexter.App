@@ -274,6 +274,15 @@ describe('parseNotionExport', () => {
           sourceAmount: 100,
           destinationAmount: 1000,
         }),
+        orderRow({
+          id: '8',
+          status: 'Активна',
+          openedAt: '2026-01-01T00:00:00.000Z',
+          source: usdt.url,
+          destination: tokenA.url,
+          sourceAmount: '1e1000000',
+          destinationAmount: '1e1000000',
+        }),
       ],
       transactions: [],
     });
@@ -284,6 +293,7 @@ describe('parseNotionExport', () => {
         expect.stringContaining('destination asset must not be a cash equivalent'),
       ]),
     );
+    expect(result.parsed.orders).toHaveLength(0);
   });
 
   it('hashes payloads deterministically', () => {

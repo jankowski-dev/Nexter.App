@@ -22,7 +22,11 @@
     "smoke:static": "node scripts/smoke-static.mjs",
     "smoke:worker": "node --check apps/worker/dist/main.js",
     "docker:up": "docker compose up -d postgres",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "restore:drill": "pnpm build:packages && pnpm --filter @nexter/db restore:drill",
+    "backup": "pnpm build:packages && pnpm --filter @nexter/db backup",
+    "backup:selftest": "pnpm --filter @nexter/db backup:selftest",
+    "db:provision-app": "pnpm --filter @nexter/db db:provision-app"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

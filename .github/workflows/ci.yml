@@ -75,6 +75,25 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Backup restore drill
+        run: pnpm restore:drill
+        env:
+          RESTORE_DRILL_SOURCE_URL: postgres://postgres:postgres@localhost:5432/nexter
+          RESTORE_DRILL_MODE: dump-docker
+
+      - name: Encrypted backup smoke
+        run: |
+          mkdir -p /tmp/nexter-backup
+          BACKUP_OUTPUT_DIR=/tmp/nexter-backup pnpm backup
+          file=$(ls /tmp/nexter-backup/*.enc | head -1)
+          node packages/db/scripts/backup.mjs --decrypt "$file" /tmp/nexter-backup/restored.dump
+          docker run --rm -v /tmp/nexter-backup:/backup postgres:17-alpine \
+            pg_restore --list /backup/restored.dump | grep -q trade_groups
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexter
+          BACKUP_ENCRYPTION_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
+          BACKUP_DUMP_MODE: docker
+
       - name: Install Playwright Chromium
         run: pnpm --filter @nexter/e2e exec playwright install --with-deps chromium
 
@@ -98,9 +117,9 @@ jobs:
           docker run -d --name nexter-api --network host \
             -e NODE_ENV=production \
             -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter \
-            -e SETUP_TOKEN=test-setup-token \
-            -e AUTH_ENCRYPTION_KEY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
-            -e APP_URL=http://127.0.0.1:3000 \
+            -e SETUP_TOKEN=ci-setup-token-0123456789abcdef0123456789abcdef \
+            -e AUTH_ENCRYPTION_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff \
+            -e APP_URL=https://nexter.example.com \
             nexter:ci
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3000/health; then
@@ -137,3 +156,6 @@ jobs:
 
       - name: Dependency audit
         run: pnpm audit --prod --audit-level=high
+
+      - name: Dependency audit (all, dev included)
+        run: pnpm audit --audit-level=high

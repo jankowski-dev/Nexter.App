@@ -20,6 +20,7 @@ import {
 import { Decimal } from 'decimal.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { registerImportAuthHook } from '../src/modules/imports/import-auth.hook';
 import { registerNotionImportBodyParser } from '../src/modules/imports/import-body-parser';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -256,6 +257,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
     registerNotionImportBodyParser(app.getHttpAdapter().getInstance());
+    registerImportAuthHook(app, app.getHttpAdapter().getInstance());
     await app.getHttpAdapter().getInstance().ready();
 
     const created = createDb(process.env.DATABASE_URL ?? '');
@@ -558,6 +560,14 @@ describe.runIf(canRun)('Notion import e2e', () => {
     await request(app.getHttpServer())
       .post('/api/v1/imports/notion/preview')
       .send(buildExport())
+      .expect(401);
+
+    // The pre-parser hook must reject an unauthenticated oversized body before
+    // Fastify allocates/parses it.
+    await request(app.getHttpServer())
+      .post('/api/v1/imports/notion/preview')
+      .set('Content-Type', 'application/x-notion-import+json')
+      .send('x'.repeat(2 * 1024 * 1024))
       .expect(401);
 
     const agent = request.agent(app.getHttpServer());

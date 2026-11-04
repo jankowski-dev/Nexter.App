@@ -32,6 +32,20 @@ const canRun = Boolean(
 );
 
 const password = 'correct horse battery staple';
+const perfEnabled = process.env.NEXTER_PERF === '1';
+
+async function timed<T>(label: string, budgetMs: number, run: () => Promise<T>): Promise<T> {
+  const started = performance.now();
+  const result = await run();
+  const elapsed = performance.now() - started;
+  console.log(`[perf] ${label}: ${elapsed.toFixed(1)}ms (budget ${budgetMs}ms)`);
+
+  if (perfEnabled) {
+    expect(elapsed).toBeLessThan(budgetMs);
+  }
+
+  return result;
+}
 
 function csrfFrom(response: request.Response): string {
   const setCookie = response.headers['set-cookie'];
@@ -109,12 +123,14 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     const owner = await setupOwner(agent);
     const rawBody = `{"fileName":"notion-431.json","source":${readExportText('source.json')},"orders":${readExportText('orders.json')},"transactions":${readExportText('transactions.json')}}`;
 
-    const preview = await agent
-      .post('/api/v1/imports/notion/preview')
-      .set('Content-Type', 'application/x-notion-import+json')
-      .set('x-csrf-token', owner.csrf)
-      .send(rawBody)
-      .expect(200);
+    const preview = await timed('import.preview', 5000, () =>
+      agent
+        .post('/api/v1/imports/notion/preview')
+        .set('Content-Type', 'application/x-notion-import+json')
+        .set('x-csrf-token', owner.csrf)
+        .send(rawBody)
+        .expect(200),
+    );
 
     const summary = preview.body.import.summary;
     const importId = preview.body.import.id as string;
@@ -216,7 +232,9 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     expect(importedRows).toHaveLength(36 + 431 + 9);
     expect(importedRows.every((row) => row.status === 'imported')).toBe(true);
 
-    const dashboard = await agent.get('/api/v1/dashboard/summary').expect(200);
+    const dashboard = await timed('dashboard.summary', 1000, () =>
+      agent.get('/api/v1/dashboard/summary').expect(200),
+    );
     expect(dashboard.body).toMatchObject({
       cashUsd: '15.73629954',
       positionsValueUsd: '1829.88804762',
@@ -247,7 +265,9 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     );
     expect(popAsset).toBeDefined();
 
-    const allocation = await agent.get('/api/v1/dashboard/allocation').expect(200);
+    const allocation = await timed('dashboard.allocation', 1000, () =>
+      agent.get('/api/v1/dashboard/allocation').expect(200),
+    );
     expect(allocation.body.totalUsd).toBe('1845.62434716');
     expect(allocation.body.slices).toEqual(
       expect.arrayContaining([
@@ -256,7 +276,9 @@ describe.runIf(canRun)('Notion 431-row import', () => {
       ]),
     );
 
-    const pnlMonths = await agent.get('/api/v1/dashboard/pnl').expect(200);
+    const pnlMonths = await timed('dashboard.pnl', 1000, () =>
+      agent.get('/api/v1/dashboard/pnl').expect(200),
+    );
     expect(pnlMonths.body.months.length).toBeGreaterThan(0);
     const pnlTotal = pnlMonths.body.months.reduce(
       (total: Decimal, month: { realizedUsd: string }) => total.plus(month.realizedUsd),
@@ -271,8 +293,10 @@ describe.runIf(canRun)('Notion 431-row import', () => {
     expect(recentTrades.body.data).toHaveLength(5);
     expect(recentTrades.body.data[0].source).toBe('notion');
 
-    const groups = await agent.get('/api/v1/trade-groups?limit=5').expect(200);
-    expect(groups.body.data).toHaveLength(5);
+    const groups = await timed('trade-groups.list', 500, () =>
+      agent.get('/api/v1/trade-groups?limit=50').expect(200),
+    );
+    expect(groups.body.data).toHaveLength(50);
     expect(groups.body.page.hasMore).toBe(true);
     const closedGroup = groups.body.data.find(
       (group: { status: string }) => group.status === 'closed',
@@ -354,10 +378,14 @@ describe.runIf(canRun)('Notion 431-row import', () => {
 
     const exportTransactions = await agent.get('/api/v1/export/transactions.json').expect(200);
     expect(exportTransactions.body).toHaveLength(852);
-    const exportGroups = await agent.get('/api/v1/export/trade-groups.csv').expect(200);
+    const exportGroups = await timed('export.trade-groups.csv', 5000, () =>
+      agent.get('/api/v1/export/trade-groups.csv').expect(200),
+    );
     expect(exportGroups.text).toContain('POP');
 
-    const equityCurve = await agent.get('/api/v1/dashboard/equity-curve').expect(200);
+    const equityCurve = await timed('dashboard.equity-curve', 1000, () =>
+      agent.get('/api/v1/dashboard/equity-curve').expect(200),
+    );
     expect(equityCurve.body.valuation).toBe('current-prices');
     expect(equityCurve.body.points.length).toBeGreaterThan(0);
     expect(equityCurve.body.points.at(-1).equityUsd).toBe('1845.62434716');
@@ -367,6 +395,11 @@ describe.runIf(canRun)('Notion 431-row import', () => {
       baseCurrency: 'USD',
       taxMethod: 'FIFO',
     });
+
+    if (process.env.NEXTER_KEEP_IMPORT === '1') {
+      console.log(`[restore-drill] kept import ${importId}`);
+      return;
+    }
 
     await agent
       .post(`/api/v1/imports/${importId}/rollback`)
