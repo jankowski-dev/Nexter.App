@@ -272,6 +272,22 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .send({ orderId, walletAddress: '0x3333333333333333333333333333333333333333' })
       .expect(403);
 
+    env.SWAP_SELECTOR_ALLOWLIST = '';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(503);
+    env.SWAP_SELECTOR_ALLOWLIST = selector;
+
+    env.SWAP_WALLET_ALLOWLIST = '';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(403);
+    env.SWAP_WALLET_ALLOWLIST = wallet;
+
     buildData = `0xdeadbeef${'0'.repeat(120)}`;
     await agent
       .post('/api/v1/swap/build')
