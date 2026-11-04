@@ -29,9 +29,17 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { BscRpcService } from './bsc-rpc.service';
+import {
+  KYBER_SUPPORTED_SELECTORS,
+  KyberCalldataError,
+  decodeKyberSwapCalldata,
+  validateKyberSwapBuild,
+  type DecodedKyberSwap,
+} from './kyber-calldata';
 import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import {
+  DEFAULT_BSC_EXECUTOR,
   DEFAULT_BSC_ROUTER,
   SWAP_CHAINS,
   getSwapChain,
@@ -125,6 +133,11 @@ function selectorAllowlist(): string[] {
     .filter(Boolean);
 }
 
+function executorAllowlist(): string[] {
+  const configured = parseAddressList(env.SWAP_EXECUTOR_ALLOWLIST);
+  return configured.length > 0 ? configured : [DEFAULT_BSC_EXECUTOR.toLowerCase()];
+}
+
 function tokenFor(address: string, chain: string, symbol: string): SwapToken {
   return (
     getSwapToken(chain, address) ?? {
@@ -158,7 +171,10 @@ export class SwapService {
       providerConfigured: this.kyber.configured,
       providerMode: this.kyber.mode,
       walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID ?? null,
-      buildEnabled: enabled && allowlist.length > 0 && selectors.length > 0,
+      buildEnabled:
+        enabled &&
+        allowlist.length > 0 &&
+        selectors.some((item) => KYBER_SUPPORTED_SELECTORS.includes(item)),
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,
@@ -438,7 +454,8 @@ export class SwapService {
         details: { reason: code },
       });
     };
-    const pass = (check: string) => validation.push({ check, passed: true, detail: null });
+    const pass = (check: string, detail: string | null = null) =>
+      validation.push({ check, passed: true, detail });
 
     if (!routerAllowlist().includes(normalizeAddress(built.routerAddress))) {
       await fail('router', 'SWAP_ROUTER_NOT_ALLOWED', 'Router is not in the allowlist');
@@ -514,6 +531,46 @@ export class SwapService {
       );
     }
     pass('transactionValue');
+
+    const decoded = await (async (): Promise<DecodedKyberSwap> => {
+      try {
+        return await decodeKyberSwapCalldata(built.data);
+      } catch (error) {
+        const code = error instanceof KyberCalldataError ? error.code : 'SWAP_CALLDATA_INVALID';
+        return await fail(
+          'calldata-decode',
+          code,
+          'Calldata could not be decoded against the Kyber router ABI',
+        );
+      }
+    })();
+    pass('calldata-decode');
+
+    const calldataValidation = validateKyberSwapBuild(decoded, {
+      wallet,
+      tokenIn: tokenIn.address,
+      tokenOut: tokenOut.address,
+      nativeIn: tokenIn.native,
+      amountInBase: quotedAmountIn,
+      minOutBase: minOutBase.toString(),
+      quotedAmountOut: built.amountOut,
+      routerAddress: built.routerAddress,
+      executorAllowlist: executorAllowlist(),
+      deadline,
+    });
+
+    for (const item of calldataValidation.issues) {
+      await fail(item.check, item.code, item.detail);
+    }
+
+    for (const check of calldataValidation.passedChecks) {
+      pass(check);
+    }
+
+    pass(
+      'calldata.deadline',
+      calldataValidation.deadlineSource === 'server' ? 'server-enforced (nested route)' : null,
+    );
 
     let simulation;
 
@@ -601,6 +658,14 @@ export class SwapService {
           routerAddress: row.routerAddress,
           gasEstimate: row.gasEstimate,
           deadline: row.deadline,
+          calldata: {
+            functionName: decoded.functionName,
+            executor: decoded.callTarget,
+            recipient: decoded.dstReceiver,
+            minReturnAmount: decoded.minReturnAmount,
+            deadlineSource: calldataValidation.deadlineSource,
+            embeddedDeadline: decoded.simpleDeadline,
+          },
           simulation: { success: true, gasEstimate: simulation.gasEstimate },
         },
       });
@@ -615,6 +680,9 @@ export class SwapService {
             routerAddress: row.routerAddress,
             gasEstimate: row.gasEstimate,
             status: 'BUILT',
+            calldataRecipient: decoded.dstReceiver,
+            calldataMinOut: decoded.minReturnAmount,
+            deadlineSource: calldataValidation.deadlineSource,
           },
           ip: meta.ip,
           userAgent: meta.userAgent,
@@ -659,6 +727,15 @@ export class SwapService {
       });
     }
 
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!order.deadline || order.deadline <= now) {
+      throw new ConflictException({
+        code: 'SWAP_DEADLINE_PASSED',
+        message: 'Swap deadline has passed',
+      });
+    }
+
     const txHash = input.txHash.toLowerCase();
 
     try {
@@ -676,11 +753,25 @@ export class SwapService {
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
               eq(swapOrders.status, 'BUILT'),
+              gt(swapOrders.deadline, now),
             ),
           )
           .returning({ id: swapOrders.id });
 
         if (!row) {
+          const [current] = await tx
+            .select({ deadline: swapOrders.deadline, status: swapOrders.status })
+            .from(swapOrders)
+            .where(and(eq(swapOrders.id, orderId), eq(swapOrders.userId, userId)))
+            .limit(1);
+
+          if (current?.deadline && current.deadline <= now) {
+            throw new ConflictException({
+              code: 'SWAP_DEADLINE_PASSED',
+              message: 'Swap deadline has passed',
+            });
+          }
+
           throw new ConflictException({
             code: 'SWAP_STATE_INVALID',
             message: 'Swap order is no longer submittable',

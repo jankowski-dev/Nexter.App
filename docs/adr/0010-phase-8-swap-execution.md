@@ -39,11 +39,11 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 
 ### Wallet and signing
 
-- Frontend uses WalletConnect v2 with `VITE_WALLETCONNECT_PROJECT_ID`; no Project ID means the connect/build/sign UI is disabled.
+- Frontend uses WalletConnect v2 with the public `WALLETCONNECT_PROJECT_ID` returned by `GET /swap/config`; no Project ID means the connect/build/sign UI is disabled.
 - The client requests chainId 56 and refuses to sign on any other chain.
 - The device must display and confirm the router, recipient, amount, and minimum output. The server does not sign.
 - `SWAP_WALLET_ALLOWLIST` must contain the connected address; server-side build rejects any other address.
-- Full calldata decoding (recipient, deadline, minOut) is implemented before `READY`; Phase 7 only validated router/selector/value/amount/minOut/simulation.
+- Router-level calldata decoding is implemented before `BUILT`: source/destination tokens, recipient, input amount, minimum output, executor, approve target, source receivers, fees, permit and partial-fill flags are verified against the quote. Phase 7 only validated router/selector/value/amount/minOut/simulation.
 
 ### Step-up TOTP
 
@@ -60,6 +60,26 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 - The server emits `approve(spender, exactAmount)` calldata, validates the spender is the allowlisted router, simulates it, and never emits an unlimited approval.
 - `POST /swap/approvals/:id/submitted` records a tx hash and moves the approval to `SUBMITTED`; the worker tracks it.
 - USDT-style allowance-reset behavior is handled by approving the exact required amount; a zero-then-exact flow is only used if the provider/contract requires it and is recorded as two events.
+
+### Calldata verification and selectors
+
+Kyber MetaAggregationRouterV2 exposes two reviewed functions with the same tuple shape:
+
+- `swap` — selector `0xe21fd0e9` (the function used by the aggregator API);
+- `swapGeneric` — selector `0x59e50fed` (whitelisted-executor variant).
+
+Both selectors must be in `SWAP_SELECTOR_ALLOWLIST`; an allowlist containing only `0x59e50fed` rejects normal Kyber builds. The decoder verifies `srcToken`/`dstToken`, `dstReceiver` (must equal the connected wallet), `amount` (must equal the quoted base-unit input), `minReturnAmount` (must be between the quoted minimum and quoted output), `callTarget` (executor allowlist), `approveTarget` (zero, router, or executor), source receivers/amounts (must total the input and point only at the allowed executor), empty fee arrays, empty permit, and no partial-fill flag.
+
+`SWAP_EXECUTOR_ALLOWLIST` defaults to the BSC AggregationExecutorProxy `0x8F10B468b06c6FD214B65F87778827F7D113f996`.
+
+Simple mode (`flags & 0x20`) is rejected: its `firstPools` and `destTokenFeeData` would require a pool allowlist or recursive executor decoding, so accepting it would let a malicious provider divert input/output within the slippage bound. Standard `swap`/`swapGeneric` routes are supported.
+
+Deadline handling is explicit:
+
+- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative and submission is rejected after it;
+- the execution UI must show this deadline and the wallet must confirm before signing; a transaction already signed by the wallet cannot be invalidated server-side.
+
+This is a deliberate limit: the server verifies the fields that determine recipient and minimum output and relies on the allowlisted executor for nested route semantics. Full recursive decoding of every DEX executor call is out of scope.
 
 ### Submission and tracking
 
@@ -97,7 +117,7 @@ Additive only.
 ### Security gates
 
 - exact approvals; no unlimited;
-- full calldata decode/recipient/deadline/minOut before READY;
+- router-level calldata decode/recipient/amount/minOut before BUILT;
 - chain 56 and wallet allowlist;
 - quote TTL and fee/gas caps;
 - step-up TOTP over $500;

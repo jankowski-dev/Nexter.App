@@ -64,6 +64,7 @@ export const SWAP_CHAINS: SwapChainConfig[] = [
 ];
 
 export const DEFAULT_BSC_ROUTER = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
+export const DEFAULT_BSC_EXECUTOR = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 
 export function getSwapChain(code: string): SwapChainConfig | null {
   return SWAP_CHAINS.find((chain) => chain.code === code) ?? null;
