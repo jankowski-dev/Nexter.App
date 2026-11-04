@@ -87,7 +87,7 @@ export function SecuritySettingsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Безопасность</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-zinc-600">
           Пароль, recovery codes и устройства, на которых открыт Nexter.
         </p>
       </div>
@@ -99,7 +99,7 @@ export function SecuritySettingsPage() {
         <Card>
           <CardTitle>Новые recovery codes</CardTitle>
           <CardDescription>Сохраните их. Старые коды больше не действуют.</CardDescription>
-          <div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm">
+          <div className="mt-3 grid grid-cols-2 gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-4 font-mono text-sm">
             {newCodes.map((code) => (
               <span key={code}>{code}</span>
             ))}
@@ -165,10 +165,10 @@ export function SecuritySettingsPage() {
           {sessions.data?.sessions.map((session) => (
             <div
               key={session.id}
-              className="flex flex-col gap-2 rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="min-w-0">
-                <div className="truncate text-zinc-300">
+                <div className="truncate text-zinc-700">
                   {session.current
                     ? 'Текущая сессия'
                     : (session.userAgent ?? 'Неизвестное устройство')}
@@ -179,7 +179,7 @@ export function SecuritySettingsPage() {
                     ? new Date(session.lastSeenAt).toLocaleString()
                     : 'нет данных'}
                 </div>
-                <div className="text-xs text-zinc-600">
+                <div className="text-xs text-zinc-500">
                   Истекает: {new Date(session.expiresAt).toLocaleString()}
                 </div>
               </div>
@@ -199,7 +199,7 @@ export function SecuritySettingsPage() {
             <div className="text-sm text-zinc-500">Загружаем сессии…</div>
           ) : null}
           {sessions.isError ? (
-            <div className="text-sm text-red-300">Не удалось загрузить сессии.</div>
+            <div className="text-sm text-red-700">Не удалось загрузить сессии.</div>
           ) : null}
         </div>
       </Card>

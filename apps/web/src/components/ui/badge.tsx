@@ -4,11 +4,11 @@ import type { ReactNode } from 'react';
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
 const tones: Record<Tone, string> = {
-  neutral: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
-  success: 'border-emerald-800/60 bg-emerald-950/30 text-emerald-200',
-  warning: 'border-amber-800/60 bg-amber-950/30 text-amber-200',
-  danger: 'border-red-800/60 bg-red-950/30 text-red-200',
-  info: 'border-sky-800/60 bg-sky-950/30 text-sky-200',
+  neutral: 'border-zinc-200 bg-zinc-100 text-zinc-600',
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  warning: 'border-amber-200 bg-amber-50 text-amber-700',
+  danger: 'border-red-200 bg-red-50 text-red-700',
+  info: 'border-sky-200 bg-sky-50 text-sky-700',
 };
 
 export function Badge({

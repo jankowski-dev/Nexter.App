@@ -8,7 +8,7 @@ export interface LinePoint {
 export function LineChart({
   points,
   height = 220,
-  color = '#34d399',
+  color = '#059669',
 }: {
   points: LinePoint[];
   height?: number;
@@ -46,7 +46,7 @@ export function LineChart({
       >
         <defs>
           <linearGradient id="line-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
@@ -57,7 +57,7 @@ export function LineChart({
             x2={width - padding}
             y1={padding + (height - padding * 2) * ratio}
             y2={padding + (height - padding * 2) * ratio}
-            stroke="#27272a"
+            stroke="#e4e4e7"
             strokeWidth="1"
           />
         ))}

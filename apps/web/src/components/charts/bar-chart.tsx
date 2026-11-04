@@ -30,7 +30,7 @@ export function BarChart({ points, height = 200 }: { points: BarPoint[]; height?
             </span>
             <div
               className={
-                positive ? 'w-full rounded-t bg-emerald-500/70' : 'w-full rounded-b bg-red-500/70'
+                positive ? 'w-full rounded-t bg-emerald-400' : 'w-full rounded-b bg-red-400'
               }
               style={{ height: barHeight, marginTop: positive ? zeroLine - barHeight : 0 }}
             />

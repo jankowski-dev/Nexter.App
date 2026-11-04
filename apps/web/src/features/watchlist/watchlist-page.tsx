@@ -122,12 +122,12 @@ export function WatchlistPage() {
         subtitle="Идеи, тезисы и приоритеты по активам."
         actions={
           <>
-            <label className="flex items-center gap-2 text-sm text-zinc-400">
+            <label className="flex items-center gap-2 text-sm text-zinc-600">
               <input
                 type="checkbox"
                 checked={includeArchived}
                 onChange={(event) => setIncludeArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-700 bg-zinc-950"
+                className="h-4 w-4 rounded border-zinc-300 bg-white"
               />
               Архив
             </label>
@@ -137,7 +137,7 @@ export function WatchlistPage() {
       />
 
       {error && !dialogOpen ? (
-        <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
@@ -172,7 +172,7 @@ export function WatchlistPage() {
                       <Link
                         to="/portfolio/assets/$assetId"
                         params={{ assetId: entry.asset.id }}
-                        className="text-lg font-semibold text-zinc-50 hover:text-emerald-300"
+                        className="text-lg font-semibold text-zinc-900 hover:text-emerald-800"
                       >
                         {entry.asset.symbol}
                       </Link>
@@ -183,7 +183,7 @@ export function WatchlistPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-mono text-lg font-semibold text-zinc-100">
+                    <div className="font-mono text-lg font-semibold text-zinc-900">
                       {formatUsd(entry.priceUsd)}
                     </div>
                     <div className={`text-xs ${pnlTone(entry.change24hPct)}`}>
@@ -202,7 +202,7 @@ export function WatchlistPage() {
                   </div>
                 ) : null}
 
-                <p className="mt-3 line-clamp-4 text-sm text-zinc-400">
+                <p className="mt-3 line-clamp-4 text-sm text-zinc-600">
                   {entry.thesis ?? 'Тезис не заполнен.'}
                 </p>
 
@@ -277,7 +277,7 @@ export function WatchlistPage() {
       >
         <div className="space-y-3">
           {!editing ? (
-            <label className="block text-sm text-zinc-400">
+            <label className="block text-sm text-zinc-600">
               Актив
               <Select
                 className="mt-1"
@@ -293,11 +293,11 @@ export function WatchlistPage() {
               </Select>
             </label>
           ) : (
-            <div className="text-sm text-zinc-400">
-              Актив: <span className="text-zinc-200">{editing.asset.symbol}</span>
+            <div className="text-sm text-zinc-600">
+              Актив: <span className="text-zinc-800">{editing.asset.symbol}</span>
             </div>
           )}
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Тезис
             <Textarea
               className="mt-1"
@@ -306,7 +306,7 @@ export function WatchlistPage() {
               placeholder="Почему этот актив интересен"
             />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Теги (через запятую)
             <Input
               className="mt-1"
@@ -315,7 +315,7 @@ export function WatchlistPage() {
               placeholder="Топ, Дашборд"
             />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Приоритет
             <Input
               className="mt-1"
@@ -326,7 +326,7 @@ export function WatchlistPage() {
               onChange={(event) => setPriority(event.target.value)}
             />
           </label>
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
         </div>
       </Dialog>
     </div>

@@ -182,13 +182,13 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
       }
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-800 bg-zinc-900/40 p-1">
+        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
           {(Object.keys(typeLabels) as ManualType[]).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setType(item)}
-              className={`rounded-md px-2.5 py-1.5 text-xs ${type === item ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`rounded-md px-2.5 py-1.5 text-xs ${type === item ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
             >
               {typeLabels[item]}
             </button>
@@ -317,7 +317,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
               />
               <DecimalInput label="Количество" field="amount" form={form} set={set} />
               <DecimalInput label="USD стоимость" field="usdValue" form={form} set={set} />
-              <label className="block text-sm text-zinc-400">
+              <label className="block text-sm text-zinc-600">
                 Заметка
                 <Textarea
                   className="mt-1"
@@ -338,7 +338,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
               />
               <DecimalInput label="Количество" field="amount" form={form} set={set} />
               <DecimalInput label="USD стоимость" field="usdValue" form={form} set={set} />
-              <label className="block text-sm text-zinc-400 md:col-span-2">
+              <label className="block text-sm text-zinc-600 md:col-span-2">
                 Причина корректировки
                 <Textarea
                   className="mt-1"
@@ -371,7 +371,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
                 form={form}
                 set={set}
               />
-              <label className="block text-sm text-zinc-400">
+              <label className="block text-sm text-zinc-600">
                 Заметка
                 <Textarea
                   className="mt-1"
@@ -384,8 +384,8 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         {preview ? (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-sm text-zinc-300">
-            <div className="font-medium text-zinc-200">Предпросмотр</div>
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-700">
+            <div className="font-medium text-zinc-800">Предпросмотр</div>
             <div className="mt-1">{preview}</div>
             <div className="mt-1 text-xs text-zinc-500">
               Точные проводки, комиссии и FIFO рассчитает сервер.
@@ -393,7 +393,7 @@ export function ManualEntryDialog({ open, onClose }: { open: boolean; onClose: (
           </div>
         ) : null}
 
-        {error ? <p className="text-sm text-red-300">{error}</p> : null}
+        {error ? <p className="text-sm text-red-700">{error}</p> : null}
       </div>
     </Dialog>
   );
@@ -411,7 +411,7 @@ function AccountSelect({
   accounts: Array<{ id: string; name: string; type: string }>;
 }) {
   return (
-    <label className="block text-sm text-zinc-400">
+    <label className="block text-sm text-zinc-600">
       {label}
       <Select className="mt-1" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">Выберите счёт</option>
@@ -439,7 +439,7 @@ function AssetSelect({
   allowEmpty?: boolean;
 }) {
   return (
-    <label className="block text-sm text-zinc-400">
+    <label className="block text-sm text-zinc-600">
       {label}
       <Select className="mt-1" value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">{allowEmpty ? 'Без сбора' : 'Выберите актив'}</option>
@@ -465,7 +465,7 @@ function DecimalInput({
   set: (field: string, value: string) => void;
 }) {
   return (
-    <label className="block text-sm text-zinc-400">
+    <label className="block text-sm text-zinc-600">
       {label}
       <Input
         className="mt-1"

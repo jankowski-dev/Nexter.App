@@ -37,10 +37,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_STYLES: Record<string, string> = {
-  preview: 'border-amber-800/60 bg-amber-950/30 text-amber-200',
-  committed: 'border-emerald-800/60 bg-emerald-950/30 text-emerald-200',
-  rolled_back: 'border-zinc-700 bg-zinc-800/60 text-zinc-300',
-  failed: 'border-red-800/60 bg-red-950/30 text-red-200',
+  preview: 'border-amber-200 bg-amber-50 text-amber-700',
+  committed: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  rolled_back: 'border-zinc-300 bg-zinc-100 text-zinc-700',
+  failed: 'border-red-200 bg-red-50 text-red-700',
 };
 
 const usdFormatter = new Intl.NumberFormat('ru-RU', {
@@ -83,8 +83,8 @@ function formatDate(value: string | null): string {
 function valueTone(value: string | number): string {
   const number = typeof value === 'number' ? value : Number(value);
 
-  if (!Number.isFinite(number) || number === 0) return 'text-zinc-400';
-  return number > 0 ? 'text-emerald-300' : 'text-red-300';
+  if (!Number.isFinite(number) || number === 0) return 'text-zinc-600';
+  return number > 0 ? 'text-emerald-700' : 'text-red-700';
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -214,14 +214,14 @@ function ControlCard({ summary }: { summary: ImportSummary }) {
           <span
             className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${
               summary.control.matches
-                ? 'border-emerald-800/60 bg-emerald-950/30 text-emerald-200'
-                : 'border-red-800/60 bg-red-950/30 text-red-200'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : 'border-red-200 bg-red-50 text-red-700'
             }`}
           >
             {summary.control.matches ? 'Сходится' : 'Расхождение'}
           </span>
         ) : (
-          <span className="inline-flex shrink-0 rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-0.5 text-xs font-medium text-zinc-300">
+          <span className="inline-flex shrink-0 rounded-full border border-zinc-300 bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-700">
             Не применимо
           </span>
         )}
@@ -232,7 +232,7 @@ function ControlCard({ summary }: { summary: ImportSummary }) {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-4 font-medium">Показатель</th>
                   <th className="py-2 pr-4 text-right font-medium">Снимок 429</th>
                   <th className="py-2 pr-4 text-right font-medium">Эталон</th>
@@ -241,12 +241,15 @@ function ControlCard({ summary }: { summary: ImportSummary }) {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.label} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-4 text-zinc-400">{row.label}</td>
-                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-200">
+                  <tr
+                    key={row.label}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-4 text-zinc-600">{row.label}</td>
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-800">
                       {display(row.baseline, row.usd)}
                     </td>
-                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-400">
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-600">
                       {display(row.expected, row.usd)}
                     </td>
                     <td
@@ -262,8 +265,8 @@ function ControlCard({ summary }: { summary: ImportSummary }) {
             </table>
           </div>
 
-          <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-400">
-            <div className="font-medium text-zinc-300">Известные изменения после снимка</div>
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600">
+            <div className="font-medium text-zinc-700">Известные изменения после снимка</div>
             <div className="mt-1">
               Новые ордера: {summary.control.adjustments.addedOrderIds.join(', ') || '—'}. Закрыты
               после снимка:{' '}
@@ -272,7 +275,7 @@ function ControlCard({ summary }: { summary: ImportSummary }) {
           </div>
         </>
       ) : (
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-zinc-600">
           В экспорте нет ордеров 465, 466, 450 и 463, поэтому сверка с базовым снимком 429 ордеров
           не выполняется. Итоги текущего экспорта показаны выше.
         </p>
@@ -311,7 +314,7 @@ function ValuationCard({ summary }: { summary: ImportSummary }) {
         />
       </div>
 
-      <div className="mt-4 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 text-xs text-zinc-400">
+      <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600">
         Для сравнения, snapshot Phase 3: позиции{' '}
         {formatUsd(valuation.controlSnapshot.activeValueUsd)}, капитал{' '}
         {formatUsd(valuation.controlSnapshot.equityUsd)}, нереализованный P&L{' '}
@@ -414,7 +417,7 @@ function DashboardPreview() {
         </div>
         <Link
           to="/dashboard"
-          className="shrink-0 text-sm font-medium text-emerald-400 hover:text-emerald-300"
+          className="shrink-0 text-sm font-medium text-emerald-700 hover:text-emerald-800"
         >
           Дашборд →
         </Link>
@@ -587,7 +590,7 @@ export function ImportPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Импорт из Notion</h1>
-          <p className="mt-1 max-w-3xl text-sm text-zinc-400">
+          <p className="mt-1 max-w-3xl text-sm text-zinc-600">
             Загрузите три JSON-файла из Notion: Source, Orders и Transactions. Сначала выполняется
             предпросмотр с восстановлением контрольных сумм; данные попадут в учёт только после
             подтверждения.
@@ -595,7 +598,7 @@ export function ImportPage() {
         </div>
         <Link
           to="/dashboard"
-          className="shrink-0 text-sm font-medium text-emerald-400 hover:text-emerald-300"
+          className="shrink-0 text-sm font-medium text-emerald-700 hover:text-emerald-800"
         >
           Дашборд →
         </Link>
@@ -615,14 +618,14 @@ export function ImportPage() {
         <div className="grid gap-4 md:grid-cols-3">
           {(Object.keys(FILE_LABELS) as FileKey[]).map((key) => (
             <label key={key} className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-400">
+              <span className="mb-1 block text-xs font-medium text-zinc-600">
                 {FILE_LABELS[key]}
               </span>
               <input
                 type="file"
                 accept="application/json,.json"
                 onChange={handleFile(key)}
-                className="block w-full cursor-pointer rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-300 outline-none file:mr-3 file:rounded file:border-0 file:bg-zinc-800 file:px-3 file:py-1 file:text-sm file:text-zinc-100 hover:border-zinc-600 focus:border-emerald-500"
+                className="block w-full cursor-pointer rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 outline-none transition-colors file:mr-3 file:rounded file:border-0 file:bg-zinc-100 file:px-3 file:py-1 file:text-sm file:text-zinc-700 hover:border-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
               />
               <span className="mt-1 block truncate text-xs text-zinc-500">
                 {files[key]?.name ?? FILE_HINTS[key]}
@@ -658,13 +661,13 @@ export function ImportPage() {
       </Card>
 
       {localError ? (
-        <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {localError}
         </div>
       ) : null}
 
       {notice ? (
-        <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
           {notice}
         </div>
       ) : null}
@@ -674,12 +677,12 @@ export function ImportPage() {
           <TotalsCard summary={summary} />
 
           {summary.errors.length > 0 ? (
-            <Card className="border-red-900/60 bg-red-950/20">
-              <CardTitle className="text-red-200">Ошибки импорта</CardTitle>
-              <CardDescription>
+            <Card className="border-red-200 bg-red-50">
+              <CardTitle className="text-red-700">Ошибки импорта</CardTitle>
+              <CardDescription className="text-red-700">
                 Импорт нельзя подтвердить, пока ошибки не устранены.
               </CardDescription>
-              <ul className="mt-3 space-y-1 text-sm text-red-200">
+              <ul className="mt-3 space-y-1 text-sm text-red-700">
                 {summary.errors.map((error) => (
                   <li key={error}>• {error}</li>
                 ))}
@@ -688,9 +691,9 @@ export function ImportPage() {
           ) : null}
 
           {summary.warnings.length > 0 ? (
-            <Card className="border-amber-900/60 bg-amber-950/20">
-              <CardTitle className="text-amber-200">Предупреждения</CardTitle>
-              <ul className="mt-3 space-y-1 text-sm text-amber-100/90">
+            <Card className="border-amber-200 bg-amber-50">
+              <CardTitle className="text-amber-800">Предупреждения</CardTitle>
+              <ul className="mt-3 space-y-1 text-sm text-amber-800">
                 {summary.warnings.map((warning) => (
                   <li key={warning}>• {warning}</li>
                 ))}
@@ -744,16 +747,16 @@ export function ImportPage() {
         </CardHeader>
 
         {importsQuery.isPending ? (
-          <p className="text-sm text-zinc-400">Загружаю историю…</p>
+          <p className="text-sm text-zinc-600">Загружаю историю…</p>
         ) : importsQuery.isError ? (
-          <p className="text-sm text-red-300">Не удалось загрузить историю импортов.</p>
+          <p className="text-sm text-red-700">Не удалось загрузить историю импортов.</p>
         ) : importsQuery.data.imports.length === 0 ? (
-          <p className="text-sm text-zinc-400">Импортов пока нет.</p>
+          <p className="text-sm text-zinc-600">Импортов пока нет.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-4 font-medium">Дата</th>
                   <th className="py-2 pr-4 font-medium">Файл</th>
                   <th className="py-2 pr-4 font-medium">Статус</th>
@@ -765,21 +768,24 @@ export function ImportPage() {
               </thead>
               <tbody>
                 {importsQuery.data.imports.map((item) => (
-                  <tr key={item.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-4 text-zinc-400">{formatDate(item.createdAt)}</td>
-                    <td className="max-w-[220px] truncate py-2 pr-4 text-zinc-300">
+                  <tr
+                    key={item.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-4 text-zinc-600">{formatDate(item.createdAt)}</td>
+                    <td className="max-w-[220px] truncate py-2 pr-4 text-zinc-700">
                       {item.fileName ?? '—'}
                     </td>
                     <td className="py-2 pr-4">
                       <StatusBadge status={item.status} />
                     </td>
-                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-300">
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-700">
                       {countFormatter.format(item.summary.counts.orders)}
                     </td>
-                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-300">
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-700">
                       {formatUsd(item.summary.totals.buyUsd)}
                     </td>
-                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-300">
+                    <td className="py-2 pr-4 text-right font-mono tabular-nums text-zinc-700">
                       {formatUsd(item.summary.totals.sellUsd)}
                     </td>
                     <td className="py-2 text-right">

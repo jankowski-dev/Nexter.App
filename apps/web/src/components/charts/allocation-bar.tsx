@@ -19,7 +19,7 @@ export function AllocationBar({ slices }: { slices: AllocationSlice[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex h-4 overflow-hidden rounded-full bg-zinc-800">
+      <div className="flex h-4 overflow-hidden rounded-full bg-zinc-200">
         {slices.map((slice, index) => (
           <div
             key={slice.key}
@@ -33,8 +33,8 @@ export function AllocationBar({ slices }: { slices: AllocationSlice[] }) {
         {slices.map((slice, index) => (
           <div key={slice.key} className="flex items-center gap-2 text-sm">
             <span className={`h-2.5 w-2.5 rounded-full ${colors[index % colors.length]}`} />
-            <span className="min-w-0 flex-1 truncate text-zinc-300">{slice.label}</span>
-            <span className="font-mono tabular-nums text-zinc-400">
+            <span className="min-w-0 flex-1 truncate text-zinc-700">{slice.label}</span>
+            <span className="font-mono tabular-nums text-zinc-500">
               {formatUsd(slice.valueUsd)}
             </span>
             <span className="w-14 text-right font-mono tabular-nums text-zinc-500">

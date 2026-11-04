@@ -38,13 +38,13 @@ export function ResetPasswordPage() {
     return (
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50">Пароль изменён</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h1 className="text-xl font-semibold text-zinc-900">Пароль изменён</h1>
+          <p className="mt-1 text-sm text-zinc-600">
             Сохраните новые recovery codes. Старые коды больше не действуют.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm text-zinc-200">
+        <div className="grid grid-cols-2 gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-4 font-mono text-sm text-zinc-800">
           {newCodes.map((code) => (
             <span key={code}>{code}</span>
           ))}
@@ -60,8 +60,8 @@ export function ResetPasswordPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Сброс пароля</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Сброс пароля</h1>
+        <p className="mt-1 text-sm text-zinc-600">
           Нужен recovery code. Email используется только как логин.
         </p>
       </div>
@@ -105,7 +105,7 @@ export function ResetPasswordPage() {
       </form>
 
       <div className="text-center text-sm text-zinc-500">
-        <Link className="hover:text-zinc-300" to="/login">
+        <Link className="hover:text-zinc-900" to="/login">
           Вернуться ко входу
         </Link>
       </div>

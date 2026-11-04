@@ -35,11 +35,11 @@ export function PortfolioPage() {
     <div className="space-y-6">
       <PageHeader title="Портфель" subtitle="Текущие позиции, себестоимость и счета." />
 
-      <div className="flex gap-1 rounded-lg border border-zinc-800 bg-zinc-900/40 p-1">
+      <div className="flex gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
         <button
           type="button"
           onClick={() => setTab('positions')}
-          className={`rounded-md px-4 py-2 text-sm ${tab === 'positions' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`rounded-md px-4 py-2 text-sm ${tab === 'positions' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
           aria-selected={tab === 'positions'}
           role="tab"
         >
@@ -48,7 +48,7 @@ export function PortfolioPage() {
         <button
           type="button"
           onClick={() => setTab('accounts')}
-          className={`rounded-md px-4 py-2 text-sm ${tab === 'accounts' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200'}`}
+          className={`rounded-md px-4 py-2 text-sm ${tab === 'accounts' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
           aria-selected={tab === 'accounts'}
           role="tab"
         >
@@ -70,25 +70,25 @@ export function PortfolioPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardTitle>Кэш</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatUsd(positions.data.cashUsd)}
               </div>
             </Card>
             <Card>
               <CardTitle>Стоимость позиций</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatUsd(positions.data.positionsValueUsd)}
               </div>
             </Card>
             <Card>
               <CardTitle>Капитал</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatUsd(positions.data.equityUsd)}
               </div>
             </Card>
             <Card>
               <CardTitle>Позиций</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatCount(positions.data.positions.length)}
               </div>
               <CardDescription>
@@ -105,12 +105,12 @@ export function PortfolioPage() {
               Стоимость рассчитана по последней цене; себестоимость — по оставшимся лотам.
             </CardDescription>
             {positions.data.positions.length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-400">Позиций нет.</p>
+              <p className="mt-4 text-sm text-zinc-600">Позиций нет.</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                       <th className="py-2 pr-3 font-medium">Актив</th>
                       <th className="py-2 pr-3 text-right font-medium">Количество</th>
                       <th className="py-2 pr-3 text-right font-medium">Цена</th>
@@ -131,13 +131,13 @@ export function PortfolioPage() {
                       return (
                         <tr
                           key={position.asset.id}
-                          className="border-b border-zinc-800/60 last:border-0"
+                          className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                         >
                           <td className="py-2 pr-3">
                             <Link
                               to="/portfolio/assets/$assetId"
                               params={{ assetId: position.asset.id }}
-                              className="font-medium text-zinc-200 hover:text-emerald-300"
+                              className="font-medium text-zinc-800 hover:text-emerald-800"
                             >
                               {position.asset.symbol}
                             </Link>
@@ -146,19 +146,19 @@ export function PortfolioPage() {
                               {!position.asset.isVerified ? ' · unverified' : ''}
                             </div>
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                             {formatTokenAmount(position.amount)}
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                             {formatUsd(position.priceUsd)}
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                             {formatUsd(position.avgCostUsd)}
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-200">
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
                             {formatUsd(position.valueUsd)}
                           </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-400">
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                             {formatUsd(position.costBasisUsd)}
                           </td>
                           <td
@@ -166,7 +166,7 @@ export function PortfolioPage() {
                           >
                             {formatSignedUsd(position.unrealizedPnlUsd)}
                           </td>
-                          <td className="py-2 text-right font-mono tabular-nums text-zinc-400">
+                          <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
                             {share === null ? '—' : formatPct(String(share))}
                           </td>
                         </tr>
@@ -187,7 +187,7 @@ export function PortfolioPage() {
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-3 font-medium">Название</th>
                   <th className="py-2 pr-3 font-medium">Тип</th>
                   <th className="py-2 pr-3 font-medium">Сеть</th>
@@ -196,12 +196,15 @@ export function PortfolioPage() {
               </thead>
               <tbody>
                 {accounts.data.accounts.map((account) => (
-                  <tr key={account.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-3 text-zinc-200">{account.name}</td>
-                    <td className="py-2 pr-3 text-zinc-400">
+                  <tr
+                    key={account.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-3 text-zinc-800">{account.name}</td>
+                    <td className="py-2 pr-3 text-zinc-600">
                       {accountTypeLabels[account.type] ?? account.type}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-400">{account.chainCode ?? '—'}</td>
+                    <td className="py-2 pr-3 text-zinc-600">{account.chainCode ?? '—'}</td>
                     <td className="py-2 text-right">
                       <Badge tone={account.isSystem ? 'info' : 'neutral'}>
                         {account.isSystem ? 'да' : 'нет'}

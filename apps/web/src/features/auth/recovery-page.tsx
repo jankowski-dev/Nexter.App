@@ -31,8 +31,8 @@ export function RecoveryPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Recovery code</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Recovery code</h1>
+        <p className="mt-1 text-sm text-zinc-600">
           Введите один из кодов, сохранённых при настройке. Он будет использован один раз.
         </p>
       </div>
@@ -55,10 +55,10 @@ export function RecoveryPage() {
       </form>
 
       <div className="flex justify-between text-sm text-zinc-500">
-        <Link className="hover:text-zinc-300" to="/2fa">
+        <Link className="hover:text-zinc-900" to="/2fa">
           Вернуться к TOTP
         </Link>
-        <Link className="hover:text-zinc-300" to="/reset-password">
+        <Link className="hover:text-zinc-900" to="/reset-password">
           Сбросить пароль
         </Link>
       </div>

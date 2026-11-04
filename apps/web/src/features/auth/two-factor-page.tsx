@@ -31,8 +31,8 @@ export function TwoFactorPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Двухфакторная проверка</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Двухфакторная проверка</h1>
+        <p className="mt-1 text-sm text-zinc-600">
           Введите шестизначный код из приложения-аутентификатора.
         </p>
       </div>
@@ -58,7 +58,7 @@ export function TwoFactorPage() {
       </form>
 
       <div className="text-center text-sm text-zinc-500">
-        <Link className="hover:text-zinc-300" to="/recovery">
+        <Link className="hover:text-zinc-900" to="/recovery">
           Использовать recovery code
         </Link>
       </div>

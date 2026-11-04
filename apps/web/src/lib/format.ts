@@ -81,8 +81,8 @@ export function formatDateTime(value: string | null | undefined): string {
 }
 
 export function pnlTone(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === '') return 'text-zinc-400';
+  if (value === null || value === undefined || value === '') return 'text-zinc-500';
   const number = Number(value);
-  if (!Number.isFinite(number) || number === 0) return 'text-zinc-400';
-  return number > 0 ? 'text-emerald-300' : 'text-red-300';
+  if (!Number.isFinite(number) || number === 0) return 'text-zinc-500';
+  return number > 0 ? 'text-emerald-700' : 'text-red-700';
 }

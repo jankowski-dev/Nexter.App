@@ -59,8 +59,8 @@ export function Setup2faPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Включите 2FA</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Включите 2FA</h1>
+        <p className="mt-1 text-sm text-zinc-600">
           Отсканируйте QR-код в Google Authenticator, 1Password, Authy или аналогичном приложении.
         </p>
       </div>
@@ -68,11 +68,11 @@ export function Setup2faPage() {
       {error ? <FormError>{error}</FormError> : null}
 
       {qrDataUrl ? (
-        <div className="flex justify-center rounded-md border border-zinc-800 bg-white p-4">
+        <div className="flex justify-center rounded-md border border-zinc-200 bg-white p-4">
           <img src={qrDataUrl} alt="QR-код для TOTP" className="h-56 w-56" />
         </div>
       ) : (
-        <div className="flex h-64 items-center justify-center rounded-md border border-zinc-800 text-sm text-zinc-500">
+        <div className="flex h-64 items-center justify-center rounded-md border border-zinc-200 text-sm text-zinc-500">
           Готовим QR-код…
         </div>
       )}
@@ -80,7 +80,7 @@ export function Setup2faPage() {
       {secret ? (
         <div className="space-y-1 text-xs text-zinc-500">
           <div>Если QR не читается, введите секрет вручную:</div>
-          <code className="block break-all rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-zinc-300">
+          <code className="block break-all rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-zinc-700">
             {secret}
           </code>
         </div>

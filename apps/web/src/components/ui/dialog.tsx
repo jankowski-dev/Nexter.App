@@ -41,7 +41,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/30 p-0 sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -54,19 +54,19 @@ export function Dialog({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-800 bg-zinc-950 p-5 shadow-2xl outline-none sm:rounded-xl',
+          'max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
           wide ? 'sm:max-w-3xl' : 'sm:max-w-xl',
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-50">{title}</h2>
-            {description ? <p className="mt-1 text-sm text-zinc-400">{description}</p> : null}
+            <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
+            {description ? <p className="mt-1 text-sm text-zinc-500">{description}</p> : null}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+            className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
             aria-label="Закрыть"
           >
             ✕
