@@ -258,6 +258,18 @@ export function validateKyberSwapBuild(
     pass('calldata.tokens');
   }
 
+  if (decoded.simpleMode) {
+    issues.push(
+      issue(
+        'calldata.simpleMode',
+        'SWAP_SIMPLE_MODE_NOT_ALLOWED',
+        'Simple-mode swaps are rejected until pool and destination-fee data are validated',
+      ),
+    );
+  } else {
+    pass('calldata.simpleMode');
+  }
+
   if (decoded.dstReceiver !== lower(expected.wallet)) {
     issues.push(
       issue(
@@ -431,6 +443,14 @@ export function validateKyberSwapBuild(
         'calldata.deadline',
         'SWAP_DEADLINE_INVALID',
         'Calldata deadline is earlier than the approved deadline',
+      ),
+    );
+  } else if (decoded.simpleMode && decoded.simpleDeadline! > expected.deadline + 60) {
+    issues.push(
+      issue(
+        'calldata.deadline',
+        'SWAP_DEADLINE_INVALID',
+        'Calldata deadline is later than the approved deadline window',
       ),
     );
   }

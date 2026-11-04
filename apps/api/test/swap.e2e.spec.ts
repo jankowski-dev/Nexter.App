@@ -25,6 +25,7 @@ const password = 'correct horse battery staple';
 const wallet = '0x1111111111111111111111111111111111111111';
 const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
 const selector = '0xe21fd0e9';
+const selectorAllowlist = `${selector},0x59e50fed`;
 const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
@@ -41,6 +42,7 @@ function makeBuildData(
     feeAmounts?: bigint[];
     flags?: bigint;
   } = {},
+  functionName: 'swap' | 'swapGeneric' = 'swap',
 ): string {
   const inputAmount = overrides.amount ?? 1_000_000_000_000_000_000n;
   const minOut = overrides.minOut ?? 1_990_000_000_000_000_000n;
@@ -48,7 +50,7 @@ function makeBuildData(
 
   return encodeFunctionData({
     abi: KYBER_ROUTER_ABI,
-    functionName: 'swap',
+    functionName,
     args: [
       {
         callTarget,
@@ -180,7 +182,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_WALLET_ALLOWLIST = wallet;
     env.SWAP_ROUTER_ALLOWLIST = router;
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
-    env.SWAP_SELECTOR_ALLOWLIST = selector;
+    env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     env.SWAP_QUOTE_TTL_SECONDS = 15;
     env.SWAP_MAX_PRICE_IMPACT_BPS = 200;
 
@@ -215,6 +217,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quoteAmountOutUsd = '0.999';
     allowance = '0';
     env.SWAP_KILL_SWITCH = false;
+    env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     await db.execute(sql`truncate table users restart identity cascade`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
   });
@@ -365,6 +368,34 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(expired.body.error.code).toBe('SWAP_DEADLINE_PASSED');
   }, 60_000);
 
+  it('accepts swapGeneric calldata when both selectors are allowlisted', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+
+    buildData = makeBuildData({}, 'swapGeneric');
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(201);
+
+    expect(built.body).toMatchObject({
+      status: 'BUILT',
+      routerAddress: router.toLowerCase(),
+    });
+    expect(built.body.validation).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'calldata-decode', passed: true }),
+        expect.objectContaining({ check: 'calldata.simpleMode', passed: true }),
+      ]),
+    );
+  }, 60_000);
+
   it('rejects disallowed tokens, wallets, stale quotes, selectors and simulations', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -411,7 +442,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .send({ orderId, walletAddress: wallet })
       .expect(503);
-    env.SWAP_SELECTOR_ALLOWLIST = selector;
+    env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
 
     env.SWAP_WALLET_ALLOWLIST = '';
     await agent

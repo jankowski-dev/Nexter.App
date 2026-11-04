@@ -72,10 +72,12 @@ Both selectors must be in `SWAP_SELECTOR_ALLOWLIST`; an allowlist containing onl
 
 `SWAP_EXECUTOR_ALLOWLIST` defaults to the BSC AggregationExecutorProxy `0x8F10B468b06c6FD214B65F87778827F7D113f996`.
 
+Simple mode (`flags & 0x20`) is rejected: its `firstPools` and `destTokenFeeData` would require a pool allowlist or recursive executor decoding, so accepting it would let a malicious provider divert input/output within the slippage bound. Standard `swap`/`swapGeneric` routes are supported.
+
 Deadline handling is explicit:
 
-- simple-mode calldata embeds `SimpleSwapData.deadline`, which is decoded and must not be earlier than the approved deadline;
-- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative and submission is rejected after it.
+- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative and submission is rejected after it;
+- the execution UI must show this deadline and the wallet must confirm before signing; a transaction already signed by the wallet cannot be invalidated server-side.
 
 This is a deliberate limit: the server verifies the fields that determine recipient and minimum output and relies on the allowlisted executor for nested route semantics. Full recursive decoding of every DEX executor call is out of scope.
 

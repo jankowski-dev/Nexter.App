@@ -1,5 +1,6 @@
 import { encodeAbiParameters, encodeFunctionData } from 'viem';
 import { describe, expect, it } from 'vitest';
+import realSwapFixture from './kyber-swap-bsc.fixture.json';
 import {
   KYBER_ROUTER_ABI,
   SIMPLE_SWAP_DATA_ABI,
@@ -135,13 +136,31 @@ describe('Kyber calldata decoding', () => {
     expect(codes(decoded)).toEqual([]);
   });
 
-  it('extracts the deadline from simple-mode calldata', async () => {
+  it('rejects simple-mode calldata until pool and destination-fee data are validated', async () => {
     const decoded = await decodeKyberSwapCalldata(encodeSwap({}, { simple: true }));
 
     expect(decoded.simpleMode).toBe(true);
     expect(decoded.simpleDeadline).toBe(deadline);
     expect(validateKyberSwapBuild(decoded, expectation()).deadlineSource).toBe('calldata');
-    expect(codes(decoded)).toEqual([]);
+    expect(codes(decoded)).toContain('SWAP_SIMPLE_MODE_NOT_ALLOWED');
+  });
+
+  it('decodes a real BSC Kyber swap fixture', async () => {
+    const decoded = await decodeKyberSwapCalldata(realSwapFixture.input);
+
+    expect(decoded).toMatchObject({
+      functionName: 'swap',
+      selector: '0xe21fd0e9',
+      callTarget: executor.toLowerCase(),
+      dstToken: tokenIn,
+      amount: '1345949795856258439590',
+      minReturnAmount: '6804472424954007124',
+      simpleMode: false,
+    });
+    expect(decoded.srcToken).toMatch(/^0x[0-9a-f]{40}$/);
+    expect(decoded.srcToken.startsWith('0x14f6')).toBe(true);
+    expect(decoded.srcReceivers).toEqual([executor.toLowerCase()]);
+    expect(decoded.feeReceivers).toEqual([]);
   });
 
   it('rejects unsupported selectors and malformed calldata', async () => {

@@ -23,7 +23,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Router-level calldata decoding with viem: verifies tokens, recipient, input amount, minimum output, executor, approve target, source receivers, fees, permit and partial-fill flags before `BUILT`.
 - Correct selector mapping: `0xe21fd0e9` = `swap`, `0x59e50fed` = `swapGeneric`; both are supported and must be allowlisted.
 - `SWAP_EXECUTOR_ALLOWLIST` with the BSC AggregationExecutorProxy default.
-- Simple-mode deadlines are decoded from `SimpleSwapData`; normal routes use the server-enforced order deadline and submit rejects after expiry.
+- Simple-mode calldata is rejected until `firstPools`/`destTokenFeeData` can be validated; standard routes use the server-enforced order deadline and submit rejects after expiry.
 
 - Migration `0010_careless_pet_avengers.sql` plus hardening migration `0011_closed_namor.sql` (additive):
   - `sessions.step_up_until`;
@@ -39,12 +39,15 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 
 ## Review history
 
+Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Zero-allowance approval sequencing remains an execution-slice gate.
+
 First slice review: **FAIL** — one High (step-up failed open on missing/numeric USD) and Mediums (approval DELETE privilege, hardcoded threshold, unpersisted deadline, allowlist re-check, unverified tx hashes/uniqueness, test gaps). Fixes applied: fail-closed centralized step-up helper with stored `amount_in_usd`, configurable threshold, deadline persistence, wallet/router re-checks, unique tx/approval indexes, token_approvals DELETE revoke, duplicate-approval handling, and expanded tests. Re-review: **PASS**; merged as `9d57f43`. Unverified tx-hash/correction remains a tracking-slice gate.
 
 ## Deferred until tracking slice
 
 - Client-submitted tx hashes are format/owned/state checked and unique, but on-chain `eth_getTransactionByHash` verification and a correction path are implemented in the tracking slice before signing is enabled.
 - Balance/gas caps and `APPROVAL_REQUIRED`/`READY` transitions remain before signing.
+- Zero-allowance ERC-20 builds currently fail simulation before an approval can be built; the execution slice must set `APPROVAL_REQUIRED`/allowance gates before signing.
 - WalletConnect/Tangem connection is implemented; signing, worker tracking, and accounting are not enabled yet.
 
 ## Not yet implemented
@@ -58,7 +61,7 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **95 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, and step-up unit coverage).
+- API suite — **97 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, and step-up unit coverage).
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010/0011 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 

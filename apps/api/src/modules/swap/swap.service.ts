@@ -30,6 +30,7 @@ import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { BscRpcService } from './bsc-rpc.service';
 import {
+  KYBER_SUPPORTED_SELECTORS,
   KyberCalldataError,
   decodeKyberSwapCalldata,
   validateKyberSwapBuild,
@@ -170,7 +171,10 @@ export class SwapService {
       providerConfigured: this.kyber.configured,
       providerMode: this.kyber.mode,
       walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID ?? null,
-      buildEnabled: enabled && allowlist.length > 0 && selectors.length > 0,
+      buildEnabled:
+        enabled &&
+        allowlist.length > 0 &&
+        selectors.some((item) => KYBER_SUPPORTED_SELECTORS.includes(item)),
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,
@@ -723,7 +727,9 @@ export class SwapService {
       });
     }
 
-    if (!order.deadline || order.deadline <= Math.floor(Date.now() / 1000)) {
+    const now = Math.floor(Date.now() / 1000);
+
+    if (!order.deadline || order.deadline <= now) {
       throw new ConflictException({
         code: 'SWAP_DEADLINE_PASSED',
         message: 'Swap deadline has passed',
@@ -747,11 +753,25 @@ export class SwapService {
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
               eq(swapOrders.status, 'BUILT'),
+              gt(swapOrders.deadline, now),
             ),
           )
           .returning({ id: swapOrders.id });
 
         if (!row) {
+          const [current] = await tx
+            .select({ deadline: swapOrders.deadline, status: swapOrders.status })
+            .from(swapOrders)
+            .where(and(eq(swapOrders.id, orderId), eq(swapOrders.userId, userId)))
+            .limit(1);
+
+          if (current?.deadline && current.deadline <= now) {
+            throw new ConflictException({
+              code: 'SWAP_DEADLINE_PASSED',
+              message: 'Swap deadline has passed',
+            });
+          }
+
           throw new ConflictException({
             code: 'SWAP_STATE_INVALID',
             message: 'Swap order is no longer submittable',

@@ -144,7 +144,7 @@ export class ApprovalService {
       });
     }
 
-    if (!order.deadline || order.deadline < Math.floor(Date.now() / 1000)) {
+    if (!order.deadline || order.deadline <= Math.floor(Date.now() / 1000)) {
       throw new ConflictException({
         code: 'SWAP_APPROVAL_EXPIRED',
         message: 'Swap order deadline has passed',

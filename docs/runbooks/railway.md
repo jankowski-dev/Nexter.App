@@ -136,7 +136,7 @@ Before enabling quotes:
 4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
 5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
-Builds remain disabled until a selector allowlist is configured. Phase 7 never signs or submits transactions.
+Builds remain disabled until a selector allowlist is configured. Phase 8 has submit/approval endpoints but no signing UI; the server never signs or broadcasts.
 
 ### Phase 5 migration 0008 preflight
 
