@@ -2,11 +2,15 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { assets, chains, type Asset, type Database, type DbExecutor } from '@nexter/db';
 import type { Asset as AssetContract } from '@nexter/contracts';
+import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 
 @Injectable()
 export class AssetsService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly audit: AuditService,
+  ) {}
 
   private toContract(row: { asset: Asset; chainCode: string }): AssetContract {
     return {
@@ -59,6 +63,7 @@ export class AssetsService {
       native: boolean;
     },
     executor: DbExecutor = this.db,
+    userId?: string,
   ): Promise<Asset> {
     const [chain] = await executor.select().from(chains).where(eq(chains.code, chainCode)).limit(1);
 
@@ -92,7 +97,25 @@ export class AssetsService {
       .onConflictDoNothing({ target: [assets.chainId, assets.symbol] })
       .returning();
 
-    if (created) return created;
+    if (created) {
+      await this.audit.log(
+        {
+          userId,
+          action: 'accounting.asset_created',
+          entityType: 'asset',
+          entityId: created.id,
+          after: {
+            chainCode,
+            symbol: created.symbol,
+            contractAddress: created.contractAddress,
+            source: 'swap-registry',
+          },
+        },
+        { executor, strict: true },
+      );
+
+      return created;
+    }
 
     const [row] = await executor
       .select()

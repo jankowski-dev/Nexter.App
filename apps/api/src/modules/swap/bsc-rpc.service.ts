@@ -139,7 +139,8 @@ export class BscRpcService {
 
     if (!result || typeof result !== 'object') return null;
     const receipt = result as Record<string, unknown>;
-    const status = receipt.status === '0x1' ? true : receipt.status === '0x0' ? false : null;
+    const statusCode = hexToNumber(receipt.status);
+    const status = statusCode === 1 ? true : statusCode === 0 ? false : null;
     const blockNumber = hexToNumber(receipt.blockNumber);
 
     if (status === null || blockNumber === null) return null;

@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
@@ -93,10 +93,14 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             eq(swapOrders.status, 'CONFIRMED'),
             isNull(swapOrders.accountingTransactionId),
             isNotNull(swapOrders.confirmedAt),
+            or(
+              sql`jsonb_array_length(${swapOrders.errors}) = 0`,
+              lte(swapOrders.updatedAt, new Date(Date.now() - 60_000)),
+            ),
           ),
         )
-        .orderBy(asc(swapOrders.confirmedAt))
-        .limit(10);
+        .orderBy(sql`jsonb_array_length(${swapOrders.errors}) asc`, asc(swapOrders.updatedAt))
+        .limit(20);
 
       for (const order of confirmed) {
         await this.safeAccount(order);
@@ -240,48 +244,50 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const [row] = await this.db
-      .update(swapOrders)
-      .set({
-        status,
-        nonce: tx.nonce ?? order.nonce,
-        blockNumber: receipt?.blockNumber ?? tx.blockNumber ?? order.blockNumber,
-        confirmations,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(swapOrders.id, order.id),
-          eq(swapOrders.userId, order.userId),
-          eq(swapOrders.status, order.status),
-        ),
-      )
-      .returning({ id: swapOrders.id });
+    await this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(swapOrders)
+        .set({
+          status,
+          nonce: tx.nonce ?? order.nonce,
+          blockNumber: receipt?.blockNumber ?? tx.blockNumber ?? order.blockNumber,
+          confirmations,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            eq(swapOrders.status, order.status),
+          ),
+        )
+        .returning({ id: swapOrders.id });
 
-    if (!row) return;
+      if (!row) return;
 
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: 'pending',
-      payload: {
-        txHash: order.txHash,
-        blockNumber: receipt?.blockNumber ?? tx.blockNumber,
-        confirmations,
-        latestBlock,
-      },
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'pending',
+        payload: {
+          txHash: order.txHash,
+          blockNumber: receipt?.blockNumber ?? tx.blockNumber,
+          confirmations,
+          latestBlock,
+        },
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.order_pending',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status, confirmations, blockNumber: receipt?.blockNumber ?? tx.blockNumber },
+        },
+        { executor: dbtx, strict: true },
+      );
     });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: 'swap.order_pending',
-        entityType: 'swap_order',
-        entityId: order.id,
-        before: { status: order.status },
-        after: { status, confirmations, blockNumber: receipt?.blockNumber ?? tx.blockNumber },
-      },
-      { strict: true },
-    );
   }
 
   private async confirm(
@@ -301,54 +307,37 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const executedAmountOut =
       swapped && tokenOut ? fromBaseUnits(swapped.returnAmount, tokenOut.decimals) : null;
 
-    const [row] = await this.db
-      .update(swapOrders)
-      .set({
-        status: 'CONFIRMED',
-        nonce: tx.nonce ?? order.nonce,
-        blockNumber: receipt.blockNumber,
-        confirmations,
-        confirmedAt,
-        executedAmountIn,
-        executedAmountOut,
-        networkFeeWei: feeWei,
-        networkFeeUsd: feeUsd,
-        updatedAt: confirmedAt,
-      })
-      .where(
-        and(
-          eq(swapOrders.id, order.id),
-          eq(swapOrders.userId, order.userId),
-          eq(swapOrders.status, order.status),
-        ),
-      )
-      .returning();
-
-    if (!row) return;
-
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: 'confirmed',
-      payload: {
-        txHash: order.txHash,
-        blockNumber: receipt.blockNumber,
-        confirmations,
-        executedAmountIn,
-        executedAmountOut,
-        networkFeeWei: feeWei,
-        networkFeeUsd: feeUsd,
-      },
-    });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: 'swap.order_confirmed',
-        entityType: 'swap_order',
-        entityId: order.id,
-        before: { status: order.status },
-        after: {
+    const row = await this.db.transaction(async (dbtx) => {
+      const [updated] = await dbtx
+        .update(swapOrders)
+        .set({
           status: 'CONFIRMED',
+          nonce: tx.nonce ?? order.nonce,
+          blockNumber: receipt.blockNumber,
+          confirmations,
+          confirmedAt,
+          executedAmountIn,
+          executedAmountOut,
+          networkFeeWei: feeWei,
+          networkFeeUsd: feeUsd,
+          updatedAt: confirmedAt,
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            eq(swapOrders.status, order.status),
+          ),
+        )
+        .returning();
+
+      if (!updated) return null;
+
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'confirmed',
+        payload: {
+          txHash: order.txHash,
           blockNumber: receipt.blockNumber,
           confirmations,
           executedAmountIn,
@@ -356,9 +345,32 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           networkFeeWei: feeWei,
           networkFeeUsd: feeUsd,
         },
-      },
-      { strict: true },
-    );
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.order_confirmed',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: {
+            status: 'CONFIRMED',
+            blockNumber: receipt.blockNumber,
+            confirmations,
+            executedAmountIn,
+            executedAmountOut,
+            networkFeeWei: feeWei,
+            networkFeeUsd: feeUsd,
+          },
+        },
+        { executor: dbtx, strict: true },
+      );
+
+      return updated;
+    });
+
+    if (!row) return;
 
     await this.safeAccount(row);
   }
@@ -472,43 +484,45 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     status: 'FAILED' | 'REPLACED' | 'DROPPED',
     payload: Record<string, unknown>,
   ): Promise<void> {
-    const [row] = await this.db
-      .update(swapOrders)
-      .set({
-        status,
-        confirmations: 0,
-        ...(status === 'FAILED' ? {} : { blockNumber: null }),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(swapOrders.id, order.id),
-          eq(swapOrders.userId, order.userId),
-          inArray(swapOrders.status, [...ACTIVE_STATUSES]),
-          isNull(swapOrders.accountingTransactionId),
-        ),
-      )
-      .returning({ id: swapOrders.id });
+    await this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(swapOrders)
+        .set({
+          status,
+          confirmations: 0,
+          ...(status === 'FAILED' ? {} : { blockNumber: null }),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            inArray(swapOrders.status, [...ACTIVE_STATUSES]),
+            isNull(swapOrders.accountingTransactionId),
+          ),
+        )
+        .returning({ id: swapOrders.id });
 
-    if (!row) return;
+      if (!row) return;
 
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: status.toLowerCase(),
-      payload,
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: status.toLowerCase(),
+        payload,
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: `swap.order_${status.toLowerCase()}`,
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status, ...payload },
+        },
+        { executor: dbtx, strict: true },
+      );
     });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: `swap.order_${status.toLowerCase()}`,
-        entityType: 'swap_order',
-        entityId: order.id,
-        before: { status: order.status },
-        after: { status, ...payload },
-      },
-      { strict: true },
-    );
   }
 
   private async account(order: SwapOrder): Promise<void> {
@@ -520,13 +534,21 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
       if (latest === null) return;
 
+      const blockMismatch =
+        receipt !== null && order.blockNumber !== null && receipt.blockNumber !== order.blockNumber;
+
       if (
         !receipt ||
         !receipt.status ||
         latest - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS ||
-        (order.blockNumber !== null && receipt.blockNumber !== order.blockNumber)
+        blockMismatch
       ) {
-        await this.revertConfirmed(order, receipt, latest);
+        await this.revertConfirmed(
+          order,
+          receipt,
+          latest,
+          blockMismatch ? 'reorg_block_mismatch' : undefined,
+        );
         return;
       }
     }
@@ -570,8 +592,18 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const accountId = order.accountId
       ? (await this.accounts.requireWalletForChain(order.userId, order.accountId, order.chain)).id
       : (await this.accounts.defaultWalletForChain(order.userId, order.chain)).id;
-    const assetIn = await this.assets.ensureForSwapToken(order.chain, tokenIn);
-    const assetOut = await this.assets.ensureForSwapToken(order.chain, tokenOut);
+    const assetIn = await this.assets.ensureForSwapToken(
+      order.chain,
+      tokenIn,
+      this.db,
+      order.userId,
+    );
+    const assetOut = await this.assets.ensureForSwapToken(
+      order.chain,
+      tokenOut,
+      this.db,
+      order.userId,
+    );
 
     const feeWei = BigInt(order.networkFeeWei ?? '0');
     const feeUsd = order.networkFeeUsd;
@@ -584,13 +616,18 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     let fee: { feeAssetId: string; feeAmount: string; feeUsdValue: string } | undefined;
 
     if (feeWei > 0n && feeUsd && decimal(feeUsd).gt(0)) {
-      const bnb = await this.assets.ensureForSwapToken(order.chain, {
-        symbol: 'BNB',
-        name: 'BNB',
-        address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        decimals: 18,
-        native: true,
-      });
+      const bnb = await this.assets.ensureForSwapToken(
+        order.chain,
+        {
+          symbol: 'BNB',
+          name: 'BNB',
+          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+          decimals: 18,
+          native: true,
+        },
+        this.db,
+        order.userId,
+      );
 
       fee = {
         feeAssetId: bnb.id,
@@ -646,106 +683,113 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const [row] = await this.db
-      .update(swapOrders)
-      .set({
-        accountingTransactionId: result.transaction.id,
-        tradeGroupId: result.transaction.tradeGroupId,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(swapOrders.id, order.id),
-          eq(swapOrders.userId, order.userId),
-          eq(swapOrders.status, 'CONFIRMED'),
-          isNull(swapOrders.accountingTransactionId),
-        ),
-      )
-      .returning({ id: swapOrders.id });
+    await this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(swapOrders)
+        .set({
+          accountingTransactionId: result.transaction.id,
+          tradeGroupId: result.transaction.tradeGroupId,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            eq(swapOrders.status, 'CONFIRMED'),
+            isNull(swapOrders.accountingTransactionId),
+          ),
+        )
+        .returning({ id: swapOrders.id });
 
-    if (!row) return;
+      if (!row) return;
 
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: 'accounted',
-      payload: {
-        transactionId: result.transaction.id,
-        tradeGroupId: result.transaction.tradeGroupId,
-      },
-    });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: 'swap.order_accounted',
-        entityType: 'swap_order',
-        entityId: order.id,
-        after: {
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'accounted',
+        payload: {
           transactionId: result.transaction.id,
           tradeGroupId: result.transaction.tradeGroupId,
-          source: 'kyberswap',
         },
-      },
-      { strict: true },
-    );
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.order_accounted',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: {
+            transactionId: result.transaction.id,
+            tradeGroupId: result.transaction.tradeGroupId,
+            source: 'kyberswap',
+          },
+        },
+        { executor: dbtx, strict: true },
+      );
+    });
   }
 
   private async revertConfirmed(
     order: SwapOrder,
     receipt: RpcReceipt | null,
     latestBlock: number | null,
+    reason?: string,
   ): Promise<void> {
     const failed = receipt !== null && !receipt.status;
     const status = failed ? 'FAILED' : 'PENDING';
     const confirmations =
       receipt && latestBlock !== null ? Math.max(0, latestBlock - receipt.blockNumber + 1) : 0;
 
-    const [row] = await this.db
-      .update(swapOrders)
-      .set({
-        status,
-        confirmations,
-        confirmedAt: null,
-        blockNumber: null,
-        executedAmountIn: null,
-        executedAmountOut: null,
-        networkFeeWei: null,
-        networkFeeUsd: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(swapOrders.id, order.id),
-          eq(swapOrders.userId, order.userId),
-          eq(swapOrders.status, 'CONFIRMED'),
-          isNull(swapOrders.accountingTransactionId),
-        ),
-      )
-      .returning({ id: swapOrders.id });
+    await this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(swapOrders)
+        .set({
+          status,
+          confirmations,
+          confirmedAt: null,
+          blockNumber: null,
+          executedAmountIn: null,
+          executedAmountOut: null,
+          networkFeeWei: null,
+          networkFeeUsd: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            eq(swapOrders.status, 'CONFIRMED'),
+            isNull(swapOrders.accountingTransactionId),
+          ),
+        )
+        .returning({ id: swapOrders.id });
 
-    if (!row) return;
+      if (!row) return;
 
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: failed ? 'failed' : 'reorg',
-      payload: {
-        reason: failed ? 'receipt_failed_after_confirmation' : 'reorg_below_confirmations',
-        blockNumber: receipt?.blockNumber ?? null,
-        confirmations,
-      },
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: failed ? 'failed' : 'reorg',
+        payload: {
+          reason: failed
+            ? 'receipt_failed_after_confirmation'
+            : (reason ?? 'reorg_below_confirmations'),
+          blockNumber: receipt?.blockNumber ?? null,
+          confirmations,
+        },
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: failed ? 'swap.order_failed' : 'swap.order_reorg',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: 'CONFIRMED' },
+          after: { status, confirmations },
+        },
+        { executor: dbtx, strict: true },
+      );
     });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: failed ? 'swap.order_failed' : 'swap.order_reorg',
-        entityType: 'swap_order',
-        entityId: order.id,
-        before: { status: 'CONFIRMED' },
-        after: { status, confirmations },
-      },
-      { strict: true },
-    );
   }
 
   private accountingErrorCode(error: unknown): string {
@@ -782,31 +826,33 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
     const exists = order.errors.includes(bounded);
 
-    await this.db
-      .update(swapOrders)
-      .set({
-        errors: exists ? order.errors : [...order.errors, bounded].slice(-20),
-        updatedAt: new Date(),
-      })
-      .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)));
+    await this.db.transaction(async (dbtx) => {
+      await dbtx
+        .update(swapOrders)
+        .set({
+          errors: exists ? order.errors : [...order.errors, bounded].slice(-20),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)));
 
-    if (exists) return;
+      if (exists) return;
 
-    await this.db.insert(swapEvents).values({
-      orderId: order.id,
-      type: 'accounting_failed',
-      payload: { code: bounded },
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'accounting_failed',
+        payload: { code: bounded },
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.accounting_failed',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: { code: bounded },
+        },
+        { executor: dbtx, strict: true },
+      );
     });
-
-    await this.audit.log(
-      {
-        userId: order.userId,
-        action: 'swap.accounting_failed',
-        entityType: 'swap_order',
-        entityId: order.id,
-        after: { code: bounded },
-      },
-      { strict: true },
-    );
   }
 }
