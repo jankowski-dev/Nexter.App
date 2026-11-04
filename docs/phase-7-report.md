@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **security fixes applied after the first review (FAIL); independent re-review and live/fork validation pending.**
+Status: **independent security review PASS; live/fork validation and deployment pending.**
 
 ## Scope
 
@@ -69,7 +69,7 @@ The migration is additive and does not rewrite ledger data.
 
 ## Review history
 
-First independent review: **FAIL**, no Critical, two High (price-impact unit bypass; unaudited failed builds) and material Mediums. Fixes applied: fraction price-impact with USD cross-check, audit/event for every build failure, conditional build/cancel/expiry transitions, RPC-outage handling, response-size cap, redirect rejection, stricter env bounds, swap-table privilege revokes, expected-5xx telemetry filtering, and expanded tests. Re-review pending.
+First independent review: **FAIL**, no Critical, two High (price-impact unit bypass; unaudited failed builds) and material Mediums. Fixes applied: fraction price-impact with USD cross-check, audit/event for every build failure, conditional build/cancel/expiry transitions, RPC-outage handling, response-size cap, redirect rejection, stricter env bounds, swap-table privilege revokes, expected-5xx telemetry filtering, and expanded tests. Re-review: **PASS**, no Critical/High/Medium code blockers.
 
 ## Next
 
