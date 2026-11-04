@@ -53,6 +53,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         enabled: swapsEnabled,
         killSwitch: !swapsEnabled,
         providerConfigured: true,
+        providerMode: 'gateway',
         rpcConfigured: true,
         walletAllowlistConfigured: true,
         chains: [

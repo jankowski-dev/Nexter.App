@@ -112,7 +112,7 @@ export function SwapPage() {
           <CardTitle>Параметры котировки</CardTitle>
           <CardDescription>
             {chain
-              ? `${chain.name} · chainId ${chain.chainId} · провайдер ${data.providerConfigured ? 'настроен' : 'не настроен'}`
+              ? `${chain.name} · chainId ${chain.chainId} · провайдер ${data.providerConfigured ? data.providerMode : 'не настроен'}`
               : 'Сеть не настроена'}
           </CardDescription>
 
@@ -223,7 +223,8 @@ export function SwapPage() {
         <Card>
           <CardTitle>Результат</CardTitle>
           <CardDescription>
-            Маршрут и суммы приходят от KyberSwap. Сборка и симуляция появятся в Phase 8.
+            Маршрут и суммы приходят от KyberSwap. Сборка доступна через API; подпись и отправка —
+            Phase 8.
           </CardDescription>
 
           {quote.data ? (

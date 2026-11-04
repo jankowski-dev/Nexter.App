@@ -7,7 +7,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lt, lte, ne, or } from 'drizzle-orm';
 import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/db';
 import type {
   SwapBuildRequest,
@@ -69,13 +69,40 @@ function fromBaseUnits(value: string, decimals: number): string {
   return new Decimal(value).div(new Decimal(10).pow(decimals)).toFixed(decimals);
 }
 
-function toPriceImpactBps(value: string | null): number | null {
+function fractionToPriceImpactBps(value: string | null): number | null {
   if (value === null) return null;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return null;
-  // Clamp before multiplying so a hostile provider cannot overflow the
-  // integer column. Anything above the 2% gate is rejected by the caller.
-  return Math.max(-100_000, Math.min(100_000, Math.round(parsed * 100)));
+
+  try {
+    const parsed = decimal(value);
+
+    if (!parsed.isFinite() || parsed.lt(0)) return null;
+
+    // Kyber routeSummary.priceImpact is a fraction (0.0015 = 0.15%).
+    return Math.min(100_000, parsed.mul(10_000).toDecimalPlaces(0).toNumber());
+  } catch {
+    return null;
+  }
+}
+
+function usdToPriceImpactBps(
+  amountInUsd: string | null,
+  amountOutUsd: string | null,
+): number | null {
+  if (amountInUsd === null || amountOutUsd === null) return null;
+
+  try {
+    const input = decimal(amountInUsd);
+    const output = decimal(amountOutUsd);
+
+    if (input.lte(0) || output.lt(0)) return null;
+
+    const difference = input.minus(output);
+    if (difference.lte(0)) return 0;
+
+    return Math.min(100_000, difference.div(input).mul(10_000).toDecimalPlaces(0).toNumber());
+  } catch {
+    return null;
+  }
 }
 
 function normalizeAddress(value: string): string {
@@ -123,6 +150,7 @@ export class SwapService {
       enabled,
       killSwitch: env.SWAP_KILL_SWITCH,
       providerConfigured: this.kyber.configured,
+      providerMode: this.kyber.mode,
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,
@@ -226,13 +254,19 @@ export class SwapService {
       });
     }
 
-    const priceImpactBps = toPriceImpactBps(route.priceImpact);
-    const warnings: string[] = [];
+    const providerImpactBps = fractionToPriceImpactBps(route.priceImpact);
+    const usdImpactBps = usdToPriceImpactBps(route.amountInUsd, route.amountOutUsd);
+    const priceImpactBps =
+      providerImpactBps === null
+        ? usdImpactBps
+        : usdImpactBps === null
+          ? providerImpactBps
+          : Math.max(providerImpactBps, usdImpactBps);
 
     if (priceImpactBps === null) {
       throw new BadRequestException({
         code: 'SWAP_VALIDATION_FAILED',
-        message: 'Provider did not return a valid price impact',
+        message: 'Provider did not return enough data to validate price impact',
       });
     }
 
@@ -242,6 +276,8 @@ export class SwapService {
         message: `Price impact ${(priceImpactBps / 100).toFixed(2)}% exceeds the configured limit`,
       });
     }
+
+    const warnings: string[] = [];
 
     const minOutBase = (BigInt(amountOutBase) * BigInt(10_000 - slippageBps)) / BigInt(10_000);
     const quoteExpiresAt = new Date(Date.now() + env.SWAP_QUOTE_TTL_SECONDS * 1000);
@@ -357,33 +393,39 @@ export class SwapService {
         deadline,
       });
     } catch (error) {
-      await this.recordBuildFailure(order, error);
+      await this.recordBuildFailure(order, 'SWAP_PROVIDER_ERROR', meta);
       throw this.providerError(error, 'SWAP_BUILD_FAILED');
     }
 
     const validation: SwapBuildResponse['validation'] = [];
-    const fail = (check: string, detail: string): never => {
+    const fail = async (check: string, code: string, detail: string): Promise<never> => {
       validation.push({ check, passed: false, detail });
+      await this.recordBuildFailure(order, code, meta);
       throw new BadRequestException({
         code: 'SWAP_VALIDATION_FAILED',
         message: `${check}: ${detail}`,
+        details: { reason: code },
       });
     };
     const pass = (check: string) => validation.push({ check, passed: true, detail: null });
 
     if (!routerAllowlist().includes(normalizeAddress(built.routerAddress))) {
-      fail('router', 'Router is not in the allowlist');
+      await fail('router', 'SWAP_ROUTER_NOT_ALLOWED', 'Router is not in the allowlist');
     }
     pass('router');
 
     if (!/^0x[0-9a-fA-F]*$/.test(built.data) || built.data.length < 10) {
-      fail('calldata', 'Calldata is not valid hex');
+      await fail('calldata', 'SWAP_CALLDATA_INVALID', 'Calldata is not valid hex');
     }
     if (built.data.length > MAX_CALLDATA_LENGTH) {
-      fail('calldata-length', 'Calldata is too large');
+      await fail('calldata-length', 'SWAP_CALLDATA_TOO_LARGE', 'Calldata is too large');
     }
     if (!selectors.includes(built.data.slice(0, 10).toLowerCase())) {
-      fail('selector', 'Calldata selector is not in the allowlist');
+      await fail(
+        'selector',
+        'SWAP_SELECTOR_NOT_ALLOWED',
+        'Calldata selector is not in the allowlist',
+      );
     }
     pass('calldata');
 
@@ -391,57 +433,76 @@ export class SwapService {
     const quotedAmountIn = typeof routeSummary.amountIn === 'string' ? routeSummary.amountIn : null;
 
     if (!quotedAmountIn || !/^\d+$/.test(quotedAmountIn)) {
+      await this.recordBuildFailure(order, 'SWAP_AMOUNT_INVALID', meta);
       throw new BadRequestException({
         code: 'SWAP_VALIDATION_FAILED',
         message: 'Stored route is missing a valid amountIn',
+        details: { reason: 'SWAP_AMOUNT_INVALID' },
       });
     }
     if (built.amountIn !== quotedAmountIn) {
-      fail('amountIn', 'Built amountIn does not match the quote');
+      await fail('amountIn', 'SWAP_AMOUNT_MISMATCH', 'Built amountIn does not match the quote');
     }
     pass('amountIn');
 
     if (!/^\d+$/.test(built.amountOut) || built.amountOut.length > 36) {
-      fail('amountOut', 'Built amountOut is not a bounded integer');
+      await fail('amountOut', 'SWAP_AMOUNT_INVALID', 'Built amountOut is not a bounded integer');
     }
     if (!/^\d+$/.test(built.transactionValue) || built.transactionValue.length > 78) {
-      fail('transactionValue', 'Transaction value is not a bounded integer');
+      await fail(
+        'transactionValue',
+        'SWAP_TX_VALUE_INVALID',
+        'Transaction value is not a bounded integer',
+      );
     }
 
     const tokenOut = getSwapToken(order.chain, order.tokenOut);
     const tokenIn = getSwapToken(order.chain, order.tokenIn);
 
     if (!tokenOut || !tokenIn) {
+      await this.recordBuildFailure(order, 'SWAP_TOKEN_NOT_ALLOWED', meta);
       throw new BadRequestException({
         code: 'SWAP_VALIDATION_FAILED',
         message: 'Stored token is not in the current registry',
+        details: { reason: 'SWAP_TOKEN_NOT_ALLOWED' },
       });
     }
 
     const minOutBase = toBaseUnits(order.minOut, tokenOut.decimals);
     if (BigInt(built.amountOut) < BigInt(minOutBase)) {
-      fail('minOut', 'Built output is below the quoted minimum');
+      await fail('minOut', 'SWAP_MIN_OUT', 'Built output is below the quoted minimum');
     }
     pass('minOut');
 
     const expectedValue = tokenIn.native ? quotedAmountIn : '0';
     if (BigInt(built.transactionValue) !== BigInt(expectedValue)) {
-      fail('transactionValue', 'Transaction value does not match the expected native amount');
+      await fail(
+        'transactionValue',
+        'SWAP_TX_VALUE_MISMATCH',
+        'Transaction value does not match the expected native amount',
+      );
     }
     pass('transactionValue');
 
-    const simulation = await this.rpc.simulate({
-      from: wallet,
-      to: built.routerAddress,
-      data: built.data,
-      value: built.transactionValue,
-    });
+    let simulation;
+
+    try {
+      simulation = await this.rpc.simulate({
+        from: wallet,
+        to: built.routerAddress,
+        data: built.data,
+        value: built.transactionValue,
+      });
+    } catch {
+      await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
 
     if (!simulation.success) {
-      await this.recordBuildFailure(
-        order,
-        new Error(simulation.revertReason ?? 'Simulation failed'),
-      );
+      await this.recordBuildFailure(order, 'SWAP_SIMULATION_FAILED', meta);
       throw new BadRequestException({
         code: 'SWAP_SIMULATION_FAILED',
         message: 'Swap simulation failed',
@@ -453,13 +514,21 @@ export class SwapService {
 
     const gasEstimate = built.gas ?? simulation.gasEstimate;
     if (gasEstimate && (!/^\d+$/.test(gasEstimate) || gasEstimate.length > 24)) {
-      fail('gas', 'Gas estimate is not a bounded integer');
+      await fail('gas', 'SWAP_GAS_INVALID', 'Gas estimate is not a bounded integer');
     }
 
     const gasUsd =
       built.gasUsd && /^\d+(?:\.\d+)?$/.test(built.gasUsd) && built.gasUsd.length <= 32
         ? built.gasUsd
         : order.gasUsd;
+
+    if (order.quoteExpiresAt.getTime() <= Date.now()) {
+      await this.expireIfNeeded(order);
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap quote expired during build',
+      });
+    }
 
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -476,10 +545,22 @@ export class SwapService {
           builtAt: new Date(),
           updatedAt: new Date(),
         })
-        .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, userId)))
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            eq(swapOrders.status, 'QUOTED'),
+            gt(swapOrders.quoteExpiresAt, new Date()),
+          ),
+        )
         .returning();
 
-      if (!row) throw new Error('Failed to update swap order');
+      if (!row) {
+        throw new ConflictException({
+          code: 'SWAP_STATE_INVALID',
+          message: 'Swap order is no longer buildable',
+        });
+      }
 
       await tx.insert(swapEvents).values({
         orderId: order.id,
@@ -529,10 +610,24 @@ export class SwapService {
     }
 
     await this.db.transaction(async (tx) => {
-      await tx
+      const [cancelled] = await tx
         .update(swapOrders)
         .set({ status: 'CANCELLED', cancelledAt: new Date(), updatedAt: new Date() })
-        .where(and(eq(swapOrders.id, orderId), eq(swapOrders.userId, userId)));
+        .where(
+          and(
+            eq(swapOrders.id, orderId),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, ['QUOTED', 'BUILT']),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!cancelled) {
+        throw new ConflictException({
+          code: 'SWAP_STATE_INVALID',
+          message: 'Swap order is no longer cancellable',
+        });
+      }
 
       await tx.insert(swapEvents).values({
         orderId,
@@ -562,6 +657,9 @@ export class SwapService {
     const conditions = [eq(swapOrders.userId, userId)];
 
     if (query.status) conditions.push(eq(swapOrders.status, query.status));
+    conditions.push(
+      or(ne(swapOrders.status, 'QUOTED'), gt(swapOrders.quoteExpiresAt, new Date()))!,
+    );
     if (query.cursor) {
       const cursor = decodeCursor<{ createdAt: string; id: string }>(query.cursor);
 
@@ -670,45 +768,83 @@ export class SwapService {
     return order;
   }
 
-  private async expireIfNeeded(order: SwapOrder): Promise<void> {
-    if (order.status !== 'QUOTED' || order.quoteExpiresAt.getTime() > Date.now()) return;
+  private async expireIfNeeded(order: SwapOrder): Promise<boolean> {
+    if (order.status !== 'QUOTED' || order.quoteExpiresAt.getTime() > Date.now()) return false;
 
-    await this.db.transaction(async (tx) => {
-      await tx
+    const expired = await this.db.transaction(async (tx) => {
+      const [row] = await tx
         .update(swapOrders)
         .set({ status: 'EXPIRED', updatedAt: new Date() })
-        .where(and(eq(swapOrders.id, order.id), eq(swapOrders.status, 'QUOTED')));
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.status, 'QUOTED'),
+            lte(swapOrders.quoteExpiresAt, new Date()),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return false;
+
       await tx.insert(swapEvents).values({
         orderId: order.id,
         type: 'expired',
         payload: { quoteExpiresAt: order.quoteExpiresAt.toISOString() },
       });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.order_expired',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: 'QUOTED' },
+          after: { status: 'EXPIRED' },
+        },
+        { executor: tx, strict: true },
+      );
+
+      return true;
     });
 
-    order.status = 'EXPIRED';
+    if (expired) order.status = 'EXPIRED';
+    return expired;
   }
 
-  private async recordBuildFailure(order: SwapOrder, error: unknown): Promise<void> {
-    const message =
-      error instanceof KyberApiError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : 'Swap build failed';
+  private async recordBuildFailure(order: SwapOrder, code: string, meta: SwapMeta): Promise<void> {
+    const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
 
     await this.db.transaction(async (tx) => {
-      await tx
+      const [row] = await tx
         .update(swapOrders)
         .set({
-          errors: [...order.errors, message.slice(0, 500)],
+          errors: [...order.errors, bounded].slice(-20),
           updatedAt: new Date(),
         })
-        .where(eq(swapOrders.id, order.id));
+        .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)))
+        .returning({ id: swapOrders.id });
+
+      if (!row) return;
+
       await tx.insert(swapEvents).values({
         orderId: order.id,
         type: 'build_failed',
-        payload: { message: message.slice(0, 500) },
+        payload: { code: bounded },
       });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.build_failed',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status: order.status, code: bounded },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
     });
   }
 
@@ -754,6 +890,13 @@ export class SwapService {
 
   private providerError(error: unknown, fallbackCode: string): Error {
     if (error instanceof KyberApiError) {
+      if (error.code === 'SWAP_RATE_LIMITED' || error.code === 'SWAP_PROVIDER_UNAVAILABLE') {
+        return new ServiceUnavailableException({
+          code: error.code,
+          message: error.message,
+        });
+      }
+
       return new ServiceUnavailableException({
         code: fallbackCode,
         message: error.message,

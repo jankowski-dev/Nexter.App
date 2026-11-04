@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **implementation complete; independent review and live/fork validation pending.**
+Status: **security fixes applied after the first review (FAIL); independent re-review and live/fork validation pending.**
 
 ## Scope
 
@@ -30,11 +30,11 @@ The migration is additive and does not rewrite ledger data.
 ## Backend
 
 - `GET /swap/config` — effective enabled state, kill switch, provider/RPC/allowlist status, BSC tokens, quote TTL, price-impact and slippage limits. Never returns keys, RPC URLs, or wallet allowlist contents.
-- `POST /swap/quote` — token allowlist, amount conversion, slippage/price-impact gates, Kyber route call, order/event/audit persistence.
-- `POST /swap/build` — wallet allowlist, quote freshness, router/selector/amount/value checks, RPC chain id, `eth_call`, and `eth_estimateGas`; returns `BUILT` only on success.
+- `POST /swap/quote` — token allowlist, amount conversion, slippage gate, Kyber route call, and a price-impact gate that treats the provider field as a fraction and cross-checks it against `amountInUsd`/`amountOutUsd`; order/event/audit persistence.
+- `POST /swap/build` — wallet allowlist, quote freshness, router/selector/amount/value/minOut checks, RPC chain id, `eth_call`, and `eth_estimateGas`; returns `BUILT` only on success. `sender`/`recipient`/`deadline` are requested from Kyber but their ABI encoding is not decoded until Phase 8.
 - `GET /swap/orders`, `GET /swap/orders/:id`, `POST /swap/orders/:id/cancel`.
 - `SWAP_SELECTOR_ALLOWLIST` is required before build is enabled; full ABI decoding remains Phase 8.
-- Every quote/build/cancel mutation is audited; provider failures are bounded and recorded as events, not raw response bodies.
+- Every persisted quote/build/cancel mutation is audited; every failed build adds a bounded `build_failed` event and `swap.build_failed` audit row. Provider messages are not written to audit payloads. Expiry is audited as `swap.order_expired`.
 
 ## Frontend
 
@@ -48,9 +48,9 @@ The migration is additive and does not rewrite ledger data.
 - `pnpm lint` — pass.
 - `pnpm format:check` — pass.
 - `pnpm build` — pass.
-- API tests — **77 passed, 1 skipped** (includes swap API, Kyber client, RPC, token registry).
+- API tests — **79 passed, 1 skipped** (includes swap API, Kyber client, RPC, token registry, price-impact units, failure audit, RPC outage, and concurrent build).
 - Playwright — **5 passed** (auth, import, manual flows, Phase 5 UI, read-only swap UI).
-- Migration `0009` applies cleanly to the disposable PostgreSQL database; restore drill now covers 21 tables.
+- Migration `0009` applies cleanly to the disposable PostgreSQL database; restore drill covers 21 tables. The app role provisioning denies DELETE on `swap_orders`, `swap_events`, and `external_api_calls` while retaining INSERT.
 - No live Kyber API or BSC RPC credentials were used; provider/RPC calls are covered by deterministic fixtures/fakes.
 
 ## Live/fork check
@@ -60,11 +60,17 @@ The migration is additive and does not rewrite ledger data.
 ## Known limitations
 
 - No signing, WalletConnect, approvals, submission, tracking, step-up TOTP, or accounting integration (Phase 8).
+- The build response is not ABI-decoded for recipient/deadline; these are mandatory Phase 8 gates before signing.
+- Recipient/deadline ABI decoding is a mandatory Phase 8 gate before any signature request; Phase 7 only requests them from Kyber and validates router/selector/amount/minOut/value/simulation.
 - `SWAP_SELECTOR_ALLOWLIST` must be configured before build is enabled; full calldata ABI decoding is Phase 8.
 - Live Kyber/BSC fork validation is opt-in and not run in this environment. The real provider returned 403 without a gateway key; a production API key/RPC URL is required for live quotes.
 - The public fallback is subject to Kyber rate limits; the gateway is preferred when `KYBERSWAP_API_KEY` is set.
 - `SWAP_ENABLED=false` is the safe default; the owner must enable quotes after configuring the provider.
 
+## Review history
+
+First independent review: **FAIL**, no Critical, two High (price-impact unit bypass; unaudited failed builds) and material Mediums. Fixes applied: fraction price-impact with USD cross-check, audit/event for every build failure, conditional build/cancel/expiry transitions, RPC-outage handling, response-size cap, redirect rejection, stricter env bounds, swap-table privilege revokes, expected-5xx telemetry filtering, and expanded tests. Re-review pending.
+
 ## Next
 
-Independent security review, live/fork validation with owner-provided provider/RPC credentials, then Phase 7 acceptance. Phase 8 must not begin until the pre-signing foundation is accepted.
+Independent re-review, live/fork validation with owner-provided provider/RPC credentials, then Phase 7 acceptance. Phase 8 must not begin until the pre-signing foundation is accepted.

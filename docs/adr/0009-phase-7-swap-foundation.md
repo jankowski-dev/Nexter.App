@@ -69,7 +69,7 @@ Quote:
 - slippage within the configured range (default 50 bps, max 200);
 - optional wallet address well-formed and, when the allowlist is configured, allowed;
 - Kyber response `code === 0`, route summary present, amountIn matches, amountOut > 0;
-- price impact present and within 2% when the provider supplies it;
+- price impact is a provider fraction cross-checked against `amountInUsd`/`amountOutUsd`; the larger of the two must be within 2%, and missing both rejects the quote;
 - quote TTL 15 seconds.
 
 Build:
@@ -87,9 +87,9 @@ Build:
 - output meets the quoted minimum;
 - RPC chain id is BSC;
 - RPC `eth_call` and `eth_estimateGas` succeed with the built transaction;
-- any mismatch rejects the build and records a `build_failed` event.
+- any mismatch rejects the build and records a `build_failed` event and a `swap.build_failed` audit row.
 
-Full ABI decoding and a complete selector allowlist are Phase 8 work; Phase 7 enforces a configured selector allowlist and otherwise relies on router/value/amount/simulation checks. This limitation is documented and reviewed.
+`sender`, `recipient`, and `deadline` are sent to Kyber, but Phase 7 does not ABI-decode the returned calldata. Recipient, deadline, and full route decoding are mandatory Phase 8 gates before any signature request. Phase 7 enforces the router/selector/value/amount/minOut checks and RPC simulation; this limitation is documented and reviewed.
 
 ### Persistence
 
@@ -111,7 +111,7 @@ All mutations are audited. Build and cancel add both a domain event and an audit
 
 ### UI
 
-- `/swap` is a read-only BSC quote page: token selectors, amount, quote result, price impact, gas, route summary, and expiry.
+- `/swap` is a read-only BSC quote page: token selectors, amount, quote result, price impact, gas, route ID, and expiry.
 - Build/sign controls are not exposed in Phase 7.
 - If swaps are disabled or the provider is not configured, the page shows a Russian explanatory state.
 - No seed phrase, private key, or wallet connection is requested.

@@ -39,11 +39,14 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
   let simulationSuccess = true;
+  let rpcFailure = false;
   let buildData = `${selector}${'0'.repeat(120)}`;
   let buildRouter = router;
   let buildValue = '0';
   let buildAmountOut = '2000000000000000000';
-  let quotePriceImpact = '0.10';
+  let quotePriceImpact: string | null = '0.0010';
+  let quoteAmountInUsd: string | null = '1.00';
+  let quoteAmountOutUsd: string | null = '0.999';
 
   const kyber = {
     configured: true,
@@ -53,8 +56,8 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
         tokenOut: input.tokenOut,
         amountIn: input.amountInBase,
         amountOut: '2000000000000000000',
-        amountInUsd: '1.00',
-        amountOutUsd: '1.99',
+        amountInUsd: quoteAmountInUsd,
+        amountOutUsd: quoteAmountOutUsd,
         gas: '120000',
         gasUsd: '0.05',
         priceImpact: quotePriceImpact,
@@ -63,8 +66,8 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       routerAddress: router,
       amountIn: input.amountInBase,
       amountOut: '2000000000000000000',
-      amountInUsd: '1.00',
-      amountOutUsd: '1.99',
+      amountInUsd: quoteAmountInUsd,
+      amountOutUsd: quoteAmountOutUsd,
       gas: '120000',
       gasUsd: '0.05',
       priceImpact: quotePriceImpact,
@@ -85,12 +88,16 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
 
   const rpc = {
     configured: true,
-    simulate: async () => ({
-      success: simulationSuccess,
-      revertReason: simulationSuccess ? null : 'execution reverted: test',
-      gasEstimate: simulationSuccess ? '120000' : null,
-      chainId: 56,
-    }),
+    simulate: async () => {
+      if (rpcFailure) throw new Error('rpc unavailable');
+
+      return {
+        success: simulationSuccess,
+        revertReason: simulationSuccess ? null : 'execution reverted: test',
+        gasEstimate: simulationSuccess ? '120000' : null,
+        chainId: 56,
+      };
+    },
   };
 
   async function setupOwner(agent: SuperAgentTest) {
@@ -142,11 +149,14 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
 
   beforeEach(async () => {
     simulationSuccess = true;
+    rpcFailure = false;
     buildData = `${selector}${'0'.repeat(120)}`;
     buildRouter = router;
     buildValue = '0';
     buildAmountOut = '2000000000000000000';
-    quotePriceImpact = '0.10';
+    quotePriceImpact = '0.0010';
+    quoteAmountInUsd = '1.00';
+    quoteAmountOutUsd = '0.999';
     env.SWAP_KILL_SWITCH = false;
     await db.execute(sql`truncate table users restart identity cascade`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
@@ -288,12 +298,31 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .expect(403);
     env.SWAP_WALLET_ALLOWLIST = wallet;
 
+    buildData = '0xzz';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+
     buildData = `0xdeadbeef${'0'.repeat(120)}`;
     await agent
       .post('/api/v1/swap/build')
       .set('x-csrf-token', owner.csrf)
       .send({ orderId, walletAddress: wallet })
       .expect(400);
+
+    const failedDetail = await agent.get(`/api/v1/swap/orders/${orderId}`).expect(200);
+    expect(failedDetail.body.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'build_failed',
+          payload: { code: 'SWAP_SELECTOR_NOT_ALLOWED' },
+        }),
+      ]),
+    );
+    const failedAudit = await agent.get('/api/v1/audit-log?action=swap.build_failed').expect(200);
+    expect(failedAudit.body.data.length).toBeGreaterThan(0);
 
     buildData = `${selector}${'0'.repeat(120)}`;
     buildRouter = '0x4444444444444444444444444444444444444444';
@@ -328,6 +357,13 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .expect(400);
 
     simulationSuccess = true;
+    rpcFailure = true;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(503);
+    rpcFailure = false;
     await db
       .update(swapOrders)
       .set({ quoteExpiresAt: new Date(Date.now() - 1000) })
@@ -348,15 +384,56 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .expect(503);
   }, 60_000);
 
-  it('rejects quotes above the configured price impact limit', async () => {
+  it('allows only one concurrent build for a quote', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
-    quotePriceImpact = '3.00';
-
-    await agent
+    const quoted = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
       .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
-      .expect(400);
+      .expect(201);
+    const orderId = quoted.body.id as string;
+
+    const responses = await Promise.all([
+      agent
+        .post('/api/v1/swap/build')
+        .set('x-csrf-token', owner.csrf)
+        .send({ orderId, walletAddress: wallet }),
+      agent
+        .post('/api/v1/swap/build')
+        .set('x-csrf-token', owner.csrf)
+        .send({ orderId, walletAddress: wallet }),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  }, 60_000);
+
+  it('applies the fraction-based price impact gate and USD fallback', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quote = () =>
+      agent
+        .post('/api/v1/swap/quote')
+        .set('x-csrf-token', owner.csrf)
+        .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet });
+
+    quotePriceImpact = '0.019';
+    quoteAmountOutUsd = '0.981';
+    const pass = await quote().expect(201);
+    expect(pass.body.priceImpactBps).toBe(190);
+
+    quotePriceImpact = '0.021';
+    quoteAmountOutUsd = '0.979';
+    await quote().expect(400);
+
+    quotePriceImpact = null;
+    quoteAmountInUsd = '1.00';
+    quoteAmountOutUsd = '0.99';
+    const fallback = await quote().expect(201);
+    expect(fallback.body.priceImpactBps).toBe(100);
+
+    quoteAmountInUsd = null;
+    quoteAmountOutUsd = null;
+    await quote().expect(400);
   }, 60_000);
 });

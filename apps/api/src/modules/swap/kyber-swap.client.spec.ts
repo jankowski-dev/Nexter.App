@@ -146,6 +146,28 @@ describe('KyberSwapClient', () => {
     ).rejects.toMatchObject({ code: 'SWAP_PROVIDER_ERROR', message: 'bad route' });
   });
 
+  it('rejects oversized provider responses', async () => {
+    const client = new KyberSwapClient(
+      fakeCalls(),
+      vi.fn().mockResolvedValue(
+        new Response('x'.repeat(2_000_001), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ) as unknown as typeof fetch,
+    );
+
+    await expect(
+      client.getRoutes({
+        chain: 'bsc',
+        tokenIn: routeSummary.tokenIn,
+        tokenOut: routeSummary.tokenOut,
+        amountInBase: routeSummary.amountIn,
+        slippageBps: 50,
+      }),
+    ).rejects.toMatchObject({ code: 'SWAP_PROVIDER_ERROR', status: 502 });
+  });
+
   it('rejects incomplete provider responses', async () => {
     const client = new KyberSwapClient(
       fakeCalls(),

@@ -126,8 +126,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status >= 500) {
       const safe = safeErrorForTelemetry(exception);
-      Sentry.captureException(safe);
-      this.logger.error(safe.message, safe.stack);
+      const expected = new Set([
+        'SWAP_DISABLED',
+        'SWAP_PROVIDER_UNAVAILABLE',
+        'SWAP_QUOTE_FAILED',
+        'SWAP_BUILD_FAILED',
+        'SWAP_RATE_LIMITED',
+        'SWAP_SELECTOR_NOT_CONFIGURED',
+      ]);
+
+      if (expected.has(code)) {
+        this.logger.warn(safe.message);
+      } else {
+        Sentry.captureException(safe);
+        this.logger.error(safe.message, safe.stack);
+      }
     }
 
     if (request.url.startsWith('/api/v1/auth/')) {

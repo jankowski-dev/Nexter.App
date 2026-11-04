@@ -128,7 +128,7 @@ Before enabling quotes:
 2. Run the pre-deploy migration command.
 3. Configure `SWAP_ENABLED=false` first and deploy the API/worker and SPA.
 4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
-5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Keep `SWAP_KILL_SWITCH=true` as the emergency stop.
+5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
 Builds remain disabled until a selector allowlist is configured. Phase 7 never signs or submits transactions.
 

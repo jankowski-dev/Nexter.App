@@ -75,6 +75,43 @@ function truncate(value: string, max = 500): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
+async function readCapped(response: Response, maxBytes: number): Promise<string> {
+  const contentLength = response.headers.get('content-length');
+
+  if (contentLength && Number(contentLength) > maxBytes) {
+    await response.body?.cancel();
+    throw new Error('RESPONSE_TOO_LARGE');
+  }
+
+  if (!response.body) {
+    const text = await response.text();
+    if (text.length > maxBytes) throw new Error('RESPONSE_TOO_LARGE');
+    return text;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let text = '';
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('RESPONSE_TOO_LARGE');
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+    return text;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 @Injectable()
 export class KyberSwapClient {
   private readonly logger = new Logger(KyberSwapClient.name);
@@ -97,6 +134,10 @@ export class KyberSwapClient {
 
   get configured(): boolean {
     return Boolean(this.baseUrl);
+  }
+
+  get mode(): 'gateway' | 'fallback' {
+    return this.apiKey ? 'gateway' : 'fallback';
   }
 
   async getRoutes(input: KyberRouteRequest): Promise<KyberRouteResult> {
@@ -198,23 +239,29 @@ export class KyberSwapClient {
             ...(this.apiKey ? { 'X-Api-Key': this.apiKey } : {}),
           },
           body: body ? JSON.stringify(body) : undefined,
+          redirect: 'error',
           signal: AbortSignal.timeout(10_000),
         });
-        const text = await response.text();
+        let text: string;
 
-        if (text.length > 2_000_000) {
-          await this.apiCalls.record({
-            provider: 'kyberswap',
-            endpoint,
-            status: response.status,
-            latencyMs: Date.now() - started,
-            errorCode: 'RESPONSE_TOO_LARGE',
-          });
-          throw new KyberApiError(
-            'SWAP_PROVIDER_ERROR',
-            'Swap provider response is too large',
-            502,
-          );
+        try {
+          text = await readCapped(response, 2_000_000);
+        } catch (error) {
+          if (error instanceof Error && error.message === 'RESPONSE_TOO_LARGE') {
+            await this.apiCalls.record({
+              provider: 'kyberswap',
+              endpoint,
+              status: response.status,
+              latencyMs: Date.now() - started,
+              errorCode: 'RESPONSE_TOO_LARGE',
+            });
+            throw new KyberApiError(
+              'SWAP_PROVIDER_ERROR',
+              'Swap provider response is too large',
+              502,
+            );
+          }
+          throw error;
         }
 
         let parsed: KyberEnvelope = {};
