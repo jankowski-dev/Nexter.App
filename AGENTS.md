@@ -6,7 +6,7 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 7 — Swap foundation (implementation complete; review and live/fork validation pending). Phase 6 — MVP-1 hardening is accepted as of 2026-11-04.
+Phase 7 — Swap foundation (independent security review PASS; deployed with swaps disabled on 2026-11-04). Live quote/provider validation is pending; Phase 7 is not accepted until that check and owner sign-off.
 
 Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, and Phase 6 — MVP-1 hardening are accepted. Phase 7 is scoped by ADR 0009 and implements quote/build/simulate only; signing, approvals, submission, and accounting integration remain Phase 8. No private keys or seed phrases may ever reach the server.
 

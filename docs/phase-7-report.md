@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **independent security review PASS; live/fork validation and deployment pending.**
+Status: **independent security review PASS; deployed with swaps disabled. Live quote/fork validation is pending provider configuration.**
 
 ## Scope
 
@@ -66,6 +66,14 @@ The migration is additive and does not rewrite ledger data.
 - Live Kyber/BSC fork validation is opt-in and not run in this environment. The real provider returned 403 without a gateway key; a production API key/RPC URL is required for live quotes.
 - The public fallback is subject to Kyber rate limits; the gateway is preferred when `KYBERSWAP_API_KEY` is set.
 - `SWAP_ENABLED=false` is the safe default; the owner must enable quotes after configuring the provider.
+
+## Production deployment
+
+- PR #9 merged to `main` as `4226ebe` after independent security review **PASS**.
+- Railway `@nexter/api` deployment `b20524aa` succeeded on 2026-11-04; pre-deploy applied migration `0009` (21 tables total).
+- `/ready` and `/login` return 200; `GET /api/v1/swap/config` is registered and returns 401 without a session.
+- `SWAP_ENABLED` is left `false`; no quote/build endpoint is enabled until the provider/RPC/allowlists are configured and live-check passes. The application role provisioning denies DELETE on the swap tables.
+- Public BSC RPC check passed locally (chain id 56, router bytecode present). Kyber public gateway/fallback returned 403 from the agent network without an API key; the live quote probe must run from Railway or with a gateway key.
 
 ## Review history
 
