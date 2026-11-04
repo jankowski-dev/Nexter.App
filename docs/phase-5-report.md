@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **review PASS; deployed to production on 2026-11-04 (merge `a731457`). Owner sign-off on the documented Phase 6 deferrals is pending.**
+Status: **accepted on 2026-11-04.** Independent review PASS; merged as `a731457`; deployed to production; owner approved the documented Phase 6 deferrals.
 
 ## Scope completed
 
@@ -99,4 +99,4 @@ Second review re-check confirmed those fixes and raised three material Mediums, 
 - P&L month grouping falls back to `Europe/Minsk` (the schema default) instead of UTC.
 - Lower-priority items: asset detail loads all asset transactions instead of the first 100; lot consumptions are ordered by disposal time; settings creation is audited; README local database name updated; trades date filters use local-day boundaries.
 
-Remaining explicit deferrals are listed above and in ADR 0008. Pending final re-review.
+Remaining explicit deferrals are listed above and in ADR 0008. The owner approved the Phase 6 deferrals on 2026-11-04, so Phase 5 is accepted.
