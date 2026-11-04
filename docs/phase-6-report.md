@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **in progress — security fixes applied; final independent re-review pending.**
+Status: **implementation and security review PASS; deployed to production on 2026-11-04. Owner UAT and production app-role provisioning are pending.**
 
 ## Scope
 
@@ -85,6 +85,21 @@ First review: **FAIL** — one High (H1) and eight Mediums. H1 and the material 
 - Retention cleanup for sessions/rate limits/imports, Docker/action digest pinning, and a schema-aware readiness check remain operational hardening items.
 - UAT requires the owner to complete authenticated checks; automated Playwright covers the main flows.
 
+## Production deployment
+
+- PR #6 merged to `main` as `670c7be` after final security review **PASS**.
+- Railway `@nexter/api` deployment `883ebb96` (Phase 6) and `0823ade7` (`TRUST_PROXY=1`) succeeded on 2026-11-04.
+- `/health`, `/ready`, and `/login` return 200; new API routes return 401 without a session; security headers are present.
+- Production pre-auth import probe: a 2 MiB unauthenticated body returned `401 AUTH_REQUIRED` before parsing, confirming the M1 hook in the deployed build.
+- `TRUST_PROXY=1` is applied in production; IP-based limits now use the Railway-appended client IP rather than the shared edge address.
+
+## Remaining acceptance steps
+
+1. Owner completes `docs/uat.md` (authenticated production or staging walkthrough).
+2. Owner runs `db:provision-app` with the owner/migration connection and switches the API/worker `DATABASE_URL` to the `nexter_app` role; keep `MIGRATION_DATABASE_URL` on the owner role.
+3. Schedule the encrypted backup cron and R2 upload/retention, then record the first production backup drill.
+4. Record Phase 6 acceptance in `AGENTS.md`/`README.md`/`decisions.md`.
+
 ## Next
 
-Final security review, verification, merge, deploy, and owner acceptance.
+Owner UAT and acceptance.
