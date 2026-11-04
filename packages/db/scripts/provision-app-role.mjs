@@ -63,6 +63,7 @@ const statements = [
   `grant usage on schema public to ${quoteIdent(appUser)};`,
   `grant select, insert, update, delete on all tables in schema public to ${quoteIdent(appUser)};`,
   `revoke update, delete on audit_log from ${quoteIdent(appUser)};`,
+  `revoke delete on users, settings, accounts, assets, chains, imports, watchlist from ${quoteIdent(appUser)};`,
   `grant usage, select on all sequences in schema public to ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant select, insert, update, delete on tables to ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant usage, select on sequences to ${quoteIdent(appUser)};`,
@@ -88,6 +89,19 @@ try {
     [appUser],
   );
 
+  const deleteCheck = await client.query(
+    `select table_name, has_table_privilege($1, 'public.' || table_name, 'delete') as can_delete
+     from unnest($2::text[]) as table_name`,
+    [appUser, ['users', 'settings', 'accounts', 'assets', 'chains', 'imports', 'watchlist']],
+  );
+  const deleteAllowed = deleteCheck.rows
+    .filter((row) => row.can_delete)
+    .map((row) => row.table_name);
+
+  if (deleteAllowed.length > 0) {
+    throw new Error(`Application role still has DELETE on: ${deleteAllowed.join(', ')}`);
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -96,6 +110,7 @@ try {
         superuser: check.rows[0]?.rolsuper ?? null,
         createDb: check.rows[0]?.rolcreatedb ?? null,
         createRole: check.rows[0]?.rolcreaterole ?? null,
+        deleteDenied: true,
         result: 'provisioned',
       },
       null,

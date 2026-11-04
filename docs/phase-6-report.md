@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **in progress — security fixes applied; independent re-review and final verification pending.**
+Status: **in progress — security fixes applied; final independent re-review pending.**
 
 ## Scope
 
@@ -33,8 +33,9 @@ The first independent security review returned **FAIL** with no Critical finding
 - **H1 (fixed): negative fee forged wallet balance.** `tradeGroupSellRequestSchema` now uses positive decimal schemas for amount, proceeds, USD value, fee amount, and fee USD value. `LedgerService` defensively rejects non-positive fee amounts/values and non-positive cash-derived USD values. Regression tests cover negative, zero, exponent, malformed, and whitespace values on both trade-group sells and `/transactions`.
 - **M1 (fixed): pre-auth 10 MiB import parsing.** A Fastify `onRequest` hook in `import-auth.hook.ts` resolves the session and validates CSRF/origin/2FA before the lossless import body parser runs. The imports e2e test sends a 2 MiB unauthenticated body and gets `401` before parsing.
 - **M2 (fixed): database parameters in logs/Sentry.** `safe-error.ts` replaces Drizzle/DB errors with a short SQLSTATE-only message before logging or Sentry; audit and pool error paths use it. Unit tests assert SQL and bound values are removed.
-- **M3 (partially fixed): database least privilege.** `MIGRATION_DATABASE_URL` is preferred by the migration runner. `db:provision-app` creates a non-superuser `nexter_app` role with DML only, no schema `CREATE`, and no `UPDATE`/`DELETE` on `audit_log`; verified locally. Ledger deletes remain available for the documented import rollback path; removing them requires moving rollback behind a security-definer function (recorded as residual).
-- **M4 (fixed): unsafe `TRUST_PROXY=true`.** Production/staging validation rejects `true`, short/test setup tokens, single-byte encryption keys, and non-HTTPS `APP_URL`. The production Railway values were checked without printing secrets: `TRUST_PROXY=false`, 64-char setup token, 32-byte key with 29 distinct bytes, HTTPS URL.
+- **M3 (fixed, with ledger residual): database least privilege.** `MIGRATION_DATABASE_URL` is preferred by the migration runner. `db:provision-app` creates a non-superuser `nexter_app` role with DML only, no schema `CREATE`, no `UPDATE`/`DELETE` on `audit_log`, and no `DELETE` on users/settings/accounts/assets/chains/imports/watchlist; the script verifies those denials. Ledger `DELETE` remains available for the documented import rollback path; removing it requires moving rollback behind a security-definer function (recorded as residual).
+- **M4 (fixed): proxy/IP handling.** Numeric `TRUST_PROXY` values are parsed as hop counts; production/staging rejects `true`. Railway should run with `TRUST_PROXY=1` (one edge hop) so IP limits use the Railway-appended client IP instead of the shared edge IP. The production Railway values were checked without printing secrets: 64-char setup token, 32-byte key with 29 distinct bytes, HTTPS URL. The `TRUST_PROXY` variable is set to `1` after this release deploys.
+- **Backup tooling (hardened after re-review).** `backup.mjs` rejects single-byte encryption keys, writes dumps only into a `0700` temporary directory with signal cleanup, encrypts before writing the final `0600` file, and passes the DB password through `PGPASSWORD` rather than process arguments.
 - **M5 (fixed): vulnerable dev toolchain.** Vitest upgraded to 5.1.0 (tinypool patched); `pnpm audit --audit-level=high` now passes for all dependencies. CI gained an all-dependency audit gate. Two dev-only advisories remain (moderate `esbuild` via drizzle-kit, low `deepmerge` via Nest CLI) and are documented.
 - **M6 (fixed): import numeric/field DoS.** Numeric exponents are normalized with a bounded exponent (max 30) instead of rejected, preserving the real Notion export (`9.83e-05`); oversized values are rejected. Text/id fields are capped, and parser errors/warnings are capped at 200 with an overflow marker.
 - **M7 (fixed): malformed sell numbers caused 500s.** Covered by the positive schemas and the H1 regression tests.
@@ -63,7 +64,7 @@ Production role/backup guidance is in `docs/runbooks/railway.md`; incident and d
 - `pnpm lint` — pass.
 - `pnpm format:check` — pass.
 - `pnpm build` — pass.
-- API tests — **60 passed, 1 skipped**.
+- API tests — **63 passed, 1 skipped**.
 - Real 431 import + Phase 6 perf assertions — pass (see timings above).
 - Playwright — **4 passed**.
 - Restore drill — pass on the real 431 dataset (18 tables, 6,977 rows).
@@ -74,13 +75,13 @@ Production role/backup guidance is in `docs/runbooks/railway.md`; incident and d
 
 ## Security review
 
-First review: **FAIL** — one High (H1) and eight Mediums. H1 and the material Mediums are fixed; lowercase L2–L5 are fixed; L6–L9 are documented residual. Re-review pending.
+First review: **FAIL** — one High (H1) and eight Mediums. H1 and the material Mediums were fixed. Second review: **PASS WITH CHANGES** — no Critical/High, three remaining Mediums (production `TRUST_PROXY=false` shared IP, excessive role `DELETE`, backup key/temp/argv hardening); all three were fixed. Final re-review pending. L2–L5 are fixed; L6–L9 are documented residual.
 
 ## Known limitations
 
 - The trade-group P&L-sign filter is still applied after the page query.
 - R2 upload, retention lifecycle, and scheduling are operational configuration; the repository provides the encrypted dump and restore tooling but not cloud credentials.
-- Separate DB roles are documented and supported but require a production role-provisioning step; ledger DELETE remains for import rollback.
+- Separate DB roles are documented and supported; `db:provision-app` verifies no DELETE on users/settings/accounts/assets/chains/imports/watchlist. Ledger DELETE remains for import rollback.
 - Retention cleanup for sessions/rate limits/imports, Docker/action digest pinning, and a schema-aware readiness check remain operational hardening items.
 - UAT requires the owner to complete authenticated checks; automated Playwright covers the main flows.
 

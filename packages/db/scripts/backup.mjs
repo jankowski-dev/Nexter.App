@@ -17,8 +17,9 @@
 
 import { spawnSync } from 'node:child_process';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const MAGIC = Buffer.from('NEXTER1');
 const IV_BYTES = 12;
@@ -34,6 +35,10 @@ function parseKey(value) {
   if (/^[0-9a-f]{64}$/i.test(value)) return Buffer.from(value, 'hex');
   const decoded = Buffer.from(value, 'base64');
   return decoded.length === 32 ? decoded : undefined;
+}
+
+function isWeakKey(key) {
+  return key.length !== 32 || key.every((byte) => byte === key[0]);
 }
 
 function encryptBuffer(plaintext, key) {
@@ -86,47 +91,75 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function dumpNative(databaseUrl, output) {
-  run('pg_dump', [
-    '--format=custom',
-    '--no-owner',
-    '--no-privileges',
-    `--file=${output}`,
-    `--dbname=${databaseUrl}`,
-  ]);
+function connectionParts(databaseUrl) {
+  const url = new URL(databaseUrl);
+
+  return {
+    host: url.hostname,
+    port: url.port || '5432',
+    user: decodeURIComponent(url.username),
+    database: url.pathname.slice(1),
+    password: decodeURIComponent(url.password),
+  };
 }
 
-function dumpDocker(databaseUrl, output) {
-  const url = new URL(databaseUrl);
-  const tempDir = dirname(output);
+function dumpNative(connection, output) {
+  run(
+    'pg_dump',
+    [
+      '--format=custom',
+      '--no-owner',
+      '--no-privileges',
+      '--no-password',
+      '--host',
+      connection.host,
+      '--port',
+      connection.port,
+      '--username',
+      connection.user,
+      '--dbname',
+      connection.database,
+      '--file',
+      output,
+    ],
+    { env: { PGPASSWORD: connection.password } },
+  );
+}
+
+function dumpDocker(connection, output, tempDir) {
   const fileName = output.slice(tempDir.length + 1);
   const mount = `${tempDir}:/backup`;
 
-  run('docker', [
-    'run',
-    '--rm',
-    '--network',
-    'host',
-    '-v',
-    mount,
-    '-e',
-    `PGPASSWORD=${url.password}`,
-    'postgres:17-alpine',
-    'pg_dump',
-    '--format=custom',
-    '--no-owner',
-    '--no-privileges',
-    '--host',
-    url.hostname,
-    '--port',
-    url.port || '5432',
-    '--username',
-    decodeURIComponent(url.username),
-    '--dbname',
-    url.pathname.slice(1),
-    '--file',
-    `/backup/${fileName}`,
-  ]);
+  run(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      'host',
+      '-v',
+      mount,
+      '-e',
+      'PGPASSWORD',
+      'postgres:17-alpine',
+      'pg_dump',
+      '--format=custom',
+      '--no-owner',
+      '--no-privileges',
+      '--no-password',
+      '--host',
+      connection.host,
+      '--port',
+      connection.port,
+      '--username',
+      connection.user,
+      '--dbname',
+      connection.database,
+      '--file',
+      `/backup/${fileName}`,
+    ],
+    { env: { PGPASSWORD: connection.password } },
+  );
 }
 
 function selfTest() {
@@ -137,6 +170,10 @@ function selfTest() {
 
   if (!decrypted.equals(plaintext)) {
     fail('Encryption self-test failed');
+  }
+
+  if (!isWeakKey(Buffer.alloc(32))) {
+    fail('Weak-key self-test failed');
   }
 
   const tampered = Buffer.from(encrypted);
@@ -154,7 +191,9 @@ function selfTest() {
     fail('Tampered ciphertext was accepted');
   }
 
-  console.log('Backup encryption self-test PASSED (round-trip + tamper rejection)');
+  console.log(
+    'Backup encryption self-test PASSED (round-trip, tamper rejection, weak-key rejection)',
+  );
 }
 
 function decryptCommand(input, output) {
@@ -162,7 +201,7 @@ function decryptCommand(input, output) {
   if (!key) fail('BACKUP_ENCRYPTION_KEY is required for --decrypt');
   const encrypted = readFileSync(input);
   const plaintext = decryptBuffer(encrypted, key);
-  writeFileSync(output, plaintext);
+  writeFileSync(output, plaintext, { mode: 0o600 });
   console.log(
     JSON.stringify(
       { decrypted: output, bytes: plaintext.length, sha256: sha256(plaintext) },
@@ -180,29 +219,50 @@ function backupCommand() {
   if (!key) {
     fail('BACKUP_ENCRYPTION_KEY must be 32 bytes as base64 or 64 hex characters');
   }
+  if (isWeakKey(key)) {
+    fail('BACKUP_ENCRYPTION_KEY must not be a single repeated byte');
+  }
 
+  const connection = connectionParts(databaseUrl);
   const outputDir = process.env.BACKUP_OUTPUT_DIR
     ? resolve(process.env.BACKUP_OUTPUT_DIR)
     : resolve(process.cwd(), 'backups');
-  mkdirSync(outputDir, { recursive: true });
+  mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+  chmodSync(outputDir, 0o700);
 
   const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
-  const dumpPath = join(outputDir, `nexter-${timestamp}.dump`);
-  const encryptedPath = `${dumpPath}.enc`;
+  const encryptedPath = join(outputDir, `nexter-${timestamp}.dump.enc`);
+  const tempDir = mkdtempSync(join(tmpdir(), 'nexter-backup-'));
+  const dumpPath = join(tempDir, 'nexter.dump');
   const mode = process.env.BACKUP_DUMP_MODE ?? 'auto';
+
+  chmodSync(tempDir, 0o700);
+
+  const cleanup = () => {
+    rmSync(tempDir, { recursive: true, force: true });
+  };
+
+  const onSignal = (signal) => {
+    cleanup();
+    console.error(`Backup interrupted by ${signal}`);
+    process.exit(1);
+  };
+
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
 
   try {
     if (mode === 'native' || (mode === 'auto' && hasCommand('pg_dump'))) {
-      dumpNative(databaseUrl, dumpPath);
+      dumpNative(connection, dumpPath);
     } else if (mode === 'docker' || (mode === 'auto' && hasDocker())) {
-      dumpDocker(databaseUrl, dumpPath);
+      dumpDocker(connection, dumpPath, tempDir);
     } else {
       fail('pg_dump is not available and Docker is not running');
     }
 
     const plaintext = readFileSync(dumpPath);
     const encrypted = encryptBuffer(plaintext, key);
-    writeFileSync(encryptedPath, encrypted);
+    writeFileSync(encryptedPath, encrypted, { mode: 0o600 });
 
     console.log(
       JSON.stringify(
@@ -219,7 +279,7 @@ function backupCommand() {
       ),
     );
   } finally {
-    rmSync(dumpPath, { force: true });
+    cleanup();
   }
 }
 
@@ -235,6 +295,14 @@ try {
     backupCommand();
   }
 } catch (error) {
-  console.error(error);
+  const databasePassword = (() => {
+    try {
+      return decodeURIComponent(new URL(process.env.DATABASE_URL ?? '').password);
+    } catch {
+      return '';
+    }
+  })();
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(message.replaceAll(databasePassword, '<redacted>'));
   process.exitCode = 1;
 }

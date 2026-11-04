@@ -30,7 +30,7 @@ Set **Root Directory** to the repository root for both `api` and `worker`. If Ra
   - `SETUP_TOKEN` (required before first setup)
   - `AUTH_ENCRYPTION_KEY` (32-byte base64 or 64-char hex)
   - `ENABLE_DOCS=false`
-  - `TRUST_PROXY` — exact Railway/Cloudflare proxy CIDR, or `true` only behind a trusted proxy. Default `false`.
+  - `TRUST_PROXY` — `1` for Railway's single edge hop (the app parses it as a hop count), or the exact Railway/Cloudflare proxy CIDR. `true` is rejected in production because it trusts client-supplied `X-Forwarded-For`; `false` behind Railway makes every client share the edge IP, so IP lockouts become global. Default `false` for local development.
 
 `WEB_DIST_PATH` is already set in the Dockerfile (`/app/apps/api/public`); do not set it manually. On Git Bash/Windows, setting Unix paths through `railway variable set` can be mangled by MSYS path conversion — use the Railway dashboard or `--stdin` if you must set one.
 

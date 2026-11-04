@@ -14,6 +14,7 @@ import { AppModule } from './app.module';
 import { registerImportAuthHook } from './modules/imports/import-auth.hook';
 import { registerNotionImportBodyParser } from './modules/imports/import-body-parser';
 import { env } from './shared/config/env';
+import { parseTrustProxy } from './shared/config/trust-proxy';
 import { AllExceptionsFilter } from './shared/errors/all-exceptions.filter';
 import { safeErrorForTelemetry } from './shared/errors/safe-error';
 import { scrubSentryBreadcrumb, scrubSentryEvent } from './shared/security/sentry';
@@ -29,8 +30,7 @@ async function bootstrap(): Promise<void> {
     });
   }
 
-  const trustProxy =
-    env.TRUST_PROXY === 'false' ? false : env.TRUST_PROXY === 'true' ? true : env.TRUST_PROXY;
+  const trustProxy = parseTrustProxy(env.TRUST_PROXY);
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,

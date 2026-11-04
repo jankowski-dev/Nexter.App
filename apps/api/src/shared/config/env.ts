@@ -83,6 +83,9 @@ export function parseEnv(raw: Record<string, string | undefined>) {
     if (parsed.TRUST_PROXY === 'true') {
       throw new Error('TRUST_PROXY=true is unsafe; use the exact proxy CIDR or a hop count');
     }
+    if (/^\d+$/.test(parsed.TRUST_PROXY) && Number(parsed.TRUST_PROXY) > 10) {
+      throw new Error('TRUST_PROXY hop count must be between 0 and 10');
+    }
     if (new URL(parsed.APP_URL).protocol !== 'https:') {
       throw new Error('APP_URL must use HTTPS in production and staging');
     }
