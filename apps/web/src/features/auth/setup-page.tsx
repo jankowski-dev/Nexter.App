@@ -52,8 +52,8 @@ export function SetupPage() {
   if (status.data?.initialized) {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold text-zinc-50">Nexter уже настроен</h1>
-        <p className="text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Nexter уже настроен</h1>
+        <p className="text-sm text-zinc-600">
           Владелец уже создан. Войдите со своим паролем и TOTP.
         </p>
         <Button asChild>
@@ -67,13 +67,13 @@ export function SetupPage() {
     return (
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-50">Сохраните recovery codes</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h1 className="text-xl font-semibold text-zinc-900">Сохраните recovery codes</h1>
+          <p className="mt-1 text-sm text-zinc-600">
             Они показываются один раз. Каждый код одноразовый и нужен для восстановления доступа.
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-4 font-mono text-sm text-zinc-200">
+        <div className="grid grid-cols-2 gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-4 font-mono text-sm text-zinc-800">
           {recoveryCodes.map((code) => (
             <span key={code}>{code}</span>
           ))}
@@ -91,8 +91,8 @@ export function SetupPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Первый запуск</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-xl font-semibold text-zinc-900">Первый запуск</h1>
+        <p className="mt-1 text-sm text-zinc-600">
           Создайте единственного владельца Nexter. Setup token задан в окружении сервера.
         </p>
       </div>
@@ -148,7 +148,7 @@ export function SetupPage() {
       </form>
 
       <div className="text-center text-sm text-zinc-500">
-        <Link className="hover:text-zinc-300" to="/login">
+        <Link className="hover:text-zinc-900" to="/login">
           Уже есть аккаунт? Войти
         </Link>
       </div>

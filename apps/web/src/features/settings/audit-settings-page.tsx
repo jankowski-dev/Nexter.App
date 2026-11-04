@@ -71,12 +71,12 @@ export function AuditSettingsPage() {
           <CardTitle>Записи</CardTitle>
           <CardDescription>{rows.length} записей</CardDescription>
           {rows.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">Записей нет.</p>
+            <p className="mt-4 text-sm text-zinc-600">Записей нет.</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                     <th className="py-2 pr-3 font-medium">Дата</th>
                     <th className="py-2 pr-3 font-medium">Действие</th>
                     <th className="py-2 pr-3 font-medium">Объект</th>
@@ -85,9 +85,12 @@ export function AuditSettingsPage() {
                 </thead>
                 <tbody>
                   {rows.map((entry) => (
-                    <tr key={entry.id} className="border-b border-zinc-800/60 last:border-0">
-                      <td className="py-2 pr-3 text-zinc-400">{formatDateTime(entry.createdAt)}</td>
-                      <td className="py-2 pr-3 font-mono text-xs text-zinc-300">{entry.action}</td>
+                    <tr
+                      key={entry.id}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                    >
+                      <td className="py-2 pr-3 text-zinc-600">{formatDateTime(entry.createdAt)}</td>
+                      <td className="py-2 pr-3 font-mono text-xs text-zinc-700">{entry.action}</td>
                       <td className="py-2 pr-3 text-zinc-500">
                         {entry.entityType} · {entry.entityId?.slice(0, 8) ?? '—'}
                       </td>

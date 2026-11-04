@@ -47,7 +47,7 @@ export function AccountsSettingsPage() {
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-3 font-medium">Название</th>
                   <th className="py-2 pr-3 font-medium">Тип</th>
                   <th className="py-2 pr-3 font-medium">Сеть</th>
@@ -56,12 +56,15 @@ export function AccountsSettingsPage() {
               </thead>
               <tbody>
                 {accounts.data.accounts.map((account) => (
-                  <tr key={account.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-3 text-zinc-200">{account.name}</td>
-                    <td className="py-2 pr-3 text-zinc-400">
+                  <tr
+                    key={account.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-3 text-zinc-800">{account.name}</td>
+                    <td className="py-2 pr-3 text-zinc-600">
                       {accountTypeLabels[account.type] ?? account.type}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-400">{account.chainCode ?? '—'}</td>
+                    <td className="py-2 pr-3 text-zinc-600">{account.chainCode ?? '—'}</td>
                     <td className="py-2 text-right">
                       <Badge tone={account.isSystem ? 'info' : 'neutral'}>
                         {account.isSystem ? 'да' : 'нет'}

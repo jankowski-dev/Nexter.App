@@ -105,9 +105,9 @@ export function SwapPage() {
       />
 
       {!data.enabled ? (
-        <Card className="border-amber-900/60 bg-amber-950/20">
-          <CardTitle className="text-amber-100">Свопы отключены</CardTitle>
-          <CardDescription className="text-amber-100/80">
+        <Card className="border-amber-200 bg-amber-50">
+          <CardTitle className="text-amber-800">Свопы отключены</CardTitle>
+          <CardDescription className="text-amber-700">
             {data.killSwitch
               ? 'Сработал kill switch. Новые котировки и сборка транзакций недоступны; существующие ордера можно только просматривать.'
               : 'SWAP_ENABLED=false. Владелец должен явно включить котировки после настройки провайдера и allowlist.'}
@@ -152,11 +152,11 @@ export function SwapPage() {
         </div>
 
         {wallet.connected ? (
-          <div className="mt-3 font-mono text-xs text-zinc-400">{wallet.address}</div>
+          <div className="mt-3 font-mono text-xs text-zinc-600">{wallet.address}</div>
         ) : null}
-        {wallet.error ? <p className="mt-2 text-sm text-red-300">{wallet.error}</p> : null}
+        {wallet.error ? <p className="mt-2 text-sm text-red-700">{wallet.error}</p> : null}
         {!data.walletConnectProjectId ? (
-          <p className="mt-2 text-sm text-amber-300">
+          <p className="mt-2 text-sm text-amber-700">
             WalletConnect Project ID не настроен на сервере.
           </p>
         ) : null}
@@ -178,7 +178,7 @@ export function SwapPage() {
           </CardDescription>
 
           <div className="mt-4 grid gap-3">
-            <label className="block text-sm text-zinc-400">
+            <label className="block text-sm text-zinc-600">
               Отдаю
               <div className="mt-1 grid grid-cols-[1fr_120px] gap-2">
                 <Select
@@ -207,7 +207,7 @@ export function SwapPage() {
               </div>
             </label>
 
-            <label className="block text-sm text-zinc-400">
+            <label className="block text-sm text-zinc-600">
               Получаю
               <Select
                 className="mt-1"
@@ -226,7 +226,7 @@ export function SwapPage() {
               </Select>
             </label>
 
-            <label className="block text-sm text-zinc-400">
+            <label className="block text-sm text-zinc-600">
               Допустимое проскальзывание
               <Select
                 className="mt-1"
@@ -246,7 +246,7 @@ export function SwapPage() {
             </label>
 
             {walletRequired ? (
-              <label className="block text-sm text-zinc-400">
+              <label className="block text-sm text-zinc-600">
                 Адрес кошелька (allowlist)
                 <Input
                   className="mt-1 font-mono text-xs"
@@ -274,7 +274,7 @@ export function SwapPage() {
             </Button>
 
             {quote.isError ? (
-              <p className="text-sm text-red-300">
+              <p className="text-sm text-red-700">
                 {toRussianError(quote.error, 'Не удалось получить котировку')}
               </p>
             ) : null}
@@ -290,9 +290,9 @@ export function SwapPage() {
 
           {quote.data ? (
             <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                 <div className="text-xs text-zinc-500">Получаю</div>
-                <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+                <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                   {formatTokenAmount(quote.data.amountOut, 8)} {quote.data.tokenOut.symbol}
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
@@ -300,9 +300,9 @@ export function SwapPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                 <div className="text-xs text-zinc-500">Курс</div>
-                <div className="mt-1 font-mono text-sm text-zinc-200">
+                <div className="mt-1 font-mono text-sm text-zinc-800">
                   1 {quote.data.tokenIn.symbol} ={' '}
                   {formatTokenAmount(
                     new Decimal(quote.data.amountOut).div(quote.data.amountIn).toFixed(6),
@@ -310,7 +310,7 @@ export function SwapPage() {
                   )}{' '}
                   {quote.data.tokenOut.symbol}
                 </div>
-                <div className="font-mono text-sm text-zinc-400">
+                <div className="font-mono text-sm text-zinc-600">
                   1 {quote.data.tokenOut.symbol} ={' '}
                   {formatTokenAmount(
                     new Decimal(quote.data.amountIn).div(quote.data.amountOut).toFixed(6),
@@ -327,32 +327,32 @@ export function SwapPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-md border border-zinc-800 p-2">
+                <div className="rounded-md border border-zinc-200 p-2">
                   <div className="text-xs text-zinc-500">Price impact</div>
-                  <div className="font-mono text-zinc-200">
+                  <div className="font-mono text-zinc-800">
                     {quote.data.priceImpactBps === null
                       ? '—'
                       : formatPct(String(quote.data.priceImpactBps / 100))}
                   </div>
                 </div>
-                <div className="rounded-md border border-zinc-800 p-2">
+                <div className="rounded-md border border-zinc-200 p-2">
                   <div className="text-xs text-zinc-500">Газ</div>
-                  <div className="font-mono text-zinc-200">{formatUsd(quote.data.gasUsd)}</div>
+                  <div className="font-mono text-zinc-800">{formatUsd(quote.data.gasUsd)}</div>
                 </div>
-                <div className="rounded-md border border-zinc-800 p-2">
+                <div className="rounded-md border border-zinc-200 p-2">
                   <div className="text-xs text-zinc-500">Маршрут</div>
-                  <div className="truncate font-mono text-xs text-zinc-300">
+                  <div className="truncate font-mono text-xs text-zinc-700">
                     {quote.data.routeId ?? 'без routeID'}
                   </div>
                 </div>
-                <div className="rounded-md border border-zinc-800 p-2">
+                <div className="rounded-md border border-zinc-200 p-2">
                   <div className="text-xs text-zinc-500">Действует до</div>
-                  <div className="text-zinc-300">{formatDateTime(quote.data.quoteExpiresAt)}</div>
+                  <div className="text-zinc-700">{formatDateTime(quote.data.quoteExpiresAt)}</div>
                 </div>
               </div>
 
               {quote.data.errors.length > 0 ? (
-                <div className="rounded-md border border-amber-900/60 bg-amber-950/20 p-2 text-xs text-amber-200">
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-700">
                   {quote.data.errors.map((item) => (
                     <div key={item}>{item}</div>
                   ))}
@@ -365,7 +365,7 @@ export function SwapPage() {
               </div>
             </div>
           ) : (
-            <p className="mt-4 text-sm text-zinc-400">
+            <p className="mt-4 text-sm text-zinc-600">
               Заполните параметры и запросите котировку. Сервер проверит allowlist, сумму, price
               impact и срок жизни котировки.
             </p>

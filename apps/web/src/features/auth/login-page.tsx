@@ -46,8 +46,8 @@ export function LoginPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold text-zinc-50">Вход</h1>
-        <p className="mt-1 text-sm text-zinc-400">Пароль и код из приложения-аутентификатора.</p>
+        <h1 className="text-xl font-semibold text-zinc-900">Вход</h1>
+        <p className="mt-1 text-sm text-zinc-600">Пароль и код из приложения-аутентификатора.</p>
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
@@ -79,11 +79,11 @@ export function LoginPage() {
       </form>
 
       <div className="flex items-center justify-between text-sm text-zinc-500">
-        <Link className="hover:text-zinc-300" to="/reset-password">
+        <Link className="hover:text-zinc-900" to="/reset-password">
           Забыли пароль?
         </Link>
         {status.data && !status.data.initialized ? (
-          <Link className="text-emerald-400 hover:text-emerald-300" to="/setup">
+          <Link className="text-emerald-700 hover:text-emerald-800" to="/setup">
             Первый запуск
           </Link>
         ) : null}

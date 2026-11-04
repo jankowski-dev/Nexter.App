@@ -40,26 +40,26 @@ export function DataQualityPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardTitle>Проблемы</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatCount(quality.data.issues.length)}
               </div>
             </Card>
             <Card>
               <CardTitle>Без цен</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatCount(quality.data.missingPrices.length)}
               </div>
               <CardDescription>{quality.data.missingPrices.join(', ') || '—'}</CardDescription>
             </Card>
             <Card>
               <CardTitle>Непроверенные активы</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatCount(quality.data.unverifiedAssets.length)}
               </div>
             </Card>
             <Card>
               <CardTitle>Отрицательные балансы</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatCount(quality.data.negativeBalances.length)}
               </div>
             </Card>
@@ -71,13 +71,13 @@ export function DataQualityPage() {
               Сгруппировано по типу; детали ограничены первыми 20 записями.
             </CardDescription>
             {quality.data.issues.length === 0 ? (
-              <p className="mt-4 text-sm text-emerald-300">Проблем не найдено.</p>
+              <p className="mt-4 text-sm text-emerald-700">Проблем не найдено.</p>
             ) : (
               <div className="mt-4 space-y-3">
                 {quality.data.issues.map((issue) => (
                   <div
                     key={issue.code}
-                    className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3"
+                    className="rounded-lg border border-zinc-200 bg-zinc-50 p-3"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -92,9 +92,9 @@ export function DataQualityPage() {
                         >
                           {issue.severity}
                         </Badge>
-                        <span className="text-sm font-medium text-zinc-200">{issue.label}</span>
+                        <span className="text-sm font-medium text-zinc-800">{issue.label}</span>
                       </div>
-                      <span className="font-mono text-sm text-zinc-400">{issue.count}</span>
+                      <span className="font-mono text-sm text-zinc-600">{issue.count}</span>
                     </div>
                     {issue.details.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-zinc-500">
@@ -110,9 +110,9 @@ export function DataQualityPage() {
           </Card>
 
           {quality.data.negativeBalances.length > 0 ? (
-            <Card className="border-red-900/60 bg-red-950/20">
-              <CardTitle className="text-red-200">Отрицательные балансы</CardTitle>
-              <div className="mt-3 space-y-1 text-sm text-red-200">
+            <Card className="border-red-200 bg-red-50">
+              <CardTitle className="text-red-700">Отрицательные балансы</CardTitle>
+              <div className="mt-3 space-y-1 text-sm text-red-700">
                 {quality.data.negativeBalances.map((row) => (
                   <div key={`${row.accountId}:${row.assetId}`} className="font-mono">
                     {row.accountName} · {row.symbol}: {row.amount}

@@ -182,14 +182,14 @@ export function TradeDetailPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardTitle>Покупка</CardTitle>
-          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {formatUsd(group.buyUsd)}
           </div>
           <CardDescription>{group.source}</CardDescription>
         </Card>
         <Card>
           <CardTitle>Продажи</CardTitle>
-          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {formatUsd(group.sellUsd)}
           </div>
           <CardDescription>{consumptions.length} списаний</CardDescription>
@@ -223,18 +223,18 @@ export function TradeDetailPage() {
         <CardDescription>Проводки покупки и продаж.</CardDescription>
         <div className="mt-4 space-y-4">
           {legs.map((leg) => (
-            <div key={leg.id} className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+            <div key={leg.id} className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Badge tone={leg.subtype === 'buy' ? 'info' : 'warning'}>{leg.subtype}</Badge>
-                  <span className="text-zinc-300">{formatDateTime(leg.occurredAt)}</span>
+                  <span className="text-zinc-700">{formatDateTime(leg.occurredAt)}</span>
                   <Badge tone={leg.source === 'notion' ? 'info' : 'neutral'}>{leg.source}</Badge>
                 </div>
                 <span className="font-mono text-xs text-zinc-500">
                   fees {formatUsd(leg.feesUsd)}
                 </span>
               </div>
-              <div className="mt-2 grid gap-1 text-xs text-zinc-400 md:grid-cols-2">
+              <div className="mt-2 grid gap-1 text-xs text-zinc-600 md:grid-cols-2">
                 {leg.postings.map((posting) => (
                   <div key={posting.id} className="flex justify-between gap-2 font-mono">
                     <span>{assetById.get(posting.assetId) ?? posting.assetId.slice(0, 8)}</span>
@@ -256,7 +256,7 @@ export function TradeDetailPage() {
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-3 font-medium">Дата</th>
                   <th className="py-2 pr-3 text-right font-medium">Количество</th>
                   <th className="py-2 pr-3 text-right font-medium">Остаток</th>
@@ -265,15 +265,18 @@ export function TradeDetailPage() {
               </thead>
               <tbody>
                 {lots.map((lot) => (
-                  <tr key={lot.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-3 text-zinc-400">{formatDate(lot.acquiredAt)}</td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                  <tr
+                    key={lot.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-3 text-zinc-600">{formatDate(lot.acquiredAt)}</td>
+                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                       {formatTokenAmount(lot.amount)}
                     </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                       {formatTokenAmount(lot.remainingAmount)}
                     </td>
-                    <td className="py-2 text-right font-mono tabular-nums text-zinc-400">
+                    <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
                       {formatUsd(lot.remainingCostBasisUsd)}
                     </td>
                   </tr>
@@ -287,12 +290,12 @@ export function TradeDetailPage() {
           <CardTitle>Списания</CardTitle>
           <CardDescription>Реализованный P&L по лотам.</CardDescription>
           {consumptions.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">Списаний нет.</p>
+            <p className="mt-4 text-sm text-zinc-600">Списаний нет.</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                     <th className="py-2 pr-3 font-medium">Дата</th>
                     <th className="py-2 pr-3 text-right font-medium">Количество</th>
                     <th className="py-2 pr-3 text-right font-medium">Выручка</th>
@@ -301,14 +304,17 @@ export function TradeDetailPage() {
                 </thead>
                 <tbody>
                   {consumptions.map((consumption) => (
-                    <tr key={consumption.id} className="border-b border-zinc-800/60 last:border-0">
-                      <td className="py-2 pr-3 text-zinc-400">
+                    <tr
+                      key={consumption.id}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                    >
+                      <td className="py-2 pr-3 text-zinc-600">
                         {formatDateTime(consumption.disposalOccurredAt)}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatTokenAmount(consumption.amount)}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatUsd(consumption.proceedsUsd)}
                       </td>
                       <td
@@ -329,12 +335,12 @@ export function TradeDetailPage() {
         <CardTitle>Аудит</CardTitle>
         <CardDescription>Связанные записи журнала аудита.</CardDescription>
         {audit.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-400">Записей аудита нет.</p>
+          <p className="mt-4 text-sm text-zinc-600">Записей аудита нет.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-3 font-medium">Дата</th>
                   <th className="py-2 pr-3 font-medium">Действие</th>
                   <th className="py-2 font-medium">Объект</th>
@@ -342,9 +348,12 @@ export function TradeDetailPage() {
               </thead>
               <tbody>
                 {audit.map((entry) => (
-                  <tr key={entry.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-3 text-zinc-400">{formatDateTime(entry.createdAt)}</td>
-                    <td className="py-2 pr-3 font-mono text-xs text-zinc-300">{entry.action}</td>
+                  <tr
+                    key={entry.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-3 text-zinc-600">{formatDateTime(entry.createdAt)}</td>
+                    <td className="py-2 pr-3 font-mono text-xs text-zinc-700">{entry.action}</td>
                     <td className="py-2 text-zinc-500">
                       {entry.entityType} · {entry.entityId?.slice(0, 8) ?? '—'}
                     </td>
@@ -382,7 +391,7 @@ export function TradeDetailPage() {
         }
       >
         <div className="space-y-3">
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Кошелёк
             <Select
               className="mt-1"
@@ -399,7 +408,7 @@ export function TradeDetailPage() {
                 ))}
             </Select>
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Количество {group.asset.symbol}
             <Input
               className="mt-1"
@@ -409,7 +418,7 @@ export function TradeDetailPage() {
               placeholder="0"
             />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Валюта выручки
             <Select
               className="mt-1"
@@ -426,7 +435,7 @@ export function TradeDetailPage() {
                 ))}
             </Select>
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Сумма выручки
             <Input
               className="mt-1"
@@ -436,7 +445,7 @@ export function TradeDetailPage() {
               placeholder="0"
             />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Заметка
             <Textarea
               className="mt-1"
@@ -446,11 +455,11 @@ export function TradeDetailPage() {
             />
           </label>
           {usdt ? null : (
-            <p className="text-xs text-amber-300">
+            <p className="text-xs text-amber-700">
               USDT не найден; выберите валюту выручки вручную.
             </p>
           )}
-          {sellError ? <p className="text-sm text-red-300">{sellError}</p> : null}
+          {sellError ? <p className="text-sm text-red-700">{sellError}</p> : null}
         </div>
       </Dialog>
 
@@ -471,7 +480,7 @@ export function TradeDetailPage() {
         }
       >
         <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
-        {notesError ? <p className="mt-2 text-sm text-red-300">{notesError}</p> : null}
+        {notesError ? <p className="mt-2 text-sm text-red-700">{notesError}</p> : null}
       </Dialog>
     </div>
   );

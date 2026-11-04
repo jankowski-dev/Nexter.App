@@ -37,6 +37,7 @@ export function useWalletConnect(projectId: string | null) {
           chains: [BSC_CHAIN_ID],
           optionalChains: [BSC_CHAIN_ID],
           showQrModal: true,
+          qrModalOptions: { themeMode: 'light' },
           metadata: {
             name: 'Nexter',
             description: 'Личный финансовый учёт',

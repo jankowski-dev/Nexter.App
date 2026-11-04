@@ -52,7 +52,7 @@ function Metric({
     <Card>
       <CardTitle>{label}</CardTitle>
       <div
-        className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-50'}`}
+        className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
       >
         {value}
       </div>
@@ -95,8 +95,8 @@ function DataQualityBanner() {
   if (query.isPending) return null;
   if (query.isError || !query.data) {
     return (
-      <Card className="border-amber-900/60 bg-amber-950/20">
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-100">
+      <Card className="border-amber-200 bg-amber-50">
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-800">
           <span>Не удалось загрузить качество данных.</span>
           <Button variant="ghost" className="h-8 px-3 text-xs" onClick={() => void query.refetch()}>
             Повторить
@@ -107,8 +107,8 @@ function DataQualityBanner() {
   }
   if (query.data.issues.length === 0) {
     return (
-      <Card className="border-emerald-900/60 bg-emerald-950/20">
-        <div className="flex items-center gap-2 text-sm text-emerald-200">
+      <Card className="border-emerald-200 bg-emerald-50">
+        <div className="flex items-center gap-2 text-sm text-emerald-700">
           <Badge tone="success">OK</Badge>
           Качество данных: критичных предупреждений нет.
         </div>
@@ -120,11 +120,11 @@ function DataQualityBanner() {
   const warnings = query.data.issues.filter((issue) => issue.severity !== 'error');
 
   return (
-    <Card className="border-amber-900/60 bg-amber-950/20">
+    <Card className="border-amber-200 bg-amber-50">
       <CardHeader>
         <div>
-          <CardTitle className="text-amber-100">Качество данных</CardTitle>
-          <CardDescription className="text-amber-100/80">
+          <CardTitle className="text-amber-800">Качество данных</CardTitle>
+          <CardDescription className="text-amber-700">
             {errors.length > 0
               ? `Есть ${formatCount(errors.length)} критичных проблем.`
               : `Есть ${formatCount(warnings.length)} предупреждений.`}
@@ -132,7 +132,7 @@ function DataQualityBanner() {
         </div>
         <Link
           to="/settings/data-quality"
-          className="text-sm font-medium text-amber-200 hover:text-amber-100"
+          className="text-sm font-medium text-amber-700 hover:text-amber-800"
         >
           Подробнее →
         </Link>
@@ -232,7 +232,7 @@ export function DashboardPage() {
         }
       />
 
-      <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/40 p-1">
+      <div className="flex items-center gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
         {(
           [
             ['30', '30D'],
@@ -245,7 +245,7 @@ export function DashboardPage() {
             key={value}
             type="button"
             onClick={() => setRange(value)}
-            className={`rounded-md px-3 py-1.5 text-xs ${range === value ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200'}`}
+            className={`rounded-md px-3 py-1.5 text-xs ${range === value ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-900'}`}
             aria-pressed={range === value}
           >
             {label}
@@ -254,8 +254,8 @@ export function DashboardPage() {
       </div>
 
       {failedAuxiliaryCount > 0 ? (
-        <Card className="border-amber-900/60 bg-amber-950/20">
-          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-100">
+        <Card className="border-amber-200 bg-amber-50">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-800">
             <span>
               Часть данных дашборда недоступна ({failedAuxiliaryCount} из 5 блоков). Показаны
               доступные значения.
@@ -346,7 +346,7 @@ export function DashboardPage() {
           title="Активные позиции"
           description="Непогашенные лоты по текущим ценам."
           action={
-            <Link to="/portfolio" className="text-sm text-emerald-400 hover:text-emerald-300">
+            <Link to="/portfolio" className="text-sm text-emerald-700 hover:text-emerald-800">
               Все позиции →
             </Link>
           }
@@ -355,7 +355,7 @@ export function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                     <th className="py-2 pr-3 font-medium">Актив</th>
                     <th className="py-2 pr-3 text-right font-medium">Количество</th>
                     <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
@@ -366,22 +366,22 @@ export function DashboardPage() {
                   {active.data.positions.map((position) => (
                     <tr
                       key={position.asset.id}
-                      className="border-b border-zinc-800/60 last:border-0"
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                     >
                       <td className="py-2 pr-3">
                         <Link
                           to="/portfolio/assets/$assetId"
                           params={{ assetId: position.asset.id }}
-                          className="font-medium text-zinc-200 hover:text-emerald-300"
+                          className="font-medium text-zinc-800 hover:text-emerald-800"
                         >
                           {position.asset.symbol}
                         </Link>
                         <div className="text-xs text-zinc-500">{position.asset.chainCode}</div>
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatTokenAmount(position.amount)}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatUsd(position.valueUsd)}
                       </td>
                       <td
@@ -395,7 +395,7 @@ export function DashboardPage() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-zinc-400">Активных позиций нет.</p>
+            <p className="text-sm text-zinc-600">Активных позиций нет.</p>
           )}
         </Section>
 
@@ -403,7 +403,7 @@ export function DashboardPage() {
           title="Последние сделки"
           description="Последние торговые группы."
           action={
-            <Link to="/trades" className="text-sm text-emerald-400 hover:text-emerald-300">
+            <Link to="/trades" className="text-sm text-emerald-700 hover:text-emerald-800">
               Все сделки →
             </Link>
           }
@@ -412,7 +412,7 @@ export function DashboardPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                     <th className="py-2 pr-3 font-medium">Актив</th>
                     <th className="py-2 pr-3 font-medium">Статус</th>
                     <th className="py-2 pr-3 text-right font-medium">P&L</th>
@@ -421,12 +421,15 @@ export function DashboardPage() {
                 </thead>
                 <tbody>
                   {recent.data.data.map((group) => (
-                    <tr key={group.id} className="border-b border-zinc-800/60 last:border-0">
+                    <tr
+                      key={group.id}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                    >
                       <td className="py-2 pr-3">
                         <Link
                           to="/trades/$tradeId"
                           params={{ tradeId: group.id }}
-                          className="font-medium text-zinc-200 hover:text-emerald-300"
+                          className="font-medium text-zinc-800 hover:text-emerald-800"
                         >
                           {group.asset.symbol}
                         </Link>
@@ -461,7 +464,7 @@ export function DashboardPage() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-zinc-400">Сделок пока нет.</p>
+            <p className="text-sm text-zinc-600">Сделок пока нет.</p>
           )}
         </Section>
       </div>

@@ -80,37 +80,37 @@ export function SettingsPage() {
       />
 
       {notice ? (
-        <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-3 text-sm text-emerald-200">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
           {notice}
         </div>
       ) : null}
       {error ? (
-        <div className="rounded-lg border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Link to="/settings/security" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-800">
+          <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Безопасность</CardTitle>
             <CardDescription>Пароль, 2FA, recovery codes, сессии.</CardDescription>
           </Card>
         </Link>
         <Link to="/settings/accounts" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-800">
+          <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Счета</CardTitle>
             <CardDescription>Кошельки и системные счета учёта.</CardDescription>
           </Card>
         </Link>
         <Link to="/settings/audit" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-800">
+          <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Аудит</CardTitle>
             <CardDescription>Журнал действий и изменений.</CardDescription>
           </Card>
         </Link>
         <Link to="/settings/data-quality" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-800">
+          <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Качество данных</CardTitle>
             <CardDescription>Цены, сети, сборы и сверка.</CardDescription>
           </Card>
@@ -123,15 +123,15 @@ export function SettingsPage() {
           Базовая валюта и метод учёта фиксированы для MVP-1: USD и FIFO.
         </CardDescription>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Базовая валюта
             <Input className="mt-1" value={settings.data.baseCurrency} readOnly disabled />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Метод списания
             <Input className="mt-1" value={settings.data.taxMethod} readOnly disabled />
           </label>
-          <label className="block text-sm text-zinc-400">
+          <label className="block text-sm text-zinc-600">
             Часовой пояс (IANA)
             <Input
               className="mt-1"
@@ -144,12 +144,12 @@ export function SettingsPage() {
               поясе браузера.
             </span>
           </label>
-          <label className="mt-7 flex items-center gap-2 text-sm text-zinc-300">
+          <label className="mt-7 flex items-center gap-2 text-sm text-zinc-700">
             <input
               type="checkbox"
               checked={includeGas}
               onChange={(event) => setIncludeGas(event.target.checked)}
-              className="h-4 w-4 rounded border-zinc-700 bg-zinc-950"
+              className="h-4 w-4 rounded border-zinc-300 bg-white"
             />
             Включать газ в себестоимость
           </label>
@@ -178,8 +178,8 @@ export function SettingsPage() {
               ['trade-groups', 'Сделки'],
             ] as const
           ).map(([dataset, label]) => (
-            <div key={dataset} className="rounded-lg border border-zinc-800 p-3">
-              <div className="text-sm font-medium text-zinc-200">{label}</div>
+            <div key={dataset} className="rounded-lg border border-zinc-200 p-3">
+              <div className="text-sm font-medium text-zinc-800">{label}</div>
               <div className="mt-2 flex gap-2">
                 <Button
                   variant="secondary"

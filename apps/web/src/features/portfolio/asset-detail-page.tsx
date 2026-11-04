@@ -102,21 +102,21 @@ export function AssetDetailPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardTitle>Количество</CardTitle>
-          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {position ? formatTokenAmount(position.amount) : '—'}
           </div>
           <CardDescription>{data.asset.symbol}</CardDescription>
         </Card>
         <Card>
           <CardTitle>Цена</CardTitle>
-          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {formatUsd(position?.priceUsd ?? null)}
           </div>
           <CardDescription>Последняя цена</CardDescription>
         </Card>
         <Card>
           <CardTitle>Стоимость</CardTitle>
-          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-50">
+          <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
             {formatUsd(position?.valueUsd ?? null)}
           </div>
           <CardDescription>По текущей цене</CardDescription>
@@ -159,7 +159,7 @@ export function AssetDetailPage() {
           </Button>
         </div>
         {priceMutation.isError ? (
-          <p className="mt-2 text-sm text-red-300">
+          <p className="mt-2 text-sm text-red-700">
             {toRussianError(priceMutation.error, 'Не удалось сохранить цену')}
           </p>
         ) : null}
@@ -179,12 +179,12 @@ export function AssetDetailPage() {
           <CardTitle>Лоты</CardTitle>
           <CardDescription>Оставшиеся лоты и себестоимость.</CardDescription>
           {data.lots.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">Лотов нет.</p>
+            <p className="mt-4 text-sm text-zinc-600">Лотов нет.</p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                     <th className="py-2 pr-3 font-medium">Дата</th>
                     <th className="py-2 pr-3 text-right font-medium">Количество</th>
                     <th className="py-2 pr-3 text-right font-medium">Остаток</th>
@@ -193,15 +193,18 @@ export function AssetDetailPage() {
                 </thead>
                 <tbody>
                   {data.lots.map((lot) => (
-                    <tr key={lot.id} className="border-b border-zinc-800/60 last:border-0">
-                      <td className="py-2 pr-3 text-zinc-400">{formatDate(lot.acquiredAt)}</td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                    <tr
+                      key={lot.id}
+                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                    >
+                      <td className="py-2 pr-3 text-zinc-600">{formatDate(lot.acquiredAt)}</td>
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatTokenAmount(lot.amount)}
                       </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-300">
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatTokenAmount(lot.remainingAmount)}
                       </td>
-                      <td className="py-2 text-right font-mono tabular-nums text-zinc-400">
+                      <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
                         {formatUsd(lot.remainingCostBasisUsd)}
                       </td>
                     </tr>
@@ -216,7 +219,7 @@ export function AssetDetailPage() {
           <CardTitle>Сделки</CardTitle>
           <CardDescription>{data.tradeGroups.length} торговых групп по активу.</CardDescription>
           {data.tradeGroups.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-400">Сделок нет.</p>
+            <p className="mt-4 text-sm text-zinc-600">Сделок нет.</p>
           ) : (
             <div className="mt-4 max-h-96 overflow-y-auto">
               {data.tradeGroups.map((group) => (
@@ -224,10 +227,10 @@ export function AssetDetailPage() {
                   key={group.id}
                   to="/trades/$tradeId"
                   params={{ tradeId: group.id }}
-                  className="flex items-center justify-between gap-3 border-b border-zinc-800/60 py-2 text-sm last:border-0 hover:text-emerald-300"
+                  className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2 text-sm last:border-0 hover:text-emerald-800"
                 >
                   <div>
-                    <div className="text-zinc-200">{formatDate(group.openedAt)}</div>
+                    <div className="text-zinc-800">{formatDate(group.openedAt)}</div>
                     <div className="text-xs text-zinc-500">
                       {group.status === 'closed'
                         ? 'Закрыта'
@@ -253,12 +256,12 @@ export function AssetDetailPage() {
         <CardTitle>Транзакции</CardTitle>
         <CardDescription>Последние операции по активу.</CardDescription>
         {data.transactions.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-400">Транзакций нет.</p>
+          <p className="mt-4 text-sm text-zinc-600">Транзакций нет.</p>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500">
+                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                   <th className="py-2 pr-3 font-medium">Дата</th>
                   <th className="py-2 pr-3 font-medium">Тип</th>
                   <th className="py-2 pr-3 font-medium">Источник</th>
@@ -267,11 +270,14 @@ export function AssetDetailPage() {
               </thead>
               <tbody>
                 {data.transactions.map((transaction) => (
-                  <tr key={transaction.id} className="border-b border-zinc-800/60 last:border-0">
-                    <td className="py-2 pr-3 text-zinc-400">
+                  <tr
+                    key={transaction.id}
+                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                  >
+                    <td className="py-2 pr-3 text-zinc-600">
                       {formatDateTime(transaction.occurredAt)}
                     </td>
-                    <td className="py-2 pr-3 text-zinc-300">
+                    <td className="py-2 pr-3 text-zinc-700">
                       {transaction.type} / {transaction.subtype}
                     </td>
                     <td className="py-2 pr-3">
