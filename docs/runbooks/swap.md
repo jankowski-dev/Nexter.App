@@ -5,7 +5,7 @@ Phase 7 is read-only: quotes and calldata building only. The server never signs,
 ## Enable quotes
 
 1. Set `SWAP_ENABLED=false` while configuring.
-2. Set `WALLETCONNECT_PROJECT_ID` (public Reown/WalletConnect project id) for the `/swap` connection UI.
+2. Set `WALLETCONNECT_PROJECT_ID` (public Reown/WalletConnect project id) for the `/swap` connection UI. The API CSP must keep the WalletConnect relay/AppKit origins in `connect-src`/`frame-src`; if the QR modal opens empty, check the browser console for CSP violations and the relay/WebSocket requests.
 3. Set the provider:
    - `KYBERSWAP_API_KEY` and optionally `KYBERSWAP_BASE_URL=https://api.kyberswap.com/swap` (gateway), or
    - leave the key empty to use the public `https://aggregator-api.kyberswap.com` fallback.

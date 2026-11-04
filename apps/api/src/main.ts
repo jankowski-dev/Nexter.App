@@ -17,6 +17,7 @@ import { env } from './shared/config/env';
 import { parseTrustProxy } from './shared/config/trust-proxy';
 import { AllExceptionsFilter } from './shared/errors/all-exceptions.filter';
 import { safeErrorForTelemetry } from './shared/errors/safe-error';
+import { CONTENT_SECURITY_POLICY, HELMET_CSP_DIRECTIVES } from './shared/security/csp';
 import { scrubSentryBreadcrumb, scrubSentryEvent } from './shared/security/sentry';
 
 async function bootstrap(): Promise<void> {
@@ -88,10 +89,7 @@ async function bootstrap(): Promise<void> {
       reply.header('referrer-policy', 'strict-origin-when-cross-origin');
       reply.header('permissions-policy', 'camera=(), microphone=(), geolocation=()');
       reply.header('strict-transport-security', 'max-age=15552000; includeSubDomains');
-      reply.header(
-        'content-security-policy',
-        "default-src 'self'; base-uri 'self'; font-src 'self' https: data:; img-src 'self' data: https:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
-      );
+      reply.header('content-security-policy', CONTENT_SECURITY_POLICY);
       await reply.code(429).send({
         error: {
           code: 'RATE_LIMITED',
@@ -113,17 +111,7 @@ async function bootstrap(): Promise<void> {
 
   await app.register(helmet as any, {
     contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        baseUri: ["'self'"],
-        fontSrc: ["'self'", 'https:', 'data:'],
-        imgSrc: ["'self'", 'data:', 'https:'],
-        objectSrc: ["'none'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        connectSrc: ["'self'"],
-        frameAncestors: ["'none'"],
-      },
+      directives: HELMET_CSP_DIRECTIVES,
     },
     xFrameOptions: { action: 'deny' },
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },

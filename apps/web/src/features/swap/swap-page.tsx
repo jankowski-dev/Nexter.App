@@ -374,11 +374,12 @@ export function SwapPage() {
       </div>
 
       <Card>
-        <CardTitle>Ограничения Phase 7</CardTitle>
+        <CardTitle>Ограничения Phase 8</CardTitle>
         <CardDescription>
-          Только BSC и только котировки. Нет WalletConnect, подписи, approvals, отправки транзакций
-          и учётных записей свопов. Kill switch отключает новые котировки; чтение существующих
-          ордеров остаётся доступным.
+          BSC и подключение Tangem через WalletConnect уже доступны. Подпись, approvals и отправка
+          транзакций включатся после full calldata review и tracking; учётные записи свопов пока не
+          создаются. Kill switch отключает новые котировки, чтение существующих ордеров остаётся
+          доступным.
         </CardDescription>
       </Card>
     </div>
