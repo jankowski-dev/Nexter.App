@@ -14,6 +14,11 @@ describe('toCsv', () => {
     expect(csv).toContain(`"'=WEBSERVICE(""http://x"")"`);
   });
 
+  it('prefixes cells beginning with a line feed', () => {
+    const csv = toCsv([{ notes: '\n=SUM(A1:A2)' }]);
+    expect(csv).toContain(`"'\n=SUM(A1:A2)"`);
+  });
+
   it('quotes commas and quotes', () => {
     const csv = toCsv([{ note: 'a,b"c' }]);
     expect(csv).toContain('"a,b""c"');

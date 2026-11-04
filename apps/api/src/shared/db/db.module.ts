@@ -2,6 +2,7 @@ import { Global, Injectable, Logger, Module, type OnApplicationShutdown } from '
 import { createDb, type Database } from '@nexter/db';
 import type { Pool } from 'pg';
 import { env } from '../config/env';
+import { safeErrorForTelemetry } from '../errors/safe-error';
 
 export const DB = Symbol('DB');
 export const DB_POOL = Symbol('DB_POOL');
@@ -15,7 +16,8 @@ export class DbService implements OnApplicationShutdown {
   constructor() {
     const created = createDb(env.DATABASE_URL, {
       onPoolError: (error) => {
-        this.logger.error('Postgres pool error', error.stack);
+        const safe = safeErrorForTelemetry(error);
+        this.logger.error(`Postgres pool error: ${safe.message}`, safe.stack);
       },
     });
     this.db = created.db;

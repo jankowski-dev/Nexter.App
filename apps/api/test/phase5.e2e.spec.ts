@@ -279,6 +279,35 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     expect(replay.body.group.remainingAmount).toBe('50.000000000000000000');
     expect(replay.body.consumptions).toHaveLength(2);
 
+    for (const invalid of [
+      { ...groupSellBody, feeAssetId: usdt.id, feeAmount: '-50' },
+      { ...groupSellBody, feeAssetId: usdt.id, feeAmount: '0' },
+      { ...groupSellBody, feeAssetId: usdt.id, feeAmount: '1e3' },
+      { ...groupSellBody, amount: 'abc' },
+      { ...groupSellBody, proceedsAmount: '   ' },
+    ]) {
+      await agent
+        .post(`/api/v1/trade-groups/${groupId}/sells`)
+        .set('x-csrf-token', owner.csrf)
+        .send(invalid)
+        .expect(400);
+    }
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: based.id,
+        amount: '1',
+        proceedsAssetId: usdt.id,
+        proceedsAmount: '2',
+        feeAssetId: usdt.id,
+        feeAmount: '-10',
+      })
+      .expect(400);
+
     const cashAsset = await agent.get(`/api/v1/portfolio/assets/${usdt.id}`).expect(200);
     expect(cashAsset.body.position).toMatchObject({
       isCashEquivalent: true,
@@ -293,6 +322,25 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     expect(portfolio.body.tradeGroups).toHaveLength(1);
     expect(portfolio.body.transactions).toHaveLength(3);
     expect(portfolio.body.prices).toHaveLength(1);
+
+    const badIdCursor = Buffer.from(
+      JSON.stringify({
+        occurredAt: new Date().toISOString(),
+        openedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        priority: 0,
+        id: 'not-a-uuid',
+      }),
+    ).toString('base64url');
+
+    for (const path of [
+      '/api/v1/transactions',
+      '/api/v1/trade-groups',
+      '/api/v1/audit-log',
+      '/api/v1/watchlist',
+    ]) {
+      await agent.get(`${path}?cursor=${encodeURIComponent(badIdCursor)}`).expect(400);
+    }
 
     const firstPage = await agent
       .get('/api/v1/transactions?limit=2&assetId=' + based.id)

@@ -27,7 +27,7 @@ import type {
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
-import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
+import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { LedgerService, type LedgerMeta } from './ledger.service';
 import { PricingService } from './pricing.service';
 
@@ -297,46 +297,6 @@ export class TradeGroupsService {
     limit: number,
     groupId?: string,
   ): Promise<GroupRow[]> {
-    const lotAgg = this.db
-      .select({
-        groupId: lots.tradeGroupId,
-        buyUsd: sql<string>`coalesce(sum(${lots.costBasisUsd}), 0)::text`.as('buy_usd'),
-        remainingAmount: sql<string>`coalesce(sum(${lots.remainingAmount}), 0)::text`.as(
-          'remaining_amount',
-        ),
-        remainingCost: sql<string>`coalesce(sum(${lots.remainingCostBasisUsd}), 0)::text`.as(
-          'remaining_cost',
-        ),
-      })
-      .from(lots)
-      .where(eq(lots.userId, userId))
-      .groupBy(lots.tradeGroupId)
-      .as('lot_agg');
-
-    const consumptionAgg = this.db
-      .select({
-        groupId: lots.tradeGroupId,
-        sellUsd: sql<string>`coalesce(sum(${lotConsumptions.proceedsUsd}), 0)::text`.as('sell_usd'),
-        realized: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`.as(
-          'realized',
-        ),
-      })
-      .from(lotConsumptions)
-      .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
-      .where(eq(lots.userId, userId))
-      .groupBy(lots.tradeGroupId)
-      .as('consumption_agg');
-
-    const sourceAgg = this.db
-      .select({
-        groupId: transactions.tradeGroupId,
-        source: sql<string>`min(${transactions.source})`.as('source'),
-      })
-      .from(transactions)
-      .where(and(eq(transactions.userId, userId), eq(transactions.subtype, 'buy')))
-      .groupBy(transactions.tradeGroupId)
-      .as('source_agg');
-
     const conditions = [eq(tradeGroups.userId, userId)];
 
     if (groupId) conditions.push(eq(tradeGroups.id, groupId));
@@ -344,7 +304,17 @@ export class TradeGroupsService {
     if (query.assetId) conditions.push(eq(tradeGroups.assetId, query.assetId));
     if (query.from) conditions.push(gte(tradeGroups.openedAt, new Date(query.from)));
     if (query.to) conditions.push(lte(tradeGroups.openedAt, new Date(query.to)));
-    if (query.source) conditions.push(eq(sourceAgg.source, query.source));
+    if (query.source) {
+      conditions.push(
+        sql`exists (
+          select 1 from ${transactions} tx
+          where tx.trade_group_id = ${tradeGroups.id}
+            and tx.user_id = ${userId}
+            and tx.subtype = 'buy'
+            and tx.source = ${query.source}
+        )`,
+      );
+    }
     if (query.search) {
       const pattern = `%${query.search}%`;
       conditions.push(or(ilike(assets.symbol, pattern), ilike(assets.name, pattern))!);
@@ -354,7 +324,7 @@ export class TradeGroupsService {
 
       if (
         typeof cursor.openedAt !== 'string' ||
-        typeof cursor.id !== 'string' ||
+        !isUuid(cursor.id) ||
         Number.isNaN(new Date(cursor.openedAt).getTime())
       ) {
         throw new BadRequestException({
@@ -372,29 +342,76 @@ export class TradeGroupsService {
       );
     }
 
-    const rows = await this.db
+    const baseRows = await this.db
       .select({
         group: tradeGroups,
         asset: assets,
         chainCode: chains.code,
-        buyUsd: lotAgg.buyUsd,
-        remainingAmount: lotAgg.remainingAmount,
-        remainingCost: lotAgg.remainingCost,
-        sellUsd: consumptionAgg.sellUsd,
-        realized: consumptionAgg.realized,
-        source: sourceAgg.source,
       })
       .from(tradeGroups)
       .innerJoin(assets, eq(tradeGroups.assetId, assets.id))
       .innerJoin(chains, eq(assets.chainId, chains.id))
-      .leftJoin(lotAgg, eq(lotAgg.groupId, tradeGroups.id))
-      .leftJoin(consumptionAgg, eq(consumptionAgg.groupId, tradeGroups.id))
-      .leftJoin(sourceAgg, eq(sourceAgg.groupId, tradeGroups.id))
       .where(and(...conditions))
       .orderBy(desc(tradeGroups.openedAt), desc(tradeGroups.id))
       .limit(limit);
 
-    return rows as GroupRow[];
+    if (baseRows.length === 0) {
+      return [];
+    }
+
+    const groupIds = baseRows.map((row) => row.group.id);
+    const [lotRows, consumptionRows, sourceRows] = await Promise.all([
+      this.db
+        .select({
+          groupId: lots.tradeGroupId,
+          buyUsd: sql<string>`coalesce(sum(${lots.costBasisUsd}), 0)::text`,
+          remainingAmount: sql<string>`coalesce(sum(${lots.remainingAmount}), 0)::text`,
+          remainingCost: sql<string>`coalesce(sum(${lots.remainingCostBasisUsd}), 0)::text`,
+        })
+        .from(lots)
+        .where(and(eq(lots.userId, userId), inArray(lots.tradeGroupId, groupIds)))
+        .groupBy(lots.tradeGroupId),
+      this.db
+        .select({
+          groupId: lots.tradeGroupId,
+          sellUsd: sql<string>`coalesce(sum(${lotConsumptions.proceedsUsd}), 0)::text`,
+          realized: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`,
+        })
+        .from(lotConsumptions)
+        .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
+        .where(and(eq(lots.userId, userId), inArray(lots.tradeGroupId, groupIds)))
+        .groupBy(lots.tradeGroupId),
+      this.db
+        .select({
+          groupId: transactions.tradeGroupId,
+          source: sql<string>`min(${transactions.source})`,
+        })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            eq(transactions.subtype, 'buy'),
+            inArray(transactions.tradeGroupId, groupIds),
+          ),
+        )
+        .groupBy(transactions.tradeGroupId),
+    ]);
+
+    const lotByGroup = new Map(lotRows.map((row) => [row.groupId, row]));
+    const consumptionByGroup = new Map(consumptionRows.map((row) => [row.groupId, row]));
+    const sourceByGroup = new Map(sourceRows.map((row) => [row.groupId, row.source]));
+
+    return baseRows.map((row) => ({
+      group: row.group,
+      asset: row.asset,
+      chainCode: row.chainCode,
+      buyUsd: lotByGroup.get(row.group.id)?.buyUsd ?? '0',
+      remainingAmount: lotByGroup.get(row.group.id)?.remainingAmount ?? '0',
+      remainingCost: lotByGroup.get(row.group.id)?.remainingCost ?? '0',
+      sellUsd: consumptionByGroup.get(row.group.id)?.sellUsd ?? '0',
+      realized: consumptionByGroup.get(row.group.id)?.realized ?? '0',
+      source: sourceByGroup.get(row.group.id) ?? null,
+    }));
   }
 
   private toSummary(row: GroupRow, priceValue?: string): TradeGroupSummary {

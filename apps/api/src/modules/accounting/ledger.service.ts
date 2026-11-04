@@ -32,7 +32,7 @@ import {
   decimal,
   usdString,
 } from '../../shared/money/decimal';
-import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
+import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsService } from './accounts.service';
 import { AssetsService } from './assets.service';
@@ -85,13 +85,14 @@ export class LedgerService {
     idempotencyKey?: string,
   ): Promise<ManualTransactionResponse> {
     await this.bootstrap.ensureDefaults(userId);
+    const key = idempotencyKey?.trim() || undefined;
 
     const result = await this.db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${`accounting:${userId}`})::bigint)`,
       );
 
-      if (idempotencyKey) {
+      if (key) {
         const [existing] = await tx
           .select()
           .from(transactions)
@@ -99,7 +100,7 @@ export class LedgerService {
             and(
               eq(transactions.userId, userId),
               eq(transactions.source, 'manual'),
-              eq(transactions.sourceId, idempotencyKey),
+              eq(transactions.sourceId, key),
             ),
           )
           .limit(1);
@@ -158,6 +159,13 @@ export class LedgerService {
         if (asset.isCashEquivalent) {
           const derived = toUsd(amount);
 
+          if (derived.lte(0)) {
+            throw new BadRequestException({
+              code: 'VALIDATION_ERROR',
+              message: `${label} must be positive`,
+            });
+          }
+
           if (provided !== undefined && !toUsd(decimal(provided)).eq(derived)) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
@@ -214,8 +222,24 @@ export class LedgerService {
 
         const feeAsset = await this.assets.require(feeAssetId, tx);
         const amount = decimal(feeAmount);
+
+        if (amount.lte(0)) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: 'feeAmount must be positive',
+          });
+        }
+
         assertAmount(feeAsset, amount, 'feeAmount');
         const usd = resolveUsd(feeAsset, amount, feeUsdValue, 'feeUsdValue');
+
+        if (usd.lte(0)) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: 'feeUsdValue must be positive',
+          });
+        }
+
         return { asset: feeAsset, amount, usd };
       };
 
@@ -230,6 +254,13 @@ export class LedgerService {
         fee: { asset: Asset; amount: Decimal; usd: Decimal } | null,
       ): void => {
         if (!fee) return;
+
+        if (fee.amount.lte(0) || fee.usd.lte(0)) {
+          throw new BadRequestException({
+            code: 'VALIDATION_ERROR',
+            message: 'Fee amount and value must be positive',
+          });
+        }
 
         add(accountId, fee.asset.id, fee.amount.negated(), fee.usd.negated());
         addExternal(fee.asset.id, fee.amount, fee.usd);
@@ -624,7 +655,7 @@ export class LedgerService {
           type,
           subtype: input.type,
           source: 'manual',
-          sourceId: idempotencyKey ?? null,
+          sourceId: key ?? null,
           tradeGroupId,
           occurredAt,
           notes,
@@ -754,7 +785,7 @@ export class LedgerService {
 
       if (
         typeof cursor.occurredAt !== 'string' ||
-        typeof cursor.id !== 'string' ||
+        !isUuid(cursor.id) ||
         Number.isNaN(new Date(cursor.occurredAt).getTime())
       ) {
         throw new BadRequestException({

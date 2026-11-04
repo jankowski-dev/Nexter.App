@@ -9,6 +9,7 @@ import {
 import * as Sentry from '@sentry/node';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import { safeErrorForTelemetry } from './safe-error';
 
 const statusCodes: Record<number, string> = {
   [HttpStatus.BAD_REQUEST]: 'VALIDATION_ERROR',
@@ -109,11 +110,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     if (status >= 500) {
-      Sentry.captureException(exception);
-      this.logger.error(
-        exception instanceof Error ? exception.message : 'Unhandled exception',
-        exception instanceof Error ? exception.stack : undefined,
-      );
+      const safe = safeErrorForTelemetry(exception);
+      Sentry.captureException(safe);
+      this.logger.error(safe.message, safe.stack);
     }
 
     if (request.url.startsWith('/api/v1/auth/')) {

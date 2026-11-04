@@ -3,7 +3,7 @@ import { and, desc, eq, gte, ilike, isNull, lt, lte, or, sql, type SQL } from 'd
 import { auditLog, type Database } from '@nexter/db';
 import type { AuditEntry, AuditLogQuery, AuditLogResponse } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
-import { decodeCursor, encodeCursor, makePage } from '../../shared/pagination/cursor';
+import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 
 /**
  * Cursors are ISO strings (millisecond precision) while `timestamptz` stores
@@ -28,7 +28,7 @@ export class AuditLogService {
 
       if (
         typeof cursor.createdAt !== 'string' ||
-        typeof cursor.id !== 'string' ||
+        !isUuid(cursor.id) ||
         Number.isNaN(new Date(cursor.createdAt).getTime())
       ) {
         throw new BadRequestException({

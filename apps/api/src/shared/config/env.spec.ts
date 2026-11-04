@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { parseEnv } from './env';
 
-const validKey = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+const validKey = Array.from({ length: 32 }, (_, index) => index.toString(16).padStart(2, '0')).join(
+  '',
+);
+const setupToken = 'setup-token-0123456789abcdef0123456789abcdef';
+
+function productionEnv(overrides: Record<string, string | undefined> = {}) {
+  return {
+    NODE_ENV: 'production',
+    DATABASE_URL: 'postgres://db',
+    SETUP_TOKEN: setupToken,
+    AUTH_ENCRYPTION_KEY: validKey,
+    APP_URL: 'https://example.com',
+    ...overrides,
+  };
+}
 
 describe('parseEnv', () => {
   it('treats empty values as undefined in development', () => {
@@ -29,7 +43,7 @@ describe('parseEnv', () => {
       parseEnv({
         NODE_ENV: 'production',
         DATABASE_URL: 'postgres://db',
-        SETUP_TOKEN: 'setup',
+        SETUP_TOKEN: setupToken,
       }),
     ).toThrow(/AUTH_ENCRYPTION_KEY/);
 
@@ -37,31 +51,29 @@ describe('parseEnv', () => {
       parseEnv({
         NODE_ENV: 'production',
         DATABASE_URL: 'postgres://db',
-        SETUP_TOKEN: 'setup',
+        SETUP_TOKEN: setupToken,
         AUTH_ENCRYPTION_KEY: validKey,
       }),
     ).toThrow(/APP_URL/);
 
-    expect(
-      parseEnv({
-        NODE_ENV: 'production',
-        DATABASE_URL: 'postgres://db',
-        SETUP_TOKEN: 'setup',
-        AUTH_ENCRYPTION_KEY: validKey,
-        APP_URL: 'https://example.com',
-      }).DATABASE_URL,
-    ).toBe('postgres://db');
+    expect(parseEnv(productionEnv()).DATABASE_URL).toBe('postgres://db');
   });
 
   it('rejects malformed encryption keys', () => {
-    expect(() =>
-      parseEnv({
-        NODE_ENV: 'production',
-        DATABASE_URL: 'postgres://db',
-        SETUP_TOKEN: 'setup',
-        AUTH_ENCRYPTION_KEY: 'test-key',
-        APP_URL: 'https://example.com',
-      }),
-    ).toThrow(/AUTH_ENCRYPTION_KEY/);
+    expect(() => parseEnv(productionEnv({ AUTH_ENCRYPTION_KEY: 'test-key' }))).toThrow(
+      /AUTH_ENCRYPTION_KEY/,
+    );
+  });
+
+  it('rejects weak production secrets and insecure URLs', () => {
+    expect(() => parseEnv(productionEnv({ SETUP_TOKEN: 'short' }))).toThrow(/SETUP_TOKEN/);
+    expect(() => parseEnv(productionEnv({ SETUP_TOKEN: 'test-setup-token' }))).toThrow(
+      /SETUP_TOKEN/,
+    );
+    expect(() => parseEnv(productionEnv({ AUTH_ENCRYPTION_KEY: 'A'.repeat(64) }))).toThrow(
+      /AUTH_ENCRYPTION_KEY/,
+    );
+    expect(() => parseEnv(productionEnv({ APP_URL: 'http://example.com' }))).toThrow(/HTTPS/);
+    expect(() => parseEnv(productionEnv({ TRUST_PROXY: 'true' }))).toThrow(/TRUST_PROXY/);
   });
 });
