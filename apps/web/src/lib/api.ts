@@ -17,6 +17,8 @@ import {
   portfolioAssetDetailSchema,
   positionsResponseSchema,
   settingsSchema,
+  swapConfigResponseSchema,
+  swapOrderDetailSchema,
   tradeGroupDetailSchema,
   tradeGroupsResponseSchema,
   transactionsPageResponseSchema,
@@ -38,6 +40,8 @@ import {
   type PortfolioAssetDetail,
   type PositionsResponse,
   type Settings,
+  type SwapConfigResponse,
+  type SwapOrderDetail,
   type TradeGroupDetail,
   type TradeGroupListQuery,
   type TradeGroupSellRequest,
@@ -69,6 +73,8 @@ export type {
   PortfolioAssetDetail,
   PositionsResponse,
   Settings,
+  SwapConfigResponse,
+  SwapOrderDetail,
   TradeGroupDetail,
   TradeGroupsResponse,
   TransactionsPageResponse,
@@ -387,6 +393,21 @@ export async function fetchAuditLog(
   } = {},
 ): Promise<AuditLogResponse> {
   return apiFetch(`/api/v1/audit-log${queryString(params)}`, {}, auditLogResponseSchema);
+}
+
+export async function fetchSwapConfig(): Promise<SwapConfigResponse> {
+  return apiFetch('/api/v1/swap/config', {}, swapConfigResponseSchema);
+}
+
+export async function quoteSwap(body: {
+  chain: 'bsc';
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  slippageBps?: number;
+  walletAddress?: string;
+}): Promise<SwapOrderDetail> {
+  return apiPost('/api/v1/swap/quote', body, swapOrderDetailSchema);
 }
 
 export async function downloadExport(

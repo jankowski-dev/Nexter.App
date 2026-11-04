@@ -118,6 +118,20 @@ Before deploying:
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
 
+### Phase 7 migration 0009 preflight
+
+Migration `0009_daily_champions.sql` is additive: it creates `swap_orders`, `swap_events`, and `external_api_calls`. It does not rewrite ledger data.
+
+Before enabling quotes:
+
+1. Take a PostgreSQL backup.
+2. Run the pre-deploy migration command.
+3. Configure `SWAP_ENABLED=false` first and deploy the API/worker and SPA.
+4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
+5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Keep `SWAP_KILL_SWITCH=true` as the emergency stop.
+
+Builds remain disabled until a selector allowlist is configured. Phase 7 never signs or submits transactions.
+
 ### Phase 5 migration 0008 preflight
 
 Migration `0008_common_the_spike.sql` is additive: it creates `watchlist` and adds nullable `trade_groups.notes`. It does not rewrite ledger data.

@@ -11,6 +11,7 @@ import { TwoFactorPage } from '@/features/auth/two-factor-page';
 import { TradeDetailPage } from '@/features/trades/trade-detail-page';
 import { TradesPage } from '@/features/trades/trades-page';
 import { WatchlistPage } from '@/features/watchlist/watchlist-page';
+import { SwapPage } from '@/features/swap/swap-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
@@ -154,6 +155,12 @@ const watchlistRoute = createRoute({
   component: WatchlistPage,
 });
 
+const swapRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/swap',
+  component: SwapPage,
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings',
@@ -202,6 +209,7 @@ const routeTree = rootRoute.addChildren([
     tradeDetailRoute,
     importRoute,
     watchlistRoute,
+    swapRoute,
     settingsRoute,
     securitySettingsRoute,
     accountsSettingsRoute,
