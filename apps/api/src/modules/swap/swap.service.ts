@@ -44,6 +44,7 @@ import {
   SWAP_CHAINS,
   getSwapChain,
   getSwapToken,
+  isCashEquivalentSymbol,
   isNativeToken,
   parseAddressList,
 } from './token-registry';
@@ -291,6 +292,14 @@ export class SwapService {
       });
     }
     const amountOutUsd = normalizeUsd(route.amountOutUsd);
+
+    if (!amountOutUsd && !isCashEquivalentSymbol(tokenOut.symbol)) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid output USD value',
+        details: { reason: 'SWAP_OUTPUT_USD_MISSING' },
+      });
+    }
 
     const providerImpactBps = fractionToPriceImpactBps(route.priceImpact);
     const usdImpactBps = usdToPriceImpactBps(amountInUsd, amountOutUsd);

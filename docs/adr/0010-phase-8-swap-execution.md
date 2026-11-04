@@ -88,7 +88,8 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 - Mempool replacement: a different tx hash for the same nonce marks `REPLACED`; dropped nonce marks `DROPPED`.
 - Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). A reorg after accounting is outside this slice; 15 confirmations make it unlikely, and any correction must be an append-only compensating transaction in a later slice.
 - A failed receipt marks `FAILED`; no accounting.
-- Confirmation creates exactly one accounting transaction; retries are idempotent by `swap_order_id`/tx hash.
+- Confirmation creates exactly one accounting transaction; retries are idempotent by `(user, source=kyberswap, sourceId=tx hash)` under the ledger's per-user advisory lock. Tracking starts whenever `BSC_RPC_URL` is configured, independent of `SWAP_ENABLED`.
+- Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by actual `Swapped` amounts. Confirmed orders are retried with a 60-second accounting backoff and no 24-hour cutoff.
 
 ### Accounting
 
@@ -99,7 +100,7 @@ On confirmed swap:
 - consume FIFO lots for tokenIn (if non-cash);
 - create a trade group and a lot for tokenOut (if non-cash) with cost basis = tokenIn USD + gas (subject to `includeGasInCostBasis`);
 - record `network_fee_wei`/`network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
-- link `swap_orders` to the transaction; idempotency by order id.
+- link `swap_orders` to the transaction; idempotency by `(user, source=kyberswap, sourceId=tx hash)`.
 
 Failure/replaced/dropped never creates a transaction.
 

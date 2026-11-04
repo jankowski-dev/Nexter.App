@@ -28,6 +28,7 @@ export interface RpcReceipt {
   status: boolean;
   blockNumber: number;
   blockHash: string;
+  transactionHash: string;
   gasUsed: string;
   effectiveGasPrice: string | null;
   logs: RpcLog[];
@@ -168,6 +169,7 @@ export class BscRpcService {
       status,
       blockNumber,
       blockHash: typeof receipt.blockHash === 'string' ? receipt.blockHash : '',
+      transactionHash: typeof receipt.transactionHash === 'string' ? receipt.transactionHash : '',
       gasUsed: hexToBigInt(receipt.gasUsed) ?? '0',
       effectiveGasPrice:
         hexToBigInt(receipt.effectiveGasPrice) ?? hexToBigInt(receipt.gasPrice) ?? null,

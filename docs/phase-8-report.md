@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **in progress — execution backend slice implemented; WalletConnect/Tangem, tracking, accounting, and security review pending.**
+Status: **in progress — execution backend, WalletConnect/Tangem, calldata verification, tracking, and confirmed-swap accounting implemented; execution UI/signing, final review, and live Tangem acceptance pending.**
 
 ## Scope
 
@@ -28,7 +28,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Confirmed-swap accounting through the existing ledger: trade/swap transaction, postings, FIFO consumption, output lot, gas posting, trade group, `source=kyberswap`, idempotent by tx hash, using the actual on-chain amounts rather than quote amounts.
 - Accounting prerequisites: the wallet must already hold the input token and BNB for gas in the ledger; negative balances fail closed and retry after reconciliation.
 
-- Migration `0010_careless_pet_avengers.sql` plus hardening migration `0011_closed_namor.sql` (additive):
+- Migrations `0010` + `0011` (execution/approvals) and `0012` (executed amounts), all additive:
   - `sessions.step_up_until`;
   - `token_approvals`;
   - swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `nonce`, `deadline`, `confirmations`, `block_number`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`, submitted/confirmed timestamps;
@@ -41,6 +41,8 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Storage of an optional wallet account on quotes for future accounting.
 
 ## Review history
+
+Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD from the quote could mismatch the actual amount after rounding, leaving USDC-output swaps unaccounted. Fixed by deriving cash-leg USD from actual on-chain amounts; USDC-output regression test added. Re-review pending.
 
 Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Zero-allowance approval sequencing remains an execution-slice gate.
 
@@ -63,7 +65,7 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **101 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
+- API suite — **102 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010/0011/0012 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 

@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
@@ -17,14 +17,17 @@ import { LedgerService } from '../accounting/ledger.service';
 import { BscRpcService, type RpcReceipt, type RpcTransaction } from './bsc-rpc.service';
 import { KYBER_ROUTER_ABI } from './kyber-calldata';
 import { normalizeUsd } from './swap-step-up';
-import { getSwapToken } from './token-registry';
+import { getSwapToken, isCashEquivalentSymbol } from './token-registry';
 
 const ACTIVE_STATUSES = ['SUBMITTED', 'PENDING'] as const;
 const BNB_WEI = decimal('1000000000000000000');
-const ACCOUNTING_RETRY_MS = 24 * 60 * 60 * 1000;
 
 function fromBaseUnits(value: string, decimals: number): string {
   return decimal(value).div(decimal('10').pow(decimals)).toFixed(decimals);
+}
+
+function toBaseUnits(value: string, decimals: number): bigint {
+  return BigInt(decimal(value).mul(decimal('10').pow(decimals)).toFixed(0));
 }
 
 @Injectable()
@@ -43,7 +46,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   ) {}
 
   onApplicationBootstrap(): void {
-    if (env.NODE_ENV === 'test' || !env.SWAP_ENABLED || !this.rpc.configured) return;
+    if (env.NODE_ENV === 'test' || !this.rpc.configured) return;
 
     this.timer = setInterval(() => {
       void this.tick();
@@ -90,7 +93,6 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             eq(swapOrders.status, 'CONFIRMED'),
             isNull(swapOrders.accountingTransactionId),
             isNotNull(swapOrders.confirmedAt),
-            gt(swapOrders.confirmedAt, new Date(Date.now() - ACCOUNTING_RETRY_MS)),
           ),
         )
         .orderBy(asc(swapOrders.confirmedAt))
@@ -170,6 +172,11 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
+    if (receipt.transactionHash && receipt.transactionHash.toLowerCase() !== txHash.toLowerCase()) {
+      await this.mark(order, 'FAILED', { reason: 'receipt_hash_mismatch', txHash });
+      return;
+    }
+
     if (!receipt.status) {
       await this.mark(order, 'FAILED', {
         reason: 'receipt_failed',
@@ -189,8 +196,12 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   }
 
   private verifyTransaction(order: SwapOrder, tx: RpcTransaction): string | null {
-    if (!order.walletAddress || !order.routerAddress || !order.calldata) {
+    if (!order.walletAddress || !order.routerAddress || !order.calldata || !order.txHash) {
       return 'missing_order_data';
+    }
+
+    if (tx.hash.toLowerCase() !== order.txHash.toLowerCase()) {
+      return 'hash_mismatch';
     }
 
     if (tx.from.toLowerCase() !== order.walletAddress.toLowerCase()) {
@@ -260,14 +271,17 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       },
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: 'swap.order_pending',
-      entityType: 'swap_order',
-      entityId: order.id,
-      before: { status: order.status },
-      after: { status, confirmations, blockNumber: receipt?.blockNumber ?? tx.blockNumber },
-    });
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: 'swap.order_pending',
+        entityType: 'swap_order',
+        entityId: order.id,
+        before: { status: order.status },
+        after: { status, confirmations, blockNumber: receipt?.blockNumber ?? tx.blockNumber },
+      },
+      { strict: true },
+    );
   }
 
   private async confirm(
@@ -280,7 +294,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const confirmedAt = new Date();
     const tokenIn = getSwapToken(order.chain, order.tokenIn);
     const tokenOut = getSwapToken(order.chain, order.tokenOut);
-    const swapped = await this.swappedAmounts(receipt, order.routerAddress);
+    const swapped =
+      tokenIn && tokenOut ? await this.swappedAmounts(receipt, order, tokenIn, tokenOut) : null;
     const executedAmountIn =
       swapped && tokenIn ? fromBaseUnits(swapped.spentAmount, tokenIn.decimals) : null;
     const executedAmountOut =
@@ -325,36 +340,45 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       },
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: 'swap.order_confirmed',
-      entityType: 'swap_order',
-      entityId: order.id,
-      before: { status: order.status },
-      after: {
-        status: 'CONFIRMED',
-        blockNumber: receipt.blockNumber,
-        confirmations,
-        executedAmountIn,
-        executedAmountOut,
-        networkFeeWei: feeWei,
-        networkFeeUsd: feeUsd,
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: 'swap.order_confirmed',
+        entityType: 'swap_order',
+        entityId: order.id,
+        before: { status: order.status },
+        after: {
+          status: 'CONFIRMED',
+          blockNumber: receipt.blockNumber,
+          confirmations,
+          executedAmountIn,
+          executedAmountOut,
+          networkFeeWei: feeWei,
+          networkFeeUsd: feeUsd,
+        },
       },
-    });
+      { strict: true },
+    );
 
     await this.safeAccount(row);
   }
 
   private async swappedAmounts(
     receipt: RpcReceipt,
-    routerAddress: string | null,
+    order: SwapOrder,
+    tokenIn: { address: string; decimals: number },
+    tokenOut: { address: string; decimals: number },
   ): Promise<{ spentAmount: string; returnAmount: string } | null> {
-    if (!routerAddress) return null;
+    if (!order.routerAddress || !order.walletAddress) return null;
 
+    const wallet = order.walletAddress.toLowerCase();
+    const expectedIn = toBaseUnits(order.amountIn, tokenIn.decimals);
+    const minOut = toBaseUnits(order.minOut, tokenOut.decimals);
     const { decodeEventLog } = await import('viem');
+    let found: { spentAmount: string; returnAmount: string } | null = null;
 
     for (const log of receipt.logs) {
-      if (log.address.toLowerCase() !== routerAddress.toLowerCase()) continue;
+      if (log.address.toLowerCase() !== order.routerAddress.toLowerCase()) continue;
 
       try {
         const decoded = decodeEventLog({
@@ -365,11 +389,23 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
         if (decoded.eventName !== 'Swapped') continue;
         const args = decoded.args as unknown as {
+          sender: string;
+          srcToken: string;
+          dstToken: string;
+          dstReceiver: string;
           spentAmount: bigint;
           returnAmount: bigint;
         };
 
-        return {
+        if (args.sender.toLowerCase() !== wallet) continue;
+        if (args.srcToken.toLowerCase() !== tokenIn.address.toLowerCase()) continue;
+        if (args.dstToken.toLowerCase() !== tokenOut.address.toLowerCase()) continue;
+        if (args.dstReceiver.toLowerCase() !== wallet) continue;
+        if (args.spentAmount !== expectedIn) continue;
+        if (args.returnAmount < minOut) continue;
+
+        // Keep the last matching event; nested router calls can emit earlier ones.
+        found = {
           spentAmount: args.spentAmount.toString(),
           returnAmount: args.returnAmount.toString(),
         };
@@ -378,7 +414,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       }
     }
 
-    return null;
+    return found;
   }
 
   private networkFee(
@@ -438,12 +474,18 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   ): Promise<void> {
     const [row] = await this.db
       .update(swapOrders)
-      .set({ status, updatedAt: new Date() })
+      .set({
+        status,
+        confirmations: 0,
+        ...(status === 'FAILED' ? {} : { blockNumber: null }),
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(swapOrders.id, order.id),
           eq(swapOrders.userId, order.userId),
           inArray(swapOrders.status, [...ACTIVE_STATUSES]),
+          isNull(swapOrders.accountingTransactionId),
         ),
       )
       .returning({ id: swapOrders.id });
@@ -456,14 +498,17 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       payload,
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: `swap.order_${status.toLowerCase()}`,
-      entityType: 'swap_order',
-      entityId: order.id,
-      before: { status: order.status },
-      after: { status, ...payload },
-    });
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: `swap.order_${status.toLowerCase()}`,
+        entityType: 'swap_order',
+        entityId: order.id,
+        before: { status: order.status },
+        after: { status, ...payload },
+      },
+      { strict: true },
+    );
   }
 
   private async account(order: SwapOrder): Promise<void> {
@@ -478,17 +523,15 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       if (
         !receipt ||
         !receipt.status ||
-        latest - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS
+        latest - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS ||
+        (order.blockNumber !== null && receipt.blockNumber !== order.blockNumber)
       ) {
         await this.revertConfirmed(order, receipt, latest);
         return;
       }
     }
 
-    if (
-      order.errors.some((code) => code.startsWith('SWAP_ACCOUNTING_')) &&
-      Date.now() - order.updatedAt.getTime() < 60_000
-    ) {
+    if (order.errors.length > 0 && Date.now() - order.updatedAt.getTime() < 60_000) {
       return;
     }
 
@@ -509,7 +552,12 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const amountInUsd = normalizeUsd(order.amountInUsd) ?? normalizeUsd(routeSummary.amountInUsd);
     const amountOutUsd = normalizeUsd(routeSummary.amountOutUsd);
 
-    if (!amountInUsd || !amountOutUsd) {
+    if (!amountInUsd) {
+      await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_USD_MISSING');
+      return;
+    }
+
+    if (!amountOutUsd && !isCashEquivalentSymbol(tokenOut.symbol)) {
       await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_USD_MISSING');
       return;
     }
@@ -527,6 +575,12 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
     const feeWei = BigInt(order.networkFeeWei ?? '0');
     const feeUsd = order.networkFeeUsd;
+
+    if (feeWei > 0n && (!feeUsd || decimal(feeUsd).lte(0))) {
+      await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_GAS_USD_MISSING');
+      return;
+    }
+
     let fee: { feeAssetId: string; feeAmount: string; feeUsdValue: string } | undefined;
 
     if (feeWei > 0n && feeUsd && decimal(feeUsd).gt(0)) {
@@ -551,9 +605,13 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       : (order.confirmedAt ?? new Date()).toISOString();
 
     const inUsd = usdString(decimal(amountInUsd).mul(order.executedAmountIn).div(order.amountIn));
-    const outUsd = usdString(
-      decimal(amountOutUsd).mul(order.executedAmountOut).div(order.amountOut),
-    );
+    const outUsd = amountOutUsd
+      ? usdString(decimal(amountOutUsd).mul(order.executedAmountOut).div(order.amountOut))
+      : null;
+    // Cash-equivalent legs must derive USD from the actual on-chain amount;
+    // quote-derived USD can differ by rounding and the ledger rejects it.
+    const usdValueIn = assetIn.isCashEquivalent ? undefined : inUsd;
+    const usdValueOut = assetOut.isCashEquivalent || !outUsd ? undefined : outUsd;
 
     let result;
 
@@ -567,8 +625,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           amountIn: order.executedAmountIn,
           assetOutId: assetOut.id,
           amountOut: order.executedAmountOut,
-          usdValueIn: inUsd,
-          usdValueOut: outUsd,
+          ...(usdValueIn ? { usdValueIn } : {}),
+          ...(usdValueOut ? { usdValueOut } : {}),
           ...(fee ?? {}),
           occurredAt,
           notes: `KyberSwap ${tokenIn.symbol} -> ${tokenOut.symbol} (${order.txHash})`,
@@ -599,6 +657,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         and(
           eq(swapOrders.id, order.id),
           eq(swapOrders.userId, order.userId),
+          eq(swapOrders.status, 'CONFIRMED'),
           isNull(swapOrders.accountingTransactionId),
         ),
       )
@@ -615,17 +674,20 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       },
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: 'swap.order_accounted',
-      entityType: 'swap_order',
-      entityId: order.id,
-      after: {
-        transactionId: result.transaction.id,
-        tradeGroupId: result.transaction.tradeGroupId,
-        source: 'kyberswap',
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: 'swap.order_accounted',
+        entityType: 'swap_order',
+        entityId: order.id,
+        after: {
+          transactionId: result.transaction.id,
+          tradeGroupId: result.transaction.tradeGroupId,
+          source: 'kyberswap',
+        },
       },
-    });
+      { strict: true },
+    );
   }
 
   private async revertConfirmed(
@@ -644,6 +706,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         status,
         confirmations,
         confirmedAt: null,
+        blockNumber: null,
         executedAmountIn: null,
         executedAmountOut: null,
         networkFeeWei: null,
@@ -655,6 +718,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           eq(swapOrders.id, order.id),
           eq(swapOrders.userId, order.userId),
           eq(swapOrders.status, 'CONFIRMED'),
+          isNull(swapOrders.accountingTransactionId),
         ),
       )
       .returning({ id: swapOrders.id });
@@ -671,14 +735,17 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       },
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: failed ? 'swap.order_failed' : 'swap.order_reorg',
-      entityType: 'swap_order',
-      entityId: order.id,
-      before: { status: 'CONFIRMED' },
-      after: { status, confirmations },
-    });
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: failed ? 'swap.order_failed' : 'swap.order_reorg',
+        entityType: 'swap_order',
+        entityId: order.id,
+        before: { status: 'CONFIRMED' },
+        after: { status, confirmations },
+      },
+      { strict: true },
+    );
   }
 
   private accountingErrorCode(error: unknown): string {
@@ -713,16 +780,17 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
   private async recordAccountingFailure(order: SwapOrder, code: string): Promise<void> {
     const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
-
-    if (order.errors.includes(bounded)) return;
+    const exists = order.errors.includes(bounded);
 
     await this.db
       .update(swapOrders)
       .set({
-        errors: [...order.errors, bounded].slice(-20),
+        errors: exists ? order.errors : [...order.errors, bounded].slice(-20),
         updatedAt: new Date(),
       })
       .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)));
+
+    if (exists) return;
 
     await this.db.insert(swapEvents).values({
       orderId: order.id,
@@ -730,12 +798,15 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       payload: { code: bounded },
     });
 
-    await this.audit.log({
-      userId: order.userId,
-      action: 'swap.accounting_failed',
-      entityType: 'swap_order',
-      entityId: order.id,
-      after: { code: bounded },
-    });
+    await this.audit.log(
+      {
+        userId: order.userId,
+        action: 'swap.accounting_failed',
+        entityType: 'swap_order',
+        entityId: order.id,
+        after: { code: bounded },
+      },
+      { strict: true },
+    );
   }
 }

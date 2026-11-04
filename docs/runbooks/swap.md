@@ -49,7 +49,10 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
 - A first-time ERC-20 swap with zero allowance currently fails simulation before approval build; the execution slice must add the allowance/`APPROVAL_REQUIRED` gate before signing is enabled.
-- Confirmed-swap accounting requires the wallet's input token and BNB gas balance to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried after reconciliation; it is never silently forced.
+- Confirmed-swap accounting requires the wallet's input token and BNB gas balance to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.
+- Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by the actual `Swapped` amounts.
+- Tracking starts whenever `BSC_RPC_URL` is configured, even if `SWAP_ENABLED=false`, so in-flight transactions continue to confirm and account during a rollback.
+- Speed-up/replacement transactions are detected as `REPLACED` but are not adopted automatically; a same-nonce replacement that actually executed is a known limitation for the execution slice.
 - The tracking poller verifies sender, router, calldata, and value before confirming. Replaced/dropped/failed transactions never create accounting. Reorgs before accounting return the order to `PENDING`; post-accounting reorg compensation is a later slice.
 - All execution endpoints remain disabled until `SWAP_ENABLED=true`, wallet/router/selector allowlists are set, and the remaining Phase 8 slices are reviewed. No signing UI exists yet.
 
