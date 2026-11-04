@@ -118,6 +118,12 @@ Before deploying:
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
 
+### Phase 8 migration 0010 preflight
+
+Migration `0010_careless_pet_avengers.sql` is additive: it adds `sessions.step_up_until`, `token_approvals`, and execution fields on `swap_orders`. It does not rewrite ledger data.
+
+Before enabling execution, take a backup, run the pre-deploy migration, and verify `/ready`. Execution endpoints remain behind the existing kill switch and allowlists; WalletConnect/Tangem and accounting are not enabled until the remaining Phase 8 slices are reviewed.
+
 ### Phase 7 migration 0009 preflight
 
 Migration `0009_daily_champions.sql` is additive: it creates `swap_orders`, `swap_events`, and `external_api_calls`. It does not rewrite ledger data.

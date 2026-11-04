@@ -24,6 +24,7 @@ import type {
   SessionsResponse,
   SetupRequest,
   SetupResponse,
+  StepUpResponse,
   TotpCodeRequest,
   TwoFactorSetupResponse,
 } from '@nexter/contracts';
@@ -674,6 +675,70 @@ export class AuthService {
         { executor: tx, strict: true },
       );
     });
+  }
+
+  async stepUp(
+    auth: AuthContext,
+    dto: TotpCodeRequest,
+    request: FastifyRequest,
+  ): Promise<StepUpResponse> {
+    if (!auth.session.twoFactorVerified || !auth.user.totpEnabled) {
+      throw new BadRequestException({
+        code: 'TOTP_REQUIRED',
+        message: 'Two-factor authentication is required',
+      });
+    }
+
+    if (!auth.user.totpSecretEncrypted) {
+      throw new BadRequestException({
+        code: 'TOTP_NOT_CONFIGURED',
+        message: 'TOTP is not configured',
+      });
+    }
+
+    const meta = this.meta(request);
+    const key = `2fa:${auth.user.id}`;
+    await this.throttle.assertNotBlocked(key, meta);
+    const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
+    const valid = await this.totp.verify(dto.code, secret);
+
+    if (!valid) {
+      await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
+      await this.audit.log({
+        userId: auth.user.id,
+        action: 'auth.step_up_failed',
+        entityType: 'user',
+        entityId: auth.user.id,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      });
+      throw new UnauthorizedException({
+        code: 'TOTP_INVALID',
+        message: 'Invalid TOTP code',
+      });
+    }
+
+    await this.throttle.reset(key);
+    const stepUpUntil = new Date(Date.now() + 5 * 60 * 1000);
+
+    await this.db.transaction(async (tx) => {
+      await tx.update(sessions).set({ stepUpUntil }).where(eq(sessions.id, auth.session.id));
+
+      await this.audit.log(
+        {
+          userId: auth.user.id,
+          action: 'auth.step_up_succeeded',
+          entityType: 'session',
+          entityId: auth.session.id,
+          after: { stepUpUntil: stepUpUntil.toISOString() },
+          ip: request.ip,
+          userAgent: request.headers['user-agent'],
+        },
+        { executor: tx, strict: true },
+      );
+    });
+
+    return { stepUpUntil: stepUpUntil.toISOString() };
   }
 
   async changePassword(

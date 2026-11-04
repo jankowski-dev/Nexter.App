@@ -18,8 +18,11 @@ import type {
   SwapOrdersQuery,
   SwapOrdersResponse,
   SwapQuoteRequest,
+  SwapSubmitRequest,
   SwapToken,
 } from '@nexter/contracts';
+import type { AuthContext } from '../auth/auth.types';
+import { AccountsService } from '../accounting/accounts.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
@@ -140,6 +143,7 @@ export class SwapService {
     private readonly kyber: KyberSwapClient,
     private readonly rpc: BscRpcService,
     private readonly audit: AuditService,
+    private readonly accounts: AccountsService,
   ) {}
 
   config(): SwapConfigResponse {
@@ -183,6 +187,10 @@ export class SwapService {
     }
 
     this.assertWallet(input.walletAddress);
+
+    if (input.accountId) {
+      await this.accounts.requireWallet(userId, input.accountId);
+    }
 
     const slippageBps = input.slippageBps ?? env.SWAP_DEFAULT_SLIPPAGE_BPS;
     if (slippageBps > env.SWAP_MAX_SLIPPAGE_BPS) {
@@ -298,6 +306,7 @@ export class SwapService {
         .insert(swapOrders)
         .values({
           userId,
+          accountId: input.accountId ?? null,
           chain: input.chain,
           walletAddress: input.walletAddress ? normalizeAddress(input.walletAddress) : null,
           tokenIn: normalizeAddress(tokenIn.address),
@@ -356,7 +365,12 @@ export class SwapService {
     return this.detail(userId, order.id, warnings);
   }
 
-  async build(userId: string, input: SwapBuildRequest, meta: SwapMeta): Promise<SwapBuildResponse> {
+  async build(
+    auth: AuthContext,
+    input: SwapBuildRequest,
+    meta: SwapMeta,
+  ): Promise<SwapBuildResponse> {
+    const userId = auth.user.id;
     this.assertEnabled();
     this.assertWallet(input.walletAddress, true);
 
@@ -369,6 +383,8 @@ export class SwapService {
         message: `Swap order is ${order.status}`,
       });
     }
+
+    this.assertStepUp(auth, order);
 
     const selectors = selectorAllowlist();
     if (selectors.length === 0) {
@@ -599,6 +615,75 @@ export class SwapService {
     };
   }
 
+  async submit(
+    auth: AuthContext,
+    orderId: string,
+    input: SwapSubmitRequest,
+    meta: SwapMeta,
+  ): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (order.status !== 'BUILT') {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    this.assertStepUp(auth, order);
+    const txHash = input.txHash.toLowerCase();
+
+    await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({
+          status: 'SUBMITTED',
+          txHash,
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, orderId),
+            eq(swapOrders.userId, userId),
+            eq(swapOrders.status, 'BUILT'),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) {
+        throw new ConflictException({
+          code: 'SWAP_STATE_INVALID',
+          message: 'Swap order is no longer submittable',
+        });
+      }
+
+      await tx.insert(swapEvents).values({
+        orderId,
+        type: 'submitted',
+        payload: { txHash },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_submitted',
+          entityType: 'swap_order',
+          entityId: orderId,
+          before: { status: 'BUILT' },
+          after: { status: 'SUBMITTED', txHash },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
+
+    return this.detail(userId, orderId, []);
+  }
+
   async cancel(userId: string, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
     const order = await this.requireOrder(userId, orderId);
 
@@ -745,6 +830,7 @@ export class SwapService {
       id: order.id,
       chain: order.chain as 'bsc',
       walletAddress: order.walletAddress,
+      accountId: order.accountId,
       tokenIn: tokenFor(order.tokenIn, order.chain, order.tokenInSymbol),
       tokenOut: tokenFor(order.tokenOut, order.chain, order.tokenOutSymbol),
       amountIn: order.amountIn,
@@ -759,7 +845,16 @@ export class SwapService {
       status: order.status,
       quoteExpiresAt: order.quoteExpiresAt.toISOString(),
       builtAt: order.builtAt?.toISOString() ?? null,
+      submittedAt: order.submittedAt?.toISOString() ?? null,
+      confirmedAt: order.confirmedAt?.toISOString() ?? null,
       cancelledAt: order.cancelledAt?.toISOString() ?? null,
+      confirmations: order.confirmations,
+      txHash: order.txHash,
+      blockNumber: order.blockNumber,
+      networkFeeWei: order.networkFeeWei,
+      networkFeeUsd: order.networkFeeUsd,
+      accountingTransactionId: order.accountingTransactionId,
+      tradeGroupId: order.tradeGroupId,
       createdAt: order.createdAt.toISOString(),
     };
   }
@@ -856,6 +951,21 @@ export class SwapService {
         { executor: tx, strict: true },
       );
     });
+  }
+
+  private assertStepUp(auth: AuthContext, order: SwapOrder): void {
+    const routeSummary = order.routeSummary as Record<string, unknown>;
+    const rawUsd = routeSummary.amountInUsd;
+    const usd = typeof rawUsd === 'string' ? decimal(rawUsd) : null;
+
+    if (usd === null || usd.lte(500)) return;
+
+    if (!auth.session.stepUpUntil || auth.session.stepUpUntil.getTime() <= Date.now()) {
+      throw new ForbiddenException({
+        code: 'SWAP_STEP_UP_REQUIRED',
+        message: 'Step-up TOTP is required for this swap',
+      });
+    }
   }
 
   private assertEnabled(): void {

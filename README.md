@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 8 — Swap execution (next; not started)**. Phase 7 — Swap foundation was accepted on 2026-11-04: BSC live quote verified, security review PASS, production quote-only deployment. Phase 8 adds WalletConnect/Tangem signing, exact approvals, step-up TOTP, submission/tracking, and accounting integration.
+Current phase: **Phase 8 — Swap execution (in progress)**. The execution backend slice adds step-up TOTP, exact approval build/submission, and order submission. WalletConnect/Tangem signing, worker tracking, accounting integration, and security review remain.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 

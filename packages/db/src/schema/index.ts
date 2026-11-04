@@ -50,6 +50,7 @@ export const sessions = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }),
+    stepUpUntil: timestamp('step_up_until', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
   },
   (table) => [
@@ -441,6 +442,7 @@ export const swapOrders = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id').references(() => accounts.id, { onDelete: 'set null' }),
     chain: text('chain').notNull(),
     walletAddress: text('wallet_address'),
     tokenIn: text('token_in').notNull(),
@@ -459,6 +461,21 @@ export const swapOrders = pgTable(
     transactionValue: numeric('transaction_value', { precision: 78, scale: 0 }),
     gasEstimate: numeric('gas_estimate', { precision: 24, scale: 0 }),
     gasUsd: numeric('gas_usd', { precision: 24, scale: 8 }),
+    txHash: text('tx_hash'),
+    nonce: integer('nonce'),
+    deadline: integer('deadline'),
+    confirmations: integer('confirmations').notNull().default(0),
+    blockNumber: integer('block_number'),
+    networkFeeWei: numeric('network_fee_wei', { precision: 78, scale: 0 }),
+    networkFeeUsd: numeric('network_fee_usd', { precision: 24, scale: 8 }),
+    accountingTransactionId: uuid('accounting_transaction_id').references(() => transactions.id, {
+      onDelete: 'set null',
+    }),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     status: text('status').$type<SwapStatus>().notNull().default('QUOTED'),
     errors: jsonb('errors')
       .$type<string[]>()
@@ -493,6 +510,35 @@ export const swapEvents = pgTable(
   (table) => [index('swap_events_order_created_idx').on(table.orderId, table.createdAt)],
 );
 
+export const tokenApprovals = pgTable(
+  'token_approvals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => swapOrders.id, { onDelete: 'cascade' }),
+    chain: text('chain').notNull(),
+    walletAddress: text('wallet_address').notNull(),
+    tokenAddress: text('token_address').notNull(),
+    spenderAddress: text('spender_address').notNull(),
+    amountWei: numeric('amount_wei', { precision: 78, scale: 0 }).notNull(),
+    status: text('status').notNull().default('BUILT'),
+    txHash: text('tx_hash'),
+    blockNumber: integer('block_number'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('token_approvals_user_created_idx').on(table.userId, table.createdAt),
+    index('token_approvals_order_idx').on(table.orderId),
+  ],
+);
+
 export const externalApiCalls = pgTable(
   'external_api_calls',
   {
@@ -524,3 +570,4 @@ export type ImportRow = typeof importRows.$inferSelect;
 export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
+export type TokenApproval = typeof tokenApprovals.$inferSelect;

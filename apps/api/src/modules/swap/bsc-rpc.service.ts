@@ -23,6 +23,24 @@ function message(value: unknown): string {
   return typeof value === 'string' ? value.slice(0, 500) : 'RPC error';
 }
 
+function padAddress(address: string): string {
+  return address.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+}
+
+export function padUint(value: string): string {
+  return BigInt(value).toString(16).padStart(64, '0');
+}
+
+function hexToBigInt(value: unknown): string | null {
+  if (typeof value !== 'string' || !/^0x[0-9a-f]+$/i.test(value)) return null;
+
+  try {
+    return BigInt(value).toString();
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class BscRpcService {
   private readonly logger = new Logger(BscRpcService.name);
@@ -35,6 +53,26 @@ export class BscRpcService {
 
   get configured(): boolean {
     return Boolean(this.rpcUrl);
+  }
+
+  async getErc20Allowance(token: string, owner: string, spender: string): Promise<string | null> {
+    if (!this.rpcUrl) return null;
+    const data = `0xdd62ed3e${padAddress(owner)}${padAddress(spender)}`;
+    const result = await this.call('eth_call', [{ from: owner, to: token, data }, 'latest']);
+    return hexToBigInt(result);
+  }
+
+  async getErc20Balance(token: string, owner: string): Promise<string | null> {
+    if (!this.rpcUrl) return null;
+    const data = `0x70a08231${padAddress(owner)}`;
+    const result = await this.call('eth_call', [{ from: owner, to: token, data }, 'latest']);
+    return hexToBigInt(result);
+  }
+
+  async getNativeBalance(owner: string): Promise<string | null> {
+    if (!this.rpcUrl) return null;
+    const result = await this.call('eth_getBalance', [owner, 'latest']);
+    return hexToBigInt(result);
   }
 
   async simulate(input: {

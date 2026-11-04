@@ -147,3 +147,10 @@ Format: date — decision — reason.
 - **Kill switch.** `SWAP_ENABLED=false` by default; `SWAP_KILL_SWITCH=true` blocks new quotes/builds while reads and cancels stay available. `GET /swap/config` exposes only effective state and public token metadata.
 - **Phase 7 deployed disabled.** PR #9 merged as `4226ebe` after security review PASS. Railway `@nexter/api` deployment `b20524aa` applied migration `0009`; `/ready` and `/login` return 200. `SWAP_ENABLED=false` until the Kyber/BSC provider, wallet allowlist, selector allowlist, and live quote/fork check are confirmed. Public BSC RPC check passed; the Kyber public endpoint returned 403 from the agent network without a gateway key. Phase 7 acceptance remains pending that live validation and owner sign-off.
 - **Phase 7 accepted.** Security review PASS; BSC live quote verified in production through the public Kyber fallback (`100 USDC → 2,027.636378 BASED`) with execution rate/USD value, price impact, gas, and route ID. Build/sign remain disabled; Anvil fork execution tests move to Phase 8 because Phase 7 cannot sign or submit. Owner accepted the quote-only foundation on 2026-11-04. Next: Phase 8 — Swap execution, after scoping.
+
+## Phase 8 — Swap execution
+
+- **Execution is split into slices.** ADR 0010 covers WalletConnect/Tangem, exact approvals, step-up TOTP, worker tracking, and confirmed-swap accounting. The first slice adds step-up TOTP, exact approval build/submission, and order submission state; it does not sign, track, or write accounting yet.
+- **Step-up is session-bound.** `sessions.step_up_until` is set by a TOTP verification for five minutes and required for build/submit when the quote input exceeds $500. Failures use the existing 2FA throttle and are audited.
+- **Approvals are exact.** The server emits `approve(router, exactAmount)` only, validates the router allowlist and simulation, and never emits unlimited approvals.
+- **Submission is idempotent-by-state.** `POST /swap/orders/:id/submitted` only accepts `BUILT` orders, requires step-up, and records a hash/event/audit; worker tracking and accounting remain the next slice.
