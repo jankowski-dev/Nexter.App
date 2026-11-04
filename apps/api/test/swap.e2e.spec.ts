@@ -4,10 +4,12 @@ import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
+import { encodeFunctionData } from 'viem';
 import { createDb, swapOrders, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { BscRpcService } from '../src/modules/swap/bsc-rpc.service';
+import { KYBER_ROUTER_ABI } from '../src/modules/swap/kyber-calldata';
 import { KyberSwapClient } from '../src/modules/swap/kyber-swap.client';
 import { env } from '../src/shared/config/env';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -22,9 +24,54 @@ const canRun = Boolean(
 const password = 'correct horse battery staple';
 const wallet = '0x1111111111111111111111111111111111111111';
 const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
-const selector = '0x12345678';
+const selector = '0xe21fd0e9';
+const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
+
+function makeBuildData(
+  overrides: {
+    recipient?: string;
+    srcToken?: string;
+    dstToken?: string;
+    amount?: bigint;
+    minOut?: bigint;
+    callTarget?: string;
+    feeReceivers?: string[];
+    feeAmounts?: bigint[];
+    flags?: bigint;
+  } = {},
+): string {
+  const inputAmount = overrides.amount ?? 1_000_000_000_000_000_000n;
+  const minOut = overrides.minOut ?? 1_990_000_000_000_000_000n;
+  const callTarget = overrides.callTarget ?? executor;
+
+  return encodeFunctionData({
+    abi: KYBER_ROUTER_ABI,
+    functionName: 'swap',
+    args: [
+      {
+        callTarget,
+        approveTarget: '0x0000000000000000000000000000000000000000',
+        targetData: '0x1234',
+        desc: {
+          srcToken: overrides.srcToken ?? tokenIn,
+          dstToken: overrides.dstToken ?? tokenOut,
+          srcReceivers: [callTarget],
+          srcAmounts: [inputAmount],
+          feeReceivers: overrides.feeReceivers ?? [],
+          feeAmounts: overrides.feeAmounts ?? [],
+          dstReceiver: overrides.recipient ?? wallet,
+          amount: inputAmount,
+          minReturnAmount: minOut,
+          flags: overrides.flags ?? 0x200n,
+          permit: '0x',
+        },
+        clientData: '0x',
+      },
+    ],
+  });
+}
 
 function csrfFrom(response: request.Response): string {
   const setCookie = response.headers['set-cookie'];
@@ -34,13 +81,13 @@ function csrfFrom(response: request.Response): string {
   return raw?.split(';')[0]?.split('=')[1] ?? '';
 }
 
-describe.runIf(canRun)('Phase 7 swap foundation API', () => {
+describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let app: NestFastifyApplication;
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
   let simulationSuccess = true;
   let rpcFailure = false;
-  let buildData = `${selector}${'0'.repeat(120)}`;
+  let buildData = makeBuildData();
   let buildRouter = router;
   let buildValue = '0';
   let buildAmountOut = '2000000000000000000';
@@ -132,6 +179,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
     env.SWAP_KILL_SWITCH = false;
     env.SWAP_WALLET_ALLOWLIST = wallet;
     env.SWAP_ROUTER_ALLOWLIST = router;
+    env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selector;
     env.SWAP_QUOTE_TTL_SECONDS = 15;
     env.SWAP_MAX_PRICE_IMPACT_BPS = 200;
@@ -158,7 +206,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   beforeEach(async () => {
     simulationSuccess = true;
     rpcFailure = false;
-    buildData = `${selector}${'0'.repeat(120)}`;
+    buildData = makeBuildData();
     buildRouter = router;
     buildValue = '0';
     buildAmountOut = '2000000000000000000';
@@ -252,6 +300,69 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(cancelled.body.status).toBe('CANCELLED');
+  }, 60_000);
+
+  it('rejects calldata with a different recipient or a lower minimum output', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+
+    buildData = makeBuildData({ recipient: '0x3333333333333333333333333333333333333333' });
+    const wrongRecipient = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+    expect(wrongRecipient.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_RECIPIENT_MISMATCH' },
+    });
+
+    buildData = makeBuildData({ minOut: 1n });
+    const wrongMinOut = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+    expect(wrongMinOut.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_MIN_OUT_MISMATCH' },
+    });
+
+    buildData = makeBuildData();
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    expect(built.body.validation).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ check: 'calldata.recipient', passed: true }),
+        expect.objectContaining({ check: 'calldata.amount', passed: true }),
+        expect.objectContaining({ check: 'calldata.executor', passed: true }),
+        expect.objectContaining({
+          check: 'calldata.deadline',
+          passed: true,
+          detail: 'server-enforced (nested route)',
+        }),
+      ]),
+    );
+
+    await db
+      .update(swapOrders)
+      .set({ deadline: Math.floor(Date.now() / 1000) - 1 })
+      .where(eq(swapOrders.id, orderId));
+    const expired = await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'e'.repeat(64)}` })
+      .expect(409);
+    expect(expired.body.error.code).toBe('SWAP_DEADLINE_PASSED');
   }, 60_000);
 
   it('rejects disallowed tokens, wallets, stale quotes, selectors and simulations', async () => {
@@ -361,6 +472,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .expect(400);
 
     buildAmountOut = '2000000000000000000';
+    buildData = makeBuildData();
     simulationSuccess = false;
     await agent
       .post('/api/v1/swap/build')
