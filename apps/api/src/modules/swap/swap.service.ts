@@ -149,6 +149,7 @@ export class SwapService {
 
   config(): SwapConfigResponse {
     const allowlist = parseAddressList(env.SWAP_WALLET_ALLOWLIST);
+    const selectors = selectorAllowlist();
     const enabled = env.SWAP_ENABLED && !env.SWAP_KILL_SWITCH;
 
     return {
@@ -156,6 +157,8 @@ export class SwapService {
       killSwitch: env.SWAP_KILL_SWITCH,
       providerConfigured: this.kyber.configured,
       providerMode: this.kyber.mode,
+      walletConnectProjectId: env.WALLETCONNECT_PROJECT_ID ?? null,
+      buildEnabled: enabled && allowlist.length > 0 && selectors.length > 0,
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,

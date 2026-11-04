@@ -17,6 +17,9 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 
 ## Implemented slice
 
+- WalletConnect v2 connection UI on `/swap` using the public `WALLETCONNECT_PROJECT_ID` (QR/modal, BSC chain check, address display, disconnect). Signing remains disabled until the remaining gates.
+- `GET /swap/config` exposes `walletConnectProjectId` and `buildEnabled` (requires wallet + selector allowlists).
+
 - Migration `0010_careless_pet_avengers.sql` plus hardening migration `0011_closed_namor.sql` (additive):
   - `sessions.step_up_until`;
   - `token_approvals`;
@@ -41,7 +44,7 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 
 ## Not yet implemented
 
-- WalletConnect/Tangem frontend connection and signing.
+- Tangem signing and the full execution UI (connection is implemented; signing disabled).
 - Full calldata ABI decoding for recipient/deadline/minOut before signing.
 - Worker `swap-track` receipt/confirmation/replaced/dropped handling.
 - Confirmed-swap accounting, FIFO consumption, gas postings, and trade-group links.

@@ -40,6 +40,8 @@ export const swapConfigResponseSchema = z.object({
   killSwitch: z.boolean(),
   providerConfigured: z.boolean(),
   providerMode: z.enum(['gateway', 'fallback']),
+  walletConnectProjectId: z.string().nullable(),
+  buildEnabled: z.boolean(),
   rpcConfigured: z.boolean(),
   walletAllowlistConfigured: z.boolean(),
   chains: z.array(swapChainConfigSchema),
