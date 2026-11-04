@@ -9,6 +9,7 @@ import { fetchSwapConfig, quoteSwap } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { Decimal } from 'decimal.js';
 import { useMemo, useState } from 'react';
 
 function isPositiveDecimal(value: string): boolean {
@@ -237,6 +238,32 @@ export function SwapPage() {
                 <div className="mt-1 text-xs text-zinc-500">
                   Минимум: {formatTokenAmount(quote.data.minOut, 8)} {quote.data.tokenOut.symbol}
                 </div>
+              </div>
+
+              <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
+                <div className="text-xs text-zinc-500">Курс</div>
+                <div className="mt-1 font-mono text-sm text-zinc-200">
+                  1 {quote.data.tokenIn.symbol} ={' '}
+                  {formatTokenAmount(
+                    new Decimal(quote.data.amountOut).div(quote.data.amountIn).toFixed(6),
+                    6,
+                  )}{' '}
+                  {quote.data.tokenOut.symbol}
+                </div>
+                <div className="font-mono text-sm text-zinc-400">
+                  1 {quote.data.tokenOut.symbol} ={' '}
+                  {formatTokenAmount(
+                    new Decimal(quote.data.amountIn).div(quote.data.amountOut).toFixed(6),
+                    6,
+                  )}{' '}
+                  {quote.data.tokenIn.symbol}
+                </div>
+                {quote.data.amountInUsd && quote.data.amountOutUsd ? (
+                  <div className="mt-1 text-xs text-zinc-500">
+                    Стоимость: {formatUsd(quote.data.amountInUsd)} →{' '}
+                    {formatUsd(quote.data.amountOutUsd)}
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-2">

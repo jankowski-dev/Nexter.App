@@ -733,6 +733,14 @@ export class SwapService {
   }
 
   private summary(order: SwapOrder): SwapOrderSummary {
+    const routeSummary = order.routeSummary as Record<string, unknown>;
+    const routeValue = (value: unknown): string | null =>
+      typeof value === 'string'
+        ? value
+        : typeof value === 'number' && Number.isFinite(value)
+          ? String(value)
+          : null;
+
     return {
       id: order.id,
       chain: order.chain as 'bsc',
@@ -741,6 +749,8 @@ export class SwapService {
       tokenOut: tokenFor(order.tokenOut, order.chain, order.tokenOutSymbol),
       amountIn: order.amountIn,
       amountOut: order.amountOut,
+      amountInUsd: routeValue(routeSummary.amountInUsd),
+      amountOutUsd: routeValue(routeSummary.amountOutUsd),
       minOut: order.minOut,
       slippageBps: order.slippageBps,
       priceImpactBps: order.priceImpactBps,
