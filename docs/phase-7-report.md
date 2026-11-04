@@ -2,7 +2,7 @@
 
 Date: 2026-11-04
 
-Status: **independent security review PASS; deployed with swaps disabled. Live quote/fork validation is pending provider configuration.**
+Status: **accepted on 2026-11-04.** Security review PASS; BSC live quote verified through the public fallback; production quote-only deployment is live. Build/sign remain disabled until Phase 8.
 
 ## Scope
 
@@ -72,13 +72,18 @@ The migration is additive and does not rewrite ledger data.
 - PR #9 merged to `main` as `4226ebe` after independent security review **PASS**.
 - Railway `@nexter/api` deployment `b20524aa` succeeded on 2026-11-04; pre-deploy applied migration `0009` (21 tables total).
 - `/ready` and `/login` return 200; `GET /api/v1/swap/config` is registered and returns 401 without a session.
-- `SWAP_ENABLED` is left `false`; no quote/build endpoint is enabled until the provider/RPC/allowlists are configured and live-check passes. The application role provisioning denies DELETE on the swap tables.
-- Public BSC RPC check passed locally (chain id 56, router bytecode present). Kyber public gateway/fallback returned 403 from the agent network without an API key; the live quote probe must run from Railway or with a gateway key.
+- Quote-only mode is enabled (`SWAP_ENABLED=true`, public Kyber fallback, public BSC RPC). Build/sign remain disabled (`SWAP_SELECTOR_ALLOWLIST`/`SWAP_WALLET_ALLOWLIST` empty). The application role provisioning denies DELETE on the swap tables.
+- Public BSC RPC check passed (chain id 56, router bytecode present). A live BSC quote from the production Railway deployment succeeded through the public Kyber fallback without an API key: `100 USDC → 2,027.636378 BASED`, with execution rate, USD value, price impact, gas, and route ID. The owner confirmed the quote UI.
 
 ## Review history
 
 First independent review: **FAIL**, no Critical, two High (price-impact unit bypass; unaudited failed builds) and material Mediums. Fixes applied: fraction price-impact with USD cross-check, audit/event for every build failure, conditional build/cancel/expiry transitions, RPC-outage handling, response-size cap, redirect rejection, stricter env bounds, swap-table privilege revokes, expected-5xx telemetry filtering, and expanded tests. Re-review: **PASS**, no Critical/High/Medium code blockers.
 
+## Acceptance notes
+
+- Live BSC quote and RPC chain/router validation passed. Anvil fork execution tests are deferred to Phase 8 because Phase 7 cannot sign or submit; the owner accepted the quote-only foundation on 2026-11-04.
+- Build/sign stay disabled until Phase 8 adds full calldata decoding, recipient/deadline verification, exact approvals, step-up TOTP, and accounting.
+
 ## Next
 
-Independent re-review, live/fork validation with owner-provided provider/RPC credentials, then Phase 7 acceptance. Phase 8 must not begin until the pre-signing foundation is accepted.
+Phase 8 — Swap execution, only after its scope is started and reviewed.
