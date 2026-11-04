@@ -13,6 +13,7 @@ import {
   type Database,
   type DbExecutor,
   type Transaction,
+  type TransactionSource,
 } from '@nexter/db';
 import type {
   ManualTransactionRequest,
@@ -67,6 +68,11 @@ export interface LedgerMeta {
   userAgent?: string;
 }
 
+export interface LedgerSourceOverride {
+  source: TransactionSource;
+  sourceId: string;
+}
+
 @Injectable()
 export class LedgerService {
   constructor(
@@ -83,24 +89,27 @@ export class LedgerService {
     input: ManualTransactionRequest,
     meta: LedgerMeta,
     idempotencyKey?: string,
+    sourceOverride?: LedgerSourceOverride,
   ): Promise<ManualTransactionResponse> {
     await this.bootstrap.ensureDefaults(userId);
     const key = idempotencyKey?.trim() || undefined;
+    const source = sourceOverride?.source ?? 'manual';
+    const sourceId = sourceOverride?.sourceId ?? key;
 
     const result = await this.db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtext(${`accounting:${userId}`})::bigint)`,
       );
 
-      if (key) {
+      if (sourceId) {
         const [existing] = await tx
           .select()
           .from(transactions)
           .where(
             and(
               eq(transactions.userId, userId),
-              eq(transactions.source, 'manual'),
-              eq(transactions.sourceId, key),
+              eq(transactions.source, source),
+              eq(transactions.sourceId, sourceId),
             ),
           )
           .limit(1);
@@ -654,8 +663,8 @@ export class LedgerService {
           userId,
           type,
           subtype: input.type,
-          source: 'manual',
-          sourceId: key ?? null,
+          source,
+          sourceId: sourceId ?? null,
           tradeGroupId,
           occurredAt,
           notes,
@@ -730,6 +739,8 @@ export class LedgerService {
           after: {
             type,
             subtype: input.type,
+            source,
+            sourceId: sourceId ?? null,
             occurredAt: occurredAt.toISOString(),
             feesUsd: usdString(feesUsd),
             reason: input.type === 'adjustment' ? input.reason : null,

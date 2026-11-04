@@ -210,7 +210,7 @@ export class SwapService {
     this.assertWallet(input.walletAddress);
 
     if (input.accountId) {
-      await this.accounts.requireWallet(userId, input.accountId);
+      await this.accounts.requireWalletForChain(userId, input.accountId, input.chain);
     }
 
     const slippageBps = input.slippageBps ?? env.SWAP_DEFAULT_SLIPPAGE_BPS;
@@ -967,6 +967,8 @@ export class SwapService {
       tokenOut: tokenFor(order.tokenOut, order.chain, order.tokenOutSymbol),
       amountIn: order.amountIn,
       amountOut: order.amountOut,
+      executedAmountIn: order.executedAmountIn,
+      executedAmountOut: order.executedAmountOut,
       amountInUsd: order.amountInUsd ?? routeValue(routeSummary.amountInUsd),
       amountOutUsd: routeValue(routeSummary.amountOutUsd),
       minOut: order.minOut,

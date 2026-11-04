@@ -8,6 +8,37 @@ export interface SimulationResult {
   chainId: number | null;
 }
 
+export interface RpcTransaction {
+  hash: string;
+  from: string;
+  to: string | null;
+  input: string;
+  value: string;
+  nonce: number | null;
+  blockNumber: number | null;
+}
+
+export interface RpcLog {
+  address: string;
+  topics: string[];
+  data: string;
+}
+
+export interface RpcReceipt {
+  status: boolean;
+  blockNumber: number;
+  blockHash: string;
+  gasUsed: string;
+  effectiveGasPrice: string | null;
+  logs: RpcLog[];
+}
+
+export interface RpcBlock {
+  number: number;
+  timestamp: number;
+  hash: string;
+}
+
 interface RpcResponse {
   result?: unknown;
   error?: { code?: unknown; message?: unknown };
@@ -73,6 +104,106 @@ export class BscRpcService {
     if (!this.rpcUrl) return null;
     const result = await this.call('eth_getBalance', [owner, 'latest']);
     return hexToBigInt(result);
+  }
+
+  async getTransactionByHash(hash: string): Promise<RpcTransaction | null> {
+    if (!this.rpcUrl) return null;
+    const result = await this.call('eth_getTransactionByHash', [hash]);
+
+    if (!result || typeof result !== 'object') return null;
+    const tx = result as Record<string, unknown>;
+
+    if (
+      typeof tx.hash !== 'string' ||
+      typeof tx.from !== 'string' ||
+      typeof tx.input !== 'string'
+    ) {
+      return null;
+    }
+
+    return {
+      hash: tx.hash,
+      from: tx.from,
+      to: typeof tx.to === 'string' ? tx.to : null,
+      input: tx.input,
+      value: typeof tx.value === 'string' ? tx.value : '0x0',
+      nonce: hexToNumber(tx.nonce),
+      blockNumber: hexToNumber(tx.blockNumber),
+    };
+  }
+
+  async getTransactionReceipt(hash: string): Promise<RpcReceipt | null> {
+    if (!this.rpcUrl) return null;
+    const result = await this.call('eth_getTransactionReceipt', [hash]);
+
+    if (!result || typeof result !== 'object') return null;
+    const receipt = result as Record<string, unknown>;
+    const status = receipt.status === '0x1' ? true : receipt.status === '0x0' ? false : null;
+    const blockNumber = hexToNumber(receipt.blockNumber);
+
+    if (status === null || blockNumber === null) return null;
+
+    const logs = Array.isArray(receipt.logs)
+      ? receipt.logs.flatMap((entry) => {
+          if (!entry || typeof entry !== 'object') return [];
+          const log = entry as Record<string, unknown>;
+
+          if (
+            typeof log.address !== 'string' ||
+            typeof log.data !== 'string' ||
+            !Array.isArray(log.topics)
+          ) {
+            return [];
+          }
+
+          const topics = log.topics.filter((topic): topic is string => typeof topic === 'string');
+
+          if (topics.length !== log.topics.length) return [];
+
+          return [{ address: log.address, topics, data: log.data }];
+        })
+      : [];
+
+    return {
+      status,
+      blockNumber,
+      blockHash: typeof receipt.blockHash === 'string' ? receipt.blockHash : '',
+      gasUsed: hexToBigInt(receipt.gasUsed) ?? '0',
+      effectiveGasPrice:
+        hexToBigInt(receipt.effectiveGasPrice) ?? hexToBigInt(receipt.gasPrice) ?? null,
+      logs,
+    };
+  }
+
+  async getBlockNumber(): Promise<number | null> {
+    if (!this.rpcUrl) return null;
+    return hexToNumber(await this.call('eth_blockNumber', []));
+  }
+
+  async getTransactionCount(owner: string): Promise<number | null> {
+    if (!this.rpcUrl) return null;
+    return hexToNumber(await this.call('eth_getTransactionCount', [owner, 'latest']));
+  }
+
+  async getBlock(blockNumber: number): Promise<RpcBlock | null> {
+    if (!this.rpcUrl) return null;
+    const result = await this.call('eth_getBlockByNumber', [
+      `0x${blockNumber.toString(16)}`,
+      false,
+    ]);
+
+    if (!result || typeof result !== 'object') return null;
+    const block = result as Record<string, unknown>;
+    const number = hexToNumber(block.number);
+    const timestamp = hexToNumber(block.timestamp);
+
+    if (number === null || timestamp === null) return null;
+
+    return {
+      number,
+      timestamp,
+      hash: typeof block.hash === 'string' ? block.hash : '',
+    };
   }
 
   async simulate(input: {

@@ -78,6 +78,8 @@ export const swapOrderSummarySchema = z.object({
   tokenOut: swapTokenSchema,
   amountIn: z.string(),
   amountOut: z.string(),
+  executedAmountIn: z.string().nullable(),
+  executedAmountOut: z.string().nullable(),
   accountId: z.uuid().nullable(),
   amountInUsd: z.string().nullable(),
   amountOutUsd: z.string().nullable(),

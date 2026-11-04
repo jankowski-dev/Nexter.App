@@ -13,7 +13,7 @@ Phase 8 currently provides WalletConnect connection, quotes, router-level callda
 5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
 6. Set `SWAP_SELECTOR_ALLOWLIST=0xe21fd0e9,0x59e50fed` (`swap`, `swapGeneric`). An empty allowlist disables builds.
 7. Optionally set `SWAP_EXECUTOR_ALLOWLIST`; the default is the BSC AggregationExecutorProxy `0x8F10B468b06c6FD214B65F87778827F7D113f996`.
-8. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required.
+8. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required; set `SWAP_CONFIRMATIONS=15` (default), `SWAP_TRACK_INTERVAL_SECONDS=15`, and `SWAP_DROP_TIMEOUT_SECONDS=1800` if a different policy is required.
 9. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
 10. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
 11. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
@@ -45,10 +45,12 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 
 - `POST /auth/step-up` sets a five-minute step-up window; builds/submissions/approvals above `SWAP_STEP_UP_THRESHOLD_USD` require it.
 - Exact approvals use the router/spender allowlist; native inputs do not need approval; already-sufficient allowance returns 409.
-- `POST /swap/orders/:id/submitted` and approvals/:id/submitted only record hashes; on-chain verification and confirmation tracking land in the tracking slice.
+- `POST /swap/orders/:id/submitted` and approvals/:id/submitted record hashes; the API tracking poller verifies the swap transaction, tracks confirmations, and creates accounting on confirmation.
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
 - A first-time ERC-20 swap with zero allowance currently fails simulation before approval build; the execution slice must add the allowance/`APPROVAL_REQUIRED` gate before signing is enabled.
+- Confirmed-swap accounting requires the wallet's input token and BNB gas balance to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried after reconciliation; it is never silently forced.
+- The tracking poller verifies sender, router, calldata, and value before confirming. Replaced/dropped/failed transactions never create accounting. Reorgs before accounting return the order to `PENDING`; post-accounting reorg compensation is a later slice.
 - All execution endpoints remain disabled until `SWAP_ENABLED=true`, wallet/router/selector allowlists are set, and the remaining Phase 8 slices are reviewed. No signing UI exists yet.
 
 ## Verification

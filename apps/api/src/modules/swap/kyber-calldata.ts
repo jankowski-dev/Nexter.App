@@ -48,6 +48,18 @@ export const KYBER_ROUTER_ABI = [
       { name: 'gasUsed', type: 'uint256' },
     ],
   },
+  {
+    type: 'event',
+    name: 'Swapped',
+    inputs: [
+      { name: 'sender', type: 'address', indexed: false },
+      { name: 'srcToken', type: 'address', indexed: false },
+      { name: 'dstToken', type: 'address', indexed: false },
+      { name: 'dstReceiver', type: 'address', indexed: false },
+      { name: 'spentAmount', type: 'uint256', indexed: false },
+      { name: 'returnAmount', type: 'uint256', indexed: false },
+    ],
+  },
 ] as const;
 
 /** `swapSimpleMode` receives this struct as `executorData`. */

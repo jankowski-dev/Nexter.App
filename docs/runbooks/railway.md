@@ -118,6 +118,10 @@ Before deploying:
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
 
+### Phase 8 migration 0012 preflight
+
+Migration `0012_dizzy_sphinx.sql` is additive: it adds `swap_orders.executed_amount_in` and `executed_amount_out` (numeric, nullable). No ledger data is rewritten.
+
 ### Phase 8 migration 0010 preflight
 
 Migration `0010_careless_pet_avengers.sql` is additive: it adds `sessions.step_up_until`, `token_approvals`, and execution fields on `swap_orders`. It does not rewrite ledger data.

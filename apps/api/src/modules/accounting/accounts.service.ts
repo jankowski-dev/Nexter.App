@@ -44,6 +44,60 @@ export class AccountsService {
     return rows.map((row) => this.toContract(row));
   }
 
+  async requireWalletForChain(
+    userId: string,
+    accountId: string,
+    chainCode: string,
+    executor: DbExecutor = this.db,
+  ): Promise<Account> {
+    const account = await this.requireWallet(userId, accountId, executor);
+
+    const [row] = await executor
+      .select({ id: accounts.id })
+      .from(accounts)
+      .innerJoin(chains, eq(accounts.chainId, chains.id))
+      .where(
+        and(eq(accounts.id, account.id), eq(accounts.userId, userId), eq(chains.code, chainCode)),
+      )
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: `Wallet account does not belong to ${chainCode}`,
+      });
+    }
+
+    return account;
+  }
+
+  async defaultWalletForChain(
+    userId: string,
+    chainCode: string,
+    executor: DbExecutor = this.db,
+  ): Promise<Account> {
+    await this.bootstrap.ensureDefaults(userId, executor);
+
+    const [row] = await executor
+      .select({ account: accounts })
+      .from(accounts)
+      .innerJoin(chains, eq(accounts.chainId, chains.id))
+      .where(
+        and(eq(accounts.userId, userId), eq(accounts.type, 'wallet'), eq(chains.code, chainCode)),
+      )
+      .orderBy(accounts.name)
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: `No ${chainCode} wallet account is configured`,
+      });
+    }
+
+    return row.account;
+  }
+
   async get(userId: string, accountId: string): Promise<AccountContract> {
     await this.bootstrap.ensureDefaults(userId);
 
