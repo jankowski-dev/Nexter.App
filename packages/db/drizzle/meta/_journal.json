@@ -64,6 +64,13 @@
       "when": 1793740929310,
       "tag": "0008_common_the_spike",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793798083751,
+      "tag": "0009_daily_champions",
+      "breakpoints": true
     }
   ]
 }

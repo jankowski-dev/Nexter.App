@@ -19,4 +19,6 @@ regexes = [
   '''AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=''',
   '''ci-setup-token-0123456789abcdef0123456789abcdef''',
   '''00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff''',
+  '''0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d''',
+  '''0x1d28d989f9e3ccb8b15d0cec601734514f958e4d''',
 ]

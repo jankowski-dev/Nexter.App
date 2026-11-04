@@ -1,5 +1,9 @@
 # KyberSwap Spec
 
+## Phase 7 scope
+
+Phase 7 implements the KyberSwap client, the static BSC token registry, quote/build/simulate validation, persisted swap orders, the kill switch, and a read-only quote UI. WalletConnect/Tangem, approvals, signing, submission, step-up TOTP, and accounting integration are Phase 8 and later.
+
 ## Scope
 
 - BSC first, Ethereum second.

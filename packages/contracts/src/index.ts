@@ -8,6 +8,7 @@ export * from './imports';
 export * from './pagination';
 export * from './portfolio';
 export * from './settings';
+export * from './swap';
 export * from './watchlist';
 
 export const uuidSchema = z.uuid();

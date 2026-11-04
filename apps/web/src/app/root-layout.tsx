@@ -13,6 +13,7 @@ const navigation = [
   { to: '/trades', label: messages.nav.trades },
   { to: '/import', label: messages.nav.imports },
   { to: '/watchlist', label: messages.nav.watchlist },
+  { to: '/swap', label: messages.nav.swap },
   { to: '/settings', label: messages.nav.settings },
 ] as const;
 

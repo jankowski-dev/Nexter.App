@@ -38,6 +38,21 @@ const contractCodes = new Set([
   'IMPORT_MAPPING_ERROR',
   'IMPORT_RECONCILIATION_FAILED',
   'IMPORT_CONFLICT',
+  'SWAP_DISABLED',
+  'SWAP_CHAIN_UNSUPPORTED',
+  'SWAP_TOKEN_NOT_ALLOWED',
+  'SWAP_QUOTE_FAILED',
+  'SWAP_PROVIDER_ERROR',
+  'SWAP_PROVIDER_UNAVAILABLE',
+  'SWAP_RATE_LIMITED',
+  'SWAP_VALIDATION_FAILED',
+  'SWAP_PRICE_IMPACT_TOO_HIGH',
+  'SWAP_STATE_INVALID',
+  'SWAP_WALLET_NOT_ALLOWED',
+  'SWAP_SELECTOR_NOT_CONFIGURED',
+  'SWAP_BUILD_FAILED',
+  'SWAP_SIMULATION_FAILED',
+  'SWAP_RPC_NOT_CONFIGURED',
   'INTERNAL_ERROR',
 ]);
 
@@ -111,8 +126,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status >= 500) {
       const safe = safeErrorForTelemetry(exception);
-      Sentry.captureException(safe);
-      this.logger.error(safe.message, safe.stack);
+      const expected = new Set([
+        'SWAP_DISABLED',
+        'SWAP_PROVIDER_UNAVAILABLE',
+        'SWAP_QUOTE_FAILED',
+        'SWAP_BUILD_FAILED',
+        'SWAP_RATE_LIMITED',
+        'SWAP_SELECTOR_NOT_CONFIGURED',
+      ]);
+
+      if (expected.has(code)) {
+        this.logger.warn(safe.message);
+      } else {
+        Sentry.captureException(safe);
+        this.logger.error(safe.message, safe.stack);
+      }
     }
 
     if (request.url.startsWith('/api/v1/auth/')) {
