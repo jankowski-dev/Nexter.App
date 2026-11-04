@@ -39,7 +39,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Token addresses are code-owned and require review; do not add arbitrary tokens in production.
 - Wallet/router/executor/selector allowlists are environment-owned. Changing them requires a redeploy and a new quote/build check. The application role must not have DELETE on swap tables, approvals, or events.
 - Step-up TOTP is required above the configured threshold; the session window is five minutes. Missing/invalid provider USD fails closed.
-- Calldata is decoded at router level before a build is accepted. Simple-mode deadlines come from calldata; normal aggregator routes use the server-enforced order deadline. Submission is rejected after the deadline.
+- Calldata is decoded at router level before a build is accepted. Simple mode is rejected; standard aggregator routes use the server-enforced order deadline, which the execution UI must display before signing. Submission is rejected after the deadline.
 
 ## Execution slice (Phase 8a)
 
