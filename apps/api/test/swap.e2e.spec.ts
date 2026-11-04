@@ -198,6 +198,8 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       status: 'QUOTED',
       amountIn: '1.000000000000000000',
       amountOut: '2.000000000000000000',
+      amountInUsd: '1.00',
+      amountOutUsd: '0.999',
       minOut: '1.990000000000000000',
       slippageBps: 50,
       priceImpactBps: 10,

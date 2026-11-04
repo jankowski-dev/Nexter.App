@@ -74,6 +74,8 @@ export const swapOrderSummarySchema = z.object({
   tokenOut: swapTokenSchema,
   amountIn: z.string(),
   amountOut: z.string(),
+  amountInUsd: z.string().nullable(),
+  amountOutUsd: z.string().nullable(),
   minOut: z.string(),
   slippageBps: z.number().int(),
   priceImpactBps: z.number().int().nullable(),

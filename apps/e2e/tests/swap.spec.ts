@@ -94,6 +94,8 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         tokenOut: { symbol: 'BASED', name: 'BASED', address: based, decimals: 18, native: false },
         amountIn: '1.000000000000000000',
         amountOut: '2.000000000000000000',
+        amountInUsd: '1.00',
+        amountOutUsd: '0.99',
         minOut: '1.990000000000000000',
         slippageBps: 50,
         priceImpactBps: 10,
@@ -122,7 +124,9 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   await page.getByLabel('Количество токена отдачи').fill('1');
   await page.getByRole('button', { name: 'Получить котировку' }).click();
 
-  await expect(page.getByText('2 BASED')).toBeVisible();
+  await expect(page.getByText('2 BASED').first()).toBeVisible();
+  await expect(page.getByText('1 USDC = 2 BASED')).toBeVisible();
+  await expect(page.getByText(/1 BASED =/)).toBeVisible();
   await expect(page.getByText('1,99 BASED')).toBeVisible();
   await expect(page.getByText('route-ui')).toBeVisible();
   await expect(page.getByText('+0,10%')).toBeVisible();
