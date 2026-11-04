@@ -23,7 +23,7 @@ Out of scope:
 - passkeys/WebAuthn;
 - email delivery and email password reset;
 - multi-user and invitations;
-- step-up TOTP for swaps (MVP-2);
+- step-up TOTP for swaps over $500 (MVP-2): `POST /auth/step-up` sets a 5-minute `step_up_until` on the session.
 - Cloudflare Access policy (optional deployment layer).
 
 ## Data model

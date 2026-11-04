@@ -15,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
+  StepUpResponse,
   AuthMeResponse,
   AuthStatusResponse,
   ChangePasswordRequest,
@@ -190,6 +191,16 @@ export class AuthController {
     if (id === auth.session.id) {
       clearAuthCookies(reply);
     }
+  }
+
+  @Post('step-up')
+  @HttpCode(HttpStatus.OK)
+  async stepUp(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(totpCodeSchema)) body: TotpCodeRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<StepUpResponse> {
+    return this.authService.stepUp(auth, body, request);
   }
 
   @Post('password')

@@ -18,6 +18,10 @@ export const totpCodeSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'TOTP code must be 6 digits'),
 });
 
+export const stepUpResponseSchema = z.object({
+  stepUpUntil: z.iso.datetime(),
+});
+
 export const recoveryCodeSchema = z.object({
   code: z.string().min(8).max(128),
 });
@@ -100,6 +104,7 @@ export const csrfTokenResponseSchema = z.object({
 export type SetupRequest = z.infer<typeof setupRequestSchema>;
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type TotpCodeRequest = z.infer<typeof totpCodeSchema>;
+export type StepUpResponse = z.infer<typeof stepUpResponseSchema>;
 export type RecoveryCodeRequest = z.infer<typeof recoveryCodeSchema>;
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 export type ResetPasswordRequest = z.infer<typeof resetPasswordRequestSchema>;

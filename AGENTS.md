@@ -6,7 +6,7 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 8 — Swap execution (next; not started). Phase 7 — Swap foundation is accepted as of 2026-11-04: security review PASS, BSC live quote verified, production deployed with build/sign disabled.
+Phase 8 — Swap execution (in progress). Step-up TOTP, exact approval build/submission, and order submission are implemented; WalletConnect/Tangem, tracking, accounting, and security review remain. Phase 7 is accepted.
 
 Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, Phase 6 — MVP-1 hardening, and Phase 7 — Swap foundation are accepted. Phase 7 is scoped by ADR 0009: BSC quote/build/simulate only, no signing. Phase 8 adds WalletConnect/Tangem, exact approvals, step-up TOTP, submission/tracking, and accounting integration. No private keys or seed phrases may ever reach the server.
 

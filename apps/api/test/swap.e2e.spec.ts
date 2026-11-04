@@ -45,8 +45,9 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   let buildValue = '0';
   let buildAmountOut = '2000000000000000000';
   let quotePriceImpact: string | null = '0.0010';
-  let quoteAmountInUsd: string | null = '1.00';
-  let quoteAmountOutUsd: string | null = '0.999';
+  let quoteAmountInUsd: string | number | null = '1.00';
+  let quoteAmountOutUsd: string | number | null = '0.999';
+  let allowance = '0';
 
   const kyber = {
     configured: true,
@@ -88,6 +89,9 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
 
   const rpc = {
     configured: true,
+    getErc20Allowance: async () => allowance,
+    getErc20Balance: async () => '1000000000000000000000',
+    getNativeBalance: async () => '1000000000000000000',
     simulate: async () => {
       if (rpcFailure) throw new Error('rpc unavailable');
 
@@ -116,7 +120,11 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .send({ code: generateSync({ secret: totpSetup.body.secret }) })
       .expect(200);
 
-    return { userId: setup.body.user.id as string, csrf: csrfFrom(enabled) };
+    return {
+      userId: setup.body.user.id as string,
+      csrf: csrfFrom(enabled),
+      secret: totpSetup.body.secret as string,
+    };
   }
 
   beforeAll(async () => {
@@ -157,6 +165,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
     quotePriceImpact = '0.0010';
     quoteAmountInUsd = '1.00';
     quoteAmountOutUsd = '0.999';
+    allowance = '0';
     env.SWAP_KILL_SWITCH = false;
     await db.execute(sql`truncate table users restart identity cascade`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
@@ -198,7 +207,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       status: 'QUOTED',
       amountIn: '1.000000000000000000',
       amountOut: '2.000000000000000000',
-      amountInUsd: '1.00',
+      amountInUsd: '1.00000000',
       amountOutUsd: '0.999',
       minOut: '1.990000000000000000',
       slippageBps: 50,
@@ -226,6 +235,7 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       simulation: { success: true },
     });
     expect(built.body.calldata).toBe(buildData);
+    expect(built.body.deadline).toBeGreaterThan(Math.floor(Date.now() / 1000));
     expect(built.body.validation).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ check: 'router', passed: true }),
@@ -408,6 +418,136 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
     ]);
 
     expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  }, 60_000);
+
+  it('fails closed when the provider omits USD and normalizes numeric USD', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    quoteAmountInUsd = null;
+    await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(400);
+
+    quoteAmountInUsd = 600;
+    quoteAmountOutUsd = 599.4;
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    expect(quoted.body.amountInUsd).toBe('600.00000000');
+
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(403);
+  }, 60_000);
+
+  it('requires step-up TOTP above $500 and builds/submits exact approvals', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    quoteAmountInUsd = '600.00';
+    quoteAmountOutUsd = '599.40';
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(403);
+
+    const stepUp = await agent
+      .post('/api/v1/auth/step-up')
+      .set('x-csrf-token', owner.csrf)
+      .send({ code: generateSync({ secret: owner.secret }) })
+      .expect(200);
+    expect(new Date(stepUp.body.stepUpUntil).getTime()).toBeGreaterThan(Date.now());
+
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    env.SWAP_WALLET_ALLOWLIST = '';
+    await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(403);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'d'.repeat(64)}` })
+      .expect(403);
+    env.SWAP_WALLET_ALLOWLIST = wallet;
+
+    const approval = await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(201);
+    expect(approval.body.calldata.startsWith('0x095ea7b3')).toBe(true);
+    expect(approval.body.approval).toMatchObject({
+      orderId,
+      status: 'BUILT',
+      spenderAddress: router.toLowerCase(),
+    });
+    expect(approval.body.approval.amountWei).toBe('1000000000000000000');
+
+    const encoded = approval.body.calldata.slice(2);
+    expect(`0x${encoded.slice(8 + 24, 8 + 64)}`).toBe(router.toLowerCase());
+    expect(BigInt(`0x${encoded.slice(72, 136)}`).toString()).toBe('1000000000000000000');
+
+    const duplicateApproval = await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId });
+    expect([409, 400]).toContain(duplicateApproval.status);
+
+    allowance = '1000000000000000000';
+    await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(409);
+    allowance = '0';
+
+    const approvals = await agent.get('/api/v1/swap/approvals').expect(200);
+    expect(approvals.body.data).toHaveLength(1);
+
+    const approvalSubmitted = await agent
+      .post(`/api/v1/swap/approvals/${approval.body.approval.id}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'a'.repeat(64)}` })
+      .expect(200);
+    expect(approvalSubmitted.body.status).toBe('SUBMITTED');
+
+    const submitted = await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'b'.repeat(64)}` })
+      .expect(200);
+    expect(submitted.body).toMatchObject({
+      status: 'SUBMITTED',
+      txHash: `0x${'b'.repeat(64)}`,
+    });
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'c'.repeat(64)}` })
+      .expect(409);
   }, 60_000);
 
   it('applies the fraction-based price impact gate and USD fallback', async () => {

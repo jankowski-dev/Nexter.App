@@ -45,6 +45,7 @@ export const swapConfigResponseSchema = z.object({
   chains: z.array(swapChainConfigSchema),
   quoteTtlSeconds: z.number().int().positive(),
   maxPriceImpactBps: z.number().int().nonnegative(),
+  stepUpThresholdUsd: z.string(),
   defaultSlippageBps: z.number().int().positive(),
   maxSlippageBps: z.number().int().positive(),
 });
@@ -55,6 +56,7 @@ export const swapQuoteRequestSchema = z
     tokenIn: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
     tokenOut: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
     amountIn: positiveDecimalSchema,
+    accountId: z.uuid().optional(),
     slippageBps: z.number().int().min(1).max(200).optional(),
     walletAddress: z
       .string()
@@ -74,6 +76,7 @@ export const swapOrderSummarySchema = z.object({
   tokenOut: swapTokenSchema,
   amountIn: z.string(),
   amountOut: z.string(),
+  accountId: z.uuid().nullable(),
   amountInUsd: z.string().nullable(),
   amountOutUsd: z.string().nullable(),
   minOut: z.string(),
@@ -84,7 +87,17 @@ export const swapOrderSummarySchema = z.object({
   status: swapStatusSchema,
   quoteExpiresAt: z.iso.datetime(),
   builtAt: z.iso.datetime().nullable(),
+  deadline: z.number().int().nullable(),
+  submittedAt: z.iso.datetime().nullable(),
+  confirmedAt: z.iso.datetime().nullable(),
   cancelledAt: z.iso.datetime().nullable(),
+  confirmations: z.number().int().nonnegative(),
+  txHash: z.string().nullable(),
+  blockNumber: z.number().int().nullable(),
+  networkFeeWei: z.string().nullable(),
+  networkFeeUsd: z.string().nullable(),
+  accountingTransactionId: z.uuid().nullable(),
+  tradeGroupId: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
 });
 
@@ -120,6 +133,57 @@ export const swapBuildRequestSchema = z.object({
   walletAddress: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
 });
 
+export const swapSubmitRequestSchema = z.object({
+  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+});
+
+export const tokenApprovalSchema = z.object({
+  id: z.uuid(),
+  orderId: z.uuid(),
+  chain: swapChainCodeSchema,
+  walletAddress: z.string(),
+  tokenAddress: z.string(),
+  spenderAddress: z.string(),
+  amountWei: z.string(),
+  status: z.enum(['BUILT', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'CANCELLED']),
+  txHash: z.string().nullable(),
+  blockNumber: z.number().int().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  submittedAt: z.iso.datetime().nullable(),
+  confirmedAt: z.iso.datetime().nullable(),
+});
+
+export const approvalBuildRequestSchema = z.object({
+  orderId: z.uuid(),
+});
+
+export const approvalSubmittedRequestSchema = z.object({
+  txHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
+});
+
+export const approvalBuildResponseSchema = z.object({
+  approval: tokenApprovalSchema,
+  to: z.string(),
+  value: z.string(),
+  calldata: z.string(),
+  simulation: z.object({
+    success: z.boolean(),
+    revertReason: z.string().nullable(),
+    gasEstimate: z.string().nullable(),
+  }),
+});
+
+export const approvalsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  cursor: z.string().min(1).optional(),
+});
+
+export const approvalsResponseSchema = z.object({
+  data: z.array(tokenApprovalSchema),
+  page: pageMetaSchema,
+});
+
 export const swapBuildResponseSchema = swapOrderDetailSchema.extend({
   simulation: z
     .object({
@@ -147,4 +211,11 @@ export type SwapOrderDetail = z.infer<typeof swapOrderDetailSchema>;
 export type SwapOrdersQuery = z.infer<typeof swapOrdersQuerySchema>;
 export type SwapOrdersResponse = z.infer<typeof swapOrdersResponseSchema>;
 export type SwapBuildRequest = z.infer<typeof swapBuildRequestSchema>;
+export type SwapSubmitRequest = z.infer<typeof swapSubmitRequestSchema>;
+export type TokenApproval = z.infer<typeof tokenApprovalSchema>;
+export type ApprovalBuildRequest = z.infer<typeof approvalBuildRequestSchema>;
+export type ApprovalSubmittedRequest = z.infer<typeof approvalSubmittedRequestSchema>;
+export type ApprovalBuildResponse = z.infer<typeof approvalBuildResponseSchema>;
+export type ApprovalsQuery = z.infer<typeof approvalsQuerySchema>;
+export type ApprovalsResponse = z.infer<typeof approvalsResponseSchema>;
 export type SwapBuildResponse = z.infer<typeof swapBuildResponseSchema>;

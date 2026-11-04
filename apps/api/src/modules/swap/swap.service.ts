@@ -18,14 +18,18 @@ import type {
   SwapOrdersQuery,
   SwapOrdersResponse,
   SwapQuoteRequest,
+  SwapSubmitRequest,
   SwapToken,
 } from '@nexter/contracts';
+import type { AuthContext } from '../auth/auth.types';
+import { AccountsService } from '../accounting/accounts.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { BscRpcService } from './bsc-rpc.service';
+import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import {
   DEFAULT_BSC_ROUTER,
@@ -140,6 +144,7 @@ export class SwapService {
     private readonly kyber: KyberSwapClient,
     private readonly rpc: BscRpcService,
     private readonly audit: AuditService,
+    private readonly accounts: AccountsService,
   ) {}
 
   config(): SwapConfigResponse {
@@ -156,6 +161,7 @@ export class SwapService {
       chains: SWAP_CHAINS,
       quoteTtlSeconds: env.SWAP_QUOTE_TTL_SECONDS,
       maxPriceImpactBps: env.SWAP_MAX_PRICE_IMPACT_BPS,
+      stepUpThresholdUsd: env.SWAP_STEP_UP_THRESHOLD_USD.toFixed(2),
       defaultSlippageBps: env.SWAP_DEFAULT_SLIPPAGE_BPS,
       maxSlippageBps: env.SWAP_MAX_SLIPPAGE_BPS,
     };
@@ -183,6 +189,10 @@ export class SwapService {
     }
 
     this.assertWallet(input.walletAddress);
+
+    if (input.accountId) {
+      await this.accounts.requireWallet(userId, input.accountId);
+    }
 
     const slippageBps = input.slippageBps ?? env.SWAP_DEFAULT_SLIPPAGE_BPS;
     if (slippageBps > env.SWAP_MAX_SLIPPAGE_BPS) {
@@ -254,8 +264,17 @@ export class SwapService {
       });
     }
 
+    const amountInUsd = normalizeUsd(route.amountInUsd);
+    if (!amountInUsd) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid input USD value',
+      });
+    }
+    const amountOutUsd = normalizeUsd(route.amountOutUsd);
+
     const providerImpactBps = fractionToPriceImpactBps(route.priceImpact);
-    const usdImpactBps = usdToPriceImpactBps(route.amountInUsd, route.amountOutUsd);
+    const usdImpactBps = usdToPriceImpactBps(amountInUsd, amountOutUsd);
     const priceImpactBps =
       providerImpactBps === null
         ? usdImpactBps
@@ -298,6 +317,7 @@ export class SwapService {
         .insert(swapOrders)
         .values({
           userId,
+          accountId: input.accountId ?? null,
           chain: input.chain,
           walletAddress: input.walletAddress ? normalizeAddress(input.walletAddress) : null,
           tokenIn: normalizeAddress(tokenIn.address),
@@ -305,6 +325,7 @@ export class SwapService {
           tokenInSymbol: tokenIn.symbol,
           tokenOutSymbol: tokenOut.symbol,
           amountIn: input.amountIn,
+          amountInUsd,
           amountOut: fromBaseUnits(amountOutBase, tokenOut.decimals),
           minOut: fromBaseUnits(minOutBase.toString(), tokenOut.decimals),
           slippageBps,
@@ -356,7 +377,12 @@ export class SwapService {
     return this.detail(userId, order.id, warnings);
   }
 
-  async build(userId: string, input: SwapBuildRequest, meta: SwapMeta): Promise<SwapBuildResponse> {
+  async build(
+    auth: AuthContext,
+    input: SwapBuildRequest,
+    meta: SwapMeta,
+  ): Promise<SwapBuildResponse> {
+    const userId = auth.user.id;
     this.assertEnabled();
     this.assertWallet(input.walletAddress, true);
 
@@ -369,6 +395,8 @@ export class SwapService {
         message: `Swap order is ${order.status}`,
       });
     }
+
+    assertStepUp(auth, order);
 
     const selectors = selectorAllowlist();
     if (selectors.length === 0) {
@@ -540,6 +568,7 @@ export class SwapService {
           transactionValue: built.transactionValue,
           gasEstimate,
           gasUsd,
+          deadline,
           status: 'BUILT',
           errors: [],
           builtAt: new Date(),
@@ -568,6 +597,7 @@ export class SwapService {
         payload: {
           routerAddress: row.routerAddress,
           gasEstimate: row.gasEstimate,
+          deadline: row.deadline,
           simulation: { success: true, gasEstimate: simulation.gasEstimate },
         },
       });
@@ -597,6 +627,99 @@ export class SwapService {
       simulation,
       validation,
     };
+  }
+
+  async submit(
+    auth: AuthContext,
+    orderId: string,
+    input: SwapSubmitRequest,
+    meta: SwapMeta,
+  ): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (order.status !== 'BUILT') {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    assertStepUp(auth, order);
+    this.assertWallet(order.walletAddress ?? undefined, true);
+
+    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_ROUTER_NOT_ALLOWED',
+        message: 'Router is not in the allowlist',
+      });
+    }
+
+    const txHash = input.txHash.toLowerCase();
+
+    try {
+      await this.db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(swapOrders)
+          .set({
+            status: 'SUBMITTED',
+            txHash,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(swapOrders.id, orderId),
+              eq(swapOrders.userId, userId),
+              eq(swapOrders.status, 'BUILT'),
+            ),
+          )
+          .returning({ id: swapOrders.id });
+
+        if (!row) {
+          throw new ConflictException({
+            code: 'SWAP_STATE_INVALID',
+            message: 'Swap order is no longer submittable',
+          });
+        }
+
+        await tx.insert(swapEvents).values({
+          orderId,
+          type: 'submitted',
+          payload: { txHash },
+        });
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'swap.order_submitted',
+            entityType: 'swap_order',
+            entityId: orderId,
+            before: { status: 'BUILT' },
+            after: { status: 'SUBMITTED', txHash },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+      });
+    } catch (error) {
+      const candidate =
+        typeof error === 'object' && error !== null
+          ? (error as { code?: string; cause?: { code?: string } })
+          : null;
+
+      if (candidate?.code === '23505' || candidate?.cause?.code === '23505') {
+        throw new ConflictException({
+          code: 'CONFLICT',
+          message: 'Transaction hash is already attached to another swap',
+        });
+      }
+      throw error;
+    }
+
+    return this.detail(userId, orderId, []);
   }
 
   async cancel(userId: string, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
@@ -745,11 +868,12 @@ export class SwapService {
       id: order.id,
       chain: order.chain as 'bsc',
       walletAddress: order.walletAddress,
+      accountId: order.accountId,
       tokenIn: tokenFor(order.tokenIn, order.chain, order.tokenInSymbol),
       tokenOut: tokenFor(order.tokenOut, order.chain, order.tokenOutSymbol),
       amountIn: order.amountIn,
       amountOut: order.amountOut,
-      amountInUsd: routeValue(routeSummary.amountInUsd),
+      amountInUsd: order.amountInUsd ?? routeValue(routeSummary.amountInUsd),
       amountOutUsd: routeValue(routeSummary.amountOutUsd),
       minOut: order.minOut,
       slippageBps: order.slippageBps,
@@ -759,7 +883,17 @@ export class SwapService {
       status: order.status,
       quoteExpiresAt: order.quoteExpiresAt.toISOString(),
       builtAt: order.builtAt?.toISOString() ?? null,
+      deadline: order.deadline,
+      submittedAt: order.submittedAt?.toISOString() ?? null,
+      confirmedAt: order.confirmedAt?.toISOString() ?? null,
       cancelledAt: order.cancelledAt?.toISOString() ?? null,
+      confirmations: order.confirmations,
+      txHash: order.txHash,
+      blockNumber: order.blockNumber,
+      networkFeeWei: order.networkFeeWei,
+      networkFeeUsd: order.networkFeeUsd,
+      accountingTransactionId: order.accountingTransactionId,
+      tradeGroupId: order.tradeGroupId,
       createdAt: order.createdAt.toISOString(),
     };
   }
