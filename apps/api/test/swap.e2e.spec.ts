@@ -40,6 +40,9 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let simulationSuccess = true;
   let buildData = `${selector}${'0'.repeat(120)}`;
+  let buildRouter = router;
+  let buildValue = '0';
+  let buildAmountOut = '2000000000000000000';
   let quotePriceImpact = '0.10';
 
   const kyber = {
@@ -68,10 +71,10 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
     }),
     buildRoute: async (input: { sender: string; recipient: string; slippageBps: number }) => ({
       data: buildData,
-      routerAddress: router,
+      routerAddress: buildRouter,
       amountIn: '1000000000000000000',
-      amountOut: '2000000000000000000',
-      transactionValue: '0',
+      amountOut: buildAmountOut,
+      transactionValue: buildValue,
       gas: '120000',
       gasUsd: '0.05',
       sender: input.sender,
@@ -140,6 +143,9 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
   beforeEach(async () => {
     simulationSuccess = true;
     buildData = `${selector}${'0'.repeat(120)}`;
+    buildRouter = router;
+    buildValue = '0';
+    buildAmountOut = '2000000000000000000';
     quotePriceImpact = '0.10';
     env.SWAP_KILL_SWITCH = false;
     await db.execute(sql`truncate table users restart identity cascade`);
@@ -274,6 +280,30 @@ describe.runIf(canRun)('Phase 7 swap foundation API', () => {
       .expect(400);
 
     buildData = `${selector}${'0'.repeat(120)}`;
+    buildRouter = '0x4444444444444444444444444444444444444444';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+
+    buildRouter = router;
+    buildValue = '1';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+
+    buildValue = '0';
+    buildAmountOut = '1';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(400);
+
+    buildAmountOut = '2000000000000000000';
     simulationSuccess = false;
     await agent
       .post('/api/v1/swap/build')

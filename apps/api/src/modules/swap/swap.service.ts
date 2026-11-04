@@ -73,7 +73,9 @@ function toPriceImpactBps(value: string | null): number | null {
   if (value === null) return null;
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
-  return Math.round(parsed * 100);
+  // Clamp before multiplying so a hostile provider cannot overflow the
+  // integer column. Anything above the 2% gate is rejected by the caller.
+  return Math.max(-100_000, Math.min(100_000, Math.round(parsed * 100)));
 }
 
 function normalizeAddress(value: string): string {
@@ -194,11 +196,18 @@ export class SwapService {
       });
     }
 
+    if (!/^0x[0-9a-fA-F]{40}$/.test(route.routerAddress)) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider returned an invalid router address',
+      });
+    }
+
     const routeIn = route.routeSummary.tokenIn;
     const routeOut = route.routeSummary.tokenOut;
 
     if (
-      typeof routeIn === 'string' &&
+      typeof routeIn !== 'string' ||
       normalizeAddress(routeIn) !== normalizeAddress(tokenIn.address)
     ) {
       throw new BadRequestException({
@@ -208,7 +217,7 @@ export class SwapService {
     }
 
     if (
-      typeof routeOut === 'string' &&
+      typeof routeOut !== 'string' ||
       normalizeAddress(routeOut) !== normalizeAddress(tokenOut.address)
     ) {
       throw new BadRequestException({
@@ -221,8 +230,13 @@ export class SwapService {
     const warnings: string[] = [];
 
     if (priceImpactBps === null) {
-      warnings.push('Провайдер не вернул price impact');
-    } else if (priceImpactBps > env.SWAP_MAX_PRICE_IMPACT_BPS) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid price impact',
+      });
+    }
+
+    if (priceImpactBps > env.SWAP_MAX_PRICE_IMPACT_BPS) {
       throw new BadRequestException({
         code: 'SWAP_PRICE_IMPACT_TOO_HIGH',
         message: `Price impact ${(priceImpactBps / 100).toFixed(2)}% exceeds the configured limit`,
@@ -231,12 +245,17 @@ export class SwapService {
 
     const minOutBase = (BigInt(amountOutBase) * BigInt(10_000 - slippageBps)) / BigInt(10_000);
     const quoteExpiresAt = new Date(Date.now() + env.SWAP_QUOTE_TTL_SECONDS * 1000);
-    const routeId =
+    const routeIdValue =
       typeof route.routeSummary.routeID === 'string'
         ? route.routeSummary.routeID
         : typeof route.routeSummary.routeId === 'string'
           ? route.routeSummary.routeId
           : null;
+    const routeId = routeIdValue ? routeIdValue.slice(0, 200) : null;
+    const gasUsd =
+      route.gasUsd && /^\d+(?:\.\d+)?$/.test(route.gasUsd) && route.gasUsd.length <= 32
+        ? route.gasUsd
+        : null;
 
     const order = await this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -257,7 +276,7 @@ export class SwapService {
           routeId,
           routeSummary: route.routeSummary,
           routerAddress: normalizeAddress(route.routerAddress),
-          gasUsd: route.gasUsd,
+          gasUsd,
           status: 'QUOTED',
           quoteExpiresAt,
         })
@@ -432,6 +451,16 @@ export class SwapService {
 
     validation.push({ check: 'simulation', passed: true, detail: null });
 
+    const gasEstimate = built.gas ?? simulation.gasEstimate;
+    if (gasEstimate && (!/^\d+$/.test(gasEstimate) || gasEstimate.length > 24)) {
+      fail('gas', 'Gas estimate is not a bounded integer');
+    }
+
+    const gasUsd =
+      built.gasUsd && /^\d+(?:\.\d+)?$/.test(built.gasUsd) && built.gasUsd.length <= 32
+        ? built.gasUsd
+        : order.gasUsd;
+
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(swapOrders)
@@ -440,8 +469,8 @@ export class SwapService {
           routerAddress: normalizeAddress(built.routerAddress),
           calldata: built.data,
           transactionValue: built.transactionValue,
-          gasEstimate: built.gas ?? simulation.gasEstimate,
-          gasUsd: built.gasUsd ?? order.gasUsd,
+          gasEstimate,
+          gasUsd,
           status: 'BUILT',
           errors: [],
           builtAt: new Date(),

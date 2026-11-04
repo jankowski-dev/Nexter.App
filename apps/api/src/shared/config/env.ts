@@ -60,7 +60,7 @@ export const envSchema = z.object({
     .transform((value) => value === 'true'),
   SWAP_QUOTE_TTL_SECONDS: z.coerce.number().int().min(5).max(30).default(15),
   SWAP_DEFAULT_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(200).default(50),
-  SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(500).default(200),
+  SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(200).default(200),
   SWAP_MAX_PRICE_IMPACT_BPS: z.coerce.number().int().min(1).max(1000).default(200),
   SWAP_BUILD_DEADLINE_SECONDS: z.coerce.number().int().min(30).max(300).default(300),
   SWAP_WALLET_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
