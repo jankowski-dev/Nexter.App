@@ -23,7 +23,7 @@ BACKUP_OUTPUT_DIR=./backups \
 node packages/db/scripts/backup.mjs
 ```
 
-The script uses local `pg_dump` when present, otherwise the `postgres:17-alpine` Docker image. Output is `nexter-<timestamp>.dump.enc`, laid out as `NEXTER1 | IV(12) | tag(16) | ciphertext`. The command prints plaintext and encrypted SHA-256 values for the backup record.
+The script uses local `pg_dump` when present, otherwise the `postgres:17-alpine` Docker image. It keeps the database URL query options (for example `sslmode=require` or `sslrootcert`) but strips the password and passes it through `PGPASSWORD`. Output is `nexter-<timestamp>.dump.enc`, laid out as `NEXTER1 | IV(12) | tag(16) | ciphertext`. Plaintext exists only in a `0700` temporary directory with signal cleanup. The command prints plaintext and encrypted SHA-256 values for the backup record.
 
 Schedule it daily (for example a Railway cron service) and upload:
 

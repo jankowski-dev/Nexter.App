@@ -93,14 +93,14 @@ function run(command, args, options = {}) {
 
 function connectionParts(databaseUrl) {
   const url = new URL(databaseUrl);
+  const password = decodeURIComponent(url.password);
 
-  return {
-    host: url.hostname,
-    port: url.port || '5432',
-    user: decodeURIComponent(url.username),
-    database: url.pathname.slice(1),
-    password: decodeURIComponent(url.password),
-  };
+  // Keep sslmode/sslrootcert/application_name and other libpq options, but
+  // remove the password so it never appears in process arguments.
+  url.password = '';
+  url.username = decodeURIComponent(url.username);
+
+  return { url: url.toString(), password };
 }
 
 function dumpNative(connection, output) {
@@ -111,14 +111,8 @@ function dumpNative(connection, output) {
       '--no-owner',
       '--no-privileges',
       '--no-password',
-      '--host',
-      connection.host,
-      '--port',
-      connection.port,
-      '--username',
-      connection.user,
       '--dbname',
-      connection.database,
+      connection.url,
       '--file',
       output,
     ],
@@ -147,14 +141,8 @@ function dumpDocker(connection, output, tempDir) {
       '--no-owner',
       '--no-privileges',
       '--no-password',
-      '--host',
-      connection.host,
-      '--port',
-      connection.port,
-      '--username',
-      connection.user,
       '--dbname',
-      connection.database,
+      connection.url,
       '--file',
       `/backup/${fileName}`,
     ],
@@ -174,6 +162,14 @@ function selfTest() {
 
   if (!isWeakKey(Buffer.alloc(32))) {
     fail('Weak-key self-test failed');
+  }
+
+  const sample = connectionParts(
+    'postgres://user:secret@db.example.com:5432/nexter?sslmode=require',
+  );
+
+  if (sample.url.includes('secret') || !sample.url.includes('sslmode=require')) {
+    fail('Connection URL self-test failed');
   }
 
   const tampered = Buffer.from(encrypted);

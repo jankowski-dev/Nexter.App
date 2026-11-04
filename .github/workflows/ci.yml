@@ -91,7 +91,7 @@ jobs:
             pg_restore --list /backup/restored.dump | grep -q trade_groups
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexter
-          BACKUP_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+          BACKUP_ENCRYPTION_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
           BACKUP_DUMP_MODE: docker
 
       - name: Install Playwright Chromium
