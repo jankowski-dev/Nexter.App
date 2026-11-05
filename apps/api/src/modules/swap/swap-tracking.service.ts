@@ -718,9 +718,6 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const accountId = order.accountId
-      ? (await this.accounts.requireWalletForChain(order.userId, order.accountId, order.chain)).id
-      : (await this.accounts.defaultWalletForChain(order.userId, order.chain)).id;
     const assetIn = await this.assets.ensureForSwapToken(
       order.chain,
       tokenIn,
@@ -743,6 +740,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     }
 
     let fee: { feeAssetId: string; feeAmount: string; feeUsdValue: string } | undefined;
+    let bnbAssetId: string | null = null;
 
     if (feeWei > 0n && feeUsd && decimal(feeUsd).gt(0)) {
       const bnb = await this.assets.ensureForSwapToken(
@@ -758,11 +756,65 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         order.userId,
       );
 
+      bnbAssetId = bnb.id;
       fee = {
         feeAssetId: bnb.id,
         feeAmount: decimal(feeWei.toString()).div(BNB_WEI).toFixed(18),
         feeUsdValue: feeUsd,
       };
+    }
+
+    let accountId: string | null = order.accountId;
+
+    if (accountId) {
+      accountId = (await this.accounts.requireWalletForChain(order.userId, accountId, order.chain))
+        .id;
+    } else {
+      const wallets = await this.accounts.walletsForChain(order.userId, order.chain);
+      const requiredIn = decimal(order.executedAmountIn);
+      const requiredGas = decimal(feeWei.toString()).div(BNB_WEI);
+
+      for (const wallet of wallets) {
+        const inputBalance = await this.accounts.balance(wallet.id, assetIn.id);
+
+        if (decimal(inputBalance).lt(requiredIn)) continue;
+
+        if (bnbAssetId && feeWei > 0n) {
+          const gasBalance = await this.accounts.balance(wallet.id, bnbAssetId);
+
+          if (decimal(gasBalance).lt(requiredGas)) continue;
+        }
+
+        accountId = wallet.id;
+        break;
+      }
+
+      if (!accountId) {
+        await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_NO_FUNDED_ACCOUNT');
+        return;
+      }
+
+      await this.db
+        .update(swapOrders)
+        .set({ accountId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            isNull(swapOrders.accountId),
+          ),
+        );
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.accounting_account_selected',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: { accountId },
+        },
+        { strict: true },
+      );
     }
 
     const block = order.blockNumber ? await this.rpc.getBlock(order.blockNumber) : null;
