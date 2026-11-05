@@ -319,25 +319,50 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   }
 
   private async track(order: SwapOrder, latestBlock: number): Promise<void> {
-    const txHash = order.txHash;
-    if (!txHash) return;
+    const originalHash = order.txHash;
+    if (!originalHash) return;
 
-    const tx = await this.rpc.getTransactionByHash(txHash);
+    let currentOrder = order;
+    let txHash = originalHash;
+    let tx = await this.rpc.getTransactionByHash(txHash);
 
-    if (!tx) {
-      if (order.nonce !== null) {
-        const count = await this.rpc.getTransactionCount(order.walletAddress ?? '');
+    if (!tx && order.nonce !== null && order.walletAddress) {
+      const count = await this.rpc.getTransactionCount(order.walletAddress);
 
-        if (count !== null && count > order.nonce) {
+      if (count !== null && count > order.nonce) {
+        const replacement = await this.rpc.findTransactionByNonce(order.walletAddress, order.nonce);
+
+        if (replacement && this.replacementMatches(order, replacement)) {
+          const adopted = await this.adoptReplacement(order, replacement);
+
+          if (!adopted) {
+            await this.mark(order, 'REPLACED', {
+              reason: 'replacement_could_not_be_recorded',
+              nonce: order.nonce,
+            });
+            return;
+          }
+
+          tx = replacement;
+          txHash = replacement.hash;
+          currentOrder = {
+            ...order,
+            status: 'PENDING',
+            txHash,
+            nonce: replacement.nonce ?? order.nonce,
+          };
+        } else {
           await this.mark(order, 'REPLACED', {
-            reason: 'nonce_already_used',
+            reason: 'replacement_not_matching_order',
             nonce: order.nonce,
             latestNonce: count,
           });
           return;
         }
       }
+    }
 
+    if (!tx) {
       if (
         order.submittedAt &&
         Date.now() - order.submittedAt.getTime() > env.SWAP_DROP_TIMEOUT_SECONDS * 1000
@@ -347,7 +372,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const mismatch = this.verifyTransaction(order, tx);
+    const mismatch = this.verifyTransaction(currentOrder, tx, txHash);
     if (mismatch) {
       await this.mark(order, 'FAILED', { reason: mismatch, txHash });
       return;
@@ -356,7 +381,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const receipt = await this.rpc.getTransactionReceipt(txHash);
 
     if (!receipt) {
-      await this.setPending(order, tx, 0, latestBlock);
+      await this.setPending(currentOrder, tx, 0, latestBlock);
       return;
     }
 
@@ -376,19 +401,85 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const confirmations = Math.max(0, latestBlock - receipt.blockNumber + 1);
 
     if (confirmations < env.SWAP_CONFIRMATIONS) {
-      await this.setPending(order, tx, confirmations, latestBlock, receipt);
+      await this.setPending(currentOrder, tx, confirmations, latestBlock, receipt);
       return;
     }
 
-    await this.confirm(order, tx, receipt, confirmations);
+    await this.confirm(currentOrder, tx, receipt, confirmations);
   }
 
-  private verifyTransaction(order: SwapOrder, tx: RpcTransaction): string | null {
-    if (!order.walletAddress || !order.routerAddress || !order.calldata || !order.txHash) {
+  private replacementMatches(order: SwapOrder, tx: RpcTransaction): boolean {
+    if (!order.walletAddress || !order.routerAddress || !order.calldata) return false;
+    if (tx.from.toLowerCase() !== order.walletAddress.toLowerCase()) return false;
+    if (!tx.to || tx.to.toLowerCase() !== order.routerAddress.toLowerCase()) return false;
+    if (tx.input.toLowerCase() !== order.calldata.toLowerCase()) return false;
+
+    try {
+      return BigInt(tx.value || '0x0') === BigInt(order.transactionValue ?? '0');
+    } catch {
+      return false;
+    }
+  }
+
+  private async adoptReplacement(order: SwapOrder, tx: RpcTransaction): Promise<boolean> {
+    return this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(swapOrders)
+        .set({
+          txHash: tx.hash.toLowerCase(),
+          nonce: tx.nonce ?? order.nonce,
+          blockNumber: tx.blockNumber ?? order.blockNumber,
+          status: 'PENDING',
+          confirmations: 0,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, order.userId),
+            eq(swapOrders.txHash, order.txHash as string),
+            inArray(swapOrders.status, [...ACTIVE_STATUSES]),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return false;
+
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'replacement_adopted',
+        payload: {
+          previousTxHash: order.txHash,
+          txHash: tx.hash,
+          nonce: tx.nonce,
+        },
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.order_replacement_adopted',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: { previousTxHash: order.txHash, txHash: tx.hash, nonce: tx.nonce },
+        },
+        { executor: dbtx, strict: true },
+      );
+
+      return true;
+    });
+  }
+
+  private verifyTransaction(
+    order: SwapOrder,
+    tx: RpcTransaction,
+    expectedHash: string,
+  ): string | null {
+    if (!order.walletAddress || !order.routerAddress || !order.calldata) {
       return 'missing_order_data';
     }
 
-    if (tx.hash.toLowerCase() !== order.txHash.toLowerCase()) {
+    if (tx.hash.toLowerCase() !== expectedHash.toLowerCase()) {
       return 'hash_mismatch';
     }
 

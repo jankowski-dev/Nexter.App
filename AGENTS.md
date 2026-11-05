@@ -6,7 +6,7 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 8 — Swap execution (accepted 2026-11-05). Live small BSC swap completed; WalletConnect/Tangem, exact approvals, step-up TOTP, calldata verification, execution UI, tracking, and confirmed-swap accounting are implemented. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch. Phase 7 is accepted.
+Phase 8 — Swap execution (accepted 2026-11-05). Live small BSC swap completed; WalletConnect/Tangem, exact approvals, step-up TOTP, calldata verification, execution UI, tracking, and confirmed-swap accounting are implemented. Phase 8.x hardening is in progress: gas preflight, ready calldata re-decode, and speed-up replacement adoption. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch. Phase 7 is accepted.
 
 Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, Phase 6 — MVP-1 hardening, and Phase 7 — Swap foundation are accepted. Phase 7 is scoped by ADR 0009: BSC quote/build/simulate only, no signing. Phase 8 adds WalletConnect/Tangem, exact approvals, step-up TOTP, submission/tracking, and accounting integration. No private keys or seed phrases may ever reach the server.
 

@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 8 — Swap execution (accepted 2026-11-05)**. Live small BSC swap completed; WalletConnect/Tangem, exact approvals, step-up TOTP, execution UI, tracking, and confirmed-swap accounting are implemented. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
+Current phase: **Phase 8 — Swap execution (accepted 2026-11-05); Phase 8.x hardening in progress**. Live small BSC swap completed; gas preflight, ready calldata re-decode, and speed-up replacement adoption are being hardened. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 

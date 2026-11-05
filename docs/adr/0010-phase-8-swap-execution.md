@@ -90,6 +90,13 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 - Signing is browser-side through WalletConnect/Tangem. The UI builds, prepares an exact approval, waits for the approval receipt, calls `ready`, marks `AWAITING_SIGNATURE`, signs the swap, and submits the hash. Approval submission is tracked server-side (confirmed/failed/timeout).
 - `SWAP_EXECUTION_ENABLED` (default false) is exposed as `executionEnabled`; the UI hides signing until the owner enables it after review/manual acceptance. Build and approval preparation remain available for verification.
 
+### Phase 8.x tracking hardening
+
+- `ready` re-decodes the stored calldata and re-runs the router/recipient/token/amount/minOut/executor checks against current allowlists before simulation.
+- Gas preflight compares the native BNB balance with `gasEstimate * eth_gasPrice` (plus amountIn for native input) at build/ready.
+- When the original tx hash is missing and the nonce has advanced, the tracker searches recent blocks for a same-nonce replacement. If the replacement matches sender/router/calldata/value, it adopts the new hash and continues tracking/accounting; a different transaction marks `REPLACED`.
+- Post-accounting reorg policy: 15 confirmations are treated as final for accounting. The tracker does not automatically reverse an already-accounted swap; a detected deep reorg requires freezing new execution and an append-only manual compensating transaction. Automatic compensation remains a Phase 9/prerequisite item.
+
 ### Submission and tracking
 
 - `POST /swap/orders/:id/submitted` accepts a BSC tx hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/`EXPIRED` order, verifies ownership/state, and records `SUBMITTED` + event + audit. It is a recovery path and is allowed during a kill switch/execution disable; tracking verifies the tx.

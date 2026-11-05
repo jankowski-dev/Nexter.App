@@ -80,9 +80,17 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **106 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
+- API suite — **109 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010/0011/0012 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
+
+## Phase 8.x hardening (in progress)
+
+- Gas/BNB preflight at build/ready.
+- Stored calldata re-decode at `ready`.
+- Same-nonce speed-up replacement adoption.
+- Post-accounting reorg policy documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
+- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling.
 
 ## Next
 

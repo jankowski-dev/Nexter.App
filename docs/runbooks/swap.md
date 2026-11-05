@@ -49,6 +49,8 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; the API tracking poller verifies the swap transaction, tracks confirmations, and creates accounting on confirmation.
 - `POST /swap/approvals/:id/submitted` records the approval hash; the tracker confirms/fails it. Approval-only hash recording is allowed while execution is disabled because it cannot move funds.
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
+- Native gas preflight (`gasEstimate × eth_gasPrice`) fails closed when BNB is insufficient.
+- `ready` re-decodes stored calldata against current allowlists. A missing original hash with an advanced nonce triggers a recent-block search for a matching same-nonce replacement; matching replacements are adopted, other txs mark `REPLACED`.
 - Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; it does not create accounting, and tracking verifies the tx.
 - The tracker is API-hosted and production must run a single API replica (or add a future leader lock). Do not roll back to a pre-Phase-8 image while orders are active/unaccounted.
@@ -75,3 +77,4 @@ The check prints only chain id, router bytecode size, and quote amounts; it neve
 2. Do not roll back to a pre-Phase-8 image while any `SUBMITTED`/`PENDING` order or `CONFIRMED` order with null `accounting_transaction_id` exists. Drain or account those orders first, or roll back only to a Phase 8 image.
 3. Attach a signed hash via `POST /swap/orders/:id/submitted` even if execution is disabled; tracking will verify it.
 4. Never delete orders, approvals, events, or ledger rows. Corrections are append-only.
+5. Post-accounting reorg policy: 15 confirmations are final for accounting; a deeper reorg requires disabling execution and a manual append-only compensating transaction. Automatic compensation is a Phase 9 prerequisite.

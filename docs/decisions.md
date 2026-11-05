@@ -190,3 +190,6 @@ Format: date — decision — reason.
 - **Gas cap.** `SWAP_MAX_GAS_USD` (default 5) is enforced at quote/build/ready; above it the operation fails closed.
 - **Light theme accepted.** ADR 0011 supersedes the former dark-theme rule; the owner requested a light UI for eye comfort. Rule 13/mega-prompt/UX spec now say light theme.
 - **Tracker deployment constraint.** The API hosts `SwapTrackingService`; production must run one API replica until a leader lock is added. Do not roll back to a pre-Phase-8 image with active/unaccounted orders.
+
+- **Phase 8.x tracking hardening.** `ready` re-decodes stored calldata and re-checks current router/recipient/token/amount/minOut/executor allowlists. Build/ready enforce a native BNB gas preflight (`gasEstimate × eth_gasPrice`). Missing original hashes with advanced nonces trigger a recent-block search; matching same-nonce replacements are adopted and tracked, different transactions are `REPLACED`.
+- **Post-accounting reorg policy.** BSC 15 confirmations are treated as final for accounting. The tracker does not automatically reverse an accounted swap; a deeper reorg requires disabling execution and an append-only manual compensating transaction. Automated compensation is a Phase 9 prerequisite.
