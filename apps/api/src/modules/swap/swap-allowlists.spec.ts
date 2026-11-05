@@ -40,8 +40,11 @@ describe('swap allowlists', () => {
     expect(executorAllowlist('bsc')).toEqual([defaultExecutorForChain('bsc').toLowerCase()]);
   });
 
-  it('fails closed for unknown chains', () => {
-    expect(() => routerAllowlist('solana')).toThrow(/solana/);
-    expect(() => executorAllowlist('solana')).toThrow(/solana/);
+  it('fails closed for unknown chains even with BSC lists configured', () => {
+    env.SWAP_BSC_ROUTER_ALLOWLIST = legacyRouter;
+    env.SWAP_BSC_EXECUTOR_ALLOWLIST = legacyExecutor;
+
+    expect(() => routerAllowlist('solana')).toThrow('Unknown swap chain');
+    expect(() => executorAllowlist('solana')).toThrow('Unknown swap chain');
   });
 });
