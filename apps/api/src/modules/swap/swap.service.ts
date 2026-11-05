@@ -573,6 +573,11 @@ export class SwapService {
     });
 
     for (const item of calldataValidation.issues) {
+      if (item.code === 'SWAP_MIN_OUT_MISMATCH') {
+        this.logger.warn(
+          `Swap ${order.id} minOut mismatch: calldata=${decoded.minReturnAmount} orderMin=${minOutBase.toString()} builtOut=${built.amountOut}`,
+        );
+      }
       await fail(item.check, item.code, item.detail);
     }
 
