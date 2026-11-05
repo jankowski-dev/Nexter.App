@@ -71,6 +71,25 @@ export class AccountsService {
     return account;
   }
 
+  async walletsForChain(
+    userId: string,
+    chainCode: string,
+    executor: DbExecutor = this.db,
+  ): Promise<Account[]> {
+    await this.bootstrap.ensureDefaults(userId, executor);
+
+    const rows = await executor
+      .select({ account: accounts })
+      .from(accounts)
+      .innerJoin(chains, eq(accounts.chainId, chains.id))
+      .where(
+        and(eq(accounts.userId, userId), eq(accounts.type, 'wallet'), eq(chains.code, chainCode)),
+      )
+      .orderBy(accounts.name);
+
+    return rows.map((row) => row.account);
+  }
+
   async defaultWalletForChain(
     userId: string,
     chainCode: string,
