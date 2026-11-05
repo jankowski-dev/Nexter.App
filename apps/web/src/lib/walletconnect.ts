@@ -120,6 +120,12 @@ export function useWalletConnect(projectId: string | null) {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: '0x38' }],
         });
+        const currentChain = await provider.request({ method: 'eth_chainId' });
+
+        if (chainIdFrom(currentChain) !== BSC_CHAIN_ID) {
+          throw new Error('Кошелёк не переключился на BSC');
+        }
+
         setChainId(BSC_CHAIN_ID);
       }
 

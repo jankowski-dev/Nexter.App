@@ -137,6 +137,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let buildValue = '0';
   let buildAmountOut = '2000000000000000000';
   let quotePriceImpact: string | null = '0.0010';
+  let quoteGasUsd: string | null = '0.05';
+  let buildGasUsd: string | null = '0.05';
   let quoteAmountInUsd: string | number | null = '1.00';
   let quoteAmountOutUsd: string | number | null = '0.999';
   let allowance = '1000000000000000000000';
@@ -157,7 +159,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         amountInUsd: quoteAmountInUsd,
         amountOutUsd: quoteAmountOutUsd,
         gas: '120000',
-        gasUsd: '0.05',
+        gasUsd: quoteGasUsd,
         priceImpact: quotePriceImpact,
         routeID: 'route-test-1',
       },
@@ -167,7 +169,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       amountInUsd: quoteAmountInUsd,
       amountOutUsd: quoteAmountOutUsd,
       gas: '120000',
-      gasUsd: '0.05',
+      gasUsd: quoteGasUsd,
       priceImpact: quotePriceImpact,
     }),
     buildRoute: async (input: { sender: string; recipient: string; slippageBps: number }) => ({
@@ -177,7 +179,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       amountOut: buildAmountOut,
       transactionValue: buildValue,
       gas: '120000',
-      gasUsd: '0.05',
+      gasUsd: buildGasUsd,
       sender: input.sender,
       recipient: input.recipient,
       slippageBps: input.slippageBps,
@@ -243,6 +245,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_EXECUTION_ENABLED = true;
     env.SWAP_QUOTE_TTL_SECONDS = 15;
     env.SWAP_MAX_PRICE_IMPACT_BPS = 200;
+    env.SWAP_MAX_GAS_USD = '5';
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(KyberSwapClient)
@@ -271,6 +274,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     buildValue = '0';
     buildAmountOut = '2000000000000000000';
     quotePriceImpact = '0.0010';
+    quoteGasUsd = '0.05';
+    buildGasUsd = '0.05';
     quoteAmountInUsd = '1.00';
     quoteAmountOutUsd = '0.999';
     allowance = '1000000000000000000000';
@@ -423,12 +428,16 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .update(swapOrders)
       .set({ deadline: Math.floor(Date.now() / 1000) - 1 })
       .where(eq(swapOrders.id, orderId));
-    const expired = await agent
+    await app.get(SwapTrackingService).tick();
+    const [expiredOrder] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(expiredOrder.status).toBe('EXPIRED');
+
+    const lateHash = await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)
       .set('x-csrf-token', owner.csrf)
       .send({ txHash: `0x${'e'.repeat(64)}` })
-      .expect(409);
-    expect(expired.body.error.code).toBe('SWAP_DEADLINE_PASSED');
+      .expect(200);
+    expect(lateHash.body.status).toBe('SUBMITTED');
   }, 60_000);
 
   it('accepts swapGeneric calldata when both selectors are allowlisted', async () => {
@@ -801,18 +810,12 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(409);
 
     env.SWAP_WALLET_ALLOWLIST = '';
-    await agent
-      .post(`/api/v1/swap/orders/${orderId}/submitted`)
-      .set('x-csrf-token', owner.csrf)
-      .send({ txHash: `0x${'d'.repeat(64)}` })
-      .expect(403);
-    env.SWAP_WALLET_ALLOWLIST = wallet;
-
     const submitted = await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)
       .set('x-csrf-token', owner.csrf)
       .send({ txHash: `0x${'b'.repeat(64)}` })
       .expect(200);
+    env.SWAP_WALLET_ALLOWLIST = wallet;
     expect(submitted.body).toMatchObject({
       status: 'SUBMITTED',
       txHash: `0x${'b'.repeat(64)}`,
@@ -823,6 +826,55 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .send({ txHash: `0x${'c'.repeat(64)}` })
       .expect(409);
+  }, 60_000);
+
+  it('enforces the gas cost cap at quote and build', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    env.SWAP_MAX_GAS_USD = '0.01';
+    await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(400);
+    env.SWAP_MAX_GAS_USD = '5';
+
+    quoteGasUsd = null;
+    await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(400);
+    quoteGasUsd = '0.05';
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    buildGasUsd = '10';
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(400);
+    expect(built.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_GAS_TOO_HIGH' },
+    });
+
+    await db.update(swapOrders).set({ gasUsd: null }).where(eq(swapOrders.id, quoted.body.id));
+    buildGasUsd = null;
+    const missing = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(400);
+    expect(missing.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_GAS_MISSING' },
+    });
+    buildGasUsd = '0.05';
   }, 60_000);
 
   it('applies the fraction-based price impact gate and USD fallback', async () => {
@@ -940,7 +992,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(tracked.status).toBe('FAILED');
   }, 60_000);
 
-  it('blocks submission while execution is disabled', async () => {
+  it('accepts a signed hash while execution is disabled', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
     const quoted = await agent
@@ -956,19 +1008,14 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(201);
 
     env.SWAP_EXECUTION_ENABLED = false;
-    const disabled = await agent
-      .post(`/api/v1/swap/orders/${orderId}/submitted`)
-      .set('x-csrf-token', owner.csrf)
-      .send({ txHash: `0x${'f'.repeat(64)}` })
-      .expect(503);
-    expect(disabled.body.error.code).toBe('SWAP_EXECUTION_DISABLED');
-
-    env.SWAP_EXECUTION_ENABLED = true;
-    await agent
+    const signed = await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)
       .set('x-csrf-token', owner.csrf)
       .send({ txHash: `0x${'f'.repeat(64)}` })
       .expect(200);
+    expect(signed.body.status).toBe('SUBMITTED');
+
+    env.SWAP_EXECUTION_ENABLED = true;
   }, 60_000);
 
   it('tracks a confirmed swap and writes idempotent accounting', async () => {

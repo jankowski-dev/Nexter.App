@@ -31,7 +31,7 @@ export function requiresStepUp(order: SwapOrder): boolean {
 
   // Fail closed: unknown USD cannot prove the swap is below the threshold.
   if (usd === null) return true;
-  return usd.gt(env.SWAP_STEP_UP_THRESHOLD_USD);
+  return usd.gt(decimal(env.SWAP_STEP_UP_THRESHOLD_USD));
 }
 
 export function assertStepUp(auth: AuthContext, order: SwapOrder): void {

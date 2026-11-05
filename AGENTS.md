@@ -6,7 +6,7 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
-Phase 8 — Swap execution (in progress). Step-up TOTP, exact approvals, submission, WalletConnect/Tangem connection, calldata verification, tracking, and confirmed-swap accounting are implemented; execution UI and allowance/READY flow are implemented; signing remains behind `SWAP_EXECUTION_ENABLED` until final security review and live Tangem acceptance. Phase 7 is accepted.
+Phase 8 — Swap execution (accepted 2026-11-05). Live small BSC swap completed; WalletConnect/Tangem, exact approvals, step-up TOTP, calldata verification, execution UI, tracking, and confirmed-swap accounting are implemented. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch. Phase 7 is accepted.
 
 Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, Phase 6 — MVP-1 hardening, and Phase 7 — Swap foundation are accepted. Phase 7 is scoped by ADR 0009: BSC quote/build/simulate only, no signing. Phase 8 adds WalletConnect/Tangem, exact approvals, step-up TOTP, submission/tracking, and accounting integration. No private keys or seed phrases may ever reach the server.
 
@@ -24,7 +24,7 @@ Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, Ph
 10. Schema changes require an ADR and review.
 11. No destructive migrations without a backup and explicit approval.
 12. Tests, typecheck, and lint must pass before merge.
-13. UI is Russian, dark theme, USD base currency.
+13. UI is Russian, light theme, USD base currency.
 14. BSC first, Ethereum second.
 15. Swap tokens are allowlisted.
 16. Step-up TOTP is required for swaps above $500.

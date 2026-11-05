@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 8 — Swap execution (in progress)**. Step-up TOTP, exact approvals, submission, WalletConnect/Tangem connection, calldata verification, API tracking, and confirmed-swap accounting are implemented. Execution UI and the allowance/READY flow are implemented; signing stays disabled behind `SWAP_EXECUTION_ENABLED` until final review and live Tangem acceptance.
+Current phase: **Phase 8 — Swap execution (accepted 2026-11-05)**. Live small BSC swap completed; WalletConnect/Tangem, exact approvals, step-up TOTP, execution UI, tracking, and confirmed-swap accounting are implemented. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -147,11 +147,11 @@ npx pnpm@10.20.0 test:e2e
 - [x] Phase 1 — Foundation (accepted with operational follow-ups)
 - [x] Phase 2 — Auth and security (accepted)
 - [x] Phase 3 — Accounting core (accepted)
-- [ ] Phase 4 — Notion import
-- [ ] Phase 5 — MVP-1 UI
-- [ ] Phase 6 — MVP-1 hardening
-- [ ] Phase 7 — Swap foundation
-- [ ] Phase 8 — Swap execution (BSC)
+- [x] Phase 4 — Notion import
+- [x] Phase 5 — MVP-1 UI
+- [x] Phase 6 — MVP-1 hardening
+- [x] Phase 7 — Swap foundation
+- [x] Phase 8 — Swap execution (BSC)
 - [ ] Phase 9 — Ethereum
 - [ ] Phase 10 — On-chain reconciliation
 - [ ] Phase 11 — Other modules

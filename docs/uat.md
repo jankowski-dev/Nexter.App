@@ -13,7 +13,7 @@ Use this checklist on staging, or on production in read-only mode unless the own
 
 | ID  | Check                           | Expected                                                                               |
 | --- | ------------------------------- | -------------------------------------------------------------------------------------- |
-| A1  | Open `/login`                   | Dark Russian UI, no console errors, no wallet/seed wording beyond the safety note.     |
+| A1  | Open `/login`                   | Light Russian UI, no console errors, no wallet/seed wording beyond the safety note.    |
 | A2  | Login with wrong password       | Error, no session, `auth.login_failed` audit entry.                                    |
 | A3  | Login with correct password     | 2FA challenge; no access to dashboard before TOTP.                                     |
 | A4  | Enter valid TOTP                | Session rotates; dashboard opens.                                                      |
@@ -121,3 +121,20 @@ Use this checklist on staging, or on production in read-only mode unless the own
 | Engineering |      |      |        |       |
 
 Record failures with the check ID, environment, timestamp, and a screenshot that does not contain secrets. Do not change acceptance tests to make a failing check pass.
+
+## Phase 8 — Swap execution
+
+Run only with explicit owner approval for real funds. Use a small amount.
+
+| ID   | Check                          | Expected                                                                    |
+| ---- | ------------------------------ | --------------------------------------------------------------------------- |
+| SW1  | Connect Tangem on `/swap`      | Light WalletConnect modal; BSC badge; address matches allowlist.            |
+| SW2  | Quote POP/USDC or a small pair | Amounts, minOut, gas, price impact shown.                                   |
+| SW3  | Build                          | Calldata validation passes; router/recipient/minOut/deadline shown.         |
+| SW4  | Approval required              | Exact approval amount/spender shown; no unlimited approval.                 |
+| SW5  | Sign approval in Tangem        | Exact approval on device; receipt confirmed; ready check passes.            |
+| SW6  | Sign swap in Tangem            | Router/recipient/amount/minOut displayed; hash recorded.                    |
+| SW7  | Tracking                       | `SUBMITTED` → `PENDING` → `CONFIRMED` with 15+ confirmations.               |
+| SW8  | Accounting                     | `/swap` history shows “учёт создан”; portfolio and trades reflect the swap. |
+| SW9  | Rejection/cancel               | Rejecting wallet prompt returns to READY; no duplicate signing.             |
+| SW10 | Kill switch                    | New signing disabled; signed-hash recovery still records the hash.          |

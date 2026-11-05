@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
@@ -68,6 +68,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       const latest = await this.rpc.getBlockNumber();
       if (latest === null) return;
 
+      await this.expireStaleOrders();
+
       const active = await this.db
         .select()
         .from(swapOrders)
@@ -128,6 +130,59 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       );
     } finally {
       this.running = false;
+    }
+  }
+
+  private async expireStaleOrders(): Promise<void> {
+    const stale = await this.db
+      .select()
+      .from(swapOrders)
+      .where(
+        and(
+          inArray(swapOrders.status, ['APPROVAL_REQUIRED', 'BUILT', 'READY']),
+          isNull(swapOrders.txHash),
+          lt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
+        ),
+      )
+      .orderBy(asc(swapOrders.deadline))
+      .limit(20);
+
+    for (const order of stale) {
+      await this.db.transaction(async (dbtx) => {
+        const [row] = await dbtx
+          .update(swapOrders)
+          .set({ status: 'EXPIRED', updatedAt: new Date() })
+          .where(
+            and(
+              eq(swapOrders.id, order.id),
+              eq(swapOrders.userId, order.userId),
+              inArray(swapOrders.status, ['APPROVAL_REQUIRED', 'BUILT', 'READY']),
+              isNull(swapOrders.txHash),
+              lt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
+            ),
+          )
+          .returning({ id: swapOrders.id });
+
+        if (!row) return;
+
+        await dbtx.insert(swapEvents).values({
+          orderId: order.id,
+          type: 'expired',
+          payload: { reason: 'deadline_passed_before_signing' },
+        });
+
+        await this.audit.log(
+          {
+            userId: order.userId,
+            action: 'swap.order_expired',
+            entityType: 'swap_order',
+            entityId: order.id,
+            before: { status: order.status },
+            after: { status: 'EXPIRED' },
+          },
+          { executor: dbtx, strict: true },
+        );
+      });
     }
   }
 

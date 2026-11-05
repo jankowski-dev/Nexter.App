@@ -28,13 +28,13 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 
 ### Execution state machine
 
-`QUOTED → BUILT → APPROVAL_REQUIRED → READY → AWAITING_SIGNATURE → SUBMITTED → PENDING → CONFIRMED | FAILED | REPLACED | DROPPED | EXPIRED | CANCELLED`
+`QUOTED → BUILT → APPROVAL_REQUIRED → READY → AWAITING_SIGNATURE → SUBMITTED → PENDING → CONFIRMED | FAILED | REPLACED | DROPPED`; `EXPIRED → SUBMITTED` is allowed for a signed hash recovery; `CANCELLED` from pre-submit states.
 
 - `BUILT` means calldata is validated and simulated.
 - `APPROVAL_REQUIRED` is used only when the token allowance is insufficient.
 - `READY` means allowance and balance are sufficient and the order is ready to sign.
 - `AWAITING_SIGNATURE` is set by the client immediately before opening the wallet.
-- `SUBMITTED` is set after a tx hash is recorded; `PENDING` after the worker sees a receipt; `CONFIRMED` after 15 BSC confirmations.
+- `SUBMITTED` is set after a tx hash is recorded; `PENDING` after the API tracker sees a receipt; `CONFIRMED` after 15 BSC confirmations.
 - `FAILED`/`REPLACED`/`DROPPED` never create accounting transactions.
 
 ### Wallet and signing
@@ -49,7 +49,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 
 - Add `sessions.step_up_until`.
 - `POST /auth/step-up` accepts a current TOTP code, verifies it with the existing TOTP service, and sets a 5-minute step-up window on the current session.
-- Build and submit require a fresh step-up when the order's `amountInUsd > SWAP_STEP_UP_THRESHOLD_USD` (default 500). A missing/invalid USD value fails closed and requires step-up; quotes require a valid provider `amountInUsd` and store it on the order.
+- Build, approval build, ready, and signing require a fresh step-up when the order's `amountInUsd > SWAP_STEP_UP_THRESHOLD_USD` (default 500). A missing/invalid USD value fails closed and requires step-up; quotes require a valid provider `amountInUsd` and store it on the order. Submit only records a hash for an already-signed order and does not require a fresh step-up.
 - Step-up attempts use the existing 2FA throttle; every success/failure is audited.
 - The UI prompts for a TOTP code only when the threshold is crossed.
 
@@ -58,7 +58,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 - Add `token_approvals` with owner, chain, wallet, token, spender, exact base-unit amount, status, tx hash, block, timestamps.
 - `POST /swap/approvals/build` accepts an order id; native-token inputs do not need approval.
 - The server emits `approve(spender, exactAmount)` calldata, validates the spender is the allowlisted router, simulates it, and never emits an unlimited approval.
-- `POST /swap/approvals/:id/submitted` records a tx hash and moves the approval to `SUBMITTED`; the worker tracks it.
+- `POST /swap/approvals/:id/submitted` records a tx hash and moves the approval to `SUBMITTED`; the API tracker confirms/fails it.
 - USDT-style allowance-reset behavior is handled by approving the exact required amount; a zero-then-exact flow is only used if the provider/contract requires it and is recorded as two events.
 
 ### Calldata verification and selectors
@@ -76,7 +76,7 @@ Simple mode (`flags & 0x20`) is rejected: its `firstPools` and `destTokenFeeData
 
 Deadline handling is explicit:
 
-- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative and submission is rejected after it;
+- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative for new signing; an already-signed hash can still be recorded after it;
 - the execution UI must show this deadline and the wallet must confirm before signing; a transaction already signed by the wallet cannot be invalidated server-side.
 
 This is a deliberate limit: the server verifies the fields that determine recipient and minimum output and relies on the allowlisted executor for nested route semantics. Full recursive decoding of every DEX executor call is out of scope.
@@ -86,13 +86,13 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 - Build checks the wallet balance and token allowance. Insufficient balance fails closed with `SWAP_INSUFFICIENT_BALANCE`.
 - For an ERC-20 input with insufficient allowance, build stores the validated calldata and enters `APPROVAL_REQUIRED` instead of failing simulation; the response exposes `approvalRequired`, `allowance`, and a null `simulation`.
 - `POST /swap/orders/:id/ready` re-checks balance, allowance, deadline, wallet/router allowlists, step-up and simulation; it moves `APPROVAL_REQUIRED`/`BUILT` to `READY` or returns `SWAP_APPROVAL_REQUIRED`. It does not clear `AWAITING_SIGNATURE`.
-- Submit accepts `BUILT`, `READY`, or `AWAITING_SIGNATURE`. `POST /signing` sets the short-lived signing lock; `/signing/cancel` releases it without requiring the kill switch.
+- Submit accepts `BUILT`, `READY`, `AWAITING_SIGNATURE`, or a built `EXPIRED` order as signed-hash recovery. `POST /signing` sets the short-lived signing lock; `/signing/cancel` releases it without requiring the kill switch.
 - Signing is browser-side through WalletConnect/Tangem. The UI builds, prepares an exact approval, waits for the approval receipt, calls `ready`, marks `AWAITING_SIGNATURE`, signs the swap, and submits the hash. Approval submission is tracked server-side (confirmed/failed/timeout).
 - `SWAP_EXECUTION_ENABLED` (default false) is exposed as `executionEnabled`; the UI hides signing until the owner enables it after review/manual acceptance. Build and approval preparation remain available for verification.
 
 ### Submission and tracking
 
-- `POST /swap/orders/:id/submitted` accepts a BSC tx hash, verifies order ownership/state/allowlists/step-up, and records `SUBMITTED` + event + audit.
+- `POST /swap/orders/:id/submitted` accepts a BSC tx hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/`EXPIRED` order, verifies ownership/state, and records `SUBMITTED` + event + audit. It is a recovery path and is allowed during a kill switch/execution disable; tracking verifies the tx.
 - An API-hosted `SwapTrackingService` poller (in-process tick guard, conditional status updates) polls the receipt, waits for the configured confirmations, records actual gas, and detects replaced/dropped txs. The ledger's per-user advisory lock and `source/sourceId` idempotency prevent duplicate accounting. The worker remains reserved for future decoupling.
 - Mempool replacement: a different tx hash for the same nonce marks `REPLACED`; dropped nonce marks `DROPPED`.
 - Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). A reorg after accounting is outside this slice; 15 confirmations make it unlikely, and any correction must be an append-only compensating transaction in a later slice.
@@ -131,7 +131,7 @@ Additive only.
 - chain 56 and wallet allowlist;
 - quote TTL and fee/gas caps;
 - step-up TOTP over $500;
-- kill switch and `SWAP_EXECUTION_ENABLED`;
+- kill switch and `SWAP_EXECUTION_ENABLED`; gas cap (`SWAP_MAX_GAS_USD`);
 - no private keys/seed phrases server-side;
 - idempotent submission/tracking/accounting;
 - all mutations audited;
@@ -140,7 +140,7 @@ Additive only.
 ### Rollback
 
 - Disable `SWAP_KILL_SWITCH=true`; no new build/submit.
-- Existing submitted transactions continue to be tracked by the worker; do not delete orders or accounting rows.
+- Existing submitted transactions continue to be tracked by the API `SwapTrackingService`; do not roll back to a pre-Phase-8 image until active/unaccounted orders are drained, or keep a Phase 8 image running. Do not delete orders or accounting rows.
 - If accounting is wrong, append a compensating transaction; never edit the ledger.
 - Revert the application image to the previous release; migration 0010 is additive.
 

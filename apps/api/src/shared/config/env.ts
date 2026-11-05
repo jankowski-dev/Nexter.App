@@ -67,7 +67,16 @@ export const envSchema = z.object({
   SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(1).max(200).default(200),
   SWAP_MAX_PRICE_IMPACT_BPS: z.coerce.number().int().min(1).max(200).default(200),
   SWAP_BUILD_DEADLINE_SECONDS: z.coerce.number().int().min(30).max(300).default(300),
-  SWAP_STEP_UP_THRESHOLD_USD: z.coerce.number().min(0).max(1_000_000_000).default(500),
+  SWAP_STEP_UP_THRESHOLD_USD: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/)
+    .refine((value) => Number(value) <= 1_000_000_000, 'Threshold is too large')
+    .default('500'),
+  SWAP_MAX_GAS_USD: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/)
+    .refine((value) => Number(value) <= 10_000, 'Gas cap is too large')
+    .default('5'),
   SWAP_CONFIRMATIONS: z.coerce.number().int().min(1).max(100).default(15),
   SWAP_TRACK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   SWAP_DROP_TIMEOUT_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),

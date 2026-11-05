@@ -118,7 +118,9 @@ Before deploying:
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
 
-### Phase 8 migration 0012 preflight
+### Phase 8 migrations 0011/0012 preflight
+
+Migration `0011_closed_namor.sql` is additive (executed amounts/unique indexes). Migration `0012_dizzy_sphinx.sql` is additive (`executed_amount_in/out`). No ledger data is rewritten.
 
 Migration `0012_dizzy_sphinx.sql` is additive: it adds `swap_orders.executed_amount_in` and `executed_amount_out` (numeric, nullable). No ledger data is rewritten.
 
@@ -126,7 +128,7 @@ Migration `0012_dizzy_sphinx.sql` is additive: it adds `swap_orders.executed_amo
 
 Migration `0010_careless_pet_avengers.sql` is additive: it adds `sessions.step_up_until`, `token_approvals`, and execution fields on `swap_orders`. It does not rewrite ledger data.
 
-Before enabling execution, take a backup, run the pre-deploy migration, and verify `/ready`. Execution endpoints remain behind the existing kill switch and allowlists; WalletConnect/Tangem and accounting are not enabled until the remaining Phase 8 slices are reviewed.
+Before enabling execution, take a backup, run the pre-deploy migration, and verify `/ready`. Execution endpoints remain behind the existing kill switch and allowlists; WalletConnect/Tangem, execution, tracking, and accounting are enabled; `SWAP_EXECUTION_ENABLED` and the kill switch are the rollback controls.
 
 ### Phase 7 migration 0009 preflight
 
@@ -140,7 +142,7 @@ Before enabling quotes:
 4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
 5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
-Builds remain disabled until a selector allowlist is configured. Phase 8 has submit/approval endpoints but no signing UI; the server never signs or broadcasts.
+Builds remain disabled until a selector allowlist is configured. Phase 8 has an execution UI; the server never signs or broadcasts. Keep a single API replica while tracking runs in-process.
 
 ### Phase 5 migration 0008 preflight
 
