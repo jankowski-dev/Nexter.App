@@ -42,7 +42,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 
 ## Review history
 
-Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD from the quote could mismatch the actual amount after rounding, leaving USDC-output swaps unaccounted. Fixed by deriving cash-leg USD from actual on-chain amounts; USDC-output regression test added. Re-review pending.
+Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD from the quote could mismatch the actual amount after rounding, leaving USDC-output swaps unaccounted. Fixed by deriving cash-leg USD from actual on-chain amounts; USDC-output regression test added. Final re-review: **PASS** after transactional tracker writes and atomic asset audit.
 
 Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Zero-allowance approval sequencing remains an execution-slice gate.
 
@@ -59,6 +59,8 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 
 - Tangem signing and the full execution UI (connection is implemented; signing disabled).
 - Post-accounting reorg compensation (append-only correction), if a deep reorg occurs.
+- Same-nonce speed-up/replacement adoption; a nonce advance is currently marked `REPLACED` and is not accounted (execution-slice gate).
+- Malformed receipt gas fields are an anomaly path; standard BSC receipts populate gasUsed/effectiveGasPrice.
 - Step-up/approval/sign prompts and a mistyped-tx correction flow.
 - Live Tangem signing acceptance and final Phase 8 security review.
 
