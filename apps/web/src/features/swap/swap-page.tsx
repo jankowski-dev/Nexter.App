@@ -12,6 +12,7 @@ import {
   cancelSwapSigning,
   fetchSwapConfig,
   fetchSwapOrder,
+  fetchSwapOrders,
   markSwapSigning,
   quoteSwap,
   readySwap,
@@ -90,6 +91,15 @@ export function SwapPage() {
       const status = query.state.data?.status;
       return status === 'SUBMITTED' || status === 'PENDING' ? 5_000 : false;
     },
+  });
+
+  const recentOrders = useQuery({
+    queryKey: ['swap-orders-recent'],
+    queryFn: async () => {
+      const page = await fetchSwapOrders({ limit: 5 });
+      return Promise.all(page.data.map((order) => fetchSwapOrder(order.id)));
+    },
+    refetchInterval: 5_000,
   });
 
   useEffect(() => {
@@ -899,6 +909,75 @@ export function SwapPage() {
             получателя, minOut, allowance и симуляцию.
           </p>
         )}
+      </Card>
+
+      <Card>
+        <CardTitle>Последние свопы</CardTitle>
+        <CardDescription>
+          История ордеров и статус учёта. Обновляется автоматически.
+        </CardDescription>
+        {recentOrders.isPending ? <LoadingRows rows={3} /> : null}
+        {recentOrders.isError ? (
+          <p className="mt-3 text-sm text-red-700">Не удалось загрузить историю свопов.</p>
+        ) : null}
+        {recentOrders.data?.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-600">Свопов пока нет.</p>
+        ) : null}
+        {recentOrders.data?.length ? (
+          <div className="mt-4 space-y-2">
+            {recentOrders.data.map((order) => (
+              <div
+                key={order.id}
+                className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-medium text-zinc-900">
+                    {formatTokenAmount(order.amountIn, 6)} {order.tokenIn.symbol} →{' '}
+                    {formatTokenAmount(order.amountOut, 6)} {order.tokenOut.symbol}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      tone={
+                        order.status === 'CONFIRMED'
+                          ? 'success'
+                          : order.status === 'FAILED' ||
+                              order.status === 'REPLACED' ||
+                              order.status === 'DROPPED'
+                            ? 'danger'
+                            : 'neutral'
+                      }
+                    >
+                      {order.status}
+                    </Badge>
+                    <Badge tone={order.accountingTransactionId ? 'success' : 'warning'}>
+                      {order.accountingTransactionId ? 'учёт создан' : 'учёта нет'}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
+                  <span>Ордер {order.id.slice(0, 8)}</span>
+                  <span>{formatDateTime(order.createdAt)}</span>
+                  {order.txHash ? (
+                    <a
+                      className="break-all text-emerald-700 underline"
+                      href={`https://bscscan.com/tx/${order.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {order.txHash.slice(0, 18)}…
+                    </a>
+                  ) : null}
+                  {order.confirmations > 0 ? <span>{order.confirmations} подтв.</span> : null}
+                </div>
+                {order.errors.length > 0 ? (
+                  <div className="mt-1 break-all text-xs text-red-700">
+                    Ошибки: {order.errors.join(', ')}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
       </Card>
 
       <Card>
