@@ -5,7 +5,22 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { fetchSwapConfig, quoteSwap } from '@/lib/api';
+import {
+  ApiError,
+  buildSwap,
+  buildSwapApproval,
+  cancelSwapSigning,
+  fetchSwapConfig,
+  fetchSwapOrder,
+  markSwapSigning,
+  quoteSwap,
+  readySwap,
+  stepUp,
+  submitSwap,
+  submitSwapApproval,
+  type ApprovalBuildResponse,
+  type SwapBuildResponse,
+} from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -42,6 +57,233 @@ export function SwapPage() {
         walletAddress: walletAddress || undefined,
       }),
   });
+
+  const [buildData, setBuildData] = useState<SwapBuildResponse | null>(null);
+  const [approvalData, setApprovalData] = useState<ApprovalBuildResponse | null>(null);
+  const [approvalConfirmed, setApprovalConfirmed] = useState(false);
+  const [approvalTxHash, setApprovalTxHash] = useState<string | null>(null);
+  const [swapTxHash, setSwapTxHash] = useState<string | null>(null);
+  const [executionBusy, setExecutionBusy] = useState(false);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpCode, setStepUpCode] = useState('');
+  const [stepUpError, setStepUpError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{ run: () => void } | null>(null);
+
+  const build = useMutation({
+    mutationFn: (input: { orderId: string; walletAddress: string }) =>
+      buildSwap(input.orderId, input.walletAddress),
+  });
+  const approval = useMutation({
+    mutationFn: (orderId: string) => buildSwapApproval(orderId),
+  });
+  const ready = useMutation({
+    mutationFn: (orderId: string) => readySwap(orderId),
+  });
+  const stepUpMutation = useMutation({ mutationFn: (code: string) => stepUp(code) });
+
+  const liveOrder = useQuery({
+    queryKey: ['swap-order', quote.data?.id],
+    queryFn: () => fetchSwapOrder(quote.data!.id),
+    enabled: Boolean(quote.data?.id && (swapTxHash || buildData)),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'SUBMITTED' || status === 'PENDING' ? 5_000 : false;
+    },
+  });
+
+  useEffect(() => {
+    setBuildData(null);
+    setApprovalData(null);
+    setApprovalConfirmed(false);
+    setApprovalTxHash(null);
+    setSwapTxHash(null);
+    setExecutionError(null);
+    setStepUpOpen(false);
+    setPendingAction(null);
+  }, [quote.data?.id]);
+
+  function retryWithStepUp(error: unknown, retry: () => void, fallback: string): void {
+    if (error instanceof ApiError && error.code === 'SWAP_STEP_UP_REQUIRED') {
+      setPendingAction({ run: retry });
+      setStepUpCode('');
+      setStepUpError(null);
+      setStepUpOpen(true);
+      return;
+    }
+
+    setExecutionError(toRussianError(error, fallback));
+  }
+
+  async function runBuild(): Promise<void> {
+    if (!quote.data || !walletAddress) return;
+    setExecutionBusy(true);
+    setExecutionError(null);
+
+    try {
+      const result = await build.mutateAsync({
+        orderId: quote.data.id,
+        walletAddress,
+      });
+      setBuildData(result);
+      setApprovalData(null);
+      setApprovalConfirmed(false);
+      setApprovalTxHash(null);
+      setSwapTxHash(null);
+    } catch (error) {
+      retryWithStepUp(error, () => void runBuild(), 'Не удалось проверить сборку');
+    } finally {
+      setExecutionBusy(false);
+    }
+  }
+
+  async function runApprovalBuild(): Promise<void> {
+    if (!quote.data) return;
+    setExecutionBusy(true);
+    setExecutionError(null);
+
+    try {
+      const result = await approval.mutateAsync(quote.data.id);
+      setApprovalData(result);
+      setApprovalConfirmed(false);
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'SWAP_APPROVAL_NOT_REQUIRED') {
+        await runReady();
+        return;
+      }
+      retryWithStepUp(error, () => void runApprovalBuild(), 'Не удалось подготовить approval');
+    } finally {
+      setExecutionBusy(false);
+    }
+  }
+
+  async function runReady(): Promise<void> {
+    if (!quote.data) return;
+    setExecutionBusy(true);
+    setExecutionError(null);
+
+    try {
+      const result = await ready.mutateAsync(quote.data.id);
+      setBuildData(result);
+      setApprovalConfirmed(true);
+      await liveOrder.refetch();
+    } catch (error) {
+      retryWithStepUp(
+        error,
+        () => void runReady(),
+        'Разрешение ещё не подтверждено. Подождите и попробуйте снова.',
+      );
+    } finally {
+      setExecutionBusy(false);
+    }
+  }
+
+  function canSignFor(expectedWallet: string | null | undefined): boolean {
+    if (!wallet.address || !expectedWallet) {
+      setExecutionError('Кошелёк не подключён к сборке. Переподключите Tangem.');
+      return false;
+    }
+
+    if (wallet.address.toLowerCase() !== expectedWallet.toLowerCase()) {
+      setExecutionError(
+        'Подключённый кошелёк не совпадает с адресом сборки. Переподключите нужный кошелёк.',
+      );
+      return false;
+    }
+
+    if (buildData?.deadline && Date.now() / 1000 >= buildData.deadline) {
+      setExecutionError('Срок действия сборки истёк. Запросите новую котировку.');
+      return false;
+    }
+
+    return true;
+  }
+
+  async function signApproval(): Promise<void> {
+    if (!approvalData || !quote.data) return;
+    if (!canSignFor(approvalData.approval.walletAddress)) return;
+    setExecutionBusy(true);
+    setExecutionError(null);
+
+    try {
+      const hash = await wallet.sendTransaction({
+        to: approvalData.to,
+        data: approvalData.calldata,
+        value: approvalData.value,
+      });
+      setApprovalTxHash(hash);
+      await submitSwapApproval(approvalData.approval.id, hash);
+      await wallet.waitForReceipt(hash);
+      await runReady();
+    } catch (error) {
+      setExecutionError(toRussianError(error, 'Не удалось подписать approval в Tangem'));
+    } finally {
+      setExecutionBusy(false);
+    }
+  }
+
+  async function submitSignedSwap(hash: string): Promise<void> {
+    if (!quote.data) return;
+
+    try {
+      await submitSwap(quote.data.id, hash);
+      await liveOrder.refetch();
+    } catch (error) {
+      retryWithStepUp(
+        error,
+        () => void submitSignedSwap(hash),
+        'Транзакция подписана, но сервер не принял hash. Скопируйте hash и проверьте статус.',
+      );
+    }
+  }
+
+  async function signSwap(): Promise<void> {
+    if (!buildData?.routerAddress || !buildData.calldata || !quote.data) return;
+    if (!canSignFor(buildData.walletAddress)) return;
+    setExecutionBusy(true);
+    setExecutionError(null);
+
+    try {
+      await markSwapSigning(quote.data.id);
+    } catch (error) {
+      setExecutionBusy(false);
+      retryWithStepUp(error, () => void signSwap(), 'Не удалось перевести сборку в статус подписи');
+      return;
+    }
+
+    try {
+      const hash = await wallet.sendTransaction({
+        to: buildData.routerAddress,
+        data: buildData.calldata,
+        value: buildData.transactionValue ?? '0',
+      });
+      setSwapTxHash(hash);
+      await submitSignedSwap(hash);
+    } catch (error) {
+      try {
+        await cancelSwapSigning(quote.data.id);
+      } catch {
+        // Leave the order in AWAITING_SIGNATURE; it can be re-checked via ready.
+      }
+      setExecutionError(toRussianError(error, 'Не удалось подписать своп в Tangem'));
+    } finally {
+      setExecutionBusy(false);
+    }
+  }
+
+  async function confirmStepUp(): Promise<void> {
+    setStepUpError(null);
+
+    try {
+      await stepUpMutation.mutateAsync(stepUpCode);
+      setStepUpOpen(false);
+      const action = pendingAction;
+      setPendingAction(null);
+      action?.run();
+    } catch (error) {
+      setStepUpError(toRussianError(error, 'Не удалось подтвердить TOTP'));
+    }
+  }
 
   const tokens = config.data?.chains[0]?.tokens ?? [];
   const selectedIn = tokens.find((token) => token.address.toLowerCase() === tokenIn.toLowerCase());
@@ -91,12 +333,16 @@ export function SwapPage() {
 
   const data = config.data;
   const chain = data.chains[0];
+  const executionReady =
+    buildData?.status === 'READY' || (buildData?.status === 'BUILT' && !buildData.approvalRequired);
+  const deadlineExpired = Boolean(buildData?.deadline && Date.now() / 1000 >= buildData.deadline);
+  const executionOrder = liveOrder.data ?? buildData ?? quote.data;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Своп"
-        subtitle="Phase 8: котировки KyberSwap на BSC и подключение Tangem. Подпись и отправка включатся после allowlist/full calldata review."
+        subtitle="Phase 8: котировки KyberSwap, проверка сборки и точный approval на BSC. Подпись Tangem включается после финального review."
         actions={
           <Badge tone={data.enabled ? 'success' : 'warning'}>
             {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
@@ -374,13 +620,282 @@ export function SwapPage() {
       </div>
 
       <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Исполнение</CardTitle>
+            <CardDescription>
+              Проверка сборки, точный approval и подпись в Tangem. Приватные ключи не покидают
+              устройство.
+            </CardDescription>
+          </div>
+          {buildData ? (
+            <Badge
+              tone={
+                buildData.status === 'APPROVAL_REQUIRED'
+                  ? 'warning'
+                  : buildData.status === 'READY' || buildData.status === 'BUILT'
+                    ? 'success'
+                    : 'neutral'
+              }
+            >
+              {buildData.status === 'APPROVAL_REQUIRED'
+                ? 'Нужно approval'
+                : buildData.status === 'READY'
+                  ? 'Готово к подписи'
+                  : buildData.status}
+            </Badge>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            onClick={() => void runBuild()}
+            disabled={!quote.data || !walletAddress || !data.buildEnabled || executionBusy}
+          >
+            {executionBusy && !buildData ? 'Проверяю сборку…' : 'Проверить сборку'}
+          </Button>
+          {buildData?.approvalRequired && !approvalData ? (
+            <Button
+              variant="secondary"
+              onClick={() => void runApprovalBuild()}
+              disabled={executionBusy}
+            >
+              Подготовить approval
+            </Button>
+          ) : null}
+          {buildData?.status === 'APPROVAL_REQUIRED' ? (
+            <Button variant="secondary" onClick={() => void runReady()} disabled={executionBusy}>
+              Проверить готовность
+            </Button>
+          ) : null}
+          {executionReady && !swapTxHash ? (
+            <Button
+              onClick={() => void signSwap()}
+              disabled={
+                executionBusy ||
+                !wallet.connected ||
+                !data.enabled ||
+                !data.executionEnabled ||
+                deadlineExpired
+              }
+            >
+              {executionBusy ? 'Подписываю…' : 'Подписать своп в Tangem'}
+            </Button>
+          ) : null}
+          {swapTxHash &&
+          (executionOrder?.status === 'READY' || executionOrder?.status === 'BUILT') ? (
+            <Button
+              variant="secondary"
+              onClick={() => void submitSignedSwap(swapTxHash)}
+              disabled={executionBusy}
+            >
+              Отправить hash повторно
+            </Button>
+          ) : null}
+        </div>
+
+        {!data.executionEnabled ? (
+          <p className="mt-3 text-sm text-amber-700">
+            Исполнение выключено до финального security review. Сборку и approval можно подготовить,
+            но подпись в Tangem недоступна.
+          </p>
+        ) : null}
+        {executionError ? <p className="mt-3 text-sm text-red-700">{executionError}</p> : null}
+        {swapTxHash ? (
+          <p className="mt-3 break-all text-xs text-zinc-600">
+            Подписанный hash:{' '}
+            <a
+              className="text-emerald-700 underline"
+              href={`https://bscscan.com/tx/${swapTxHash}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {swapTxHash}
+            </a>
+          </p>
+        ) : null}
+
+        {buildData ? (
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="grid gap-2 md:grid-cols-2">
+              <div className="rounded-md border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Router</div>
+                <div className="truncate font-mono text-xs text-zinc-700">
+                  {buildData.routerAddress ?? '—'}
+                </div>
+              </div>
+              <div className="rounded-md border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Минимум на выходе</div>
+                <div className="font-mono text-zinc-800">
+                  {formatTokenAmount(buildData.minOut, 8)} {buildData.tokenOut.symbol}
+                </div>
+              </div>
+              <div className="rounded-md border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Deadline</div>
+                <div className="text-zinc-700">
+                  {buildData.deadline
+                    ? formatDateTime(new Date(buildData.deadline * 1000).toISOString())
+                    : '—'}
+                </div>
+              </div>
+              <div className="rounded-md border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Allowance</div>
+                <div className="font-mono text-xs text-zinc-700">
+                  {buildData.allowance ?? 'native'}
+                </div>
+              </div>
+              <div className="rounded-md border border-zinc-200 p-2 md:col-span-2">
+                <div className="text-xs text-zinc-500">Получатель</div>
+                <div className="break-all font-mono text-xs text-zinc-700">
+                  {buildData.walletAddress ?? '—'}
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-40 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 p-2 font-mono text-xs text-zinc-600">
+              {buildData.validation.map((item) => (
+                <div key={item.check} className={item.passed ? 'text-zinc-600' : 'text-amber-700'}>
+                  {item.passed ? '✓' : '•'} {item.check}
+                  {item.detail ? ` — ${item.detail}` : ''}
+                </div>
+              ))}
+            </div>
+
+            {approvalData ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                <div className="font-medium text-amber-800">Approval токена</div>
+                <div className="mt-1 break-all font-mono text-xs text-amber-700">
+                  token: {approvalData.approval.tokenAddress}
+                </div>
+                <div className="break-all font-mono text-xs text-amber-700">
+                  spender: {approvalData.approval.spenderAddress}
+                </div>
+                <div className="mt-1 font-mono text-xs text-amber-700">
+                  amountWei: {approvalData.approval.amountWei}
+                </div>
+                {approvalTxHash ? (
+                  <div className="mt-1 break-all font-mono text-xs text-amber-700">
+                    tx: {approvalTxHash}
+                  </div>
+                ) : null}
+                {approvalConfirmed ? (
+                  <p className="mt-2 text-xs text-emerald-700">Approval подтверждён в сети.</p>
+                ) : approvalTxHash ? (
+                  <Button
+                    className="mt-2"
+                    variant="secondary"
+                    onClick={() => void runReady()}
+                    disabled={executionBusy}
+                  >
+                    Проверить готовность
+                  </Button>
+                ) : (
+                  <Button
+                    className="mt-2"
+                    onClick={() => void signApproval()}
+                    disabled={
+                      executionBusy ||
+                      !wallet.connected ||
+                      !data.enabled ||
+                      !data.executionEnabled ||
+                      deadlineExpired
+                    }
+                  >
+                    {executionBusy ? 'Подписываю approval…' : 'Подписать approval в Tangem'}
+                  </Button>
+                )}
+              </div>
+            ) : null}
+
+            {deadlineExpired ? (
+              <p className="text-xs text-amber-700">
+                Сборка истекла. Запросите новую котировку, чтобы подписать.
+              </p>
+            ) : executionReady ? (
+              <p className="text-xs text-emerald-700">
+                Сборка проверена. Можно подписывать swap-транзакцию в Tangem.
+              </p>
+            ) : null}
+
+            {executionOrder ? (
+              <div className="rounded-md border border-zinc-200 p-2 text-xs text-zinc-600">
+                Ордер {executionOrder.id.slice(0, 8)} · {executionOrder.status}
+                {executionOrder.txHash ? (
+                  <>
+                    {' '}
+                    · tx{' '}
+                    <a
+                      className="break-all text-emerald-700 underline"
+                      href={`https://bscscan.com/tx/${executionOrder.txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {executionOrder.txHash}
+                    </a>
+                  </>
+                ) : null}
+                {executionOrder.confirmations > 0 ? (
+                  <> · подтверждений: {executionOrder.confirmations}</>
+                ) : null}
+                {executionOrder.accountingTransactionId ? <> · учёт создан</> : null}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-zinc-600">
+            Запросите котировку, затем проверьте сборку. Сервер декодирует calldata и проверит
+            получателя, minOut, allowance и симуляцию.
+          </p>
+        )}
+      </Card>
+
+      <Card>
         <CardTitle>Ограничения Phase 8</CardTitle>
         <CardDescription>
           BSC и подключение Tangem через WalletConnect уже доступны. Tracking и учёт подтверждённых
-          свопов работают; подпись, approvals и отправка включатся после execution UI. Kill switch
-          отключает новые котировки, чтение существующих ордеров остаётся доступным.
+          свопов работают; подпись включается через `SWAP_EXECUTION_ENABLED` после финального
+          review. Kill switch отключает новые котировки, чтение существующих ордеров остаётся
+          доступным.
         </CardDescription>
       </Card>
+
+      {stepUpOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
+          <Card className="w-full max-w-sm">
+            <CardTitle>Подтвердите TOTP</CardTitle>
+            <CardDescription>
+              Для этой суммы нужен свежий код двухфакторной аутентификации.
+            </CardDescription>
+            <Input
+              className="mt-3 font-mono tracking-[0.3em]"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={stepUpCode}
+              onChange={(event) => setStepUpCode(event.target.value.replace(/\D/g, ''))}
+              aria-label="Код TOTP"
+            />
+            {stepUpError ? <p className="mt-2 text-sm text-red-700">{stepUpError}</p> : null}
+            <div className="mt-4 flex gap-2">
+              <Button
+                onClick={() => void confirmStepUp()}
+                disabled={stepUpCode.length !== 6 || stepUpMutation.isPending}
+              >
+                {stepUpMutation.isPending ? 'Проверяю…' : 'Подтвердить'}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setStepUpOpen(false);
+                  setPendingAction(null);
+                }}
+              >
+                Отмена
+              </Button>
+            </div>
+          </Card>
+        </div>
+      ) : null}
     </div>
   );
 }

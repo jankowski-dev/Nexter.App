@@ -39,6 +39,9 @@ const contractCodes = new Set([
   'IMPORT_RECONCILIATION_FAILED',
   'IMPORT_CONFLICT',
   'SWAP_DISABLED',
+  'SWAP_EXECUTION_DISABLED',
+  'SWAP_INSUFFICIENT_BALANCE',
+  'SWAP_APPROVAL_REQUIRED',
   'SWAP_CHAIN_UNSUPPORTED',
   'SWAP_TOKEN_NOT_ALLOWED',
   'SWAP_QUOTE_FAILED',
@@ -145,6 +148,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const safe = safeErrorForTelemetry(exception);
       const expected = new Set([
         'SWAP_DISABLED',
+        'SWAP_EXECUTION_DISABLED',
         'SWAP_PROVIDER_UNAVAILABLE',
         'SWAP_QUOTE_FAILED',
         'SWAP_BUILD_FAILED',

@@ -54,6 +54,10 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  SWAP_EXECUTION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   SWAP_KILL_SWITCH: z
     .enum(['true', 'false'])
     .default('false')

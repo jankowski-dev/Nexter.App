@@ -1,5 +1,6 @@
 import {
   accountsResponseSchema,
+  approvalBuildResponseSchema,
   assetsResponseSchema,
   auditLogResponseSchema,
   authMeResponseSchema,
@@ -17,14 +18,18 @@ import {
   portfolioAssetDetailSchema,
   positionsResponseSchema,
   settingsSchema,
+  stepUpResponseSchema,
+  swapBuildResponseSchema,
   swapConfigResponseSchema,
   swapOrderDetailSchema,
+  tokenApprovalSchema,
   tradeGroupDetailSchema,
   tradeGroupsResponseSchema,
   transactionsPageResponseSchema,
   watchlistEntrySchema,
   watchlistResponseSchema,
   type AccountsResponse,
+  type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
   type DashboardActivePositions,
@@ -40,8 +45,11 @@ import {
   type PortfolioAssetDetail,
   type PositionsResponse,
   type Settings,
+  type StepUpResponse,
+  type SwapBuildResponse,
   type SwapConfigResponse,
   type SwapOrderDetail,
+  type TokenApproval,
   type TradeGroupDetail,
   type TradeGroupListQuery,
   type TradeGroupSellRequest,
@@ -58,6 +66,7 @@ import {
 export { healthResponseSchema };
 export type {
   AccountsResponse,
+  ApprovalBuildResponse,
   AssetsResponse,
   AuditLogResponse,
   DashboardActivePositions,
@@ -73,7 +82,10 @@ export type {
   PortfolioAssetDetail,
   PositionsResponse,
   Settings,
+  StepUpResponse,
+  SwapBuildResponse,
   SwapConfigResponse,
+  TokenApproval,
   SwapOrderDetail,
   TradeGroupDetail,
   TradeGroupsResponse,
@@ -408,6 +420,48 @@ export async function quoteSwap(body: {
   walletAddress?: string;
 }): Promise<SwapOrderDetail> {
   return apiPost('/api/v1/swap/quote', body, swapOrderDetailSchema);
+}
+
+export async function buildSwap(
+  orderId: string,
+  walletAddress: string,
+): Promise<SwapBuildResponse> {
+  return apiPost('/api/v1/swap/build', { orderId, walletAddress }, swapBuildResponseSchema);
+}
+
+export async function readySwap(orderId: string): Promise<SwapBuildResponse> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/ready`, {}, swapBuildResponseSchema);
+}
+
+export async function markSwapSigning(orderId: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/signing`, {}, swapOrderDetailSchema);
+}
+
+export async function cancelSwapSigning(orderId: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/signing/cancel`, {}, swapOrderDetailSchema);
+}
+
+export async function submitSwap(orderId: string, txHash: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/submitted`, { txHash }, swapOrderDetailSchema);
+}
+
+export async function fetchSwapOrder(orderId: string): Promise<SwapOrderDetail> {
+  return apiFetch(`/api/v1/swap/orders/${orderId}`, {}, swapOrderDetailSchema);
+}
+
+export async function buildSwapApproval(orderId: string): Promise<ApprovalBuildResponse> {
+  return apiPost('/api/v1/swap/approvals/build', { orderId }, approvalBuildResponseSchema);
+}
+
+export async function submitSwapApproval(
+  approvalId: string,
+  txHash: string,
+): Promise<TokenApproval> {
+  return apiPost(`/api/v1/swap/approvals/${approvalId}/submitted`, { txHash }, tokenApprovalSchema);
+}
+
+export async function stepUp(code: string): Promise<StepUpResponse> {
+  return apiPost('/api/v1/auth/step-up', { code }, stepUpResponseSchema);
 }
 
 export async function downloadExport(

@@ -176,6 +176,7 @@ export class SwapService {
         enabled &&
         allowlist.length > 0 &&
         selectors.some((item) => KYBER_SUPPORTED_SELECTORS.includes(item)),
+      executionEnabled: env.SWAP_EXECUTION_ENABLED && enabled,
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,
@@ -581,15 +582,12 @@ export class SwapService {
       calldataValidation.deadlineSource === 'server' ? 'server-enforced (nested route)' : null,
     );
 
-    let simulation;
+    let balance: string | null;
 
     try {
-      simulation = await this.rpc.simulate({
-        from: wallet,
-        to: built.routerAddress,
-        data: built.data,
-        value: built.transactionValue,
-      });
+      balance = tokenIn.native
+        ? await this.rpc.getNativeBalance(wallet)
+        : await this.rpc.getErc20Balance(tokenIn.address, wallet);
     } catch {
       await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
       throw new ServiceUnavailableException({
@@ -598,18 +596,92 @@ export class SwapService {
       });
     }
 
-    if (!simulation.success) {
-      await this.recordBuildFailure(order, 'SWAP_SIMULATION_FAILED', meta);
-      throw new BadRequestException({
-        code: 'SWAP_SIMULATION_FAILED',
-        message: 'Swap simulation failed',
-        details: { revertReason: simulation.revertReason },
+    if (balance === null) {
+      await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
       });
     }
 
-    validation.push({ check: 'simulation', passed: true, detail: null });
+    if (BigInt(balance) < BigInt(quotedAmountIn)) {
+      await this.recordBuildFailure(order, 'SWAP_INSUFFICIENT_BALANCE', meta);
+      throw new BadRequestException({
+        code: 'SWAP_INSUFFICIENT_BALANCE',
+        message: 'Wallet balance is below the input amount',
+      });
+    }
+    pass('balance');
 
-    const gasEstimate = built.gas ?? simulation.gasEstimate;
+    let allowance: string | null = null;
+    let approvalRequired = false;
+
+    if (!tokenIn.native) {
+      try {
+        allowance = await this.rpc.getErc20Allowance(tokenIn.address, wallet, built.routerAddress);
+      } catch {
+        await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
+        throw new ServiceUnavailableException({
+          code: 'SWAP_PROVIDER_UNAVAILABLE',
+          message: 'BSC RPC is unavailable',
+        });
+      }
+
+      if (allowance === null) {
+        await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
+        throw new ServiceUnavailableException({
+          code: 'SWAP_PROVIDER_UNAVAILABLE',
+          message: 'BSC RPC is unavailable',
+        });
+      }
+
+      approvalRequired = BigInt(allowance) < BigInt(quotedAmountIn);
+
+      if (approvalRequired) {
+        validation.push({ check: 'allowance', passed: false, detail: 'approval required' });
+        validation.push({
+          check: 'simulation',
+          passed: false,
+          detail: 'skipped until approval',
+        });
+      } else {
+        pass('allowance');
+      }
+    } else {
+      pass('allowance', 'native input');
+    }
+
+    let simulation: Awaited<ReturnType<BscRpcService['simulate']>> | null = null;
+
+    if (!approvalRequired) {
+      try {
+        simulation = await this.rpc.simulate({
+          from: wallet,
+          to: built.routerAddress,
+          data: built.data,
+          value: built.transactionValue,
+        });
+      } catch {
+        await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
+        throw new ServiceUnavailableException({
+          code: 'SWAP_PROVIDER_UNAVAILABLE',
+          message: 'BSC RPC is unavailable',
+        });
+      }
+
+      if (!simulation.success) {
+        await this.recordBuildFailure(order, 'SWAP_SIMULATION_FAILED', meta);
+        throw new BadRequestException({
+          code: 'SWAP_SIMULATION_FAILED',
+          message: 'Swap simulation failed',
+          details: { revertReason: simulation.revertReason },
+        });
+      }
+
+      validation.push({ check: 'simulation', passed: true, detail: null });
+    }
+
+    const gasEstimate = built.gas ?? simulation?.gasEstimate ?? null;
     if (gasEstimate && (!/^\d+$/.test(gasEstimate) || gasEstimate.length > 24)) {
       await fail('gas', 'SWAP_GAS_INVALID', 'Gas estimate is not a bounded integer');
     }
@@ -627,6 +699,8 @@ export class SwapService {
       });
     }
 
+    const builtStatus = approvalRequired ? 'APPROVAL_REQUIRED' : 'BUILT';
+
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(swapOrders)
@@ -638,7 +712,7 @@ export class SwapService {
           gasEstimate,
           gasUsd,
           deadline,
-          status: 'BUILT',
+          status: builtStatus,
           errors: [],
           builtAt: new Date(),
           updatedAt: new Date(),
@@ -667,6 +741,8 @@ export class SwapService {
           routerAddress: row.routerAddress,
           gasEstimate: row.gasEstimate,
           deadline: row.deadline,
+          approvalRequired,
+          allowance,
           calldata: {
             functionName: decoded.functionName,
             executor: decoded.callTarget,
@@ -675,7 +751,9 @@ export class SwapService {
             deadlineSource: calldataValidation.deadlineSource,
             embeddedDeadline: decoded.simpleDeadline,
           },
-          simulation: { success: true, gasEstimate: simulation.gasEstimate },
+          simulation: simulation
+            ? { success: true, gasEstimate: simulation.gasEstimate }
+            : { success: false, skipped: true, reason: 'approval_required' },
         },
       });
 
@@ -688,7 +766,9 @@ export class SwapService {
           after: {
             routerAddress: row.routerAddress,
             gasEstimate: row.gasEstimate,
-            status: 'BUILT',
+            status: builtStatus,
+            approvalRequired,
+            allowance,
             calldataRecipient: decoded.dstReceiver,
             calldataMinOut: decoded.minReturnAmount,
             deadlineSource: calldataValidation.deadlineSource,
@@ -704,9 +784,345 @@ export class SwapService {
 
     return {
       ...(await this.detail(userId, updated.id, [])),
+      approvalRequired,
+      allowance,
       simulation,
       validation,
     };
+  }
+
+  async ready(auth: AuthContext, orderId: string, meta: SwapMeta): Promise<SwapBuildResponse> {
+    this.assertEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (!['APPROVAL_REQUIRED', 'BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    assertStepUp(auth, order);
+    this.assertWallet(order.walletAddress ?? undefined, true);
+
+    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_ROUTER_NOT_ALLOWED',
+        message: 'Router is not in the allowlist',
+      });
+    }
+
+    if (!order.deadline || order.deadline <= Math.floor(Date.now() / 1000)) {
+      throw new ConflictException({
+        code: 'SWAP_DEADLINE_PASSED',
+        message: 'Swap deadline has passed',
+      });
+    }
+
+    if (!order.calldata || order.transactionValue === null) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order has no stored build',
+      });
+    }
+
+    const tokenIn = getSwapToken(order.chain, order.tokenIn);
+    const tokenOut = getSwapToken(order.chain, order.tokenOut);
+    const routeSummary = order.routeSummary as Record<string, unknown>;
+    const amountIn = typeof routeSummary.amountIn === 'string' ? routeSummary.amountIn : null;
+
+    if (!tokenIn || !tokenOut || !amountIn || !/^\d+$/.test(amountIn)) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Stored swap order is incomplete',
+      });
+    }
+
+    const wallet = order.walletAddress as string;
+
+    let balance: string | null;
+
+    try {
+      balance = tokenIn.native
+        ? await this.rpc.getNativeBalance(wallet)
+        : await this.rpc.getErc20Balance(tokenIn.address, wallet);
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
+
+    if (balance === null) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
+
+    if (BigInt(balance) < BigInt(amountIn)) {
+      throw new BadRequestException({
+        code: 'SWAP_INSUFFICIENT_BALANCE',
+        message: 'Wallet balance is below the input amount',
+      });
+    }
+
+    let allowance: string | null = null;
+
+    if (!tokenIn.native) {
+      try {
+        allowance = await this.rpc.getErc20Allowance(tokenIn.address, wallet, order.routerAddress);
+      } catch {
+        throw new ServiceUnavailableException({
+          code: 'SWAP_PROVIDER_UNAVAILABLE',
+          message: 'BSC RPC is unavailable',
+        });
+      }
+
+      if (allowance === null) {
+        throw new ServiceUnavailableException({
+          code: 'SWAP_PROVIDER_UNAVAILABLE',
+          message: 'BSC RPC is unavailable',
+        });
+      }
+
+      if (BigInt(allowance) < BigInt(amountIn)) {
+        throw new ConflictException({
+          code: 'SWAP_APPROVAL_REQUIRED',
+          message: 'Token allowance is still insufficient',
+        });
+      }
+    }
+
+    let simulation: Awaited<ReturnType<BscRpcService['simulate']>>;
+
+    try {
+      simulation = await this.rpc.simulate({
+        from: wallet,
+        to: order.routerAddress,
+        data: order.calldata,
+        value: order.transactionValue,
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
+
+    if (!simulation.success) {
+      throw new BadRequestException({
+        code: 'SWAP_SIMULATION_FAILED',
+        message: 'Swap simulation failed',
+        details: { revertReason: simulation.revertReason },
+      });
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({ status: 'READY', updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, [
+              'APPROVAL_REQUIRED',
+              'BUILT',
+              'READY',
+              'AWAITING_SIGNATURE',
+            ]),
+            gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
+          ),
+        )
+        .returning();
+
+      if (!row) return null;
+
+      await tx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'ready',
+        payload: { allowance, simulation: { success: true, gasEstimate: simulation.gasEstimate } },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_ready',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: { status: 'READY', allowance },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return row;
+    });
+
+    if (!updated) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order is no longer ready',
+      });
+    }
+
+    return {
+      ...(await this.detail(userId, updated.id, [])),
+      approvalRequired: false,
+      allowance,
+      simulation,
+      validation: [
+        { check: 'balance', passed: true, detail: null },
+        { check: 'allowance', passed: true, detail: null },
+        { check: 'simulation', passed: true, detail: null },
+      ],
+    };
+  }
+
+  async signing(auth: AuthContext, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    this.assertExecutionEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (!['BUILT', 'READY'].includes(order.status)) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    assertStepUp(auth, order);
+    this.assertWallet(order.walletAddress ?? undefined, true);
+
+    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_ROUTER_NOT_ALLOWED',
+        message: 'Router is not in the allowlist',
+      });
+    }
+
+    if (!order.deadline || order.deadline <= Math.floor(Date.now() / 1000)) {
+      throw new ConflictException({
+        code: 'SWAP_DEADLINE_PASSED',
+        message: 'Swap deadline has passed',
+      });
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({ status: 'AWAITING_SIGNATURE', updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, ['BUILT', 'READY']),
+            gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return null;
+
+      await tx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'signing',
+        payload: { walletAddress: order.walletAddress },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_signing',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status: 'AWAITING_SIGNATURE' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return row;
+    });
+
+    if (!updated) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order is already being signed or no longer ready',
+      });
+    }
+
+    return this.detail(userId, orderId, []);
+  }
+
+  async cancelSigning(
+    auth: AuthContext,
+    orderId: string,
+    meta: SwapMeta,
+  ): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (order.status !== 'AWAITING_SIGNATURE') {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({ status: 'READY', updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            eq(swapOrders.status, 'AWAITING_SIGNATURE'),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return null;
+
+      await tx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'signing_cancelled',
+        payload: {},
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_signing_cancelled',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: 'AWAITING_SIGNATURE' },
+          after: { status: 'READY' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return row;
+    });
+
+    if (!updated) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order is no longer awaiting signature',
+      });
+    }
+
+    return this.detail(userId, orderId, []);
   }
 
   async submit(
@@ -716,10 +1132,11 @@ export class SwapService {
     meta: SwapMeta,
   ): Promise<SwapOrderDetail> {
     this.assertEnabled();
+    this.assertExecutionEnabled();
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (order.status !== 'BUILT') {
+    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -761,7 +1178,7 @@ export class SwapService {
             and(
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
-              eq(swapOrders.status, 'BUILT'),
+              inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE']),
               gt(swapOrders.deadline, now),
             ),
           )
@@ -799,7 +1216,7 @@ export class SwapService {
             action: 'swap.order_submitted',
             entityType: 'swap_order',
             entityId: orderId,
-            before: { status: 'BUILT' },
+            before: { status: order.status },
             after: { status: 'SUBMITTED', txHash },
             ip: meta.ip,
             userAgent: meta.userAgent,
@@ -828,7 +1245,7 @@ export class SwapService {
   async cancel(userId: string, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['QUOTED', 'BUILT'].includes(order.status)) {
+    if (!['QUOTED', 'BUILT', 'APPROVAL_REQUIRED', 'READY'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -843,7 +1260,7 @@ export class SwapService {
           and(
             eq(swapOrders.id, orderId),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, ['QUOTED', 'BUILT']),
+            inArray(swapOrders.status, ['QUOTED', 'BUILT', 'APPROVAL_REQUIRED', 'READY']),
           ),
         )
         .returning({ id: swapOrders.id });
@@ -1102,6 +1519,15 @@ export class SwapService {
       throw new ServiceUnavailableException({
         code: 'SWAP_DISABLED',
         message: 'Swaps are disabled',
+      });
+    }
+  }
+
+  private assertExecutionEnabled(): void {
+    if (!env.SWAP_EXECUTION_ENABLED) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_EXECUTION_DISABLED',
+        message: 'Swap execution is disabled',
       });
     }
   }

@@ -56,6 +56,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         providerMode: 'gateway',
         walletConnectProjectId: '11111111111111111111111111111111',
         buildEnabled: false,
+        executionEnabled: false,
         rpcConfigured: true,
         walletAllowlistConfigured: true,
         chains: [
@@ -135,12 +136,14 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   await page.goto('/swap');
   await expect(page.getByRole('heading', { name: 'Своп' })).toBeVisible();
   await expect(
-    page.getByText('Phase 8: котировки KyberSwap на BSC и подключение Tangem.'),
+    page.getByText('Phase 8: котировки KyberSwap, проверка сборки и точный approval на BSC.'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Подключить Tangem' })).toBeVisible();
   await expect(
     page.getByText('Подпись и отправка выключены до завершения allowlist/full calldata review.'),
   ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Проверить сборку' })).toBeVisible();
+  await expect(page.getByText('Исполнение выключено до финального security review.')).toBeVisible();
 
   await page.getByLabel('Адрес кошелька').fill(wallet);
   await page.getByLabel('Количество токена отдачи').fill('1');

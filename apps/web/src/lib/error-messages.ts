@@ -14,6 +14,16 @@ const messages: Record<string, string> = {
   NEGATIVE_BALANCE: 'Импорт привёл бы к отрицательному балансу кошелька.',
   INSUFFICIENT_LOTS: 'Недостаточно лотов для списания.',
   INTERNAL_ERROR: 'Внутренняя ошибка сервера. Попробуйте позже.',
+  SWAP_STEP_UP_REQUIRED: 'Для этой суммы нужен свежий код TOTP.',
+  SWAP_APPROVAL_REQUIRED: 'Сначала подтвердите approval токена в кошельке.',
+  SWAP_INSUFFICIENT_BALANCE: 'На кошельке недостаточно токенов для этой суммы.',
+  SWAP_DEADLINE_PASSED: 'Срок действия сборки истёк. Запросите новую котировку.',
+  SWAP_EXECUTION_DISABLED: 'Исполнение выключено на сервере до финального review.',
+  SWAP_SIMULATION_FAILED: 'Симуляция не прошла. Обновите котировку и попробуйте снова.',
+  SWAP_PROVIDER_UNAVAILABLE: 'BSC RPC или провайдер временно недоступен.',
+  SWAP_RATE_LIMITED: 'Слишком много запросов к провайдеру. Попробуйте позже.',
+  SWAP_DISABLED: 'Свопы временно отключены.',
+  SWAP_STATE_INVALID: 'Состояние ордера изменилось. Запросите новую котировку.',
 };
 
 const reasonMessages: Record<string, string> = {

@@ -6,7 +6,7 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { and, asc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
-import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/db';
+import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
@@ -85,6 +85,23 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         await this.safeTrack(order, latest);
       }
 
+      const approvals = await this.db
+        .select()
+        .from(tokenApprovals)
+        .where(
+          and(
+            eq(tokenApprovals.status, 'SUBMITTED'),
+            isNotNull(tokenApprovals.txHash),
+            isNotNull(tokenApprovals.submittedAt),
+          ),
+        )
+        .orderBy(asc(tokenApprovals.submittedAt))
+        .limit(20);
+
+      for (const approval of approvals) {
+        await this.safeTrackApproval(approval, latest);
+      }
+
       const confirmed = await this.db
         .select()
         .from(swapOrders)
@@ -122,6 +139,110 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         `Swap ${order.id} tracking failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
     }
+  }
+
+  private async safeTrackApproval(
+    approval: typeof tokenApprovals.$inferSelect,
+    latestBlock: number,
+  ): Promise<void> {
+    try {
+      await this.trackApproval(approval, latestBlock);
+    } catch (error) {
+      this.logger.warn(
+        `Approval ${approval.id} tracking failed: ${
+          error instanceof Error ? error.message : 'unknown error'
+        }`,
+      );
+    }
+  }
+
+  private async trackApproval(
+    approval: typeof tokenApprovals.$inferSelect,
+    latestBlock: number,
+  ): Promise<void> {
+    const txHash = approval.txHash;
+    if (!txHash) return;
+
+    const tx = await this.rpc.getTransactionByHash(txHash);
+
+    if (!tx) {
+      if (
+        approval.submittedAt &&
+        Date.now() - approval.submittedAt.getTime() > env.SWAP_DROP_TIMEOUT_SECONDS * 1000
+      ) {
+        await this.markApproval(approval, 'FAILED', 'approval_tx_not_found');
+      }
+      return;
+    }
+
+    if (
+      tx.from.toLowerCase() !== approval.walletAddress.toLowerCase() ||
+      !tx.to ||
+      tx.to.toLowerCase() !== approval.tokenAddress.toLowerCase() ||
+      !approval.calldata ||
+      tx.input.toLowerCase() !== approval.calldata.toLowerCase()
+    ) {
+      await this.markApproval(approval, 'FAILED', 'approval_tx_mismatch');
+      return;
+    }
+
+    const receipt = await this.rpc.getTransactionReceipt(txHash);
+
+    if (!receipt) return;
+
+    if (!receipt.status) {
+      await this.markApproval(approval, 'FAILED', 'approval_receipt_failed', receipt.blockNumber);
+      return;
+    }
+
+    if (latestBlock - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS) return;
+
+    await this.markApproval(approval, 'CONFIRMED', null, receipt.blockNumber);
+  }
+
+  private async markApproval(
+    approval: typeof tokenApprovals.$inferSelect,
+    status: 'CONFIRMED' | 'FAILED',
+    reason: string | null,
+    blockNumber?: number,
+  ): Promise<void> {
+    await this.db.transaction(async (dbtx) => {
+      const [row] = await dbtx
+        .update(tokenApprovals)
+        .set({
+          status,
+          blockNumber: blockNumber ?? approval.blockNumber,
+          confirmedAt: status === 'CONFIRMED' ? new Date() : null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(tokenApprovals.id, approval.id),
+            eq(tokenApprovals.userId, approval.userId),
+            eq(tokenApprovals.status, 'SUBMITTED'),
+          ),
+        )
+        .returning({ id: tokenApprovals.id });
+
+      if (!row) return;
+
+      await dbtx.insert(swapEvents).values({
+        orderId: approval.orderId,
+        type: status === 'CONFIRMED' ? 'approval_confirmed' : 'approval_failed',
+        payload: { approvalId: approval.id, txHash: approval.txHash, reason, blockNumber },
+      });
+
+      await this.audit.log(
+        {
+          userId: approval.userId,
+          action: `swap.approval_${status.toLowerCase()}`,
+          entityType: 'token_approval',
+          entityId: approval.id,
+          after: { status, txHash: approval.txHash, reason, blockNumber: blockNumber ?? null },
+        },
+        { executor: dbtx, strict: true },
+      );
+    });
   }
 
   private async safeAccount(order: SwapOrder): Promise<void> {

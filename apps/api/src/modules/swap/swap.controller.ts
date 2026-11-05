@@ -82,6 +82,45 @@ export class SwapController {
     });
   }
 
+  @Post('orders/:id/ready')
+  @HttpCode(HttpStatus.OK)
+  ready(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SwapBuildResponse> {
+    return this.swaps.ready(auth, id, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Post('orders/:id/signing')
+  @HttpCode(HttpStatus.OK)
+  signing(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SwapOrderDetail> {
+    return this.swaps.signing(auth, id, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Post('orders/:id/signing/cancel')
+  @HttpCode(HttpStatus.OK)
+  cancelSigning(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SwapOrderDetail> {
+    return this.swaps.cancelSigning(auth, id, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
   @Post('orders/:id/submitted')
   @HttpCode(HttpStatus.OK)
   submit(
