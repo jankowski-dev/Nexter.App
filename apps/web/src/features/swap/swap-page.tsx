@@ -9,8 +9,10 @@ import {
   ApiError,
   buildSwap,
   buildSwapApproval,
+  cancelSwapSigning,
   fetchSwapConfig,
   fetchSwapOrder,
+  markSwapSigning,
   quoteSwap,
   readySwap,
   stepUp,
@@ -145,6 +147,10 @@ export function SwapPage() {
       setApprovalData(result);
       setApprovalConfirmed(false);
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'SWAP_APPROVAL_NOT_REQUIRED') {
+        await runReady();
+        return;
+      }
       retryWithStepUp(error, () => void runApprovalBuild(), 'Не удалось подготовить approval');
     } finally {
       setExecutionBusy(false);
@@ -172,8 +178,30 @@ export function SwapPage() {
     }
   }
 
+  function canSignFor(expectedWallet: string | null | undefined): boolean {
+    if (!wallet.address || !expectedWallet) {
+      setExecutionError('Кошелёк не подключён к сборке. Переподключите Tangem.');
+      return false;
+    }
+
+    if (wallet.address.toLowerCase() !== expectedWallet.toLowerCase()) {
+      setExecutionError(
+        'Подключённый кошелёк не совпадает с адресом сборки. Переподключите нужный кошелёк.',
+      );
+      return false;
+    }
+
+    if (buildData?.deadline && Date.now() / 1000 >= buildData.deadline) {
+      setExecutionError('Срок действия сборки истёк. Запросите новую котировку.');
+      return false;
+    }
+
+    return true;
+  }
+
   async function signApproval(): Promise<void> {
     if (!approvalData || !quote.data) return;
+    if (!canSignFor(approvalData.approval.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
 
@@ -211,8 +239,17 @@ export function SwapPage() {
 
   async function signSwap(): Promise<void> {
     if (!buildData?.routerAddress || !buildData.calldata || !quote.data) return;
+    if (!canSignFor(buildData.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
+
+    try {
+      await markSwapSigning(quote.data.id);
+    } catch (error) {
+      setExecutionBusy(false);
+      retryWithStepUp(error, () => void signSwap(), 'Не удалось перевести сборку в статус подписи');
+      return;
+    }
 
     try {
       const hash = await wallet.sendTransaction({
@@ -223,6 +260,11 @@ export function SwapPage() {
       setSwapTxHash(hash);
       await submitSignedSwap(hash);
     } catch (error) {
+      try {
+        await cancelSwapSigning(quote.data.id);
+      } catch {
+        // Leave the order in AWAITING_SIGNATURE; it can be re-checked via ready.
+      }
       setExecutionError(toRussianError(error, 'Не удалось подписать своп в Tangem'));
     } finally {
       setExecutionBusy(false);
@@ -293,13 +335,14 @@ export function SwapPage() {
   const chain = data.chains[0];
   const executionReady =
     buildData?.status === 'READY' || (buildData?.status === 'BUILT' && !buildData.approvalRequired);
+  const deadlineExpired = Boolean(buildData?.deadline && Date.now() / 1000 >= buildData.deadline);
   const executionOrder = liveOrder.data ?? buildData ?? quote.data;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Своп"
-        subtitle="Phase 8: котировки KyberSwap на BSC и подключение Tangem. Подпись и отправка включатся после allowlist/full calldata review."
+        subtitle="Phase 8: котировки KyberSwap, проверка сборки и точный approval на BSC. Подпись Tangem включается после финального review."
         actions={
           <Badge tone={data.enabled ? 'success' : 'warning'}>
             {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
@@ -620,7 +663,7 @@ export function SwapPage() {
               Подготовить approval
             </Button>
           ) : null}
-          {approvalConfirmed && buildData?.status === 'APPROVAL_REQUIRED' ? (
+          {buildData?.status === 'APPROVAL_REQUIRED' ? (
             <Button variant="secondary" onClick={() => void runReady()} disabled={executionBusy}>
               Проверить готовность
             </Button>
@@ -628,7 +671,13 @@ export function SwapPage() {
           {executionReady && !swapTxHash ? (
             <Button
               onClick={() => void signSwap()}
-              disabled={executionBusy || !wallet.connected || !data.executionEnabled}
+              disabled={
+                executionBusy ||
+                !wallet.connected ||
+                !data.enabled ||
+                !data.executionEnabled ||
+                deadlineExpired
+              }
             >
               {executionBusy ? 'Подписываю…' : 'Подписать своп в Tangem'}
             </Button>
@@ -652,6 +701,19 @@ export function SwapPage() {
           </p>
         ) : null}
         {executionError ? <p className="mt-3 text-sm text-red-700">{executionError}</p> : null}
+        {swapTxHash ? (
+          <p className="mt-3 break-all text-xs text-zinc-600">
+            Подписанный hash:{' '}
+            <a
+              className="text-emerald-700 underline"
+              href={`https://bscscan.com/tx/${swapTxHash}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {swapTxHash}
+            </a>
+          </p>
+        ) : null}
 
         {buildData ? (
           <div className="mt-4 space-y-3 text-sm">
@@ -682,6 +744,12 @@ export function SwapPage() {
                   {buildData.allowance ?? 'native'}
                 </div>
               </div>
+              <div className="rounded-md border border-zinc-200 p-2 md:col-span-2">
+                <div className="text-xs text-zinc-500">Получатель</div>
+                <div className="break-all font-mono text-xs text-zinc-700">
+                  {buildData.walletAddress ?? '—'}
+                </div>
+              </div>
             </div>
 
             <div className="max-h-40 overflow-auto rounded-md border border-zinc-200 bg-zinc-50 p-2 font-mono text-xs text-zinc-600">
@@ -695,9 +763,12 @@ export function SwapPage() {
 
             {approvalData ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-                <div className="font-medium text-amber-800">
-                  Approval {approvalData.approval.tokenAddress.slice(0, 8)}… →{' '}
-                  {approvalData.approval.spenderAddress.slice(0, 8)}…
+                <div className="font-medium text-amber-800">Approval токена</div>
+                <div className="mt-1 break-all font-mono text-xs text-amber-700">
+                  token: {approvalData.approval.tokenAddress}
+                </div>
+                <div className="break-all font-mono text-xs text-amber-700">
+                  spender: {approvalData.approval.spenderAddress}
                 </div>
                 <div className="mt-1 font-mono text-xs text-amber-700">
                   amountWei: {approvalData.approval.amountWei}
@@ -722,7 +793,13 @@ export function SwapPage() {
                   <Button
                     className="mt-2"
                     onClick={() => void signApproval()}
-                    disabled={executionBusy || !wallet.connected || !data.executionEnabled}
+                    disabled={
+                      executionBusy ||
+                      !wallet.connected ||
+                      !data.enabled ||
+                      !data.executionEnabled ||
+                      deadlineExpired
+                    }
                   >
                     {executionBusy ? 'Подписываю approval…' : 'Подписать approval в Tangem'}
                   </Button>
@@ -730,7 +807,11 @@ export function SwapPage() {
               </div>
             ) : null}
 
-            {executionReady ? (
+            {deadlineExpired ? (
+              <p className="text-xs text-amber-700">
+                Сборка истекла. Запросите новую котировку, чтобы подписать.
+              </p>
+            ) : executionReady ? (
               <p className="text-xs text-emerald-700">
                 Сборка проверена. Можно подписывать swap-транзакцию в Tangem.
               </p>
@@ -772,8 +853,9 @@ export function SwapPage() {
         <CardTitle>Ограничения Phase 8</CardTitle>
         <CardDescription>
           BSC и подключение Tangem через WalletConnect уже доступны. Tracking и учёт подтверждённых
-          свопов работают; подпись, approvals и отправка включатся после execution UI. Kill switch
-          отключает новые котировки, чтение существующих ордеров остаётся доступным.
+          свопов работают; подпись включается через `SWAP_EXECUTION_ENABLED` после финального
+          review. Kill switch отключает новые котировки, чтение существующих ордеров остаётся
+          доступным.
         </CardDescription>
       </Card>
 

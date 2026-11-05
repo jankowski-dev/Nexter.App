@@ -180,12 +180,21 @@ export class ApprovalService {
     }
 
     const calldata = `0x095ea7b3${padAddress(spender)}${padUint(amountWei)}`;
-    const simulation = await this.rpc.simulate({
-      from: order.walletAddress,
-      to: token.address,
-      data: calldata,
-      value: '0',
-    });
+    let simulation;
+
+    try {
+      simulation = await this.rpc.simulate({
+        from: order.walletAddress,
+        to: token.address,
+        data: calldata,
+        value: '0',
+      });
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
 
     if (!simulation.success) {
       throw new BadRequestException({

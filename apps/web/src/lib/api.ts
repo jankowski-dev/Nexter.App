@@ -433,6 +433,14 @@ export async function readySwap(orderId: string): Promise<SwapBuildResponse> {
   return apiPost(`/api/v1/swap/orders/${orderId}/ready`, {}, swapBuildResponseSchema);
 }
 
+export async function markSwapSigning(orderId: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/signing`, {}, swapOrderDetailSchema);
+}
+
+export async function cancelSwapSigning(orderId: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/signing/cancel`, {}, swapOrderDetailSchema);
+}
+
 export async function submitSwap(orderId: string, txHash: string): Promise<SwapOrderDetail> {
   return apiPost(`/api/v1/swap/orders/${orderId}/submitted`, { txHash }, swapOrderDetailSchema);
 }

@@ -176,7 +176,7 @@ export class SwapService {
         enabled &&
         allowlist.length > 0 &&
         selectors.some((item) => KYBER_SUPPORTED_SELECTORS.includes(item)),
-      executionEnabled: env.SWAP_EXECUTION_ENABLED,
+      executionEnabled: env.SWAP_EXECUTION_ENABLED && enabled,
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
       chains: SWAP_CHAINS,
@@ -605,11 +605,11 @@ export class SwapService {
     }
 
     if (BigInt(balance) < BigInt(quotedAmountIn)) {
-      await fail(
-        'balance',
-        'SWAP_INSUFFICIENT_BALANCE',
-        'Wallet balance is below the input amount',
-      );
+      await this.recordBuildFailure(order, 'SWAP_INSUFFICIENT_BALANCE', meta);
+      throw new BadRequestException({
+        code: 'SWAP_INSUFFICIENT_BALANCE',
+        message: 'Wallet balance is below the input amount',
+      });
     }
     pass('balance');
 
@@ -796,7 +796,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['APPROVAL_REQUIRED', 'BUILT', 'READY'].includes(order.status)) {
+    if (!['APPROVAL_REQUIRED', 'BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -927,7 +927,12 @@ export class SwapService {
           and(
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, ['APPROVAL_REQUIRED', 'BUILT', 'READY']),
+            inArray(swapOrders.status, [
+              'APPROVAL_REQUIRED',
+              'BUILT',
+              'READY',
+              'AWAITING_SIGNATURE',
+            ]),
             gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
           ),
         )
@@ -977,6 +982,149 @@ export class SwapService {
     };
   }
 
+  async signing(auth: AuthContext, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    this.assertExecutionEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (!['BUILT', 'READY'].includes(order.status)) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    assertStepUp(auth, order);
+    this.assertWallet(order.walletAddress ?? undefined, true);
+
+    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_ROUTER_NOT_ALLOWED',
+        message: 'Router is not in the allowlist',
+      });
+    }
+
+    if (!order.deadline || order.deadline <= Math.floor(Date.now() / 1000)) {
+      throw new ConflictException({
+        code: 'SWAP_DEADLINE_PASSED',
+        message: 'Swap deadline has passed',
+      });
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({ status: 'AWAITING_SIGNATURE', updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, ['BUILT', 'READY']),
+            gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return null;
+
+      await tx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'signing',
+        payload: { walletAddress: order.walletAddress },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_signing',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status: 'AWAITING_SIGNATURE' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return row;
+    });
+
+    if (!updated) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order is already being signed or no longer ready',
+      });
+    }
+
+    return this.detail(userId, orderId, []);
+  }
+
+  async cancelSigning(
+    auth: AuthContext,
+    orderId: string,
+    meta: SwapMeta,
+  ): Promise<SwapOrderDetail> {
+    this.assertEnabled();
+    const userId = auth.user.id;
+    const order = await this.requireOrder(userId, orderId);
+
+    if (order.status !== 'AWAITING_SIGNATURE') {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: `Swap order is ${order.status}`,
+      });
+    }
+
+    const updated = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(swapOrders)
+        .set({ status: 'READY', updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            eq(swapOrders.status, 'AWAITING_SIGNATURE'),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!row) return null;
+
+      await tx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'signing_cancelled',
+        payload: {},
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_signing_cancelled',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: 'AWAITING_SIGNATURE' },
+          after: { status: 'READY' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return row;
+    });
+
+    if (!updated) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order is no longer awaiting signature',
+      });
+    }
+
+    return this.detail(userId, orderId, []);
+  }
+
   async submit(
     auth: AuthContext,
     orderId: string,
@@ -988,7 +1136,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (order.status !== 'BUILT' && order.status !== 'READY') {
+    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -1030,7 +1178,7 @@ export class SwapService {
             and(
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
-              inArray(swapOrders.status, ['BUILT', 'READY']),
+              inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE']),
               gt(swapOrders.deadline, now),
             ),
           )
@@ -1068,7 +1216,7 @@ export class SwapService {
             action: 'swap.order_submitted',
             entityType: 'swap_order',
             entityId: orderId,
-            before: { status: 'BUILT' },
+            before: { status: order.status },
             after: { status: 'SUBMITTED', txHash },
             ip: meta.ip,
             userAgent: meta.userAgent,
@@ -1097,7 +1245,7 @@ export class SwapService {
   async cancel(userId: string, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['QUOTED', 'BUILT'].includes(order.status)) {
+    if (!['QUOTED', 'BUILT', 'APPROVAL_REQUIRED', 'READY'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -1112,7 +1260,7 @@ export class SwapService {
           and(
             eq(swapOrders.id, orderId),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, ['QUOTED', 'BUILT']),
+            inArray(swapOrders.status, ['QUOTED', 'BUILT', 'APPROVAL_REQUIRED', 'READY']),
           ),
         )
         .returning({ id: swapOrders.id });

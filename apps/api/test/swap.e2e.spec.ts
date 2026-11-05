@@ -755,6 +755,12 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       approvalRequired: false,
     });
 
+    const signing = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(signing.body.status).toBe('AWAITING_SIGNATURE');
+
     env.SWAP_WALLET_ALLOWLIST = '';
     await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)
@@ -807,6 +813,37 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quoteAmountInUsd = null;
     quoteAmountOutUsd = null;
     await quote().expect(400);
+  }, 60_000);
+
+  it('blocks submission while execution is disabled', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    env.SWAP_EXECUTION_ENABLED = false;
+    const disabled = await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'f'.repeat(64)}` })
+      .expect(503);
+    expect(disabled.body.error.code).toBe('SWAP_EXECUTION_DISABLED');
+
+    env.SWAP_EXECUTION_ENABLED = true;
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'f'.repeat(64)}` })
+      .expect(200);
   }, 60_000);
 
   it('tracks a confirmed swap and writes idempotent accounting', async () => {

@@ -148,6 +148,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       const safe = safeErrorForTelemetry(exception);
       const expected = new Set([
         'SWAP_DISABLED',
+        'SWAP_EXECUTION_DISABLED',
         'SWAP_PROVIDER_UNAVAILABLE',
         'SWAP_QUOTE_FAILED',
         'SWAP_BUILD_FAILED',

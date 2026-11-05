@@ -1,6 +1,6 @@
 # Swap Execution Runbook (Phase 8)
 
-Phase 8 currently provides WalletConnect connection, quotes, router-level calldata verification, and exact approval build/submission. The server never signs, broadcasts, or stores private keys/seed phrases. There is no execution UI yet.
+Phase 8 provides WalletConnect connection, quotes, router-level calldata verification, exact approval build/submission, an execution UI, and tracking/accounting. The server never signs, broadcasts, or stores private keys/seed phrases. Signing is gated by `SWAP_EXECUTION_ENABLED`.
 
 ## Enable quotes
 
@@ -21,12 +21,12 @@ Phase 8 currently provides WalletConnect connection, quotes, router-level callda
 
 ## Kill switch
 
-Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New quotes/builds return `SWAP_DISABLED`; existing orders remain readable and can be cancelled. Do not delete orders or edit events.
+Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New quotes/builds return `SWAP_DISABLED`; existing orders remain readable; `QUOTED`, `BUILT`, `APPROVAL_REQUIRED`, and `READY` orders can be cancelled, while an in-flight signature uses `signing/cancel`. Do not delete orders or edit events.
 
 ## Provider outage / rate limit
 
 - `429` and `5xx` are retried twice. A 429 maps to `SWAP_RATE_LIMITED`; network/provider exhaustion maps to `SWAP_PROVIDER_UNAVAILABLE`; other provider failures map to `SWAP_QUOTE_FAILED`/`SWAP_BUILD_FAILED`.
-- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s) and no signing UI exists yet, so the server cannot move funds.
+- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s); `SWAP_EXECUTION_ENABLED` can also be disabled to hide signing, and submit is blocked server-side.
 - Check `external_api_calls` for status/latency; it contains no secrets or response bodies.
 
 ## Key rotation
@@ -50,7 +50,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
 - Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is hidden until `SWAP_EXECUTION_ENABLED=true`.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
-- A first-time ERC-20 swap with zero allowance currently fails simulation before approval build; the execution slice must add the allowance/`APPROVAL_REQUIRED` gate before signing is enabled.
+- A first-time ERC-20 swap with zero allowance enters `APPROVAL_REQUIRED`; after the exact approval, `POST /swap/orders/:id/ready` re-checks and moves it to `READY`.
 - Confirmed-swap accounting requires the wallet's input token and BNB gas balance to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.
 - Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by the actual `Swapped` amounts.
 - Tracking starts whenever `BSC_RPC_URL` is configured, even if `SWAP_ENABLED=false`, so in-flight transactions continue to confirm and account during a rollback.
