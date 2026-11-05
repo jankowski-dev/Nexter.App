@@ -142,7 +142,7 @@ Before enabling quotes:
 4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `ETHEREUM_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
 5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
-Builds remain disabled until a selector allowlist is configured. Phase 8 has an execution UI; the server never signs or broadcasts. Keep a single API replica while tracking runs in-process.
+Builds remain disabled until a selector allowlist is configured. Phase 9 has an execution UI; the server never signs or broadcasts. The tracker uses a Postgres advisory lock, so multiple API replicas are safe.
 
 ### Phase 5 migration 0008 preflight
 

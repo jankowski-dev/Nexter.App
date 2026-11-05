@@ -1152,6 +1152,66 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_EXECUTION_ENABLED = true;
   }, 60_000);
 
+  it('uses a Postgres advisory lock so only one tracker replica ticks', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'9'.repeat(63)}8`;
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'8'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 114;
+
+    const lockClient = await pool.connect();
+    try {
+      await lockClient.query("select pg_advisory_lock('5712345678901234'::bigint)");
+      await tracking.tick();
+      const [held] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+      expect(held.status).toBe('SUBMITTED');
+      expect(held.confirmations).toBe(0);
+    } finally {
+      await lockClient.query("select pg_advisory_unlock('5712345678901234'::bigint)");
+      lockClient.release();
+    }
+
+    await tracking.tick();
+    const [confirmed] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(confirmed.status).toBe('CONFIRMED');
+  }, 60_000);
+
   it('tracks a confirmed swap and writes idempotent accounting', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
