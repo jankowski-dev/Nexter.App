@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AccountingModule } from '../accounting/accounting.module';
 import { ApprovalService } from './approval.service';
-import { BscRpcService } from './bsc-rpc.service';
+import { EvmRpcService } from './evm-rpc.service';
 import { ExternalApiCallService } from './external-api-call.service';
 import { KyberSwapClient } from './kyber-swap.client';
 import { SwapController } from './swap.controller';
@@ -22,8 +22,8 @@ import { SwapTrackingService } from './swap-tracking.service';
       inject: [ExternalApiCallService],
     },
     {
-      provide: BscRpcService,
-      useFactory: () => new BscRpcService(),
+      provide: EvmRpcService,
+      useFactory: () => new EvmRpcService(),
     },
   ],
 })

@@ -27,7 +27,8 @@
     "backup": "pnpm build:packages && pnpm --filter @nexter/db backup",
     "backup:selftest": "pnpm --filter @nexter/db backup:selftest",
     "db:provision-app": "pnpm --filter @nexter/db db:provision-app",
-    "swap:live-check": "node scripts/swap-live-check.mjs"
+    "swap:live-check": "node scripts/swap-live-check.mjs bsc",
+    "swap:live-check:eth": "node scripts/swap-live-check.mjs ethereum"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -17,14 +17,14 @@ const messages: Record<string, string> = {
   SWAP_STEP_UP_REQUIRED: 'Для этой суммы нужен свежий код TOTP.',
   SWAP_APPROVAL_REQUIRED: 'Сначала подтвердите approval токена в кошельке.',
   SWAP_INSUFFICIENT_BALANCE: 'На кошельке недостаточно токенов для этой суммы.',
-  SWAP_INSUFFICIENT_GAS_BALANCE: 'На кошельке недостаточно BNB для газа.',
+  SWAP_INSUFFICIENT_GAS_BALANCE: 'На кошельке недостаточно нативной монеты (BNB/ETH) для газа.',
   SWAP_DEADLINE_PASSED: 'Срок действия сборки истёк. Запросите новую котировку.',
-  SWAP_EXECUTION_DISABLED: 'Исполнение выключено на сервере до финального review.',
+  SWAP_EXECUTION_DISABLED: 'Исполнение для этой сети выключено на сервере.',
   SWAP_SIMULATION_FAILED: 'Симуляция не прошла. Обновите котировку и попробуйте снова.',
   SWAP_GAS_TOO_HIGH:
     'Стоимость газа выше настроенного лимита. Попробуйте позже или измените сумму.',
   SWAP_GAS_MISSING: 'Провайдер не вернул стоимость газа. Обновите котировку.',
-  SWAP_PROVIDER_UNAVAILABLE: 'BSC RPC или провайдер временно недоступен.',
+  SWAP_PROVIDER_UNAVAILABLE: 'RPC или провайдер временно недоступен.',
   SWAP_RATE_LIMITED: 'Слишком много запросов к провайдеру. Попробуйте позже.',
   SWAP_DISABLED: 'Свопы временно отключены.',
   SWAP_STATE_INVALID: 'Состояние ордера изменилось. Запросите новую котировку.',
@@ -66,7 +66,7 @@ const reasonMessages: Record<string, string> = {
   SWAP_GAS_TOO_HIGH: 'Стоимость газа выше настроенного лимита.',
   SWAP_GAS_MISSING: 'Провайдер не вернул стоимость газа.',
   SWAP_INSUFFICIENT_BALANCE: 'На кошельке недостаточно токенов для этой суммы.',
-  SWAP_INSUFFICIENT_GAS_BALANCE: 'На кошельке недостаточно BNB для газа.',
+  SWAP_INSUFFICIENT_GAS_BALANCE: 'На кошельке недостаточно нативной монеты (BNB/ETH) для газа.',
 };
 
 function reasonFrom(error: ApiError): string | undefined {

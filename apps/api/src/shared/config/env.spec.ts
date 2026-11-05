@@ -59,6 +59,21 @@ describe('parseEnv', () => {
     expect(parseEnv(productionEnv()).DATABASE_URL).toBe('postgres://db');
   });
 
+  it('parses per-chain swap settings and empty confirmation overrides', () => {
+    const parsed = parseEnv({
+      NODE_ENV: 'test',
+      ETHEREUM_RPC_URL: 'https://ethereum.example',
+      SWAP_ETHEREUM_EXECUTION_ENABLED: 'true',
+      SWAP_ETHEREUM_CONFIRMATIONS: '',
+      SWAP_BSC_CONFIRMATIONS: '',
+    });
+
+    expect(parsed.ETHEREUM_RPC_URL).toBe('https://ethereum.example');
+    expect(parsed.SWAP_ETHEREUM_EXECUTION_ENABLED).toBe(true);
+    expect(parsed.SWAP_ETHEREUM_CONFIRMATIONS).toBe(12);
+    expect(parsed.SWAP_BSC_CONFIRMATIONS).toBeUndefined();
+  });
+
   it('rejects malformed encryption keys', () => {
     expect(() => parseEnv(productionEnv({ AUTH_ENCRYPTION_KEY: 'test-key' }))).toThrow(
       /AUTH_ENCRYPTION_KEY/,

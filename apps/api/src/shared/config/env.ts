@@ -58,6 +58,10 @@ export const envSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
+  SWAP_ETHEREUM_EXECUTION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
   SWAP_KILL_SWITCH: z
     .enum(['true', 'false'])
     .default('false')
@@ -78,18 +82,31 @@ export const envSchema = z.object({
     .refine((value) => Number(value) <= 10_000, 'Gas cap is too large')
     .default('5'),
   SWAP_CONFIRMATIONS: z.coerce.number().int().min(1).max(100).default(15),
+  SWAP_BSC_CONFIRMATIONS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(1).max(100).optional(),
+  ),
+  SWAP_ETHEREUM_CONFIRMATIONS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(1).max(100).default(12),
+  ),
   SWAP_TRACK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   SWAP_DROP_TIMEOUT_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
   SWAP_REPLACEMENT_LOOKBACK_BLOCKS: z.coerce.number().int().min(3).max(1200).default(240),
   SWAP_WALLET_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_BSC_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_ETHEREUM_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_BSC_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_ETHEREUM_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_SELECTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   KYBERSWAP_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   KYBERSWAP_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   KYBERSWAP_CLIENT_ID: z.string().min(1).default('nexter'),
   WALLETCONNECT_PROJECT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   BSC_RPC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
+  ETHEREUM_RPC_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   VERSION: z.string().default('0.1.0'),
 });
 
@@ -140,3 +157,16 @@ export function parseEnv(raw: Record<string, string | undefined>) {
 
 export const env = parseEnv(process.env);
 export type Env = typeof env;
+
+export function confirmationsForChain(chainCode: string): number {
+  return chainCode === 'ethereum'
+    ? env.SWAP_ETHEREUM_CONFIRMATIONS
+    : (env.SWAP_BSC_CONFIRMATIONS ?? env.SWAP_CONFIRMATIONS);
+}
+
+export function executionEnabledForChain(chainCode: string): boolean {
+  if (!env.SWAP_EXECUTION_ENABLED) return false;
+  if (chainCode === 'bsc') return true;
+  if (chainCode === 'ethereum') return env.SWAP_ETHEREUM_EXECUTION_ENABLED;
+  return false;
+}

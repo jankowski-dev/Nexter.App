@@ -33,8 +33,20 @@ function isPositiveDecimal(value: string): boolean {
   return /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0;
 }
 
+function chainIdForCode(code: string): number | null {
+  if (code === 'bsc') return 56;
+  if (code === 'ethereum') return 1;
+  return null;
+}
+
+function explorerForChain(code: string): string {
+  return code === 'ethereum' ? 'https://etherscan.io' : 'https://bscscan.com';
+}
+
 export function SwapPage() {
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
+  const [chainCode, setChainCode] = useState<'bsc' | 'ethereum'>('bsc');
+  const selectedChainId = chainCode === 'ethereum' ? 1 : 56;
   const [tokenIn, setTokenIn] = useState('0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d');
   const [tokenOut, setTokenOut] = useState('0x1d28d989f9e3ccb8b15d0cec601734514f958e4d');
   const [amountIn, setAmountIn] = useState('1');
@@ -50,7 +62,7 @@ export function SwapPage() {
   const quote = useMutation({
     mutationFn: () =>
       quoteSwap({
-        chain: 'bsc',
+        chain: chainCode,
         tokenIn,
         tokenOut,
         amountIn,
@@ -211,12 +223,25 @@ export function SwapPage() {
 
   async function signApproval(): Promise<void> {
     if (!approvalData || !quote.data) return;
+    const approvalChainId = chainIdForCode(approvalData.approval.chain);
+
+    if (
+      approvalData.approval.orderId !== quote.data.id ||
+      approvalData.approval.chain !== quote.data.chain ||
+      approvalChainId === null ||
+      approvalChainId !== selectedChainId
+    ) {
+      setExecutionError('Сеть approval не совпадает с выбранной сетью. Обновите котировку.');
+      return;
+    }
+
     if (!canSignFor(approvalData.approval.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
 
     try {
       const hash = await wallet.sendTransaction({
+        chainId: approvalChainId,
         to: approvalData.to,
         data: approvalData.calldata,
         value: approvalData.value,
@@ -269,6 +294,18 @@ export function SwapPage() {
 
   async function signSwap(): Promise<void> {
     if (!buildData?.routerAddress || !buildData.calldata || !quote.data) return;
+    const orderChainId = chainIdForCode(buildData.chain);
+
+    if (
+      buildData.id !== quote.data.id ||
+      buildData.chain !== quote.data.chain ||
+      orderChainId === null ||
+      orderChainId !== selectedChainId
+    ) {
+      setExecutionError('Сеть сборки не совпадает с выбранной сетью. Обновите котировку.');
+      return;
+    }
+
     if (!canSignFor(buildData.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
@@ -284,6 +321,7 @@ export function SwapPage() {
 
     try {
       const hash = await wallet.sendTransaction({
+        chainId: orderChainId,
         to: buildData.routerAddress,
         data: buildData.calldata,
         value: buildData.transactionValue ?? '0',
@@ -323,7 +361,10 @@ export function SwapPage() {
     }
   }
 
-  const tokens = config.data?.chains[0]?.tokens ?? [];
+  const availableChains = config.data?.chains ?? [];
+  const selectedChain =
+    availableChains.find((item) => item.code === chainCode) ?? availableChains[0];
+  const tokens = selectedChain?.tokens ?? [];
   const selectedIn = tokens.find((token) => token.address.toLowerCase() === tokenIn.toLowerCase());
   const selectedOut = tokens.find(
     (token) => token.address.toLowerCase() === tokenOut.toLowerCase(),
@@ -348,6 +389,27 @@ export function SwapPage() {
     walletAddress,
   ]);
 
+  function selectChain(nextCode: 'bsc' | 'ethereum'): void {
+    const next = config.data?.chains.find((item) => item.code === nextCode);
+    const nextTokens = next?.tokens ?? [];
+    const nextIn = nextTokens.find((token) => !token.native) ?? nextTokens[0];
+    const nextOut =
+      nextTokens.find(
+        (token) => !token.native && token.address.toLowerCase() !== nextIn?.address.toLowerCase(),
+      ) ?? nextTokens[0];
+
+    setChainCode(nextCode);
+    setTokenIn(nextIn?.address ?? '');
+    setTokenOut(nextOut?.address ?? '');
+    quote.reset();
+    setBuildData(null);
+    setApprovalData(null);
+    setApprovalConfirmed(false);
+    setApprovalTxHash(null);
+    setSwapTxHash(null);
+    setExecutionError(null);
+  }
+
   if (config.isPending) {
     return (
       <div className="space-y-6">
@@ -370,7 +432,9 @@ export function SwapPage() {
   }
 
   const data = config.data;
-  const chain = data.chains[0];
+  const chain = selectedChain ?? data.chains[0];
+  const chainExecutionEnabled = chain.executionEnabled;
+  const chainBuildEnabled = data.buildEnabled && chain.rpcConfigured;
   const executionReady = buildData?.status === 'READY';
   const deadlineExpired = Boolean(buildData?.deadline && Date.now() / 1000 >= buildData.deadline);
   const executionOrder = liveOrder.data ?? buildData ?? quote.data;
@@ -379,7 +443,7 @@ export function SwapPage() {
     <div className="space-y-6">
       <PageHeader
         title="Своп"
-        subtitle="Phase 8: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC."
+        subtitle="Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum."
         actions={
           <Badge tone={data.enabled ? 'success' : 'warning'}>
             {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
@@ -403,20 +467,25 @@ export function SwapPage() {
           <div>
             <CardTitle>Кошелёк Tangem</CardTitle>
             <CardDescription>
-              WalletConnect v2 · BSC only. Приватные ключи и seed-фраза не передаются серверу.
+              WalletConnect v2 · BSC и Ethereum. Приватные ключи и seed-фраза не передаются серверу.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
             {wallet.connected ? (
-              <Badge tone={wallet.onBsc ? 'success' : 'warning'}>
-                {wallet.onBsc ? 'BSC' : `chain ${wallet.chainId ?? '—'}`}
+              <Badge tone={wallet.onChain(chain.chainId) ? 'success' : 'warning'}>
+                {wallet.onChain(chain.chainId)
+                  ? chain.code.toUpperCase()
+                  : `chain ${wallet.chainId ?? '—'}`}
               </Badge>
             ) : null}
             {wallet.connected ? (
               <>
-                {!wallet.onBsc ? (
-                  <Button variant="secondary" onClick={() => void wallet.switchToBsc()}>
-                    Переключить на BSC
+                {!wallet.onChain(chain.chainId) ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => void wallet.switchToChain(chain.chainId)}
+                  >
+                    Переключить на {chain.name}
                   </Button>
                 ) : null}
                 <Button variant="ghost" onClick={() => void wallet.disconnect()}>
@@ -443,10 +512,10 @@ export function SwapPage() {
             WalletConnect Project ID не настроен на сервере.
           </p>
         ) : null}
-        {!data.buildEnabled ? (
-          <p className="mt-2 text-sm text-zinc-500">
-            Подпись и отправка выключены до завершения allowlist/full calldata review. Сейчас
-            доступна только котировка.
+        {!chainBuildEnabled ? (
+          <p className="mt-2 text-sm text-amber-700">
+            Для сети {chain.name} не настроен RPC или сборка выключена. Котировка доступна, но
+            собрать и подписать транзакцию нельзя.
           </p>
         ) : null}
       </Card>
@@ -456,11 +525,28 @@ export function SwapPage() {
           <CardTitle>Параметры котировки</CardTitle>
           <CardDescription>
             {chain
-              ? `${chain.name} · chainId ${chain.chainId} · провайдер ${data.providerConfigured ? data.providerMode : 'не настроен'}`
+              ? `${chain.name} · chainId ${chain.chainId} · RPC ${chain.rpcConfigured ? 'настроен' : 'не настроен'} · исполнение ${chain.executionEnabled ? 'включено' : 'выключено'}`
               : 'Сеть не настроена'}
           </CardDescription>
 
           <div className="mt-4 grid gap-3">
+            <label className="block text-sm text-zinc-600">
+              Сеть
+              <Select
+                className="mt-1"
+                value={chainCode}
+                onChange={(event) => selectChain(event.target.value as 'bsc' | 'ethereum')}
+                disabled={executionBusy || quote.isPending}
+                aria-label="Сеть свопа"
+              >
+                {data.chains.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+
             <label className="block text-sm text-zinc-600">
               Отдаю
               <div className="mt-1 grid grid-cols-[1fr_120px] gap-2">
@@ -551,7 +637,7 @@ export function SwapPage() {
             <Button
               className="mt-2"
               onClick={() => quote.mutate()}
-              disabled={!canQuote || quote.isPending}
+              disabled={!canQuote || quote.isPending || executionBusy}
             >
               {quote.isPending ? 'Запрашиваю котировку…' : 'Получить котировку'}
             </Button>
@@ -568,7 +654,7 @@ export function SwapPage() {
           <CardTitle>Результат</CardTitle>
           <CardDescription>
             Маршрут и суммы приходят от KyberSwap. Сборка доступна через API; подпись и отправка —
-            Phase 8.
+            Phase 9.
           </CardDescription>
 
           {quote.data ? (
@@ -689,7 +775,7 @@ export function SwapPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             onClick={() => void runBuild()}
-            disabled={!quote.data || !walletAddress || !data.buildEnabled || executionBusy}
+            disabled={!quote.data || !walletAddress || !chainBuildEnabled || executionBusy}
           >
             {executionBusy && !buildData ? 'Проверяю сборку…' : 'Проверить сборку'}
           </Button>
@@ -715,7 +801,7 @@ export function SwapPage() {
                 executionBusy ||
                 !wallet.connected ||
                 !data.enabled ||
-                !data.executionEnabled ||
+                !chainExecutionEnabled ||
                 deadlineExpired
               }
             >
@@ -743,10 +829,10 @@ export function SwapPage() {
           ) : null}
         </div>
 
-        {!data.executionEnabled ? (
+        {!chainExecutionEnabled ? (
           <p className="mt-3 text-sm text-amber-700">
-            Исполнение выключено до финального security review. Сборку и approval можно подготовить,
-            но подпись в Tangem недоступна.
+            Исполнение для сети {chain.name} выключено. Сборку и approval можно подготовить, но
+            подпись в Tangem недоступна до отдельного включения и live acceptance.
           </p>
         ) : null}
         {executionError ? <p className="mt-3 text-sm text-red-700">{executionError}</p> : null}
@@ -755,7 +841,7 @@ export function SwapPage() {
             Подписанный hash:{' '}
             <a
               className="text-emerald-700 underline"
-              href={`https://bscscan.com/tx/${swapTxHash}`}
+              href={`${explorerForChain(buildData?.chain ?? quote.data?.chain ?? chain.code)}/tx/${swapTxHash}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -861,7 +947,7 @@ export function SwapPage() {
                       executionBusy ||
                       !wallet.connected ||
                       !data.enabled ||
-                      !data.executionEnabled ||
+                      !chainExecutionEnabled ||
                       deadlineExpired
                     }
                   >
@@ -890,7 +976,7 @@ export function SwapPage() {
                     · tx{' '}
                     <a
                       className="break-all text-emerald-700 underline"
-                      href={`https://bscscan.com/tx/${executionOrder.txHash}`}
+                      href={`${explorerForChain(executionOrder.chain)}/tx/${executionOrder.txHash}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -978,7 +1064,7 @@ export function SwapPage() {
                   {order.txHash ? (
                     <a
                       className="break-all text-emerald-700 underline"
-                      href={`https://bscscan.com/tx/${order.txHash}`}
+                      href={`${explorerForChain(order.chain)}/tx/${order.txHash}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -999,12 +1085,12 @@ export function SwapPage() {
       </Card>
 
       <Card>
-        <CardTitle>Ограничения Phase 8</CardTitle>
+        <CardTitle>Ограничения Phase 9</CardTitle>
         <CardDescription>
-          BSC и подключение Tangem через WalletConnect уже доступны. Tracking и учёт подтверждённых
-          свопов работают; подпись включается через `SWAP_EXECUTION_ENABLED` после финального
-          review. Kill switch отключает новые котировки, чтение существующих ордеров остаётся
-          доступным.
+          BSC и Ethereum и подключение Tangem через WalletConnect доступны. Tracking и учёт
+          подтверждённых свопов работают; BSC-подпись включается через `SWAP_EXECUTION_ENABLED`,
+          Ethereum дополнительно требует `SWAP_ETHEREUM_EXECUTION_ENABLED` после live acceptance.
+          Kill switch отключает новые котировки, чтение существующих ордеров остаётся доступным.
         </CardDescription>
       </Card>
 

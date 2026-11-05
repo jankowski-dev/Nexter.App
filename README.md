@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 8 — Swap execution (accepted 2026-11-05); Phase 8.x hardening implemented**. Live small BSC swap completed; gas preflight, ready calldata re-decode, and speed-up replacement adoption are in place. Execution is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
+Current phase: **Phase 9 — Ethereum execution (implementation complete; live acceptance pending)**. Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC swap completed; Ethereum chain config, per-chain RPC/confirmations, chain-aware UI, and mocked/API verification are in place. Ethereum signing stays behind `SWAP_ETHEREUM_EXECUTION_ENABLED` until live acceptance.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 

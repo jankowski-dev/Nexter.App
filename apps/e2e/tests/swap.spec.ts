@@ -7,6 +7,8 @@ const password = 'correct horse battery staple';
 const wallet = '0x1111111111111111111111111111111111111111';
 const usdc = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const based = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
+const ethereumUsdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+const ethereumLink = '0x514910771af9ca656af840dff83e8264ecf986ca';
 
 test.skip(
   process.env.NEXTER_TEST_DB !== '1',
@@ -55,7 +57,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         providerConfigured: true,
         providerMode: 'gateway',
         walletConnectProjectId: '11111111111111111111111111111111',
-        buildEnabled: false,
+        buildEnabled: true,
         executionEnabled: false,
         rpcConfigured: true,
         walletAllowlistConfigured: true,
@@ -75,6 +77,38 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
                 native: true,
               },
             ],
+            rpcConfigured: true,
+            executionEnabled: false,
+          },
+          {
+            code: 'ethereum',
+            chainId: 1,
+            name: 'Ethereum',
+            tokens: [
+              {
+                symbol: 'USDC',
+                name: 'USD Coin',
+                address: ethereumUsdc,
+                decimals: 6,
+                native: false,
+              },
+              {
+                symbol: 'LINK',
+                name: 'ChainLink Token',
+                address: ethereumLink,
+                decimals: 18,
+                native: false,
+              },
+              {
+                symbol: 'ETH',
+                name: 'Ether',
+                address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+                decimals: 18,
+                native: true,
+              },
+            ],
+            rpcConfigured: true,
+            executionEnabled: false,
           },
         ],
         quoteTtlSeconds: 15,
@@ -145,18 +179,22 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   });
 
   await page.goto('/swap');
-  await expect(page.getByRole('heading', { name: 'Своп' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Своп', exact: true })).toBeVisible();
   await expect(
     page.getByText(
-      'Phase 8: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC.',
+      'Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum.',
     ),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Подключить Tangem' })).toBeVisible();
-  await expect(
-    page.getByText('Подпись и отправка выключены до завершения allowlist/full calldata review.'),
-  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Проверить сборку' })).toBeVisible();
-  await expect(page.getByText('Исполнение выключено до финального security review.')).toBeVisible();
+  await expect(
+    page.getByText('Исполнение для сети BNB Smart Chain выключено.', { exact: false }),
+  ).toBeVisible();
+
+  await page.getByLabel('Сеть свопа').selectOption('ethereum');
+  await expect(page.getByLabel('Токен отдачи')).toHaveValue(ethereumUsdc);
+  await expect(page.getByLabel('Токен получения')).toHaveValue(ethereumLink);
+  await page.getByLabel('Сеть свопа').selectOption('bsc');
 
   await page.getByLabel('Адрес кошелька').fill(wallet);
   await page.getByLabel('Количество токена отдачи').fill('1');
