@@ -796,7 +796,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['APPROVAL_REQUIRED', 'BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
+    if (!['APPROVAL_REQUIRED', 'BUILT', 'READY'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -927,12 +927,7 @@ export class SwapService {
           and(
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, [
-              'APPROVAL_REQUIRED',
-              'BUILT',
-              'READY',
-              'AWAITING_SIGNATURE',
-            ]),
+            inArray(swapOrders.status, ['APPROVAL_REQUIRED', 'BUILT', 'READY']),
             gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
           ),
         )
@@ -1066,7 +1061,6 @@ export class SwapService {
     orderId: string,
     meta: SwapMeta,
   ): Promise<SwapOrderDetail> {
-    this.assertEnabled();
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 

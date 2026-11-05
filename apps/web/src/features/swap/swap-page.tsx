@@ -222,11 +222,31 @@ export function SwapPage() {
     }
   }
 
+  async function cancelSigning(): Promise<void> {
+    if (!quote.data) return;
+    setExecutionError(null);
+
+    try {
+      const result = await cancelSwapSigning(quote.data.id);
+      setBuildData((current) => (current ? { ...current, status: result.status } : current));
+      await liveOrder.refetch();
+    } catch (error) {
+      const refreshed = await liveOrder.refetch();
+      if (refreshed.data) {
+        setBuildData((current) =>
+          current ? { ...current, status: refreshed.data.status } : current,
+        );
+      }
+      setExecutionError(toRussianError(error, 'Не удалось отменить подпись'));
+    }
+  }
+
   async function submitSignedSwap(hash: string): Promise<void> {
     if (!quote.data) return;
 
     try {
-      await submitSwap(quote.data.id, hash);
+      const submitted = await submitSwap(quote.data.id, hash);
+      setBuildData((current) => (current ? { ...current, status: submitted.status } : current));
       await liveOrder.refetch();
     } catch (error) {
       retryWithStepUp(
@@ -245,6 +265,7 @@ export function SwapPage() {
 
     try {
       await markSwapSigning(quote.data.id);
+      setBuildData((current) => (current ? { ...current, status: 'AWAITING_SIGNATURE' } : current));
     } catch (error) {
       setExecutionBusy(false);
       retryWithStepUp(error, () => void signSwap(), 'Не удалось перевести сборку в статус подписи');
@@ -261,9 +282,16 @@ export function SwapPage() {
       await submitSignedSwap(hash);
     } catch (error) {
       try {
-        await cancelSwapSigning(quote.data.id);
+        const cancelled = await cancelSwapSigning(quote.data.id);
+        setBuildData((current) => (current ? { ...current, status: cancelled.status } : current));
+        await liveOrder.refetch();
       } catch {
-        // Leave the order in AWAITING_SIGNATURE; it can be re-checked via ready.
+        const refreshed = await liveOrder.refetch();
+        if (refreshed.data) {
+          setBuildData((current) =>
+            current ? { ...current, status: refreshed.data.status } : current,
+          );
+        }
       }
       setExecutionError(toRussianError(error, 'Не удалось подписать своп в Tangem'));
     } finally {
@@ -668,7 +696,7 @@ export function SwapPage() {
               Проверить готовность
             </Button>
           ) : null}
-          {executionReady && !swapTxHash ? (
+          {executionReady && !swapTxHash && executionOrder?.status !== 'AWAITING_SIGNATURE' ? (
             <Button
               onClick={() => void signSwap()}
               disabled={
@@ -683,13 +711,22 @@ export function SwapPage() {
             </Button>
           ) : null}
           {swapTxHash &&
-          (executionOrder?.status === 'READY' || executionOrder?.status === 'BUILT') ? (
+          (executionOrder?.status === 'READY' ||
+            executionOrder?.status === 'BUILT' ||
+            executionOrder?.status === 'AWAITING_SIGNATURE') ? (
             <Button
               variant="secondary"
               onClick={() => void submitSignedSwap(swapTxHash)}
               disabled={executionBusy}
             >
               Отправить hash повторно
+            </Button>
+          ) : null}
+          {!swapTxHash &&
+          (buildData?.status === 'AWAITING_SIGNATURE' ||
+            executionOrder?.status === 'AWAITING_SIGNATURE') ? (
+            <Button variant="secondary" onClick={() => void cancelSigning()}>
+              Отменить подпись
             </Button>
           ) : null}
         </div>
@@ -781,14 +818,29 @@ export function SwapPage() {
                 {approvalConfirmed ? (
                   <p className="mt-2 text-xs text-emerald-700">Approval подтверждён в сети.</p>
                 ) : approvalTxHash ? (
-                  <Button
-                    className="mt-2"
-                    variant="secondary"
-                    onClick={() => void runReady()}
-                    disabled={executionBusy}
-                  >
-                    Проверить готовность
-                  </Button>
+                  <>
+                    <Button
+                      className="mt-2"
+                      variant="secondary"
+                      onClick={() => void runReady()}
+                      disabled={executionBusy}
+                    >
+                      Проверить готовность
+                    </Button>
+                    <Button
+                      className="mt-2 ml-2"
+                      variant="ghost"
+                      onClick={() => {
+                        setApprovalData(null);
+                        setApprovalTxHash(null);
+                        setApprovalConfirmed(false);
+                        void runApprovalBuild();
+                      }}
+                      disabled={executionBusy}
+                    >
+                      Пересобрать approval
+                    </Button>
+                  </>
                 ) : (
                   <Button
                     className="mt-2"

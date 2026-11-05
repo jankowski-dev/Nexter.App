@@ -85,9 +85,9 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 
 - Build checks the wallet balance and token allowance. Insufficient balance fails closed with `SWAP_INSUFFICIENT_BALANCE`.
 - For an ERC-20 input with insufficient allowance, build stores the validated calldata and enters `APPROVAL_REQUIRED` instead of failing simulation; the response exposes `approvalRequired`, `allowance`, and a null `simulation`.
-- `POST /swap/orders/:id/ready` re-checks balance, allowance, deadline, wallet/router allowlists, step-up and simulation; it moves `APPROVAL_REQUIRED`/`BUILT` to `READY` or returns `SWAP_APPROVAL_REQUIRED`.
-- Submit accepts `BUILT` or `READY`.
-- Signing is browser-side through WalletConnect/Tangem. The UI builds, prepares an exact approval, waits for the approval receipt, calls `ready`, signs the swap, and submits the hash.
+- `POST /swap/orders/:id/ready` re-checks balance, allowance, deadline, wallet/router allowlists, step-up and simulation; it moves `APPROVAL_REQUIRED`/`BUILT` to `READY` or returns `SWAP_APPROVAL_REQUIRED`. It does not clear `AWAITING_SIGNATURE`.
+- Submit accepts `BUILT`, `READY`, or `AWAITING_SIGNATURE`. `POST /signing` sets the short-lived signing lock; `/signing/cancel` releases it without requiring the kill switch.
+- Signing is browser-side through WalletConnect/Tangem. The UI builds, prepares an exact approval, waits for the approval receipt, calls `ready`, marks `AWAITING_SIGNATURE`, signs the swap, and submits the hash. Approval submission is tracked server-side (confirmed/failed/timeout).
 - `SWAP_EXECUTION_ENABLED` (default false) is exposed as `executionEnabled`; the UI hides signing until the owner enables it after review/manual acceptance. Build and approval preparation remain available for verification.
 
 ### Submission and tracking

@@ -46,7 +46,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 
 Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD from the quote could mismatch the actual amount after rounding, leaving USDC-output swaps unaccounted. Fixed by deriving cash-leg USD from actual on-chain amounts; USDC-output regression test added. Final re-review: **PASS** after transactional tracker writes and atomic asset audit.
 
-Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Execution UI review: **PASS WITH CHANGES** — wallet binding, deadline, kill-switch UI, signed-hash visibility, approval tracking, and `AWAITING_SIGNATURE` lease fixes applied; final re-review pending.
+Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Execution UI review: **PASS WITH CHANGES** — wallet binding, deadline, kill-switch UI, signed-hash visibility, approval tracking, and `AWAITING_SIGNATURE` signing lock fixes applied; remaining recovery/test items addressed; final re-review pending.
 
 First slice review: **FAIL** — one High (step-up failed open on missing/numeric USD) and Mediums (approval DELETE privilege, hardcoded threshold, unpersisted deadline, allowlist re-check, unverified tx hashes/uniqueness, test gaps). Fixes applied: fail-closed centralized step-up helper with stored `amount_in_usd`, configurable threshold, deadline persistence, wallet/router re-checks, unique tx/approval indexes, token_approvals DELETE revoke, duplicate-approval handling, and expanded tests. Re-review: **PASS**; merged as `9d57f43`. Unverified tx-hash/correction remains a tracking-slice gate.
 
@@ -68,12 +68,13 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **103 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
+- API suite — **105 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010/0011/0012 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 
 ## Next
 
-1. Final re-review, then enable `SWAP_EXECUTION_ENABLED=true` in Railway.
-2. Run a small live Tangem swap with owner approval and verify tracking/accounting end-to-end.
-3. Phase 8 acceptance; then Ethereum (Phase 9).
+1. Final re-review with the signing lock/approval recovery fixes.
+2. Run a small controlled live Tangem acceptance with a temporary/monitored execution enable; verify build → approval → ready → signing → submit → tracking → accounting, plus rejection/cancel paths.
+3. Only then enable `SWAP_EXECUTION_ENABLED=true` for normal production use.
+4. Phase 8 acceptance; then Ethereum (Phase 9).
