@@ -17,7 +17,7 @@ Status: **implementation in progress; live reconciliation acceptance pending.**
 - Migration `0014` adds `watched_addresses`, `indexed_transfers`, `reconciliation_runs`, and `reconciliation_items`; additive only.
 - `watched_addresses` is unique per `(user, chain, address)`. Addresses can be added explicitly via `POST /reconciliation/addresses` and are idempotently seeded from swap-order wallet addresses during a run.
 - `OnchainIndexerService` scans ERC-20 `Transfer` logs and native transfers for enabled addresses, with a Postgres advisory lock, a configurable lookback, and a bounded block range per tick. Rows are idempotent by `event_key`; the cursor is `watched_addresses.last_indexed_block`.
-- `ReconciliationService` compares the aggregate ledger balance of wallet accounts for a chain with the sum of on-chain balances across enabled watched addresses. Items are `MATCH`, `MISMATCH`, `MISSING_ONCHAIN`, or `MISSING_LEDGER`; runs persist summaries and never edit the ledger or swap orders.
+- `ReconciliationService` compares the aggregate ledger balance of wallet accounts for a chain with the sum of on-chain balances across enabled watched addresses. Items are `MATCH`, `MISMATCH`, `MISSING_ONCHAIN`, or `MISSING_LEDGER` (`delta = ledger − on-chain`); runs persist summaries and never edit the ledger or swap orders. Assets without a contract address that are not the chain native asset are reported as unsupported rather than treated as native.
 - Gas backfill fills `swap_orders.network_fee_wei` from the receipt for confirmed orders where it is missing, with an audit event. It does not invent USD values or rewrite accounting.
 - API:
   - `GET /reconciliation/addresses`

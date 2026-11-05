@@ -44,7 +44,7 @@ GET /api/v1/reconciliation/indexer
 ## Interpreting results
 
 - `MATCH` — ledger and on-chain balances agree.
-- `MISMATCH` — both non-zero but different; investigate transfers, gas, and missing ledger entries.
+- `MISMATCH` — both non-zero but different; `delta = ledger − on-chain`. Investigate transfers, gas, and missing ledger entries.
 - `MISSING_ONCHAIN` — ledger has a positive balance but the watched addresses do not.
 - `MISSING_LEDGER` — the watched addresses hold an asset the ledger does not.
 

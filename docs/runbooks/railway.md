@@ -207,3 +207,12 @@ Phase 6 is code/ops hardening with no schema migration. Before deploying:
 4. Deploy with `SWAP_ETHEREUM_EXECUTION_ENABLED=false` for initial verification; enable it only for acceptance/rollout.
 5. For acceptance, enable `SWAP_ETHEREUM_EXECUTION_ENABLED=true`, perform a small Tangem swap, verify tracking/accounting, then keep it enabled only if accepted. Acceptance completed 2026-11-05.
 6. Rollback: set `SWAP_ETHEREUM_EXECUTION_ENABLED=false` (or the global kill switch) and keep the tracker running for in-flight orders.
+
+## Phase 10 — reconciliation rollout
+
+1. Take a backup and run `node packages/db/dist/migrate.js`; migration `0014` is additive (`watched_addresses`, `indexed_transfers`, `reconciliation_runs`, `reconciliation_items`).
+2. Re-run `provision-app-role` (or verify default privileges) so the app role has DML on the new tables and no DELETE on reconciliation evidence.
+3. Deploy with `RECONCILIATION_ENABLED=false`; verify `/ready`.
+4. Enable `RECONCILIATION_ENABLED=true`, add watch-only addresses via `POST /api/v1/reconciliation/addresses`, and run `POST /api/v1/reconciliation/run` for BSC/Ethereum.
+5. Inspect `GET /api/v1/reconciliation/runs/:id`; all non-zero assets must be `MATCH` or a documented owner-approved exception.
+6. Rollback: set `RECONCILIATION_ENABLED=false`; do not delete reconciliation rows.

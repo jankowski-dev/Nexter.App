@@ -363,6 +363,7 @@ export class ReconciliationService {
       const ledgerByAsset = new Map(ledgerRows.map((row) => [row.assetId, row.balance]));
 
       const items: Array<typeof reconciliationItems.$inferInsert> = [];
+      const nativeSymbol = nativeTokenForChain(input.chain).symbol;
       const summary = {
         addresses: watches.map((row) => row.address),
         blockNumber: latestBlock,
@@ -371,10 +372,16 @@ export class ReconciliationService {
         mismatches: 0,
         missingOnchain: 0,
         missingLedger: 0,
+        unsupportedAssets: [] as string[],
         gasBackfilled,
       };
 
       for (const asset of assetRows) {
+        if (!asset.contractAddress && asset.symbol !== nativeSymbol) {
+          summary.unsupportedAssets.push(asset.symbol);
+          continue;
+        }
+
         let onchain = decimal('0');
 
         for (const watch of watches) {
@@ -558,7 +565,13 @@ export class ReconciliationService {
     let backfilled = 0;
 
     for (const order of orders) {
-      const receipt = await this.rpc.getTransactionReceipt(chain, order.txHash as string);
+      let receipt;
+
+      try {
+        receipt = await this.rpc.getTransactionReceipt(chain, order.txHash as string);
+      } catch {
+        continue;
+      }
 
       if (!receipt || !receipt.effectiveGasPrice) continue;
 
