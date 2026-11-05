@@ -2,6 +2,8 @@ type Hex = `0x${string}`;
 
 export const KYBER_SWAP_SELECTOR = '0xe21fd0e9';
 export const KYBER_SWAP_GENERIC_SELECTOR = '0x59e50fed';
+const MIN_OUT_TOLERANCE_WEI = 10n;
+
 export const KYBER_SUPPORTED_SELECTORS = [KYBER_SWAP_SELECTOR, KYBER_SWAP_GENERIC_SELECTOR];
 
 const SWAP_DESCRIPTION_COMPONENTS = [
@@ -307,7 +309,7 @@ export function validateKyberSwapBuild(
   }
 
   if (
-    BigInt(decoded.minReturnAmount) < BigInt(expected.minOutBase) ||
+    BigInt(decoded.minReturnAmount) + MIN_OUT_TOLERANCE_WEI < BigInt(expected.minOutBase) ||
     BigInt(decoded.minReturnAmount) > BigInt(expected.quotedAmountOut)
   ) {
     issues.push(

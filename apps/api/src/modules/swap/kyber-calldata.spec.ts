@@ -190,6 +190,9 @@ describe('Kyber calldata decoding', () => {
     );
     expect(
       codes(await decodeKyberSwapCalldata(encodeSwap({ minReturnAmount: minOut - 1n }))),
+    ).not.toContain('SWAP_MIN_OUT_MISMATCH');
+    expect(
+      codes(await decodeKyberSwapCalldata(encodeSwap({ minReturnAmount: minOut - 1000n }))),
     ).toContain('SWAP_MIN_OUT_MISMATCH');
     expect(codes(await decodeKyberSwapCalldata(encodeSwap({ callTarget: other })))).toContain(
       'SWAP_EXECUTOR_NOT_ALLOWED',
