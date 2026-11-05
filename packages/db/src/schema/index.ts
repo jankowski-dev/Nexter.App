@@ -117,6 +117,8 @@ export type TransactionSubtype =
   'buy' | 'sell' | 'swap' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
 export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system';
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
+export type ReconciliationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type ReconciliationItemStatus = 'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER';
 
 export const chains = pgTable(
   'chains',
@@ -173,6 +175,95 @@ export const accounts = pgTable(
     uniqueIndex('accounts_user_name_unique').on(table.userId, table.name),
     index('accounts_user_id_idx').on(table.userId),
   ],
+);
+
+export const watchedAddresses = pgTable(
+  'watched_addresses',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    chain: text('chain').notNull(),
+    address: text('address').notNull(),
+    label: text('label'),
+    enabled: boolean('enabled').notNull().default(true),
+    lastIndexedBlock: integer('last_indexed_block'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('watched_addresses_user_chain_address_unique').on(
+      table.userId,
+      table.chain,
+      table.address,
+    ),
+    index('watched_addresses_user_chain_idx').on(table.userId, table.chain),
+  ],
+);
+
+export const indexedTransfers = pgTable(
+  'indexed_transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    chain: text('chain').notNull(),
+    eventKey: text('event_key').notNull(),
+    txHash: text('tx_hash').notNull(),
+    logIndex: integer('log_index').notNull(),
+    blockNumber: integer('block_number').notNull(),
+    blockHash: text('block_hash'),
+    fromAddress: text('from_address').notNull(),
+    toAddress: text('to_address').notNull(),
+    assetAddress: text('asset_address'),
+    amount: numeric('amount', { precision: 78, scale: 0 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('indexed_transfers_event_key_unique').on(table.eventKey),
+    index('indexed_transfers_chain_block_idx').on(table.chain, table.blockNumber),
+    index('indexed_transfers_from_idx').on(table.chain, table.fromAddress),
+    index('indexed_transfers_to_idx').on(table.chain, table.toAddress),
+  ],
+);
+
+export const reconciliationRuns = pgTable(
+  'reconciliation_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    chain: text('chain').notNull(),
+    status: text('status').$type<ReconciliationStatus>().notNull().default('RUNNING'),
+    blockNumber: integer('block_number'),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    error: text('error'),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('reconciliation_runs_user_chain_idx').on(table.userId, table.chain, table.startedAt),
+  ],
+);
+
+export const reconciliationItems = pgTable(
+  'reconciliation_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => reconciliationRuns.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    symbol: text('symbol').notNull(),
+    contractAddress: text('contract_address'),
+    ledgerBalance: numeric('ledger_balance', { precision: 36, scale: 18 }).notNull(),
+    onchainBalance: numeric('onchain_balance', { precision: 36, scale: 18 }).notNull(),
+    delta: numeric('delta', { precision: 36, scale: 18 }).notNull(),
+    status: text('status').$type<ReconciliationItemStatus>().notNull(),
+    details: jsonb('details').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('reconciliation_items_run_idx').on(table.runId)],
 );
 
 export const tradeGroups = pgTable(

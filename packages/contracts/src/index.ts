@@ -7,6 +7,7 @@ export * from './audit';
 export * from './imports';
 export * from './pagination';
 export * from './portfolio';
+export * from './reconciliation';
 export * from './settings';
 export * from './swap';
 export * from './watchlist';

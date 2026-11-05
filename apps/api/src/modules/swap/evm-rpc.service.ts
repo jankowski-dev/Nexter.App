@@ -23,6 +23,17 @@ export interface RpcLog {
   address: string;
   topics: string[];
   data: string;
+  transactionHash?: string;
+  logIndex?: number;
+  blockNumber?: number;
+  blockHash?: string;
+}
+
+export interface RpcLogFilter {
+  fromBlock: number;
+  toBlock: number;
+  address?: string;
+  topics?: Array<string | null | string[]>;
 }
 
 export interface RpcReceipt {
@@ -86,6 +97,33 @@ function parseTransaction(value: unknown): RpcTransaction | null {
     value: typeof tx.value === 'string' ? tx.value : '0x0',
     nonce: hexToNumber(tx.nonce),
     blockNumber: hexToNumber(tx.blockNumber),
+  };
+}
+
+function parseLog(value: unknown): RpcLog | null {
+  if (!value || typeof value !== 'object') return null;
+  const log = value as Record<string, unknown>;
+
+  if (
+    typeof log.address !== 'string' ||
+    typeof log.data !== 'string' ||
+    !Array.isArray(log.topics)
+  ) {
+    return null;
+  }
+
+  const topics = log.topics.filter((topic): topic is string => typeof topic === 'string');
+
+  if (topics.length !== log.topics.length) return null;
+
+  return {
+    address: log.address,
+    topics,
+    data: log.data,
+    transactionHash: typeof log.transactionHash === 'string' ? log.transactionHash : undefined,
+    logIndex: hexToNumber(log.logIndex) ?? undefined,
+    blockNumber: hexToNumber(log.blockNumber) ?? undefined,
+    blockHash: typeof log.blockHash === 'string' ? log.blockHash : undefined,
   };
 }
 
@@ -192,22 +230,8 @@ export class EvmRpcService {
 
     const logs = Array.isArray(receipt.logs)
       ? receipt.logs.flatMap((entry) => {
-          if (!entry || typeof entry !== 'object') return [];
-          const log = entry as Record<string, unknown>;
-
-          if (
-            typeof log.address !== 'string' ||
-            typeof log.data !== 'string' ||
-            !Array.isArray(log.topics)
-          ) {
-            return [];
-          }
-
-          const topics = log.topics.filter((topic): topic is string => typeof topic === 'string');
-
-          if (topics.length !== log.topics.length) return [];
-
-          return [{ address: log.address, topics, data: log.data }];
+          const log = parseLog(entry);
+          return log ? [log] : [];
         })
       : [];
 
@@ -336,6 +360,49 @@ export class EvmRpcService {
     }
 
     return null;
+  }
+
+  async getLogs(chain: string, filter: RpcLogFilter): Promise<RpcLog[]> {
+    if (!this.configuredFor(chain)) return [];
+    if (filter.toBlock < filter.fromBlock) return [];
+    await this.assertChain(chain);
+
+    const payload: Record<string, unknown> = {
+      fromBlock: `0x${filter.fromBlock.toString(16)}`,
+      toBlock: `0x${filter.toBlock.toString(16)}`,
+    };
+
+    if (filter.address) payload.address = filter.address;
+    if (filter.topics) payload.topics = filter.topics;
+
+    const result = await this.call(chain, 'eth_getLogs', [payload]);
+
+    if (!Array.isArray(result)) return [];
+
+    return result.flatMap((entry) => {
+      const log = parseLog(entry);
+      return log ? [log] : [];
+    });
+  }
+
+  async getBlockTransactions(chain: string, blockNumber: number): Promise<RpcTransaction[]> {
+    if (!this.configuredFor(chain)) return [];
+    await this.assertChain(chain);
+
+    const result = await this.call(chain, 'eth_getBlockByNumber', [
+      `0x${blockNumber.toString(16)}`,
+      true,
+    ]);
+
+    if (!result || typeof result !== 'object') return [];
+    const transactions = (result as Record<string, unknown>).transactions;
+
+    if (!Array.isArray(transactions)) return [];
+
+    return transactions.flatMap((entry) => {
+      const tx = parseTransaction(entry);
+      return tx ? [tx] : [];
+    });
   }
 
   async getBlock(chain: string, blockNumber: number): Promise<RpcBlock | null> {

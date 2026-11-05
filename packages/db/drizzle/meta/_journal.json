@@ -99,6 +99,13 @@
       "when": 1793882209484,
       "tag": "0013_foamy_kinsey_walden",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793908615625,
+      "tag": "0014_famous_bucky",
+      "breakpoints": true
     }
   ]
 }

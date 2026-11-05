@@ -101,6 +101,13 @@ export const envSchema = z.object({
   SWAP_BSC_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_ETHEREUM_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_SELECTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  RECONCILIATION_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
+  RECONCILIATION_INDEX_INTERVAL_SECONDS: z.coerce.number().int().min(15).max(3600).default(60),
+  RECONCILIATION_LOOKBACK_BLOCKS: z.coerce.number().int().min(1).max(50_000).default(100),
+  RECONCILIATION_MAX_BLOCKS_PER_TICK: z.coerce.number().int().min(1).max(500).default(50),
   KYBERSWAP_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   KYBERSWAP_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   KYBERSWAP_CLIENT_ID: z.string().min(1).default('nexter'),
