@@ -171,6 +171,54 @@ describe('EvmRpcService', () => {
     }
   });
 
+  it('reads transfer logs and full block transactions', async () => {
+    const token = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
+    const topic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+    const topicAddress = `0x${'1'.repeat(64)}`;
+    const log = {
+      address: token,
+      topics: [topic, topicAddress, topicAddress],
+      data: `0x${'0'.repeat(63)}1`,
+      transactionHash: `0x${'2'.repeat(64)}`,
+      logIndex: '0x0',
+      blockNumber: '0x64',
+      blockHash: `0x${'3'.repeat(64)}`,
+    };
+    const tx = {
+      hash: `0x${'4'.repeat(64)}`,
+      from: '0x1111111111111111111111111111111111111111',
+      to: token,
+      input: '0x12345678',
+      value: '0x1',
+      nonce: '0x7',
+      blockNumber: '0x64',
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpcResponse('0x38'))
+      .mockResolvedValueOnce(rpcResponse([log]))
+      .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [tx] }));
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
+
+    const logs = await service.getLogs('bsc', {
+      fromBlock: 100,
+      toBlock: 100,
+      address: token,
+      topics: [topic],
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      address: token,
+      transactionHash: log.transactionHash,
+      logIndex: 0,
+      blockNumber: 100,
+    });
+
+    const transactions = await service.getBlockTransactions('bsc', 100);
+    expect(transactions).toHaveLength(1);
+    expect(transactions[0]).toMatchObject({ hash: tx.hash, nonce: 7, value: '0x1' });
+  });
+
   it('reports a missing contract and a reverted call', async () => {
     const missing = new EvmRpcService(
       vi

@@ -52,11 +52,11 @@ A mismatch is **not** auto-corrected. Do not edit or delete ledger rows. Record 
 
 ## Gas backfill
 
-For confirmed swap orders with a tx hash and missing `network_fee_wei`, a run fetches the receipt and fills the raw fee with `swap.gas_backfilled` audit. It does not invent USD gas values or rewrite accounting.
+For already-accounted confirmed swap orders with a tx hash and missing `network_fee_wei`, a run fetches the receipt and fills the raw fee with `swap.gas_backfilled` audit. It does not invent USD gas values or rewrite accounting.
 
 ## Indexer
 
-The API-hosted indexer uses a Postgres advisory lock, so multiple API replicas are safe. It scans a bounded range per tick and advances `watched_addresses.last_indexed_block`; a failure leaves the cursor unchanged for retry. It indexes ERC-20 `Transfer` logs and non-zero native transfers.
+The API-hosted indexer uses a Postgres advisory lock, so multiple API replicas are safe. It scans a bounded range per tick and advances `watched_addresses.last_indexed_block`; a failure leaves the cursor unchanged for retry. It indexes ERC-20 `Transfer` logs and non-zero native transfers. The indexer does not yet rewind on reorg; reconciliation uses live balances, so a stale transfer history does not change the balance comparison.
 
 ## Rollback
 

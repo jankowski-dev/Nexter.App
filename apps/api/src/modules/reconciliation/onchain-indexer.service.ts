@@ -5,13 +5,21 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
-import { indexedTransfers, watchedAddresses, type Database, type DbExecutor } from '@nexter/db';
+import { and, eq, isNotNull } from 'drizzle-orm';
+import {
+  assets,
+  chains,
+  indexedTransfers,
+  watchedAddresses,
+  type Database,
+  type DbExecutor,
+} from '@nexter/db';
 import type { Pool, PoolClient } from 'pg';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB, DB_POOL } from '../../shared/db/db.module';
 import { EvmRpcService, type RpcLog } from '../swap/evm-rpc.service';
+import { getSwapChain } from '../swap/token-registry';
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const INDEXER_LOCK_KEY = '5712345678901236';
@@ -117,6 +125,20 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
       const latest = await this.rpc.getBlockNumber(chain);
       if (latest === null) continue;
 
+      const chainConfig = getSwapChain(chain);
+      const assetRows = await this.db
+        .select({ address: assets.contractAddress })
+        .from(assets)
+        .innerJoin(chains, eq(assets.chainId, chains.id))
+        .where(and(eq(chains.code, chain), isNotNull(assets.contractAddress)));
+      const tokenAddresses = [
+        ...new Set([
+          ...(chainConfig?.tokens.filter((token) => !token.native).map((token) => token.address) ??
+            []),
+          ...assetRows.map((row) => row.address as string),
+        ]),
+      ].map((address) => address.toLowerCase());
+
       for (const watch of chainWatches) {
         const from =
           watch.lastIndexedBlock === null
@@ -128,7 +150,7 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
         const to = Math.min(latest, from + env.RECONCILIATION_MAX_BLOCKS_PER_TICK - 1);
 
         try {
-          const indexed = await this.indexRange(chain, watch.address, from, to);
+          const indexed = await this.indexRange(chain, watch.address, from, to, tokenAddresses);
           await this.db
             .update(watchedAddresses)
             .set({ lastIndexedBlock: to, updatedAt: new Date() })
@@ -162,18 +184,27 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
     address: string,
     fromBlock: number,
     toBlock: number,
+    tokenAddresses: string[],
   ): Promise<number> {
     const padded = padTopicAddress(address);
-    const incoming = await this.rpc.getLogs(chain, {
-      fromBlock,
-      toBlock,
-      topics: [TRANSFER_TOPIC, null, padded],
-    });
-    const outgoing = await this.rpc.getLogs(chain, {
-      fromBlock,
-      toBlock,
-      topics: [TRANSFER_TOPIC, padded],
-    });
+    const incoming =
+      tokenAddresses.length > 0
+        ? await this.rpc.getLogs(chain, {
+            fromBlock,
+            toBlock,
+            address: tokenAddresses,
+            topics: [TRANSFER_TOPIC, null, padded],
+          })
+        : [];
+    const outgoing =
+      tokenAddresses.length > 0
+        ? await this.rpc.getLogs(chain, {
+            fromBlock,
+            toBlock,
+            address: tokenAddresses,
+            topics: [TRANSFER_TOPIC, padded],
+          })
+        : [];
     const logs = new Map<string, RpcLog>();
 
     for (const log of [...incoming, ...outgoing]) {
@@ -190,12 +221,16 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
 
       if (!from || !to) continue;
 
+      if (!/^0x[0-9a-fA-F]{64}$/.test(log.data)) continue;
+
       let amount: string;
       try {
         amount = BigInt(log.data).toString();
       } catch {
         continue;
       }
+
+      if (amount.length > 78) continue;
 
       const txHash = log.transactionHash!.toLowerCase();
       const created = await this.insertTransfer(this.db, {
@@ -231,6 +266,7 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
           const value = BigInt(tx.value || '0x0');
           if (value === 0n) continue;
           amount = value.toString();
+          if (amount.length > 78) continue;
         } catch {
           continue;
         }

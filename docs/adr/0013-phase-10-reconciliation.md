@@ -21,6 +21,6 @@ Phase 9 exposes BSC and Ethereum swaps, but the ledger is still derived from man
 ## Consequences
 
 - Reconciliation reports mismatches rather than auto-correcting them; corrections remain append-only ledger transactions (Phase 11/hardening).
-- The indexer is bounded and may lag the chain head; reconciliation uses current balances, not the indexer cursor, for the final comparison.
+- The indexer is bounded and may lag the chain head; reconciliation uses current balances, not the indexer cursor, for the final comparison. Indexer reorg rewind/parent-hash checks are a later hardening item; transfer history can be stale after a reorg.
 - A watched address added after a historical block starts indexing from the configured lookback, not genesis.
 - Live acceptance requires owner approval to add the production wallet address and run `/reconciliation/run`; no production data is changed by the run.

@@ -32,7 +32,7 @@ export interface RpcLog {
 export interface RpcLogFilter {
   fromBlock: number;
   toBlock: number;
-  address?: string;
+  address?: string | string[];
   topics?: Array<string | null | string[]>;
 }
 

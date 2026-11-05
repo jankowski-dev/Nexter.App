@@ -146,6 +146,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let rpcFailureChain: string | null = null;
   let rpcLogs: RpcLog[] = [];
   let rpcBlockTransactions: RpcTransaction[] = [];
+  let erc20Balance = '1000000000000000000';
   let rpcFailure = false;
   let buildData = makeBuildData();
   let buildRouter = router;
@@ -210,7 +211,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     configuredFor: () => true,
     ensureChain: async () => undefined,
     getErc20Allowance: async () => allowance,
-    getErc20Balance: async () => '1000000000000000000000',
+    getErc20Balance: async () => erc20Balance,
     getNativeBalance: async () => nativeBalance,
     getGasPrice: async () => '0x3b9aca00',
     findTransactionByNonce: async () => replacementTx,
@@ -302,6 +303,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     rpcFailureChain = null;
     rpcLogs = [];
     rpcBlockTransactions = [];
+    erc20Balance = '1000000000000000000';
     env.RECONCILIATION_ENABLED = false;
     env.RECONCILIATION_LOOKBACK_BLOCKS = 100;
     env.RECONCILIATION_MAX_BLOCKS_PER_TICK = 50;
@@ -331,6 +333,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     await db.execute(sql`truncate table users restart identity cascade`);
+    await db.execute(sql`truncate table indexed_transfers restart identity`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
   });
 
@@ -1282,6 +1285,58 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       blockNumber: 1000,
       gasBackfilled: 0,
     });
+  }, 60_000);
+
+  it('reconciles a seeded ERC-20 contract asset', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const usdc = await assets.ensureForSwapToken(
+      'bsc',
+      getSwapToken('bsc', tokenIn)!,
+      undefined,
+      owner.userId,
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: usdc.id,
+        amount: '1',
+        usdValue: '1',
+      },
+      {},
+    );
+
+    nativeBalance = '0';
+    erc20Balance = '1000000000000000000';
+    env.RECONCILIATION_ENABLED = true;
+
+    await agent
+      .post('/api/v1/reconciliation/addresses')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', address: wallet })
+      .expect(201);
+
+    const run = await agent
+      .post('/api/v1/reconciliation/run')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc' })
+      .expect(201);
+
+    const item = run.body.items.find((row: { symbol: string }) => row.symbol === 'USDC');
+    expect(item).toMatchObject({
+      status: 'MATCH',
+      ledgerBalance: '1.000000000000000000',
+      onchainBalance: '1.000000000000000000',
+    });
+    expect(run.body.summary.unsupportedAssets).not.toContain('USDC');
+    expect(run.body.summary.unsupportedAssets).toEqual([]);
   }, 60_000);
 
   it('indexes ERC-20 and native transfers for a watched address', async () => {

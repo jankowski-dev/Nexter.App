@@ -6,7 +6,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import {
   accounts,
   assets,
@@ -143,6 +143,13 @@ export class ReconciliationService {
 
     const address = normalizeAddress(input.address);
 
+    if (address === '0x0000000000000000000000000000000000000000') {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Zero address cannot be watched',
+      });
+    }
+
     return this.db.transaction(async (tx) => {
       const [row] = await tx
         .insert(watchedAddresses)
@@ -157,7 +164,7 @@ export class ReconciliationService {
         .onConflictDoUpdate({
           target: [watchedAddresses.userId, watchedAddresses.chain, watchedAddresses.address],
           set: {
-            label: input.label ?? null,
+            ...(input.label ? { label: input.label } : {}),
             enabled: true,
             updatedAt: new Date(),
           },
@@ -247,7 +254,14 @@ export class ReconciliationService {
             ),
           ),
         );
-      const latestBlock = await this.rpc.getBlockNumber(chain);
+      let latestBlock: number | null = null;
+
+      try {
+        latestBlock = await this.rpc.getBlockNumber(chain);
+      } catch {
+        latestBlock = null;
+      }
+
       const lastIndexed = chainAddresses.reduce<number | null>((current, row) => {
         if (row.lastIndexedBlock === null) return current;
         return current === null ? row.lastIndexedBlock : Math.max(current, row.lastIndexedBlock);
@@ -288,6 +302,39 @@ export class ReconciliationService {
     }
 
     await this.ensureWatchedFromSwapOrders(userId, input.chain, meta);
+
+    const staleRuns = await this.db
+      .update(reconciliationRuns)
+      .set({
+        status: 'FAILED',
+        error: 'stale_run',
+        completedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(reconciliationRuns.userId, userId),
+          eq(reconciliationRuns.chain, input.chain),
+          eq(reconciliationRuns.status, 'RUNNING'),
+          lt(reconciliationRuns.startedAt, new Date(Date.now() - 10 * 60 * 1000)),
+        ),
+      )
+      .returning({ id: reconciliationRuns.id });
+
+    for (const stale of staleRuns) {
+      await this.audit.log(
+        {
+          userId,
+          action: 'reconciliation.failed',
+          entityType: 'reconciliation_run',
+          entityId: stale.id,
+          after: { chain: input.chain, error: 'stale_run' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { strict: true },
+      );
+    }
+
     const watches = await this.db
       .select()
       .from(watchedAddresses)
@@ -378,6 +425,15 @@ export class ReconciliationService {
 
       for (const asset of assetRows) {
         if (!asset.contractAddress && asset.symbol !== nativeSymbol) {
+          const unsupportedBalance = decimal(ledgerByAsset.get(asset.id) ?? '0');
+
+          if (!unsupportedBalance.eq(0)) {
+            throw new BadRequestException({
+              code: 'RECONCILIATION_UNSUPPORTED_ASSET',
+              message: `Asset ${asset.symbol} has a ledger balance but no contract address`,
+            });
+          }
+
           summary.unsupportedAssets.push(asset.symbol);
           continue;
         }
@@ -402,10 +458,7 @@ export class ReconciliationService {
         const ledgerBalance = decimal(ledgerByAsset.get(asset.id) ?? '0');
         const onchainBalance = onchain;
         const delta = ledgerBalance.minus(onchainBalance);
-        const status = itemStatus(
-          ledgerBalance.toFixed(asset.decimals),
-          onchainBalance.toFixed(asset.decimals),
-        );
+        const status = itemStatus(ledgerBalance.toString(), onchainBalance.toString());
 
         if (ledgerBalance.eq(0) && onchainBalance.eq(0)) continue;
 
@@ -558,6 +611,7 @@ export class ReconciliationService {
           eq(swapOrders.chain, chain),
           eq(swapOrders.status, 'CONFIRMED'),
           isNotNull(swapOrders.txHash),
+          isNotNull(swapOrders.accountingTransactionId),
           isNull(swapOrders.networkFeeWei),
         ),
       )
