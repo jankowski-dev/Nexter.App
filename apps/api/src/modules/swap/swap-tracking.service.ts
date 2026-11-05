@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
@@ -326,49 +326,84 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     let txHash = originalHash;
     let tx = await this.rpc.getTransactionByHash(txHash);
 
-    if (!tx && order.nonce !== null && order.walletAddress) {
-      const count = await this.rpc.getTransactionCount(order.walletAddress);
+    if (!tx && order.walletAddress && order.routerAddress && order.calldata) {
+      if (order.nonce !== null) {
+        const count = await this.rpc.getTransactionCount(order.walletAddress);
 
-      if (count !== null && count > order.nonce) {
-        const replacement = await this.rpc.findTransactionByNonce(order.walletAddress, order.nonce);
+        if (count !== null && count > order.nonce) {
+          const candidate = await this.rpc.findTransactionByNonce(
+            order.walletAddress,
+            order.nonce,
+            env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
+          );
 
-        if (replacement && this.replacementMatches(order, replacement)) {
-          const adopted = await this.adoptReplacement(order, replacement);
+          if (candidate) {
+            if (!this.replacementMatches(order, candidate)) {
+              await this.mark(order, 'REPLACED', {
+                reason: 'replacement_not_matching_order',
+                nonce: order.nonce,
+                latestNonce: count,
+              });
+              return;
+            }
 
-          if (!adopted) {
-            await this.mark(order, 'REPLACED', {
-              reason: 'replacement_could_not_be_recorded',
-              nonce: order.nonce,
-            });
+            const adopted = await this.adoptReplacement(order, candidate);
+
+            if (!adopted) {
+              await this.recheckAdoptionMiss(order);
+              return;
+            }
+
+            tx = candidate;
+            txHash = candidate.hash;
+            currentOrder = {
+              ...order,
+              status: 'PENDING',
+              txHash,
+              nonce: candidate.nonce ?? order.nonce,
+            };
+          } else {
+            await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_NOT_FOUND');
             return;
           }
+        }
+      } else {
+        const matches = await this.rpc.findMatchingTransactions({
+          owner: order.walletAddress,
+          router: order.routerAddress,
+          calldata: order.calldata,
+          value: order.transactionValue ?? '0',
+          lookbackBlocks: env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
+        });
 
-          tx = replacement;
-          txHash = replacement.hash;
-          currentOrder = {
-            ...order,
-            status: 'PENDING',
-            txHash,
-            nonce: replacement.nonce ?? order.nonce,
-          };
-        } else {
-          await this.mark(order, 'REPLACED', {
-            reason: 'replacement_not_matching_order',
-            nonce: order.nonce,
-            latestNonce: count,
-          });
+        if (matches.length !== 1) {
+          await this.recordTrackingAnomaly(
+            order,
+            matches.length > 1 ? 'SWAP_REPLACEMENT_AMBIGUOUS' : 'SWAP_REPLACEMENT_NOT_FOUND',
+          );
           return;
         }
+
+        const adopted = await this.adoptReplacement(order, matches[0]);
+
+        if (!adopted) {
+          await this.recheckAdoptionMiss(order);
+          return;
+        }
+
+        tx = matches[0];
+        txHash = matches[0].hash;
+        currentOrder = {
+          ...order,
+          status: 'PENDING',
+          txHash,
+          nonce: matches[0].nonce ?? order.nonce,
+        };
       }
     }
 
     if (!tx) {
-      if (
-        order.submittedAt &&
-        Date.now() - order.submittedAt.getTime() > env.SWAP_DROP_TIMEOUT_SECONDS * 1000
-      ) {
-        await this.mark(order, 'DROPPED', { reason: 'not_found_in_mempool_or_chain' });
-      }
+      await this.recordTrackingAnomaly(order, 'SWAP_TX_NOT_FOUND');
       return;
     }
 
@@ -423,6 +458,14 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
   private async adoptReplacement(order: SwapOrder, tx: RpcTransaction): Promise<boolean> {
     return this.db.transaction(async (dbtx) => {
+      const [conflict] = await dbtx
+        .select({ id: swapOrders.id })
+        .from(swapOrders)
+        .where(and(eq(swapOrders.txHash, tx.hash.toLowerCase()), ne(swapOrders.id, order.id)))
+        .limit(1);
+
+      if (conflict) return false;
+
       const [row] = await dbtx
         .update(swapOrders)
         .set({
@@ -467,6 +510,59 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       );
 
       return true;
+    });
+  }
+
+  private async recheckAdoptionMiss(order: SwapOrder): Promise<void> {
+    const [current] = await this.db
+      .select({ status: swapOrders.status, txHash: swapOrders.txHash })
+      .from(swapOrders)
+      .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)))
+      .limit(1);
+
+    if (!current) return;
+    if (current.txHash !== order.txHash || !['SUBMITTED', 'PENDING'].includes(current.status)) {
+      return;
+    }
+
+    await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_NOT_RECORDED');
+  }
+
+  private async recordTrackingAnomaly(order: SwapOrder, code: string): Promise<void> {
+    const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
+    const exists = order.errors.includes(bounded);
+
+    if (!exists) {
+      this.logger.warn(`Swap ${order.id} tracking anomaly: ${bounded}`);
+    }
+
+    await this.db.transaction(async (dbtx) => {
+      await dbtx
+        .update(swapOrders)
+        .set({
+          errors: exists ? order.errors : [...order.errors, bounded].slice(-20),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(swapOrders.id, order.id), eq(swapOrders.userId, order.userId)));
+
+      if (exists) return;
+
+      await dbtx.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'tracking_anomaly',
+        payload: { code: bounded },
+      });
+
+      await this.audit.log(
+        {
+          userId: order.userId,
+          action: 'swap.tracking_anomaly',
+          entityType: 'swap_order',
+          entityId: order.id,
+          after: { code: bounded, txHash: order.txHash },
+        },
+        { executor: dbtx, strict: true },
+      );
     });
   }
 

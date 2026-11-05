@@ -709,14 +709,31 @@ export class SwapService {
     }
 
     if (gasEstimate) {
-      await this.assertGasBalance({
-        wallet,
-        tokenInNative: tokenIn.native,
-        amountInBase: quotedAmountIn,
-        gasEstimate,
+      try {
+        await this.assertGasBalance({
+          wallet,
+          tokenInNative: tokenIn.native,
+          amountInBase: quotedAmountIn,
+          gasEstimate,
+        });
+      } catch (error) {
+        await this.recordBuildFailure(
+          order,
+          error instanceof BadRequestException
+            ? 'SWAP_INSUFFICIENT_GAS_BALANCE'
+            : 'SWAP_RPC_UNAVAILABLE',
+          meta,
+        );
+        throw error;
+      }
+      pass('gasBalance');
+    } else {
+      validation.push({
+        check: 'gasBalance',
+        passed: false,
+        detail: 'not checked: no gas estimate',
       });
     }
-    pass('gasBalance');
 
     const gasUsd =
       built.gasUsd && /^\d+(?:\.\d+)?$/.test(built.gasUsd) && built.gasUsd.length <= 32
@@ -749,6 +766,7 @@ export class SwapService {
           routerAddress: normalizeAddress(built.routerAddress),
           calldata: built.data,
           transactionValue: built.transactionValue,
+          builtAmountOut: built.amountOut,
           gasEstimate,
           gasUsd,
           deadline,
@@ -886,6 +904,13 @@ export class SwapService {
       });
     }
 
+    if (!selectorAllowlist().includes(order.calldata.slice(0, 10).toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_SELECTOR_NOT_ALLOWED',
+        message: 'Calldata selector is not in the current allowlist',
+      });
+    }
+
     let decoded;
 
     try {
@@ -905,7 +930,8 @@ export class SwapService {
       nativeIn: tokenIn.native,
       amountInBase: amountIn,
       minOutBase: toBaseUnits(order.minOut, tokenOut.decimals).toString(),
-      quotedAmountOut: decoded.minReturnAmount,
+      quotedAmountOut:
+        order.builtAmountOut ?? toBaseUnits(order.amountOut, tokenOut.decimals).toString(),
       routerAddress: order.routerAddress,
       executorAllowlist: executorAllowlist(),
       deadline: order.deadline,
@@ -1014,12 +1040,14 @@ export class SwapService {
       });
     }
 
-    if (simulation.gasEstimate) {
+    const readyGasEstimate = simulation.gasEstimate ?? order.gasEstimate;
+
+    if (readyGasEstimate) {
       await this.assertGasBalance({
         wallet,
         tokenInNative: tokenIn.native,
         amountInBase: amountIn,
-        gasEstimate: simulation.gasEstimate,
+        gasEstimate: readyGasEstimate,
       });
     }
 
@@ -1087,7 +1115,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['BUILT', 'READY'].includes(order.status)) {
+    if (order.status !== 'READY') {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -1119,7 +1147,7 @@ export class SwapService {
           and(
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, ['BUILT', 'READY']),
+            eq(swapOrders.status, 'READY'),
             gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
           ),
         )

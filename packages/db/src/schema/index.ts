@@ -452,6 +452,7 @@ export const swapOrders = pgTable(
     amountIn: numeric('amount_in', { precision: 36, scale: 18 }).notNull(),
     amountInUsd: numeric('amount_in_usd', { precision: 24, scale: 8 }),
     amountOut: numeric('amount_out', { precision: 36, scale: 18 }).notNull(),
+    builtAmountOut: numeric('built_amount_out', { precision: 36, scale: 0 }),
     executedAmountIn: numeric('executed_amount_in', { precision: 36, scale: 18 }),
     executedAmountOut: numeric('executed_amount_out', { precision: 36, scale: 18 }),
     minOut: numeric('min_out', { precision: 36, scale: 18 }).notNull(),

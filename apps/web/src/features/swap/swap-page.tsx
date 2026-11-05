@@ -371,8 +371,7 @@ export function SwapPage() {
 
   const data = config.data;
   const chain = data.chains[0];
-  const executionReady =
-    buildData?.status === 'READY' || (buildData?.status === 'BUILT' && !buildData.approvalRequired);
+  const executionReady = buildData?.status === 'READY';
   const deadlineExpired = Boolean(buildData?.deadline && Date.now() / 1000 >= buildData.deadline);
   const executionOrder = liveOrder.data ?? buildData ?? quote.data;
 
@@ -669,18 +668,20 @@ export function SwapPage() {
           {buildData ? (
             <Badge
               tone={
-                buildData.status === 'APPROVAL_REQUIRED'
-                  ? 'warning'
-                  : buildData.status === 'READY' || buildData.status === 'BUILT'
-                    ? 'success'
+                buildData.status === 'READY'
+                  ? 'success'
+                  : buildData.status === 'APPROVAL_REQUIRED' || buildData.status === 'BUILT'
+                    ? 'warning'
                     : 'neutral'
               }
             >
               {buildData.status === 'APPROVAL_REQUIRED'
                 ? 'Нужно approval'
-                : buildData.status === 'READY'
-                  ? 'Готово к подписи'
-                  : buildData.status}
+                : buildData.status === 'BUILT'
+                  ? 'Собрано, нужна проверка'
+                  : buildData.status === 'READY'
+                    ? 'Готово к подписи'
+                    : buildData.status}
             </Badge>
           ) : null}
         </div>
@@ -701,7 +702,8 @@ export function SwapPage() {
               Подготовить approval
             </Button>
           ) : null}
-          {buildData?.status === 'APPROVAL_REQUIRED' ? (
+          {buildData?.status === 'APPROVAL_REQUIRED' ||
+          (buildData?.status === 'BUILT' && !buildData.approvalRequired) ? (
             <Button variant="secondary" onClick={() => void runReady()} disabled={executionBusy}>
               Проверить готовность
             </Button>

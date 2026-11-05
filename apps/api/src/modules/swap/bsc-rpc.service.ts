@@ -212,6 +212,55 @@ export class BscRpcService {
     return hexToBigInt(await this.call('eth_gasPrice', []));
   }
 
+  async findMatchingTransactions(input: {
+    owner: string;
+    router: string;
+    calldata: string;
+    value: string;
+    lookbackBlocks?: number;
+  }): Promise<RpcTransaction[]> {
+    if (!this.rpcUrl) return [];
+
+    const latest = await this.getBlockNumber();
+    if (latest === null) return [];
+    const lower = input.owner.toLowerCase();
+    const router = input.router.toLowerCase();
+    const calldata = input.calldata.toLowerCase();
+    const lookback = input.lookbackBlocks ?? 240;
+    const fromBlock = Math.max(0, latest - lookback);
+    const matches: RpcTransaction[] = [];
+
+    for (let blockNumber = latest; blockNumber >= fromBlock; blockNumber -= 1) {
+      const result = await this.call('eth_getBlockByNumber', [
+        `0x${blockNumber.toString(16)}`,
+        true,
+      ]);
+
+      if (!result || typeof result !== 'object') continue;
+      const transactions = (result as Record<string, unknown>).transactions;
+
+      if (!Array.isArray(transactions)) continue;
+
+      for (const raw of transactions) {
+        const tx = parseTransaction(raw);
+
+        if (!tx || tx.from.toLowerCase() !== lower || !tx.to) continue;
+        if (tx.to.toLowerCase() !== router) continue;
+        if (tx.input.toLowerCase() !== calldata) continue;
+
+        try {
+          if (BigInt(tx.value || '0x0') !== BigInt(input.value)) continue;
+        } catch {
+          continue;
+        }
+
+        matches.push(tx);
+      }
+    }
+
+    return matches;
+  }
+
   async findTransactionByNonce(
     owner: string,
     nonce: number,

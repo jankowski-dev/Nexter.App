@@ -61,39 +61,44 @@ Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD fr
 
 Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Execution UI review: **PASS WITH CHANGES** — wallet binding, deadline, kill-switch UI, signed-hash visibility, approval tracking, and `AWAITING_SIGNATURE` signing lock fixes applied; remaining recovery/test items addressed; final acceptance review: **PASS WITH CHANGES**; acceptance blockers fixed and live acceptance completed.
 
+Phase 8.x tracking review: **FAIL** — one High (an executed swap could be terminally marked `REPLACED`/`DROPPED` when the original hash disappeared before the nonce was recorded or the replacement was outside the lookback) and Mediums (tautological ready minOut bound, missing selector re-check, signing bypassing `ready`, adoption race fallback, stale docs). Fixed by nonce-less sender/router/calldata/value search, configurable 240-block lookback, no terminal drop on not-found, adoption race recheck, persisted `built_amount_out` (migration 0013), selector re-check, `READY`-only signing, UI “Проверить готовность”, and doc updates.
+
 First slice review: **FAIL** — one High (step-up failed open on missing/numeric USD) and Mediums (approval DELETE privilege, hardcoded threshold, unpersisted deadline, allowlist re-check, unverified tx hashes/uniqueness, test gaps). Fixes applied: fail-closed centralized step-up helper with stored `amount_in_usd`, configurable threshold, deadline persistence, wallet/router re-checks, unique tx/approval indexes, token_approvals DELETE revoke, duplicate-approval handling, and expanded tests. Re-review: **PASS**; merged as `9d57f43`. Unverified tx-hash/correction remains a tracking-slice gate.
 
 ## Deferred until enablement/hardening
 
 - Client-submitted tx hashes are now verified against `eth_getTransactionByHash`; a user-facing correction path for a mistyped hash remains a later slice (tracking marks a mismatch `FAILED` and never creates accounting).
-- Gas/BNB balance preflight and malformed-gas anomaly handling remain hardening items.
+- Malformed receipt gas fields remain a hardening item; gas/BNB preflight is implemented in Phase 8.x.
 - Execution is enabled in production after live acceptance; the kill switch and `SWAP_EXECUTION_ENABLED` remain the rollback controls.
-- Post-accounting reorg compensation and same-nonce speed-up adoption remain execution/hardening items.
+- Post-accounting reorg compensation remains a Phase 9 prerequisite; same-nonce speed-up adoption is implemented in Phase 8.x.
 
 ## Not yet implemented
 
-- Post-accounting reorg compensation (append-only correction), if a deep reorg occurs.
-- Same-nonce speed-up/replacement adoption; a nonce advance is currently marked `REPLACED` and is not accounted.
+- Automated post-accounting reorg compensation (append-only correction), if a deep reorg occurs.
 - Malformed receipt gas fields are an anomaly path; standard BSC receipts populate gasUsed/effectiveGasPrice.
 - A user-facing mistyped-tx correction flow.
+- Tracker leader lock (single API replica is still required).
+- Mocked WalletConnect UI tests for the execution flow.
 
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **109 passed, 1 skipped** (adds step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, accounting idempotency, and step-up unit coverage).
+- API suite — **117 passed, 1 skipped** (adds replacement adoption/not-found, gas preflight, ready re-decode, selector/minOut re-check, signing-requires-ready, step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, and accounting idempotency).
 - Playwright — **5 passed** (swap connection/quote UI included).
-- Migrations 0010/0011/0012 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
+- Migrations 0010–0013 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 
-## Phase 8.x hardening (in progress)
+## Phase 8.x hardening (completed)
 
-- Gas/BNB preflight at build/ready.
-- Stored calldata re-decode at `ready`.
-- Same-nonce speed-up replacement adoption.
-- Post-accounting reorg policy documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
-- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling.
+- Gas/BNB preflight at build/ready, including native-input amount.
+- Stored calldata re-decode at `ready`, current selector allowlist re-check, and persisted `built_amount_out` (migration 0013) as the minOut upper bound.
+- Same-nonce speed-up replacement adoption; sender/router/calldata/value search when the nonce is unknown; no terminal drop on “not found”.
+- Adoption race recheck before any `REPLACED` fallback; tracking anomalies are audited.
+- Signing requires `READY`; the UI exposes “Проверить готовность” for non-approval `BUILT` orders.
+- Post-accounting reorg policy and incident procedure documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
+- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling, automated reorg compensation.
 
 ## Next
 
-1. Phase 8.x hardening: gas/BNB preflight, ready/submit calldata re-check, replacement adoption, post-accounting reorg, mocked WalletConnect tests, monitoring.
-2. Phase 9 — Ethereum: chain config, private RPC/MEV, confirmation thresholds, live acceptance.
+1. Phase 9 — Ethereum: chain config, private RPC/MEV, confirmation thresholds, live acceptance.
+2. Phase 9 prerequisite: automated post-accounting reorg compensation and tracker leader lock.
 3. Phase 10 — on-chain reconciliation.

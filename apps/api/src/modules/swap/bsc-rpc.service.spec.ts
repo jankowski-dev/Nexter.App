@@ -53,6 +53,62 @@ describe('BscRpcService', () => {
     expect(result.revertReason).toContain('expected 56');
   });
 
+  it('reads gas price and finds a same-nonce replacement in recent blocks', async () => {
+    const tx = {
+      hash: `0x${'a'.repeat(64)}`,
+      from: '0x1111111111111111111111111111111111111111',
+      to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
+      input: '0x12345678',
+      value: '0x0',
+      nonce: '0x7',
+      blockNumber: '0x64',
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpcResponse('0x3b9aca00'))
+      .mockResolvedValueOnce(rpcResponse('0x64'))
+      .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [tx] }));
+    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+
+    await expect(service.getGasPrice()).resolves.toBe('1000000000');
+    await expect(
+      service.findTransactionByNonce('0x1111111111111111111111111111111111111111', 7, 10),
+    ).resolves.toMatchObject({ hash: tx.hash, nonce: 7 });
+  });
+
+  it('finds matching transactions by sender, router, calldata and value', async () => {
+    const match = {
+      hash: `0x${'b'.repeat(64)}`,
+      from: '0x1111111111111111111111111111111111111111',
+      to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
+      input: '0x12345678',
+      value: '0x0',
+      nonce: '0x8',
+      blockNumber: '0x64',
+    };
+    const wrongValue = {
+      ...match,
+      hash: `0x${'c'.repeat(64)}`,
+      value: '0x1',
+      nonce: '0x9',
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpcResponse('0x64'))
+      .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [wrongValue, match] }));
+    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+
+    const matches = await service.findMatchingTransactions({
+      owner: '0x1111111111111111111111111111111111111111',
+      router: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
+      calldata: '0x12345678',
+      value: '0',
+      lookbackBlocks: 0,
+    });
+
+    expect(matches.map((item) => item.hash)).toEqual([match.hash]);
+  });
+
   it('reports a missing contract and a reverted call', async () => {
     const missing = new BscRpcService(
       vi
