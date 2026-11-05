@@ -138,6 +138,10 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
           ...assetRows.map((row) => row.address as string),
         ]),
       ].map((address) => address.toLowerCase());
+      const blockCache = new Map<
+        number,
+        Awaited<ReturnType<EvmRpcService['getBlockTransactions']>>
+      >();
 
       for (const watch of chainWatches) {
         const from =
@@ -150,24 +154,33 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
         const to = Math.min(latest, from + env.RECONCILIATION_MAX_BLOCKS_PER_TICK - 1);
 
         try {
-          const indexed = await this.indexRange(chain, watch.address, from, to, tokenAddresses);
-          await this.db
-            .update(watchedAddresses)
-            .set({ lastIndexedBlock: to, updatedAt: new Date() })
-            .where(eq(watchedAddresses.id, watch.id));
+          const indexed = await this.indexRange(
+            chain,
+            watch.address,
+            from,
+            to,
+            tokenAddresses,
+            blockCache,
+          );
+          await this.db.transaction(async (tx) => {
+            await tx
+              .update(watchedAddresses)
+              .set({ lastIndexedBlock: to, updatedAt: new Date() })
+              .where(eq(watchedAddresses.id, watch.id));
 
-          if (indexed > 0) {
-            await this.audit.log(
-              {
-                userId: watch.userId,
-                action: 'reconciliation.indexer_tick',
-                entityType: 'watched_address',
-                entityId: watch.id,
-                after: { chain, address: watch.address, fromBlock: from, toBlock: to, indexed },
-              },
-              { strict: true },
-            );
-          }
+            if (indexed > 0) {
+              await this.audit.log(
+                {
+                  userId: watch.userId,
+                  action: 'reconciliation.indexer_tick',
+                  entityType: 'watched_address',
+                  entityId: watch.id,
+                  after: { chain, address: watch.address, fromBlock: from, toBlock: to, indexed },
+                },
+                { executor: tx, strict: true },
+              );
+            }
+          });
         } catch (error) {
           this.logger.warn(
             `Indexer failed for ${chain} ${watch.address}: ${
@@ -185,6 +198,7 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
     fromBlock: number,
     toBlock: number,
     tokenAddresses: string[],
+    blockCache: Map<number, Awaited<ReturnType<EvmRpcService['getBlockTransactions']>>>,
   ): Promise<number> {
     const padded = padTopicAddress(address);
     const incoming =
@@ -250,7 +264,12 @@ export class OnchainIndexerService implements OnApplicationBootstrap, OnApplicat
     }
 
     for (let blockNumber = fromBlock; blockNumber <= toBlock; blockNumber += 1) {
-      const transactions = await this.rpc.getBlockTransactions(chain, blockNumber);
+      let transactions = blockCache.get(blockNumber);
+
+      if (!transactions) {
+        transactions = await this.rpc.getBlockTransactions(chain, blockNumber);
+        blockCache.set(blockNumber, transactions);
+      }
 
       for (const tx of transactions) {
         if (!tx.to) continue;

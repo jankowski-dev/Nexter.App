@@ -35,8 +35,6 @@ const messages: Record<string, string> = {
   RECONCILIATION_DISABLED: 'Сверка с сетью выключена на сервере.',
   RECONCILIATION_NO_ADDRESSES: 'Сначала добавьте watch-only адрес кошелька.',
   RECONCILIATION_FAILED: 'Не удалось выполнить сверку с сетью. Попробуйте позже.',
-  RECONCILIATION_UNSUPPORTED_ASSET:
-    'У актива в ledger нет contract address; сверка не может его проверить.',
 };
 
 const reasonMessages: Record<string, string> = {

@@ -122,6 +122,19 @@ try {
     throw new Error(`Application role still has DELETE on: ${deleteAllowed.join(', ')}`);
   }
 
+  const updateCheck = await client.query(
+    `select table_name, has_table_privilege($1, 'public.' || table_name, 'update') as can_update
+     from unnest($2::text[]) as table_name`,
+    [appUser, ['indexed_transfers', 'reconciliation_items']],
+  );
+  const updateAllowed = updateCheck.rows
+    .filter((row) => row.can_update)
+    .map((row) => row.table_name);
+
+  if (updateAllowed.length > 0) {
+    throw new Error(`Application role still has UPDATE on: ${updateAllowed.join(', ')}`);
+  }
+
   console.log(
     JSON.stringify(
       {

@@ -29,7 +29,7 @@ export const reconciliationItemSchema = z.object({
   ledgerBalance: z.string(),
   onchainBalance: z.string(),
   delta: z.string(),
-  status: z.enum(['MATCH', 'MISMATCH', 'MISSING_ONCHAIN', 'MISSING_LEDGER']),
+  status: z.enum(['MATCH', 'MISMATCH', 'MISSING_ONCHAIN', 'MISSING_LEDGER', 'UNSUPPORTED']),
   details: z.unknown(),
 });
 

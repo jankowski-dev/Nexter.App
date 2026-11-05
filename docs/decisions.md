@@ -212,7 +212,7 @@ Format: date — decision — reason.
 
 ## Phase 10 — On-chain reconciliation
 
-- **Seeded assets are contract-address complete.** Migration `0014` backfills verified contract addresses/decimals for seeded BSC/Ethereum assets, and `ensureForSwapToken` repairs an existing null-contract non-native asset. A non-zero ledger asset without a contract fails reconciliation rather than being silently skipped.
+- **Seeded assets are contract-address complete.** Migration `0015` backfills verified contract addresses/decimals for seeded BSC/Ethereum assets, and `ensureForSwapToken` repairs an existing null-contract non-native asset. A non-zero ledger asset without a contract is reported as `UNSUPPORTED` (the run completes) rather than being silently matched; imported assets may need mapping.
 - **Watch-only addresses.** `watched_addresses` stores `(user, chain, address, label, enabled, last_indexed_block)`; addresses are added explicitly and auto-seeded idempotently from swap-order wallet addresses. No signing material is stored.
 - **Indexer.** ERC-20 `Transfer` logs and non-zero native transfers are indexed into `indexed_transfers` by `event_key`; the API-hosted indexer uses a Postgres advisory lock, a bounded block range per tick, and a resumable per-address cursor.
 - **Reconciliation is a report, not a correction.** Runs compare aggregate ledger wallet balances with the sum of on-chain balances across watched addresses and persist `MATCH`/`MISMATCH`/`MISSING_ONCHAIN`/`MISSING_LEDGER` items. Mismatches are investigated and corrected only with new append-only ledger transactions.

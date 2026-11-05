@@ -203,7 +203,7 @@ describe('EvmRpcService', () => {
     const logs = await service.getLogs('bsc', {
       fromBlock: 100,
       toBlock: 100,
-      address: token,
+      address: [token],
       topics: [topic],
     });
     expect(logs).toHaveLength(1);

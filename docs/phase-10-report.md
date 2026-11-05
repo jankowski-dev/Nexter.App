@@ -14,7 +14,7 @@ Status: **implementation in progress; live reconciliation acceptance pending.**
 
 ## Implementation
 
-- Migration `0014` adds `watched_addresses`, `indexed_transfers`, `reconciliation_runs`, and `reconciliation_items`; it also backfills the verified contract addresses/decimals for the seeded BSC/Ethereum registry assets. Additive only.
+- Migration `0014` adds `watched_addresses`, `indexed_transfers`, `reconciliation_runs`, and `reconciliation_items`; migration `0015` backfills the verified contract addresses/decimals for seeded BSC/Ethereum assets. Additive only.
 - `ensureForSwapToken` repairs an existing non-native asset with a missing contract address, so registry assets are reconcilable. `watched_addresses` is unique per `(user, chain, address)`. Addresses can be added explicitly via `POST /reconciliation/addresses` and are idempotently seeded from swap-order wallet addresses during a run.
 - `OnchainIndexerService` scans ERC-20 `Transfer` logs and native transfers for enabled addresses, with a Postgres advisory lock, a configurable lookback, and a bounded block range per tick. Rows are idempotent by `event_key`; the cursor is `watched_addresses.last_indexed_block`.
 - `ReconciliationService` compares the aggregate ledger balance of wallet accounts for a chain with the sum of on-chain balances across enabled watched addresses. Items are `MATCH`, `MISMATCH`, `MISSING_ONCHAIN`, or `MISSING_LEDGER` (`delta = ledger − on-chain`); runs persist summaries and never edit the ledger or swap orders. Assets without a contract address that are not the chain native asset are reported as unsupported; a non-zero ledger balance for such an asset fails the run with `RECONCILIATION_UNSUPPORTED_ASSET` instead of producing a partial clean run.
@@ -37,8 +37,8 @@ Status: **implementation in progress; live reconciliation acceptance pending.**
 ## Verification
 
 - Migration `0014` applies cleanly to the disposable PostgreSQL database.
-- API tests cover watch-only native reconciliation (`MATCH`) and ERC-20/native indexing with cursor advancement.
-- Full suite: **138 passed, 1 skipped**; typecheck/lint/format/build pass.
+- API tests cover watch-only native reconciliation (`MATCH`), seeded ERC-20 reconciliation (`USDC MATCH` with a clean item set), unsupported ledger assets (`UNSUPPORTED`), and ERC-20/native indexing with cursor advancement.
+- Full suite: **139 passed, 1 skipped**; typecheck/lint/format/build pass.
 - Live reconciliation: pending owner approval to add the production wallet and run `POST /reconciliation/run` on BSC and Ethereum.
 
 ## Acceptance

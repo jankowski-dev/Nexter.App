@@ -16,7 +16,7 @@ Phase 9 exposes BSC and Ethereum swaps, but the ledger is still derived from man
 - **Gas backfill.** For confirmed swap orders with a tx hash and missing `network_fee_wei`, the run fetches the receipt and fills the raw gas fee with an audit event. It does not rewrite accounting transactions or invent USD gas values.
 - **API and UI.** Backend endpoints cover watched-address management, indexer status, reconciliation runs, and run detail. Phase 10 is backend-only; the UI is a later task.
 - **Security.** Owner-only, CSRF-protected mutations; address format and chain allowlist validation; no arbitrary contract calls beyond balance reads and transfer log queries; no secrets in logs.
-- **Schema is additive.** Migration 0014 adds the four tables; no existing ledger or swap rows are rewritten.
+- **Schema is additive.** Migration 0014 adds the four tables; migration 0015 backfills verified contract addresses/decimals for seeded assets. No ledger transactions or swap accounting rows are rewritten; the asset metadata backfill is a system migration and is documented separately.
 
 ## Consequences
 

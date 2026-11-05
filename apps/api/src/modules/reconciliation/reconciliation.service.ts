@@ -303,37 +303,39 @@ export class ReconciliationService {
 
     await this.ensureWatchedFromSwapOrders(userId, input.chain, meta);
 
-    const staleRuns = await this.db
-      .update(reconciliationRuns)
-      .set({
-        status: 'FAILED',
-        error: 'stale_run',
-        completedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(reconciliationRuns.userId, userId),
-          eq(reconciliationRuns.chain, input.chain),
-          eq(reconciliationRuns.status, 'RUNNING'),
-          lt(reconciliationRuns.startedAt, new Date(Date.now() - 10 * 60 * 1000)),
-        ),
-      )
-      .returning({ id: reconciliationRuns.id });
+    await this.db.transaction(async (tx) => {
+      const staleRuns = await tx
+        .update(reconciliationRuns)
+        .set({
+          status: 'FAILED',
+          error: 'stale_run',
+          completedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(reconciliationRuns.userId, userId),
+            eq(reconciliationRuns.chain, input.chain),
+            eq(reconciliationRuns.status, 'RUNNING'),
+            lt(reconciliationRuns.startedAt, new Date(Date.now() - 10 * 60 * 1000)),
+          ),
+        )
+        .returning({ id: reconciliationRuns.id });
 
-    for (const stale of staleRuns) {
-      await this.audit.log(
-        {
-          userId,
-          action: 'reconciliation.failed',
-          entityType: 'reconciliation_run',
-          entityId: stale.id,
-          after: { chain: input.chain, error: 'stale_run' },
-          ip: meta.ip,
-          userAgent: meta.userAgent,
-        },
-        { strict: true },
-      );
-    }
+      for (const stale of staleRuns) {
+        await this.audit.log(
+          {
+            userId,
+            action: 'reconciliation.failed',
+            entityType: 'reconciliation_run',
+            entityId: stale.id,
+            after: { chain: input.chain, error: 'stale_run' },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+      }
+    });
 
     const watches = await this.db
       .select()
@@ -427,14 +429,22 @@ export class ReconciliationService {
         if (!asset.contractAddress && asset.symbol !== nativeSymbol) {
           const unsupportedBalance = decimal(ledgerByAsset.get(asset.id) ?? '0');
 
+          summary.unsupportedAssets.push(asset.symbol);
+
           if (!unsupportedBalance.eq(0)) {
-            throw new BadRequestException({
-              code: 'RECONCILIATION_UNSUPPORTED_ASSET',
-              message: `Asset ${asset.symbol} has a ledger balance but no contract address`,
+            items.push({
+              runId: created.id,
+              assetId: asset.id,
+              symbol: asset.symbol,
+              contractAddress: null,
+              ledgerBalance: unsupportedBalance.toFixed(asset.decimals),
+              onchainBalance: decimal('0').toFixed(asset.decimals),
+              delta: unsupportedBalance.toFixed(asset.decimals),
+              status: 'UNSUPPORTED',
+              details: { reason: 'missing_contract_address' },
             });
           }
 
-          summary.unsupportedAssets.push(asset.symbol);
           continue;
         }
 
@@ -486,7 +496,7 @@ export class ReconciliationService {
       await this.db.transaction(async (tx) => {
         if (items.length > 0) await tx.insert(reconciliationItems).values(items);
 
-        await tx
+        const [completed] = await tx
           .update(reconciliationRuns)
           .set({
             status: 'COMPLETED',
@@ -494,7 +504,17 @@ export class ReconciliationService {
             completedAt: new Date(),
             summary,
           })
-          .where(eq(reconciliationRuns.id, created.id));
+          .where(
+            and(eq(reconciliationRuns.id, created.id), eq(reconciliationRuns.status, 'RUNNING')),
+          )
+          .returning({ id: reconciliationRuns.id });
+
+        if (!completed) {
+          throw new ConflictException({
+            code: 'CONFLICT',
+            message: 'Reconciliation run is no longer running',
+          });
+        }
 
         await this.audit.log(
           {
@@ -556,6 +576,7 @@ export class ReconciliationService {
           eq(swapOrders.userId, userId),
           eq(swapOrders.chain, chain),
           isNotNull(swapOrders.walletAddress),
+          inArray(swapOrders.status, ['CONFIRMED', 'SUBMITTED', 'PENDING']),
         ),
       );
     const addresses = [...new Set(rows.map((row) => row.walletAddress as string))];

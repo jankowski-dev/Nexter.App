@@ -118,7 +118,8 @@ export type TransactionSubtype =
 export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system';
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
 export type ReconciliationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
-export type ReconciliationItemStatus = 'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER';
+export type ReconciliationItemStatus =
+  'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER' | 'UNSUPPORTED';
 
 export const chains = pgTable(
   'chains',

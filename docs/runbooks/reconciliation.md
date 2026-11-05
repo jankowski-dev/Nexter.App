@@ -11,7 +11,7 @@ RECONCILIATION_LOOKBACK_BLOCKS=100
 RECONCILIATION_MAX_BLOCKS_PER_TICK=50
 ```
 
-`BSC_RPC_URL` and `ETHEREUM_RPC_URL` are used for balances, transfer logs, and receipts. The RPC chain ID is validated by `EvmRpcService`.
+Migration `0015` is a system data backfill of verified asset contract addresses/decimals; runtime repairs via `ensureForSwapToken` emit `accounting.asset_repaired` audit. `BSC_RPC_URL` and `ETHEREUM_RPC_URL` are used for balances, transfer logs, and receipts. The RPC chain ID is validated by `EvmRpcService`.
 
 ## Enable and add addresses
 
@@ -47,10 +47,13 @@ GET /api/v1/reconciliation/indexer
 - `MISMATCH` — both non-zero but different; `delta = ledger − on-chain`. Investigate transfers, gas, and missing ledger entries.
 - `MISSING_ONCHAIN` — ledger has a positive balance but the watched addresses do not.
 - `MISSING_LEDGER` — the watched addresses hold an asset the ledger does not.
+- `UNSUPPORTED` — the ledger has a balance for a non-native asset without a contract address. The run completes and the item is flagged; map the asset to a verified contract address or record an explicit owner-approved exception. Phase 4 imported assets may need this mapping.
 
 A mismatch is **not** auto-corrected. Do not edit or delete ledger rows. Record the cause and create a new append-only correction transaction (or fix the indexer/asset registry and rerun).
 
-## Gas backfill
+## Imported assets
+
+Assets created by the Notion import may not have contract addresses. They are reported as `UNSUPPORTED` when they have a ledger balance; they are never treated as native or silently matched. Map them to verified contract addresses (or record an owner-approved exception) before claiming a clean reconciliation.
 
 For already-accounted confirmed swap orders with a tx hash and missing `network_fee_wei`, a run fetches the receipt and fills the raw fee with `swap.gas_backfilled` audit. It does not invent USD gas values or rewrite accounting.
 
