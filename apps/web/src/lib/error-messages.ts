@@ -20,6 +20,8 @@ const messages: Record<string, string> = {
   SWAP_DEADLINE_PASSED: 'Срок действия сборки истёк. Запросите новую котировку.',
   SWAP_EXECUTION_DISABLED: 'Исполнение выключено на сервере до финального review.',
   SWAP_SIMULATION_FAILED: 'Симуляция не прошла. Обновите котировку и попробуйте снова.',
+  SWAP_GAS_TOO_HIGH:
+    'Стоимость газа выше настроенного лимита. Попробуйте позже или измените сумму.',
   SWAP_PROVIDER_UNAVAILABLE: 'BSC RPC или провайдер временно недоступен.',
   SWAP_RATE_LIMITED: 'Слишком много запросов к провайдеру. Попробуйте позже.',
   SWAP_DISABLED: 'Свопы временно отключены.',

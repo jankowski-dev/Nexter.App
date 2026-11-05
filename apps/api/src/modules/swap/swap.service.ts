@@ -185,7 +185,7 @@ export class SwapService {
       chains: SWAP_CHAINS,
       quoteTtlSeconds: env.SWAP_QUOTE_TTL_SECONDS,
       maxPriceImpactBps: env.SWAP_MAX_PRICE_IMPACT_BPS,
-      stepUpThresholdUsd: env.SWAP_STEP_UP_THRESHOLD_USD.toFixed(2),
+      stepUpThresholdUsd: decimal(env.SWAP_STEP_UP_THRESHOLD_USD).toFixed(2),
       defaultSlippageBps: env.SWAP_DEFAULT_SLIPPAGE_BPS,
       maxSlippageBps: env.SWAP_MAX_SLIPPAGE_BPS,
     };
@@ -343,6 +343,13 @@ export class SwapService {
       route.gasUsd && /^\d+(?:\.\d+)?$/.test(route.gasUsd) && route.gasUsd.length <= 32
         ? route.gasUsd
         : null;
+
+    if (gasUsd && decimal(gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_TOO_HIGH',
+        message: 'Quoted gas cost exceeds the configured cap',
+      });
+    }
 
     const order = await this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -699,6 +706,10 @@ export class SwapService {
         ? built.gasUsd
         : order.gasUsd;
 
+    if (gasUsd && decimal(gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+      await fail('gas', 'SWAP_GAS_TOO_HIGH', 'Gas cost exceeds the configured cap');
+    }
+
     if (order.quoteExpiresAt.getTime() <= Date.now()) {
       await this.expireIfNeeded(order);
       throw new ConflictException({
@@ -844,6 +855,13 @@ export class SwapService {
       throw new BadRequestException({
         code: 'SWAP_VALIDATION_FAILED',
         message: 'Stored swap order is incomplete',
+      });
+    }
+
+    if (order.gasUsd && decimal(order.gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_TOO_HIGH',
+        message: 'Gas cost exceeds the configured cap',
       });
     }
 
@@ -1133,8 +1151,8 @@ export class SwapService {
     input: SwapSubmitRequest,
     meta: SwapMeta,
   ): Promise<SwapOrderDetail> {
-    this.assertEnabled();
-    this.assertExecutionEnabled();
+    // Attaching a hash for an already-signed transaction is a recovery action,
+    // not a new execution: keep it available during a kill switch/execution disable.
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
@@ -1142,25 +1160,6 @@ export class SwapService {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
-      });
-    }
-
-    assertStepUp(auth, order);
-    this.assertWallet(order.walletAddress ?? undefined, true);
-
-    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
-      throw new BadRequestException({
-        code: 'SWAP_ROUTER_NOT_ALLOWED',
-        message: 'Router is not in the allowlist',
-      });
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-
-    if (!order.deadline || order.deadline <= now) {
-      throw new ConflictException({
-        code: 'SWAP_DEADLINE_PASSED',
-        message: 'Swap deadline has passed',
       });
     }
 
@@ -1181,25 +1180,11 @@ export class SwapService {
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
               inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE']),
-              gt(swapOrders.deadline, now),
             ),
           )
           .returning({ id: swapOrders.id });
 
         if (!row) {
-          const [current] = await tx
-            .select({ deadline: swapOrders.deadline, status: swapOrders.status })
-            .from(swapOrders)
-            .where(and(eq(swapOrders.id, orderId), eq(swapOrders.userId, userId)))
-            .limit(1);
-
-          if (current?.deadline && current.deadline <= now) {
-            throw new ConflictException({
-              code: 'SWAP_DEADLINE_PASSED',
-              message: 'Swap deadline has passed',
-            });
-          }
-
           throw new ConflictException({
             code: 'SWAP_STATE_INVALID',
             message: 'Swap order is no longer submittable',

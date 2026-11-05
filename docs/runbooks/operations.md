@@ -8,6 +8,7 @@
 - Check API logs for `auth.rate_limited`, import failures, and 5xx.
 - Confirm the daily encrypted backup exists in R2 and its size is plausible.
 - Confirm no new `unverified_assets`, `negative_balances`, or `missing_gas` spike on `/settings/data-quality`.
+- Check `/swap` history or the DB for `CONFIRMED` orders with null `accounting_transaction_id`, and for `SWAP_ACCOUNTING_*` errors older than 10 minutes. Investigate before the next swap.
 
 ## Weekly
 
@@ -26,7 +27,7 @@
 
 ## Rollback
 
-- Railway: redeploy the previous successful deployment image.
+- Railway: prefer `SWAP_KILL_SWITCH=true`/`SWAP_EXECUTION_ENABLED=false`; drain active/unaccounted swap orders before rolling back to a pre-Phase-8 image. The API hosts the swap tracker.
 - Database: restore PITR/dump only if a migration is destructive; prefer a forward fix for additive migrations.
 - After rollback, verify `/ready` and login.
 - Keep the failed deployment logs and the exact commit SHA.

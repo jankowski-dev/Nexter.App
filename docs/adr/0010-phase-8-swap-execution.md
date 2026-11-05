@@ -34,7 +34,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 - `APPROVAL_REQUIRED` is used only when the token allowance is insufficient.
 - `READY` means allowance and balance are sufficient and the order is ready to sign.
 - `AWAITING_SIGNATURE` is set by the client immediately before opening the wallet.
-- `SUBMITTED` is set after a tx hash is recorded; `PENDING` after the worker sees a receipt; `CONFIRMED` after 15 BSC confirmations.
+- `SUBMITTED` is set after a tx hash is recorded; `PENDING` after the API tracker sees a receipt; `CONFIRMED` after 15 BSC confirmations.
 - `FAILED`/`REPLACED`/`DROPPED` never create accounting transactions.
 
 ### Wallet and signing
@@ -58,7 +58,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 - Add `token_approvals` with owner, chain, wallet, token, spender, exact base-unit amount, status, tx hash, block, timestamps.
 - `POST /swap/approvals/build` accepts an order id; native-token inputs do not need approval.
 - The server emits `approve(spender, exactAmount)` calldata, validates the spender is the allowlisted router, simulates it, and never emits an unlimited approval.
-- `POST /swap/approvals/:id/submitted` records a tx hash and moves the approval to `SUBMITTED`; the worker tracks it.
+- `POST /swap/approvals/:id/submitted` records a tx hash and moves the approval to `SUBMITTED`; the API tracker confirms/fails it.
 - USDT-style allowance-reset behavior is handled by approving the exact required amount; a zero-then-exact flow is only used if the provider/contract requires it and is recorded as two events.
 
 ### Calldata verification and selectors
@@ -131,7 +131,7 @@ Additive only.
 - chain 56 and wallet allowlist;
 - quote TTL and fee/gas caps;
 - step-up TOTP over $500;
-- kill switch and `SWAP_EXECUTION_ENABLED`;
+- kill switch and `SWAP_EXECUTION_ENABLED`; gas cap (`SWAP_MAX_GAS_USD`);
 - no private keys/seed phrases server-side;
 - idempotent submission/tracking/accounting;
 - all mutations audited;
@@ -140,7 +140,7 @@ Additive only.
 ### Rollback
 
 - Disable `SWAP_KILL_SWITCH=true`; no new build/submit.
-- Existing submitted transactions continue to be tracked by the worker; do not delete orders or accounting rows.
+- Existing submitted transactions continue to be tracked by the API `SwapTrackingService`; do not roll back to a pre-Phase-8 image until active/unaccounted orders are drained, or keep a Phase 8 image running. Do not delete orders or accounting rows.
 - If accounting is wrong, append a compensating transaction; never edit the ledger.
 - Revert the application image to the previous release; migration 0010 is additive.
 

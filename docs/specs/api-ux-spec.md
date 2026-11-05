@@ -62,7 +62,7 @@ Every screen has loading skeleton, empty state, error state, forbidden state, of
 
 ## Accessibility
 
-Keyboard navigation, focus rings, ARIA labels, `aria-current`, skip link, contrast, not color-only P&L. Russian UI, dark theme.
+Keyboard navigation, focus rings, ARIA labels, `aria-current`, skip link, contrast, not color-only P&L. Russian UI, light theme.
 
 ## Performance
 

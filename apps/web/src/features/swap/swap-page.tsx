@@ -380,7 +380,7 @@ export function SwapPage() {
     <div className="space-y-6">
       <PageHeader
         title="Своп"
-        subtitle="Phase 8: котировки KyberSwap, проверка сборки и точный approval на BSC. Подпись Tangem включается после финального review."
+        subtitle="Phase 8: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC."
         actions={
           <Badge tone={data.enabled ? 'success' : 'warning'}>
             {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}

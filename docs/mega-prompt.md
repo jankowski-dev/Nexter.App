@@ -95,7 +95,7 @@ Later: on-chain reconciliation, passwords, tasks, notes.
 10. **Schema changes require an ADR and review.**
 11. **No destructive migrations without a backup and explicit approval.**
 12. **Tests, typecheck, and lint must pass before merge.**
-13. **UI is Russian, dark theme by default, USD base currency.**
+13. **UI is Russian, light theme by default, USD base currency.**
 14. **BSC first, Ethereum second.**
 15. **Swap tokens are allowlisted.** No arbitrary contract addresses in the UI.
 16. **Step-up TOTP is required for swaps above $500.**
@@ -1242,7 +1242,7 @@ Exit: balances match.
 - Watchlist CRUD.
 - Settings persist.
 - Export CSV/JSON.
-- Responsive dark Russian UI.
+- Responsive light Russian UI.
 - No wallet/swap.
 - OpenAPI client generated.
 
