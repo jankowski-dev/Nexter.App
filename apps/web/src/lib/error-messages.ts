@@ -32,6 +32,9 @@ const messages: Record<string, string> = {
     'Провайдер не смог собрать транзакцию для этого маршрута. Попробуйте другую пару или сумму.',
   SWAP_VALIDATION_FAILED:
     'Сборка не прошла проверку безопасности. Попробуйте другую пару или сумму.',
+  RECONCILIATION_DISABLED: 'Сверка с сетью выключена на сервере.',
+  RECONCILIATION_NO_ADDRESSES: 'Сначала добавьте watch-only адрес кошелька.',
+  RECONCILIATION_FAILED: 'Не удалось выполнить сверку с сетью. Попробуйте позже.',
 };
 
 const reasonMessages: Record<string, string> = {

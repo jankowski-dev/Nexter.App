@@ -6,14 +6,17 @@ import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
 import { encodeAbiParameters, encodeFunctionData, toEventSelector } from 'viem';
 import {
+  assets,
   auditLog,
   createDb,
+  indexedTransfers,
   lots,
   postings,
   swapEvents,
   swapOrders,
   tokenApprovals,
   transactions,
+  watchedAddresses,
   type Database,
 } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -23,13 +26,19 @@ import { AssetsService } from '../src/modules/accounting/assets.service';
 import { LedgerService } from '../src/modules/accounting/ledger.service';
 import {
   EvmRpcService,
+  type RpcLog,
   type RpcReceipt,
   type RpcTransaction,
 } from '../src/modules/swap/evm-rpc.service';
 import { KYBER_ROUTER_ABI } from '../src/modules/swap/kyber-calldata';
 import { KyberSwapClient } from '../src/modules/swap/kyber-swap.client';
+import { OnchainIndexerService } from '../src/modules/reconciliation/onchain-indexer.service';
 import { SwapTrackingService } from '../src/modules/swap/swap-tracking.service';
-import { NATIVE_ADDRESS, getSwapToken } from '../src/modules/swap/token-registry';
+import {
+  NATIVE_ADDRESS,
+  getSwapToken,
+  nativeTokenForChain,
+} from '../src/modules/swap/token-registry';
 import { env } from '../src/shared/config/env';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -136,6 +145,10 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let simulationGasEstimate: string | null = '120000';
   let rpcChainId = 56;
   let rpcFailureChain: string | null = null;
+  let rpcLogs: RpcLog[] = [];
+  let rpcBlockTransactions: RpcTransaction[] = [];
+  let erc20Balances: Record<string, string> = {};
+  let erc20DefaultBalance = '1000000000000000000000';
   let rpcFailure = false;
   let buildData = makeBuildData();
   let buildRouter = router;
@@ -200,7 +213,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     configuredFor: () => true,
     ensureChain: async () => undefined,
     getErc20Allowance: async () => allowance,
-    getErc20Balance: async () => '1000000000000000000000',
+    getErc20Balance: async (_chain: string, token: string) =>
+      erc20Balances[token.toLowerCase()] ?? erc20DefaultBalance,
     getNativeBalance: async () => nativeBalance,
     getGasPrice: async () => '0x3b9aca00',
     findTransactionByNonce: async () => replacementTx,
@@ -217,6 +231,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       timestamp: blockTimestamp,
       hash: `0x${'f'.repeat(64)}`,
     }),
+    getLogs: async () => rpcLogs,
+    getBlockTransactions: async () => rpcBlockTransactions,
     simulate: async () => {
       if (rpcFailure) throw new Error('rpc unavailable');
 
@@ -288,6 +304,13 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     simulationGasEstimate = '120000';
     rpcChainId = 56;
     rpcFailureChain = null;
+    rpcLogs = [];
+    rpcBlockTransactions = [];
+    erc20Balances = {};
+    erc20DefaultBalance = '1000000000000000000000';
+    env.RECONCILIATION_ENABLED = false;
+    env.RECONCILIATION_LOOKBACK_BLOCKS = 100;
+    env.RECONCILIATION_MAX_BLOCKS_PER_TICK = 50;
     rpcFailure = false;
     buildData = makeBuildData();
     buildRouter = router;
@@ -314,6 +337,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     await db.execute(sql`truncate table users restart identity cascade`);
+    await db.execute(sql`truncate table indexed_transfers restart identity`);
+    await db.execute(
+      sql`delete from postings where asset_id in (select id from assets where symbol = 'TESTNULL')`,
+    );
+    await db.execute(sql`delete from assets where symbol = 'TESTNULL'`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
   });
 
@@ -1210,6 +1238,245 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     await tracking.tick();
     const [confirmed] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
     expect(confirmed.status).toBe('CONFIRMED');
+  }, 60_000);
+
+  it('runs a watch-only reconciliation for the native asset', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const native = await assets.ensureForSwapToken(
+      'bsc',
+      nativeTokenForChain('bsc'),
+      undefined,
+      owner.userId,
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: native.id,
+        amount: '0.5',
+        usdValue: '300',
+      },
+      {},
+    );
+
+    nativeBalance = '500000000000000000';
+    erc20DefaultBalance = '0';
+    env.RECONCILIATION_ENABLED = true;
+
+    await agent
+      .post('/api/v1/reconciliation/addresses')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', address: wallet, label: 'acceptance wallet' })
+      .expect(201);
+
+    const run = await agent
+      .post('/api/v1/reconciliation/run')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc' })
+      .expect(201);
+
+    expect(run.body.status).toBe('COMPLETED');
+    const bnb = run.body.items.find((item: { symbol: string }) => item.symbol === 'BNB');
+    expect(bnb).toMatchObject({
+      status: 'MATCH',
+      ledgerBalance: '0.500000000000000000',
+      onchainBalance: '0.500000000000000000',
+    });
+    expect(run.body.summary).toMatchObject({
+      addresses: [wallet],
+      blockNumber: 1000,
+      gasBackfilled: 0,
+    });
+  }, 60_000);
+
+  it('reconciles a seeded ERC-20 contract asset', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const usdc = await assets.ensureForSwapToken(
+      'bsc',
+      getSwapToken('bsc', tokenIn)!,
+      undefined,
+      owner.userId,
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: usdc.id,
+        amount: '1',
+        usdValue: '1',
+      },
+      {},
+    );
+
+    nativeBalance = '0';
+    erc20DefaultBalance = '0';
+    erc20Balances = { [tokenIn.toLowerCase()]: '1000000000000000000' };
+    env.RECONCILIATION_ENABLED = true;
+
+    await agent
+      .post('/api/v1/reconciliation/addresses')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', address: wallet })
+      .expect(201);
+
+    const run = await agent
+      .post('/api/v1/reconciliation/run')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc' })
+      .expect(201);
+
+    const item = run.body.items.find((row: { symbol: string }) => row.symbol === 'USDC');
+    expect(item).toMatchObject({
+      status: 'MATCH',
+      ledgerBalance: '1.000000000000000000',
+      onchainBalance: '1.000000000000000000',
+    });
+    expect(run.body.items).toHaveLength(1);
+    expect(run.body.summary).toMatchObject({
+      matches: 1,
+      mismatches: 0,
+      missingOnchain: 0,
+      missingLedger: 0,
+      unsupportedAssets: [],
+    });
+  }, 60_000);
+
+  it('reports a ledger asset without a contract as unsupported without failing the run', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assetsService = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const usdc = await assetsService.ensureForSwapToken(
+      'bsc',
+      getSwapToken('bsc', tokenIn)!,
+      undefined,
+      owner.userId,
+    );
+    const [manual] = await db
+      .insert(assets)
+      .values({
+        chainId: usdc.chainId,
+        symbol: 'TESTNULL',
+        name: 'Imported without contract',
+        decimals: 18,
+        isVerified: false,
+      })
+      .returning();
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: manual.id,
+        amount: '1',
+        usdValue: '1',
+      },
+      {},
+    );
+
+    nativeBalance = '0';
+    erc20DefaultBalance = '0';
+    env.RECONCILIATION_ENABLED = true;
+
+    await agent
+      .post('/api/v1/reconciliation/addresses')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', address: wallet })
+      .expect(201);
+
+    const run = await agent
+      .post('/api/v1/reconciliation/run')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc' })
+      .expect(201);
+
+    expect(run.body.status).toBe('COMPLETED');
+    expect(run.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ symbol: 'TESTNULL', status: 'UNSUPPORTED' }),
+      ]),
+    );
+    expect(run.body.summary.unsupportedAssets).toContain('TESTNULL');
+  }, 60_000);
+
+  it('indexes ERC-20 and native transfers for a watched address', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const indexer = app.get(OnchainIndexerService);
+
+    env.RECONCILIATION_ENABLED = true;
+    env.RECONCILIATION_LOOKBACK_BLOCKS = 1;
+    env.RECONCILIATION_MAX_BLOCKS_PER_TICK = 50;
+    latestBlock = 1;
+
+    await agent
+      .post('/api/v1/reconciliation/addresses')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', address: wallet, label: 'indexer wallet' })
+      .expect(201);
+
+    const topic = (address: string) =>
+      `0x${address.toLowerCase().replace(/^0x/, '').padStart(64, '0')}`;
+    const amount = BigInt(1_000_000_000_000_000_000n).toString(16).padStart(64, '0');
+    const logTxHash = `0x${'1'.repeat(64)}`;
+    rpcLogs = [
+      {
+        address: tokenIn,
+        topics: [
+          '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
+          topic(wallet),
+          topic('0x2222222222222222222222222222222222222222'),
+        ],
+        data: `0x${amount}`,
+        transactionHash: logTxHash,
+        logIndex: 0,
+        blockNumber: 1,
+        blockHash: `0x${'2'.repeat(64)}`,
+      },
+    ];
+    rpcBlockTransactions = [
+      {
+        hash: `0x${'3'.repeat(64)}`,
+        from: wallet,
+        to: '0x2222222222222222222222222222222222222222',
+        input: '0x',
+        value: '0x1',
+        nonce: 1,
+        blockNumber: 1,
+      },
+    ];
+
+    await indexer.tick();
+
+    const transfers = await db.select().from(indexedTransfers);
+    expect(transfers).toHaveLength(2);
+    expect(transfers.find((row) => row.assetAddress === tokenIn.toLowerCase())?.amount).toBe(
+      '1000000000000000000',
+    );
+    expect(transfers.find((row) => row.assetAddress === null)?.amount).toBe('1');
+
+    const [watch] = await db
+      .select()
+      .from(watchedAddresses)
+      .where(eq(watchedAddresses.address, wallet));
+    expect(watch.lastIndexedBlock).toBe(1);
   }, 60_000);
 
   it('tracks a confirmed swap and writes idempotent accounting', async () => {

@@ -63,8 +63,9 @@ const statements = [
   `grant usage on schema public to ${quoteIdent(appUser)};`,
   `grant select, insert, update, delete on all tables in schema public to ${quoteIdent(appUser)};`,
   `revoke update, delete on audit_log from ${quoteIdent(appUser)};`,
-  `revoke delete on users, settings, accounts, assets, chains, imports, watchlist, swap_orders, swap_events, token_approvals, external_api_calls from ${quoteIdent(appUser)};`,
+  `revoke delete on users, settings, accounts, assets, chains, imports, watchlist, swap_orders, swap_events, token_approvals, external_api_calls, watched_addresses, indexed_transfers, reconciliation_runs, reconciliation_items from ${quoteIdent(appUser)};`,
   `grant usage, select on all sequences in schema public to ${quoteIdent(appUser)};`,
+  `revoke update on indexed_transfers, reconciliation_items from ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant select, insert, update, delete on tables to ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant usage, select on sequences to ${quoteIdent(appUser)};`,
 ];
@@ -106,6 +107,10 @@ try {
         'swap_events',
         'token_approvals',
         'external_api_calls',
+        'watched_addresses',
+        'indexed_transfers',
+        'reconciliation_runs',
+        'reconciliation_items',
       ],
     ],
   );
@@ -115,6 +120,19 @@ try {
 
   if (deleteAllowed.length > 0) {
     throw new Error(`Application role still has DELETE on: ${deleteAllowed.join(', ')}`);
+  }
+
+  const updateCheck = await client.query(
+    `select table_name, has_table_privilege($1, 'public.' || table_name, 'update') as can_update
+     from unnest($2::text[]) as table_name`,
+    [appUser, ['indexed_transfers', 'reconciliation_items']],
+  );
+  const updateAllowed = updateCheck.rows
+    .filter((row) => row.can_update)
+    .map((row) => row.table_name);
+
+  if (updateAllowed.length > 0) {
+    throw new Error(`Application role still has UPDATE on: ${updateAllowed.join(', ')}`);
   }
 
   console.log(

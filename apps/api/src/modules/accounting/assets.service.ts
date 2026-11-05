@@ -81,7 +81,41 @@ export class AssetsService {
       .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, token.symbol)))
       .limit(1);
 
-    if (existing) return existing;
+    if (existing) {
+      if (!token.native && !existing.contractAddress) {
+        const [repaired] = await executor
+          .update(assets)
+          .set({
+            contractAddress: token.address.toLowerCase(),
+            decimals: token.decimals,
+            updatedAt: new Date(),
+          })
+          .where(eq(assets.id, existing.id))
+          .returning();
+
+        if (repaired) {
+          await this.audit.log(
+            {
+              userId,
+              action: 'accounting.asset_repaired',
+              entityType: 'asset',
+              entityId: repaired.id,
+              after: {
+                chainCode,
+                symbol: repaired.symbol,
+                contractAddress: repaired.contractAddress,
+                decimals: repaired.decimals,
+              },
+            },
+            { executor, strict: Boolean(userId) },
+          );
+
+          return repaired;
+        }
+      }
+
+      return existing;
+    }
 
     const cashEquivalent = ['USDC', 'USDT', 'BUSD', 'FDUSD'].includes(token.symbol);
     const [created] = await executor

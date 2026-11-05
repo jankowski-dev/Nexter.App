@@ -209,3 +209,12 @@ Format: date — decision — reason.
 - **Phase 9 accepted (2026-11-05).** Live Ethereum swap completed: 0.0001 ETH → 0.22526 USDC, order `92e1bada…`, tx `0x7ecdd673…`, 12 confirmations, status `CONFIRMED`. The first accounting attempt failed `SWAP_ACCOUNTING_NO_FUNDED_ACCOUNT`; adding the ETH opening balance to the Tangem Ethereum ledger account let the tracker create accounting. Ethereum execution is enabled in production; `SWAP_ETHEREUM_EXECUTION_ENABLED` and the global kill switch are rollback controls.
 
 - **Phase 9.x tracker leader lock.** `SwapTrackingService.tick()` takes a session-level Postgres advisory lock (`pg_try_advisory_lock`) on a dedicated pool connection and releases it in `finally`; if unlock fails, the connection is destroyed. Replicas that do not acquire the lock skip the tick. This removes the single-API-replica requirement without a schema change.
+
+## Phase 10 — On-chain reconciliation
+
+- **Seeded assets are contract-address complete.** Migration `0015` backfills verified contract addresses/decimals for seeded BSC/Ethereum assets, and `ensureForSwapToken` repairs an existing null-contract non-native asset. A non-zero ledger asset without a contract is reported as `UNSUPPORTED` (the run completes) rather than being silently matched; imported assets may need mapping.
+- **Watch-only addresses.** `watched_addresses` stores `(user, chain, address, label, enabled, last_indexed_block)`; addresses are added explicitly and auto-seeded idempotently from swap-order wallet addresses. No signing material is stored.
+- **Indexer.** ERC-20 `Transfer` logs and non-zero native transfers are indexed into `indexed_transfers` by `event_key`; the API-hosted indexer uses a Postgres advisory lock, a bounded block range per tick, and a resumable per-address cursor.
+- **Reconciliation is a report, not a correction.** Runs compare aggregate ledger wallet balances with the sum of on-chain balances across watched addresses and persist `MATCH`/`MISMATCH`/`MISSING_ONCHAIN`/`MISSING_LEDGER` items. Mismatches are investigated and corrected only with new append-only ledger transactions.
+- **Gas backfill is raw-only.** Missing `network_fee_wei` on confirmed swap orders is filled from the receipt with audit; USD gas and accounting rows are not invented or rewritten.
+- **Rollout.** `RECONCILIATION_ENABLED` defaults to false; enabling it starts the indexer. No UI in Phase 10; API/runbook only. Migration `0014` is additive.
