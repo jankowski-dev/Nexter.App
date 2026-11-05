@@ -18,7 +18,7 @@ export const swapStatusSchema = z.enum([
   'CANCELLED',
 ]);
 
-export const swapChainCodeSchema = z.literal('bsc');
+export const swapChainCodeSchema = z.enum(['bsc', 'ethereum']);
 
 export const swapTokenSchema = z.object({
   symbol: z.string(),
@@ -33,6 +33,8 @@ export const swapChainConfigSchema = z.object({
   chainId: z.number().int().positive(),
   name: z.string(),
   tokens: z.array(swapTokenSchema),
+  rpcConfigured: z.boolean(),
+  executionEnabled: z.boolean(),
 });
 
 export const swapConfigResponseSchema = z.object({
@@ -209,6 +211,7 @@ export const swapBuildResponseSchema = swapOrderDetailSchema.extend({
 });
 
 export type SwapStatus = z.infer<typeof swapStatusSchema>;
+export type SwapChainCode = z.infer<typeof swapChainCodeSchema>;
 export type SwapToken = z.infer<typeof swapTokenSchema>;
 export type SwapChainConfig = z.infer<typeof swapChainConfigSchema>;
 export type SwapConfigResponse = z.infer<typeof swapConfigResponseSchema>;

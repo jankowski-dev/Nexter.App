@@ -13,6 +13,7 @@ import type {
   ApprovalBuildResponse,
   ApprovalsQuery,
   ApprovalsResponse,
+  SwapChainCode,
   TokenApproval,
 } from '@nexter/contracts';
 import type { AuthContext } from '../auth/auth.types';
@@ -20,10 +21,10 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
-import { BscRpcService, padUint } from './bsc-rpc.service';
+import { EvmRpcService, padUint } from './evm-rpc.service';
 import { assertStepUp } from './swap-step-up';
 import {
-  DEFAULT_BSC_ROUTER,
+  defaultRouterForChain,
   getSwapToken,
   isNativeToken,
   parseAddressList,
@@ -44,16 +45,16 @@ function isUniqueViolation(error: unknown): boolean {
   return candidate.code === '23505' || candidate.cause?.code === '23505';
 }
 
-function routerAllowlist(): string[] {
+function routerAllowlist(chain: string): string[] {
   const configured = parseAddressList(env.SWAP_ROUTER_ALLOWLIST);
-  return configured.length > 0 ? configured : [DEFAULT_BSC_ROUTER.toLowerCase()];
+  return configured.length > 0 ? configured : [defaultRouterForChain(chain).toLowerCase()];
 }
 
 @Injectable()
 export class ApprovalService {
   constructor(
     @Inject(DB) private readonly db: Database,
-    private readonly rpc: BscRpcService,
+    private readonly rpc: EvmRpcService,
     private readonly audit: AuditService,
   ) {}
 
@@ -137,7 +138,7 @@ export class ApprovalService {
     }
 
     const spender = order.routerAddress.toLowerCase();
-    if (!routerAllowlist().includes(spender)) {
+    if (!routerAllowlist(order.chain).includes(spender)) {
       throw new BadRequestException({
         code: 'SWAP_ROUTER_NOT_ALLOWED',
         message: 'Router is not in the allowlist',
@@ -157,18 +158,23 @@ export class ApprovalService {
     let allowance: string | null;
 
     try {
-      allowance = await this.rpc.getErc20Allowance(token.address, order.walletAddress, spender);
+      allowance = await this.rpc.getErc20Allowance(
+        order.chain,
+        token.address,
+        order.walletAddress,
+        spender,
+      );
     } catch {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
     if (allowance === null) {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is not configured',
+        message: 'RPC is not configured',
       });
     }
 
@@ -184,6 +190,7 @@ export class ApprovalService {
 
     try {
       simulation = await this.rpc.simulate({
+        chain: order.chain,
         from: order.walletAddress,
         to: token.address,
         data: calldata,
@@ -192,7 +199,7 @@ export class ApprovalService {
     } catch {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -390,7 +397,7 @@ export class ApprovalService {
     return {
       id: row.id,
       orderId: row.orderId,
-      chain: row.chain as 'bsc',
+      chain: row.chain as SwapChainCode,
       walletAddress: row.walletAddress,
       tokenAddress: row.tokenAddress,
       spenderAddress: row.spenderAddress,

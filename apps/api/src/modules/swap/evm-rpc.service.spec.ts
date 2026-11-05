@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BscRpcService } from './bsc-rpc.service';
+import { EvmRpcService } from './evm-rpc.service';
 import { env } from '../../shared/config/env';
 
 env.BSC_RPC_URL = 'http://rpc.test';
@@ -11,7 +11,7 @@ function rpcResponse(result: unknown, status = 200): Response {
   });
 }
 
-describe('BscRpcService', () => {
+describe('EvmRpcService', () => {
   it('simulates on BSC after checking chain id and router code', async () => {
     const fetchMock = vi
       .fn()
@@ -19,9 +19,10 @@ describe('BscRpcService', () => {
       .mockResolvedValueOnce(rpcResponse('0x6080'))
       .mockResolvedValueOnce(rpcResponse('0x'))
       .mockResolvedValueOnce(rpcResponse('0x1d4c0'));
-    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
 
     const result = await service.simulate({
+      chain: 'bsc',
       from: '0x1111111111111111111111111111111111111111',
       to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       data: '0x12345678',
@@ -38,11 +39,12 @@ describe('BscRpcService', () => {
   });
 
   it('rejects a non-BSC RPC chain', async () => {
-    const service = new BscRpcService(
+    const service = new EvmRpcService(
       vi.fn().mockResolvedValue(rpcResponse('0x1')) as unknown as typeof fetch,
     );
 
     const result = await service.simulate({
+      chain: 'bsc',
       from: '0x1111111111111111111111111111111111111111',
       to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       data: '0x12345678',
@@ -68,11 +70,11 @@ describe('BscRpcService', () => {
       .mockResolvedValueOnce(rpcResponse('0x3b9aca00'))
       .mockResolvedValueOnce(rpcResponse('0x64'))
       .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [tx] }));
-    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
 
-    await expect(service.getGasPrice()).resolves.toBe('1000000000');
+    await expect(service.getGasPrice('bsc')).resolves.toBe('1000000000');
     await expect(
-      service.findTransactionByNonce('0x1111111111111111111111111111111111111111', 7, 10),
+      service.findTransactionByNonce('bsc', '0x1111111111111111111111111111111111111111', 7, 10),
     ).resolves.toMatchObject({ hash: tx.hash, nonce: 7 });
   });
 
@@ -96,9 +98,10 @@ describe('BscRpcService', () => {
       .fn()
       .mockResolvedValueOnce(rpcResponse('0x64'))
       .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [wrongValue, match] }));
-    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
 
     const matches = await service.findMatchingTransactions({
+      chain: 'bsc',
       owner: '0x1111111111111111111111111111111111111111',
       router: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       calldata: '0x12345678',
@@ -125,9 +128,10 @@ describe('BscRpcService', () => {
       .mockResolvedValueOnce(
         rpcResponse({ number: '0x64', timestamp: '0x64', transactions: [tx] }),
       );
-    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
 
     const matches = await service.findMatchingTransactions({
+      chain: 'bsc',
       owner: '0x1111111111111111111111111111111111111111',
       router: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       calldata: '0x12345678',
@@ -140,13 +144,14 @@ describe('BscRpcService', () => {
   });
 
   it('reports a missing contract and a reverted call', async () => {
-    const missing = new BscRpcService(
+    const missing = new EvmRpcService(
       vi
         .fn()
         .mockResolvedValueOnce(rpcResponse('0x38'))
         .mockResolvedValueOnce(rpcResponse('0x')) as unknown as typeof fetch,
     );
     const missingResult = await missing.simulate({
+      chain: 'bsc',
       from: '0x1111111111111111111111111111111111111111',
       to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       data: '0x12345678',
@@ -155,7 +160,7 @@ describe('BscRpcService', () => {
     expect(missingResult.success).toBe(false);
     expect(missingResult.revertReason).toContain('no contract code');
 
-    const reverted = new BscRpcService(
+    const reverted = new EvmRpcService(
       vi
         .fn()
         .mockResolvedValueOnce(rpcResponse('0x38'))
@@ -168,6 +173,7 @@ describe('BscRpcService', () => {
         ) as unknown as typeof fetch,
     );
     const revertedResult = await reverted.simulate({
+      chain: 'bsc',
       from: '0x1111111111111111111111111111111111111111',
       to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
       data: '0x12345678',

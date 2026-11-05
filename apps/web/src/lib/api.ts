@@ -47,6 +47,7 @@ import {
   type PositionsResponse,
   type Settings,
   type StepUpResponse,
+  type SwapChainCode,
   type SwapBuildResponse,
   type SwapConfigResponse,
   type SwapOrdersResponse,
@@ -415,7 +416,7 @@ export async function fetchSwapConfig(): Promise<SwapConfigResponse> {
 }
 
 export async function quoteSwap(body: {
-  chain: 'bsc';
+  chain: SwapChainCode;
   tokenIn: string;
   tokenOut: string;
   amountIn: string;

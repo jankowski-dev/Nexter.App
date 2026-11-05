@@ -1,9 +1,11 @@
 import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { useCallback, useRef, useState } from 'react';
 
+const SUPPORTED_CHAIN_IDS = [56, 1] as const;
 const BSC_CHAIN_ID = 56;
 
 export interface SendTransactionInput {
+  chainId: number;
   to: string;
   data: string;
   value?: string;
@@ -41,8 +43,8 @@ export function useWalletConnect(projectId: string | null) {
         providerRef.current ??
         (await EthereumProvider.init({
           projectId,
-          chains: [BSC_CHAIN_ID],
-          optionalChains: [BSC_CHAIN_ID],
+          chains: [...SUPPORTED_CHAIN_IDS],
+          optionalChains: [...SUPPORTED_CHAIN_IDS],
           showQrModal: true,
           qrModalOptions: { themeMode: 'light' },
           metadata: {
@@ -92,18 +94,18 @@ export function useWalletConnect(projectId: string | null) {
     }
   }, []);
 
-  const switchToBsc = useCallback(async () => {
+  const switchToChain = useCallback(async (targetChainId: number) => {
     const provider = providerRef.current;
     if (!provider) return;
 
     try {
       await provider.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x38' }],
+        params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
-      setChainId(BSC_CHAIN_ID);
+      setChainId(targetChainId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось переключить сеть на BSC');
+      setError(err instanceof Error ? err.message : 'Не удалось переключить сеть в кошельке');
     }
   }, []);
 
@@ -115,18 +117,18 @@ export function useWalletConnect(projectId: string | null) {
         throw new Error('Кошелёк не подключён');
       }
 
-      if (chainId !== BSC_CHAIN_ID) {
+      if (chainId !== input.chainId) {
         await provider.request({
           method: 'wallet_switchEthereumChain',
-          params: [{ chainId: '0x38' }],
+          params: [{ chainId: `0x${input.chainId.toString(16)}` }],
         });
         const currentChain = await provider.request({ method: 'eth_chainId' });
 
-        if (chainIdFrom(currentChain) !== BSC_CHAIN_ID) {
-          throw new Error('Кошелёк не переключился на BSC');
+        if (chainIdFrom(currentChain) !== input.chainId) {
+          throw new Error('Кошелёк не переключился на нужную сеть');
         }
 
-        setChainId(BSC_CHAIN_ID);
+        setChainId(input.chainId);
       }
 
       const value =
@@ -188,9 +190,10 @@ export function useWalletConnect(projectId: string | null) {
     error,
     connected: Boolean(address),
     onBsc: chainId === BSC_CHAIN_ID,
+    onChain: (targetChainId: number) => chainId === targetChainId,
     connect,
     disconnect,
-    switchToBsc,
+    switchToChain,
     sendTransaction,
     waitForReceipt,
   };

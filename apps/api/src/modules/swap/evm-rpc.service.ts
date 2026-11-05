@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
+import { getSwapChain } from './token-registry';
 
 export interface SimulationResult {
   success: boolean;
@@ -43,6 +44,12 @@ export interface RpcBlock {
 interface RpcResponse {
   result?: unknown;
   error?: { code?: unknown; message?: unknown };
+}
+
+interface ChainRpcConfig {
+  url: string | undefined;
+  chainId: number;
+  name: string;
 }
 
 function hexToNumber(value: unknown): number | null {
@@ -93,9 +100,8 @@ function hexToBigInt(value: unknown): string | null {
 }
 
 @Injectable()
-export class BscRpcService {
-  private readonly logger = new Logger(BscRpcService.name);
-  private readonly rpcUrl = env.BSC_RPC_URL;
+export class EvmRpcService {
+  private readonly logger = new Logger(EvmRpcService.name);
   private readonly fetchImpl: typeof fetch;
 
   constructor(fetchImpl?: typeof fetch) {
@@ -103,58 +109,46 @@ export class BscRpcService {
   }
 
   get configured(): boolean {
-    return Boolean(this.rpcUrl);
+    return Boolean(env.BSC_RPC_URL || env.ETHEREUM_RPC_URL);
   }
 
-  async getErc20Allowance(token: string, owner: string, spender: string): Promise<string | null> {
-    if (!this.rpcUrl) return null;
+  configuredFor(chain: string): boolean {
+    return Boolean(this.config(chain).url);
+  }
+
+  async getErc20Allowance(
+    chain: string,
+    token: string,
+    owner: string,
+    spender: string,
+  ): Promise<string | null> {
+    if (!this.configuredFor(chain)) return null;
     const data = `0xdd62ed3e${padAddress(owner)}${padAddress(spender)}`;
-    const result = await this.call('eth_call', [{ from: owner, to: token, data }, 'latest']);
+    const result = await this.call(chain, 'eth_call', [{ from: owner, to: token, data }, 'latest']);
     return hexToBigInt(result);
   }
 
-  async getErc20Balance(token: string, owner: string): Promise<string | null> {
-    if (!this.rpcUrl) return null;
+  async getErc20Balance(chain: string, token: string, owner: string): Promise<string | null> {
+    if (!this.configuredFor(chain)) return null;
     const data = `0x70a08231${padAddress(owner)}`;
-    const result = await this.call('eth_call', [{ from: owner, to: token, data }, 'latest']);
+    const result = await this.call(chain, 'eth_call', [{ from: owner, to: token, data }, 'latest']);
     return hexToBigInt(result);
   }
 
-  async getNativeBalance(owner: string): Promise<string | null> {
-    if (!this.rpcUrl) return null;
-    const result = await this.call('eth_getBalance', [owner, 'latest']);
+  async getNativeBalance(chain: string, owner: string): Promise<string | null> {
+    if (!this.configuredFor(chain)) return null;
+    const result = await this.call(chain, 'eth_getBalance', [owner, 'latest']);
     return hexToBigInt(result);
   }
 
-  async getTransactionByHash(hash: string): Promise<RpcTransaction | null> {
-    if (!this.rpcUrl) return null;
-    const result = await this.call('eth_getTransactionByHash', [hash]);
-
-    if (!result || typeof result !== 'object') return null;
-    const tx = result as Record<string, unknown>;
-
-    if (
-      typeof tx.hash !== 'string' ||
-      typeof tx.from !== 'string' ||
-      typeof tx.input !== 'string'
-    ) {
-      return null;
-    }
-
-    return {
-      hash: tx.hash,
-      from: tx.from,
-      to: typeof tx.to === 'string' ? tx.to : null,
-      input: tx.input,
-      value: typeof tx.value === 'string' ? tx.value : '0x0',
-      nonce: hexToNumber(tx.nonce),
-      blockNumber: hexToNumber(tx.blockNumber),
-    };
+  async getTransactionByHash(chain: string, hash: string): Promise<RpcTransaction | null> {
+    if (!this.configuredFor(chain)) return null;
+    return parseTransaction(await this.call(chain, 'eth_getTransactionByHash', [hash]));
   }
 
-  async getTransactionReceipt(hash: string): Promise<RpcReceipt | null> {
-    if (!this.rpcUrl) return null;
-    const result = await this.call('eth_getTransactionReceipt', [hash]);
+  async getTransactionReceipt(chain: string, hash: string): Promise<RpcReceipt | null> {
+    if (!this.configuredFor(chain)) return null;
+    const result = await this.call(chain, 'eth_getTransactionReceipt', [hash]);
 
     if (!result || typeof result !== 'object') return null;
     const receipt = result as Record<string, unknown>;
@@ -197,22 +191,23 @@ export class BscRpcService {
     };
   }
 
-  async getBlockNumber(): Promise<number | null> {
-    if (!this.rpcUrl) return null;
-    return hexToNumber(await this.call('eth_blockNumber', []));
+  async getBlockNumber(chain: string): Promise<number | null> {
+    if (!this.configuredFor(chain)) return null;
+    return hexToNumber(await this.call(chain, 'eth_blockNumber', []));
   }
 
-  async getTransactionCount(owner: string): Promise<number | null> {
-    if (!this.rpcUrl) return null;
-    return hexToNumber(await this.call('eth_getTransactionCount', [owner, 'latest']));
+  async getTransactionCount(chain: string, owner: string): Promise<number | null> {
+    if (!this.configuredFor(chain)) return null;
+    return hexToNumber(await this.call(chain, 'eth_getTransactionCount', [owner, 'latest']));
   }
 
-  async getGasPrice(): Promise<string | null> {
-    if (!this.rpcUrl) return null;
-    return hexToBigInt(await this.call('eth_gasPrice', []));
+  async getGasPrice(chain: string): Promise<string | null> {
+    if (!this.configuredFor(chain)) return null;
+    return hexToBigInt(await this.call(chain, 'eth_gasPrice', []));
   }
 
   async findMatchingTransactions(input: {
+    chain: string;
     owner: string;
     router: string;
     calldata: string;
@@ -220,9 +215,9 @@ export class BscRpcService {
     lookbackBlocks?: number;
     sinceTimestamp?: number;
   }): Promise<RpcTransaction[]> {
-    if (!this.rpcUrl) return [];
+    if (!this.configuredFor(input.chain)) return [];
 
-    const latest = await this.getBlockNumber();
+    const latest = await this.getBlockNumber(input.chain);
     if (latest === null) return [];
     const lower = input.owner.toLowerCase();
     const router = input.router.toLowerCase();
@@ -232,7 +227,7 @@ export class BscRpcService {
     const matches: RpcTransaction[] = [];
 
     for (let blockNumber = latest; blockNumber >= fromBlock; blockNumber -= 1) {
-      const result = await this.call('eth_getBlockByNumber', [
+      const result = await this.call(input.chain, 'eth_getBlockByNumber', [
         `0x${blockNumber.toString(16)}`,
         true,
       ]);
@@ -271,19 +266,20 @@ export class BscRpcService {
   }
 
   async findTransactionByNonce(
+    chain: string,
     owner: string,
     nonce: number,
     lookbackBlocks = 60,
   ): Promise<RpcTransaction | null> {
-    if (!this.rpcUrl) return null;
+    if (!this.configuredFor(chain)) return null;
 
-    const latest = await this.getBlockNumber();
+    const latest = await this.getBlockNumber(chain);
     if (latest === null) return null;
     const lower = owner.toLowerCase();
     const fromBlock = Math.max(0, latest - lookbackBlocks);
 
     for (let blockNumber = latest; blockNumber >= fromBlock; blockNumber -= 1) {
-      const result = await this.call('eth_getBlockByNumber', [
+      const result = await this.call(chain, 'eth_getBlockByNumber', [
         `0x${blockNumber.toString(16)}`,
         true,
       ]);
@@ -305,9 +301,9 @@ export class BscRpcService {
     return null;
   }
 
-  async getBlock(blockNumber: number): Promise<RpcBlock | null> {
-    if (!this.rpcUrl) return null;
-    const result = await this.call('eth_getBlockByNumber', [
+  async getBlock(chain: string, blockNumber: number): Promise<RpcBlock | null> {
+    if (!this.configuredFor(chain)) return null;
+    const result = await this.call(chain, 'eth_getBlockByNumber', [
       `0x${blockNumber.toString(16)}`,
       false,
     ]);
@@ -327,38 +323,41 @@ export class BscRpcService {
   }
 
   async simulate(input: {
+    chain: string;
     from: string;
     to: string;
     data: string;
     value: string;
   }): Promise<SimulationResult> {
-    if (!this.rpcUrl) {
+    const config = this.config(input.chain);
+
+    if (!config.url) {
       return {
         success: false,
-        revertReason: 'BSC_RPC_URL is not configured',
+        revertReason: `${config.name} RPC is not configured`,
         gasEstimate: null,
         chainId: null,
       };
     }
 
-    const chainHex = await this.call('eth_chainId', []);
+    const chainHex = await this.call(input.chain, 'eth_chainId', []);
     const chainId = hexToNumber(chainHex);
 
-    if (chainId !== 56) {
+    if (chainId !== config.chainId) {
       return {
         success: false,
-        revertReason: `RPC chain id is ${chainId ?? 'unknown'}, expected 56`,
+        revertReason: `RPC chain id is ${chainId ?? 'unknown'}, expected ${config.chainId}`,
         gasEstimate: null,
         chainId,
       };
     }
 
-    const code = await this.call('eth_getCode', [input.to, 'latest']);
+    const code = await this.call(input.chain, 'eth_getCode', [input.to, 'latest']);
 
     if (typeof code !== 'string' || code === '0x') {
       return {
         success: false,
-        revertReason: 'Router has no contract code on BSC',
+        revertReason: `Router has no contract code on ${config.name}`,
         gasEstimate: null,
         chainId,
       };
@@ -381,7 +380,7 @@ export class BscRpcService {
     };
 
     try {
-      await this.call('eth_call', [transaction, 'latest']);
+      await this.call(input.chain, 'eth_call', [transaction, 'latest']);
     } catch (error) {
       return {
         success: false,
@@ -392,7 +391,7 @@ export class BscRpcService {
     }
 
     try {
-      const gasHex = await this.call('eth_estimateGas', [transaction]);
+      const gasHex = await this.call(input.chain, 'eth_estimateGas', [transaction]);
       const gasEstimate = hexToNumber(gasHex);
 
       return {
@@ -411,9 +410,25 @@ export class BscRpcService {
     }
   }
 
-  private async call(method: string, params: unknown[]): Promise<unknown> {
+  private config(chain: string): ChainRpcConfig {
+    const chainConfig = getSwapChain(chain);
+    return {
+      url:
+        chain === 'ethereum' ? env.ETHEREUM_RPC_URL : chain === 'bsc' ? env.BSC_RPC_URL : undefined,
+      chainId: chainConfig?.chainId ?? 0,
+      name: chainConfig?.name ?? chain,
+    };
+  }
+
+  private async call(chain: string, method: string, params: unknown[]): Promise<unknown> {
+    const config = this.config(chain);
+
+    if (!config.url) {
+      throw new Error(`${config.name} RPC is not configured`);
+    }
+
     try {
-      const response = await this.fetchImpl(this.rpcUrl as string, {
+      const response = await this.fetchImpl(config.url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
@@ -428,7 +443,7 @@ export class BscRpcService {
       return body.result;
     } catch (error) {
       this.logger.warn(
-        `BSC RPC ${method} failed: ${error instanceof Error ? error.message : 'unknown'}`,
+        `${config.name} RPC ${method} failed: ${error instanceof Error ? error.message : 'unknown'}`,
       );
       throw error;
     }

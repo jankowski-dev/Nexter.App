@@ -8,19 +8,18 @@ import {
 import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
-import { env } from '../../shared/config/env';
+import { confirmationsForChain, env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decimal, usdString } from '../../shared/money/decimal';
 import { AccountsService } from '../accounting/accounts.service';
 import { AssetsService } from '../accounting/assets.service';
 import { LedgerService } from '../accounting/ledger.service';
-import { BscRpcService, type RpcReceipt, type RpcTransaction } from './bsc-rpc.service';
+import { EvmRpcService, type RpcReceipt, type RpcTransaction } from './evm-rpc.service';
 import { KYBER_ROUTER_ABI } from './kyber-calldata';
 import { normalizeUsd } from './swap-step-up';
-import { getSwapToken, isCashEquivalentSymbol } from './token-registry';
+import { getSwapToken, isCashEquivalentSymbol, nativeTokenForChain } from './token-registry';
 
 const ACTIVE_STATUSES = ['SUBMITTED', 'PENDING'] as const;
-const BNB_WEI = decimal('1000000000000000000');
 
 function fromBaseUnits(value: string, decimals: number): string {
   return decimal(value).div(decimal('10').pow(decimals)).toFixed(decimals);
@@ -46,7 +45,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
   constructor(
     @Inject(DB) private readonly db: Database,
-    private readonly rpc: BscRpcService,
+    private readonly rpc: EvmRpcService,
     private readonly accounts: AccountsService,
     private readonly assets: AssetsService,
     private readonly ledger: LedgerService,
@@ -73,8 +72,13 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     this.running = true;
 
     try {
-      const latest = await this.rpc.getBlockNumber();
-      if (latest === null) return;
+      const latestByChain = new Map<string, number | null>();
+      const latestFor = async (chain: string): Promise<number | null> => {
+        if (!latestByChain.has(chain)) {
+          latestByChain.set(chain, await this.rpc.getBlockNumber(chain));
+        }
+        return latestByChain.get(chain) ?? null;
+      };
 
       await this.expireStaleOrders();
 
@@ -92,6 +96,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         .limit(20);
 
       for (const order of active) {
+        const latest = await latestFor(order.chain);
+        if (latest === null) continue;
         await this.safeTrack(order, latest);
       }
 
@@ -109,6 +115,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         .limit(20);
 
       for (const approval of approvals) {
+        const latest = await latestFor(approval.chain);
+        if (latest === null) continue;
         await this.safeTrackApproval(approval, latest);
       }
 
@@ -226,7 +234,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     const txHash = approval.txHash;
     if (!txHash) return;
 
-    const tx = await this.rpc.getTransactionByHash(txHash);
+    const tx = await this.rpc.getTransactionByHash(approval.chain, txHash);
 
     if (!tx) {
       if (
@@ -249,7 +257,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const receipt = await this.rpc.getTransactionReceipt(txHash);
+    const receipt = await this.rpc.getTransactionReceipt(approval.chain, txHash);
 
     if (!receipt) {
       if (
@@ -266,7 +274,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    if (latestBlock - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS) return;
+    if (latestBlock - receipt.blockNumber + 1 < confirmationsForChain(approval.chain)) return;
 
     await this.markApproval(approval, 'CONFIRMED', null, receipt.blockNumber);
   }
@@ -332,14 +340,15 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
     let currentOrder = order;
     let txHash = originalHash;
-    let tx = await this.rpc.getTransactionByHash(txHash);
+    let tx = await this.rpc.getTransactionByHash(order.chain, txHash);
 
     if (!tx && order.walletAddress && order.routerAddress && order.calldata) {
       if (order.nonce !== null) {
-        const count = await this.rpc.getTransactionCount(order.walletAddress);
+        const count = await this.rpc.getTransactionCount(order.chain, order.walletAddress);
 
         if (count !== null && count > order.nonce) {
           const candidate = await this.rpc.findTransactionByNonce(
+            order.chain,
             order.walletAddress,
             order.nonce,
             env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
@@ -347,12 +356,12 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
           if (candidate) {
             if (!this.replacementMatches(order, candidate)) {
-              const receipt = await this.rpc.getTransactionReceipt(candidate.hash);
+              const receipt = await this.rpc.getTransactionReceipt(order.chain, candidate.hash);
               const confirmations = receipt
                 ? Math.max(0, latestBlock - receipt.blockNumber + 1)
                 : 0;
 
-              if (!receipt || confirmations < env.SWAP_CONFIRMATIONS) {
+              if (!receipt || confirmations < confirmationsForChain(order.chain)) {
                 await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_PENDING', {
                   candidateHash: candidate.hash.toLowerCase(),
                   candidateBlock: receipt?.blockNumber ?? candidate.blockNumber,
@@ -406,6 +415,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         }
       } else {
         const matches = await this.rpc.findMatchingTransactions({
+          chain: order.chain,
           owner: order.walletAddress,
           router: order.routerAddress,
           calldata: order.calldata,
@@ -462,7 +472,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
-    const receipt = await this.rpc.getTransactionReceipt(txHash);
+    const receipt = await this.rpc.getTransactionReceipt(order.chain, txHash);
 
     if (!receipt) {
       await this.setPending(currentOrder, tx, 0, latestBlock);
@@ -484,7 +494,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
     const confirmations = Math.max(0, latestBlock - receipt.blockNumber + 1);
 
-    if (confirmations < env.SWAP_CONFIRMATIONS) {
+    if (confirmations < confirmationsForChain(order.chain)) {
       await this.setPending(currentOrder, tx, confirmations, latestBlock, receipt);
       return;
     }
@@ -968,8 +978,10 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     if (order.accountingTransactionId) return;
 
     if (order.status === 'CONFIRMED') {
-      const latest = await this.rpc.getBlockNumber();
-      const receipt = order.txHash ? await this.rpc.getTransactionReceipt(order.txHash) : null;
+      const latest = await this.rpc.getBlockNumber(order.chain);
+      const receipt = order.txHash
+        ? await this.rpc.getTransactionReceipt(order.chain, order.txHash)
+        : null;
 
       if (latest === null) return;
 
@@ -979,7 +991,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       if (
         !receipt ||
         !receipt.status ||
-        latest - receipt.blockNumber + 1 < env.SWAP_CONFIRMATIONS ||
+        latest - receipt.blockNumber + 1 < confirmationsForChain(order.chain) ||
         blockMismatch
       ) {
         await this.revertConfirmed(
@@ -1049,27 +1061,23 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       return;
     }
 
+    const gasToken = nativeTokenForChain(order.chain);
+    const gasUnit = decimal('10').pow(String(gasToken.decimals));
     let fee: { feeAssetId: string; feeAmount: string; feeUsdValue: string } | undefined;
-    let bnbAssetId: string | null = null;
+    let gasAssetId: string | null = null;
 
     if (feeWei > 0n && feeUsd && decimal(feeUsd).gt(0)) {
-      const bnb = await this.assets.ensureForSwapToken(
+      const gasAsset = await this.assets.ensureForSwapToken(
         order.chain,
-        {
-          symbol: 'BNB',
-          name: 'BNB',
-          address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-          decimals: 18,
-          native: true,
-        },
+        gasToken,
         this.db,
         order.userId,
       );
 
-      bnbAssetId = bnb.id;
+      gasAssetId = gasAsset.id;
       fee = {
-        feeAssetId: bnb.id,
-        feeAmount: decimal(feeWei.toString()).div(BNB_WEI).toFixed(18),
+        feeAssetId: gasAsset.id,
+        feeAmount: decimal(feeWei.toString()).div(gasUnit).toFixed(gasToken.decimals),
         feeUsdValue: feeUsd,
       };
     }
@@ -1082,15 +1090,15 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     } else {
       const wallets = await this.accounts.walletsForChain(order.userId, order.chain);
       const requiredIn = decimal(order.executedAmountIn);
-      const requiredGas = decimal(feeWei.toString()).div(BNB_WEI);
+      const requiredGas = decimal(feeWei.toString()).div(gasUnit);
 
       for (const wallet of wallets) {
         const inputBalance = await this.accounts.balance(wallet.id, assetIn.id);
 
         if (decimal(inputBalance).lt(requiredIn)) continue;
 
-        if (bnbAssetId && feeWei > 0n) {
-          const gasBalance = await this.accounts.balance(wallet.id, bnbAssetId);
+        if (gasAssetId && feeWei > 0n) {
+          const gasBalance = await this.accounts.balance(wallet.id, gasAssetId);
 
           if (decimal(gasBalance).lt(requiredGas)) continue;
         }
@@ -1129,7 +1137,9 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       this.logger.log(`Swap ${order.id} accounting account selected: ${accountId}`);
     }
 
-    const block = order.blockNumber ? await this.rpc.getBlock(order.blockNumber) : null;
+    const block = order.blockNumber
+      ? await this.rpc.getBlock(order.chain, order.blockNumber)
+      : null;
     const occurredAt = block
       ? new Date(block.timestamp * 1000).toISOString()
       : (order.confirmedAt ?? new Date()).toISOString();

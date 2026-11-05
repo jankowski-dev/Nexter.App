@@ -22,10 +22,10 @@ import { AccountsService } from '../src/modules/accounting/accounts.service';
 import { AssetsService } from '../src/modules/accounting/assets.service';
 import { LedgerService } from '../src/modules/accounting/ledger.service';
 import {
-  BscRpcService,
+  EvmRpcService,
   type RpcReceipt,
   type RpcTransaction,
-} from '../src/modules/swap/bsc-rpc.service';
+} from '../src/modules/swap/evm-rpc.service';
 import { KYBER_ROUTER_ABI } from '../src/modules/swap/kyber-calldata';
 import { KyberSwapClient } from '../src/modules/swap/kyber-swap.client';
 import { SwapTrackingService } from '../src/modules/swap/swap-tracking.service';
@@ -48,6 +48,8 @@ const selectorAllowlist = `${selector},0x59e50fed`;
 const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
+const ethereumTokenIn = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+const ethereumTokenOut = '0x514910771af9ca656af840dff83e8264ecf986ca';
 const chainlinkAddress = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd';
 
 function makeBuildData(
@@ -132,10 +134,12 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let simulationSuccess = true;
   let simulationGasEstimate: string | null = '120000';
+  let rpcChainId = 56;
   let rpcFailure = false;
   let buildData = makeBuildData();
   let buildRouter = router;
   let buildValue = '0';
+  let buildAmountIn = '1000000000000000000';
   let buildAmountOut = '2000000000000000000';
   let quotePriceImpact: string | null = '0.0010';
   let quoteGasUsd: string | null = '0.05';
@@ -179,7 +183,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     buildRoute: async (input: { sender: string; recipient: string; slippageBps: number }) => ({
       data: buildData,
       routerAddress: buildRouter,
-      amountIn: '1000000000000000000',
+      amountIn: buildAmountIn,
       amountOut: buildAmountOut,
       transactionValue: buildValue,
       gas: '120000',
@@ -192,6 +196,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
 
   const rpc = {
     configured: true,
+    configuredFor: () => true,
     getErc20Allowance: async () => allowance,
     getErc20Balance: async () => '1000000000000000000000',
     getNativeBalance: async () => nativeBalance,
@@ -214,7 +219,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         success: simulationSuccess,
         revertReason: simulationSuccess ? null : 'execution reverted: test',
         gasEstimate: simulationSuccess ? simulationGasEstimate : null,
-        chainId: 56,
+        chainId: rpcChainId,
       };
     },
   };
@@ -257,7 +262,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(KyberSwapClient)
       .useValue(kyber)
-      .overrideProvider(BscRpcService)
+      .overrideProvider(EvmRpcService)
       .useValue(rpc)
       .compile();
 
@@ -276,10 +281,12 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   beforeEach(async () => {
     simulationSuccess = true;
     simulationGasEstimate = '120000';
+    rpcChainId = 56;
     rpcFailure = false;
     buildData = makeBuildData();
     buildRouter = router;
     buildValue = '0';
+    buildAmountIn = '1000000000000000000';
     buildAmountOut = '2000000000000000000';
     quotePriceImpact = '0.0010';
     quoteGasUsd = '0.05';
@@ -296,6 +303,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     latestNonce = 7;
     blockTimestamp = Math.floor(Date.now() / 1000);
     env.SWAP_KILL_SWITCH = false;
+    env.SWAP_ETHEREUM_EXECUTION_ENABLED = false;
     env.SWAP_ROUTER_ALLOWLIST = router;
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
@@ -319,8 +327,15 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       walletAllowlistConfigured: true,
       rpcConfigured: true,
     });
-    expect(config.body.chains).toHaveLength(1);
+    expect(config.body.chains).toHaveLength(2);
+    expect(config.body.chains.map((chain: { code: string }) => chain.code)).toEqual([
+      'bsc',
+      'ethereum',
+    ]);
     expect(config.body.chains[0].tokens).toHaveLength(7);
+    expect(config.body.chains[1].tokens).toHaveLength(5);
+    expect(config.body.chains[0].executionEnabled).toBe(true);
+    expect(config.body.chains[1].executionEnabled).toBe(false);
 
     const quoted = await agent
       .post('/api/v1/swap/quote')
@@ -481,6 +496,101 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     );
   }, 60_000);
 
+  it('quotes, builds, readies, signs and confirms an Ethereum swap', async () => {
+    env.SWAP_ETHEREUM_EXECUTION_ENABLED = false;
+    rpcChainId = 1;
+    buildAmountIn = '1000000';
+    buildData = makeBuildData({
+      srcToken: ethereumTokenIn,
+      dstToken: ethereumTokenOut,
+      amount: 1_000_000n,
+      minOut: 1_990_000_000_000_000_000n,
+    });
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'ethereum',
+        tokenIn: ethereumTokenIn,
+        tokenOut: ethereumTokenOut,
+        amountIn: '1',
+        slippageBps: 50,
+        walletAddress: wallet,
+      })
+      .expect(201);
+    expect(quoted.body).toMatchObject({
+      chain: 'ethereum',
+      status: 'QUOTED',
+      tokenIn: { symbol: 'USDC', decimals: 6 },
+      tokenOut: { symbol: 'LINK', decimals: 18 },
+    });
+
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    expect(built.body).toMatchObject({ chain: 'ethereum', status: 'BUILT' });
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    const disabled = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(503);
+    expect(disabled.body.error.code).toBe('SWAP_EXECUTION_DISABLED');
+
+    env.SWAP_ETHEREUM_EXECUTION_ENABLED = true;
+    const signing = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(signing.body.status).toBe('AWAITING_SIGNATURE');
+
+    const txHash = `0x${'1'.repeat(63)}2`;
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'2'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 111;
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      chain: 'ethereum',
+      status: 'CONFIRMED',
+      txHash,
+      confirmations: 12,
+    });
+  }, 60_000);
+
   it('rejects disallowed tokens, wallets, stale quotes, selectors and simulations', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -580,6 +690,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(400);
 
     buildValue = '0';
+    buildAmountIn = '1000000000000000000';
     buildAmountOut = '1';
     await agent
       .post('/api/v1/swap/build')

@@ -139,7 +139,7 @@ Before enabling quotes:
 1. Take a PostgreSQL backup.
 2. Run the pre-deploy migration command.
 3. Configure `SWAP_ENABLED=false` first and deploy the API/worker and SPA.
-4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
+4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `ETHEREUM_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
 5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
 Builds remain disabled until a selector allowlist is configured. Phase 8 has an execution UI; the server never signs or broadcasts. Keep a single API replica while tracking runs in-process.
@@ -198,3 +198,12 @@ Phase 6 is code/ops hardening with no schema migration. Before deploying:
 3. Merge only after CI is green; Railway applies no new migration.
 4. After deploy, verify `/health`, `/ready`, login/2FA, `/dashboard`, `/trades`, `/settings/audit`, and one export.
 5. Confirm the encrypted backup cron produced an object in R2 and that its timestamp is within 24 hours.
+
+## Phase 9 — Ethereum rollout
+
+1. Add `ETHEREUM_RPC_URL` (private/MEV-preferred) and confirm `KYBERSWAP_API_KEY` works for Ethereum.
+2. Run `node scripts/swap-live-check.mjs ethereum`; verify chain id 1 and router bytecode.
+3. If router/executor allowlists are set, include both chains; otherwise defaults apply.
+4. Deploy with `SWAP_ETHEREUM_EXECUTION_ENABLED=false`; verify `/swap` shows Ethereum and that signing is disabled.
+5. For acceptance, enable `SWAP_ETHEREUM_EXECUTION_ENABLED=true` for the window, perform a small Tangem swap, verify tracking/accounting, then keep it enabled only if accepted.
+6. Rollback: set `SWAP_ETHEREUM_EXECUTION_ENABLED=false` (or the global kill switch) and keep the tracker running for in-flight orders.

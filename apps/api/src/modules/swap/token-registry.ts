@@ -1,6 +1,7 @@
-import type { SwapChainConfig, SwapToken } from '@nexter/contracts';
+import type { SwapChainCode, SwapChainConfig, SwapToken } from '@nexter/contracts';
 
-export const BSC_NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+export const NATIVE_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+export const BSC_NATIVE_ADDRESS = NATIVE_ADDRESS;
 
 const BSC_TOKENS: SwapToken[] = [
   {
@@ -48,7 +49,45 @@ const BSC_TOKENS: SwapToken[] = [
   {
     symbol: 'BNB',
     name: 'BNB',
-    address: BSC_NATIVE_ADDRESS,
+    address: NATIVE_ADDRESS,
+    decimals: 18,
+    native: true,
+  },
+];
+
+const ETHEREUM_TOKENS: SwapToken[] = [
+  {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    decimals: 6,
+    native: false,
+  },
+  {
+    symbol: 'LINK',
+    name: 'ChainLink Token',
+    address: '0x514910771af9ca656af840dff83e8264ecf986ca',
+    decimals: 18,
+    native: false,
+  },
+  {
+    symbol: 'BASED',
+    name: 'BASED',
+    address: '0x4f2b33840227ddd0e28da8d4185d6fa07adfed87',
+    decimals: 18,
+    native: false,
+  },
+  {
+    symbol: 'APR',
+    name: 'APR',
+    address: '0x5a9610919f5e81183823a2be4bd1beb2b4da2a20',
+    decimals: 18,
+    native: false,
+  },
+  {
+    symbol: 'ETH',
+    name: 'Ether',
+    address: NATIVE_ADDRESS,
     decimals: 18,
     native: true,
   },
@@ -60,11 +99,34 @@ export const SWAP_CHAINS: SwapChainConfig[] = [
     chainId: 56,
     name: 'BNB Smart Chain',
     tokens: BSC_TOKENS,
+    rpcConfigured: false,
+    executionEnabled: false,
+  },
+  {
+    code: 'ethereum',
+    chainId: 1,
+    name: 'Ethereum',
+    tokens: ETHEREUM_TOKENS,
+    rpcConfigured: false,
+    executionEnabled: false,
   },
 ];
 
+// KyberSwap uses the same deterministic router/executor addresses on BSC and Ethereum.
 export const DEFAULT_BSC_ROUTER = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
 export const DEFAULT_BSC_EXECUTOR = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
+export const DEFAULT_ETHEREUM_ROUTER = DEFAULT_BSC_ROUTER;
+export const DEFAULT_ETHEREUM_EXECUTOR = DEFAULT_BSC_EXECUTOR;
+
+export const DEFAULT_ROUTERS: Record<SwapChainCode, string> = {
+  bsc: DEFAULT_BSC_ROUTER,
+  ethereum: DEFAULT_ETHEREUM_ROUTER,
+};
+
+export const DEFAULT_EXECUTORS: Record<SwapChainCode, string> = {
+  bsc: DEFAULT_BSC_EXECUTOR,
+  ethereum: DEFAULT_ETHEREUM_EXECUTOR,
+};
 
 export function getSwapChain(code: string): SwapChainConfig | null {
   return SWAP_CHAINS.find((chain) => chain.code === code) ?? null;
@@ -79,7 +141,7 @@ export function getSwapToken(chainCode: string, address: string): SwapToken | nu
 }
 
 export function isNativeToken(address: string): boolean {
-  return address.toLowerCase() === BSC_NATIVE_ADDRESS.toLowerCase();
+  return address.toLowerCase() === NATIVE_ADDRESS.toLowerCase();
 }
 
 export function isCashEquivalentSymbol(symbol: string): boolean {
@@ -94,4 +156,23 @@ export function parseAddressList(value: string | undefined): string[] {
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => item.toLowerCase());
+}
+
+export function nativeTokenForChain(chainCode: string): SwapToken {
+  const chain = getSwapChain(chainCode);
+  const native = chain?.tokens.find((token) => token.native);
+
+  if (!native) {
+    throw new Error(`Native token is not configured for ${chainCode}`);
+  }
+
+  return native;
+}
+
+export function defaultRouterForChain(chainCode: string): string {
+  return DEFAULT_ROUTERS[chainCode as SwapChainCode] ?? DEFAULT_BSC_ROUTER;
+}
+
+export function defaultExecutorForChain(chainCode: string): string {
+  return DEFAULT_EXECUTORS[chainCode as SwapChainCode] ?? DEFAULT_BSC_EXECUTOR;
 }

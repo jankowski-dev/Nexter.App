@@ -138,3 +138,18 @@ Run only with explicit owner approval for real funds. Use a small amount.
 | SW8  | Accounting                     | `/swap` history shows “учёт создан”; portfolio and trades reflect the swap. |
 | SW9  | Rejection/cancel               | Rejecting wallet prompt returns to READY; no duplicate signing.             |
 | SW10 | Kill switch                    | New signing disabled; signed-hash recovery still records the hash.          |
+
+## Phase 9 — Ethereum
+
+Run only with explicit owner approval for real funds. Use a small amount.
+
+| ID  | Check                           | Expected                                                                        |
+| --- | ------------------------------- | ------------------------------------------------------------------------------- |
+| ET1 | Select Ethereum on `/swap`      | Ethereum tokens and per-chain RPC/execution status shown.                       |
+| ET2 | Connect Tangem                  | Wallet switches to chainId 1; address matches allowlist.                        |
+| ET3 | Quote USDC/LINK or a small pair | Amounts, minOut, gas, price impact shown.                                       |
+| ET4 | Build/ready                     | Calldata validation and simulation pass; READY shown.                           |
+| ET5 | Sign in Tangem                  | Device shows Ethereum chain, router/recipient/amount/minOut; hash recorded.     |
+| ET6 | Tracking                        | `SUBMITTED` → `PENDING` → `CONFIRMED` with 12+ confirmations.                   |
+| ET7 | Accounting                      | `/swap` shows “учёт создан”; portfolio/trades reflect ETH gas and swap.         |
+| ET8 | Flag off                        | `SWAP_ETHEREUM_EXECUTION_ENABLED=false` hides Ethereum signing; BSC unaffected. |

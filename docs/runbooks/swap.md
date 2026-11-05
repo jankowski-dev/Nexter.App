@@ -1,6 +1,6 @@
-# Swap Execution Runbook (Phase 8)
+# Swap Execution Runbook (Phase 9)
 
-Phase 8 provides WalletConnect connection, quotes, router-level calldata verification, exact approval build/submission, an execution UI, and tracking/accounting. The server never signs, broadcasts, or stores private keys/seed phrases. Signing is gated by `SWAP_EXECUTION_ENABLED`.
+Phase 9 provides BSC and Ethereum WalletConnect connection, quotes, router-level calldata verification, exact approval build/submission, an execution UI, and tracking/accounting. The server never signs, broadcasts, or stores private keys/seed phrases. BSC signing is gated by `SWAP_EXECUTION_ENABLED`; Ethereum signing additionally requires `SWAP_ETHEREUM_EXECUTION_ENABLED=true`.
 
 ## Enable quotes
 
@@ -9,14 +9,14 @@ Phase 8 provides WalletConnect connection, quotes, router-level calldata verific
 3. Set the provider:
    - `KYBERSWAP_API_KEY` and optionally `KYBERSWAP_BASE_URL=https://api.kyberswap.com/swap` (gateway), or
    - leave the key empty to use the public `https://aggregator-api.kyberswap.com` fallback.
-4. Set `BSC_RPC_URL` for build/simulation (quotes work without it).
+4. Set `BSC_RPC_URL` and/or `ETHEREUM_RPC_URL` for build/simulation (quotes work without them). Prefer a private/MEV-protected Ethereum RPC for reads/simulation.
 5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
 6. Set `SWAP_SELECTOR_ALLOWLIST=0xe21fd0e9,0x59e50fed` (`swap`, `swapGeneric`). An empty allowlist disables builds.
 7. Optionally set `SWAP_EXECUTOR_ALLOWLIST`; the default is the BSC AggregationExecutorProxy `0x8F10B468b06c6FD214B65F87778827F7D113f996`.
 8. Keep `SWAP_EXECUTION_ENABLED=false` until final review and a successful manual Tangem acceptance; after acceptance, set it to `true` to enable signing. Set `SWAP_MAX_GAS_USD=5` (or a stricter cap).
-9. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required; set `SWAP_CONFIRMATIONS=15` (default), `SWAP_TRACK_INTERVAL_SECONDS=15`, and `SWAP_DROP_TIMEOUT_SECONDS=1800` if a different policy is required.
+9. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required; set `SWAP_CONFIRMATIONS=15` (BSC default), `SWAP_ETHEREUM_CONFIRMATIONS=12`, `SWAP_TRACK_INTERVAL_SECONDS=15`, and `SWAP_DROP_TIMEOUT_SECONDS=1800` if a different policy is required.
 10. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
-11. Run `pnpm swap:live-check` with the production RPC/key (or against an Anvil BSC fork) and confirm chain id 56, router bytecode presence (not router identity), and a read-only quote.
+11. Run `node scripts/swap-live-check.mjs bsc` and/or `node scripts/swap-live-check.mjs ethereum` with the production RPC/key and confirm the chain id, router bytecode presence (not router identity), and a read-only quote.
 12. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
 
 ## Kill switch
@@ -42,6 +42,15 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Step-up TOTP is required above the configured threshold; the session window is five minutes. Missing/invalid provider USD fails closed.
 - Calldata is decoded at router level before a build is accepted. Simple mode is rejected; standard aggregator routes use the server-enforced order deadline, which the execution UI must display before signing. New signing is blocked after the deadline; a signed hash can still be recorded.
 
+## Ethereum (Phase 9)
+
+- `ETHEREUM_RPC_URL` is required for Ethereum build/simulation/tracking; it may be a private/MEV-protected endpoint. Quotes use KyberSwap and can work without an RPC.
+- Ethereum tokens are USDC (6 decimals), LINK, BASED, APR, and native ETH. Router/executor defaults are the deterministic Kyber addresses; if `SWAP_ROUTER_ALLOWLIST`/`SWAP_EXECUTOR_ALLOWLIST` are set, they must include every enabled chain.
+- Ethereum signing requires both `SWAP_EXECUTION_ENABLED=true` and `SWAP_ETHEREUM_EXECUTION_ENABLED=true`. The flag defaults to false and should be enabled only for acceptance/rollout. The kill switch remains global.
+- Ethereum confirmations default to `SWAP_ETHEREUM_CONFIRMATIONS=12`; BSC uses `SWAP_CONFIRMATIONS` or `SWAP_BSC_CONFIRMATIONS`.
+- WalletConnect/Tangem broadcasts the signed transaction through the wallet. The server cannot enforce MEV protection on that broadcast; use a wallet/device flow the owner trusts, and a private RPC for server-side reads/simulation.
+- Run `node scripts/swap-live-check.mjs ethereum` before enabling execution.
+
 ## Execution slice (Phase 8a)
 
 - `POST /auth/step-up` sets a five-minute step-up window; builds, approval builds, ready, and signing above `SWAP_STEP_UP_THRESHOLD_USD` require it. Submit is recovery-only.
@@ -57,18 +66,19 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - The tracker is API-hosted and production must run a single API replica (or add a future leader lock). Do not roll back to a pre-Phase-8 image while orders are active/unaccounted.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
 - A first-time ERC-20 swap with zero allowance enters `APPROVAL_REQUIRED`; after the exact approval, `POST /swap/orders/:id/ready` re-checks and moves it to `READY`.
-- Confirmed-swap accounting requires the wallet's input token and BNB gas balance to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.
+- Confirmed-swap accounting requires the wallet's input token and native gas balance (BNB/ETH) to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.
 - Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by the actual `Swapped` amounts.
-- Tracking starts whenever `BSC_RPC_URL` is configured, even if `SWAP_ENABLED=false`, so in-flight transactions continue to confirm and account during a rollback.
-- Replacement/speed-up handling: when the original hash is missing and a nonce is known, the tracker searches for a same-nonce candidate in the last `SWAP_REPLACEMENT_LOOKBACK_BLOCKS` blocks (default 240). If none is found, the order stays active with `SWAP_REPLACEMENT_NOT_FOUND`; there is deliberately no content fallback to a different nonce, because a different nonce cannot be the same signed transaction. If the nonce is unknown, it searches only blocks at/after the submission time (minus a 2-minute grace) for sender + router + calldata + value; an exact external replay mined inside that short grace is an accepted residual, and the tx-hash/ambiguity guards still apply. A unique matching transaction is adopted (hash/nonce updated, event/audit written); a found-but-mismatched same-nonce transaction is marked `REPLACED` only after its receipt reaches `SWAP_CONFIRMATIONS`; a pending mismatched candidate records `SWAP_REPLACEMENT_PENDING` and stays active; terminal writes are guarded by the original tx hash, so a concurrent adoption cannot be overwritten. Ambiguous/no matches record `SWAP_REPLACEMENT_AMBIGUOUS` / `SWAP_REPLACEMENT_NOT_FOUND`. A missing replacement never terminally drops an executed swap.
-- At current BSC sub-second block times, 240 blocks is only a few minutes, not hours. If the tracker was down longer than the lookback, keep the order active, use an independent explorer/RPC to locate the executed transaction, verify sender/router/calldata/value and nonce, and attach the verified hash through a reviewed operator action that updates only `tx_hash`/`nonce`, writes a `replacement_manually_attached` event and audit entry, and lets the tracker resume. Do not mark the order failed/dropped and do not create ledger rows manually. A first-class attach endpoint is a Phase 9 prerequisite.
+- Tracking starts whenever either `BSC_RPC_URL` or `ETHEREUM_RPC_URL` is configured, even if `SWAP_ENABLED=false`, so in-flight transactions continue to confirm and account during a rollback.
+- Replacement/speed-up handling: when the original hash is missing and a nonce is known, the tracker searches for a same-nonce candidate in the last `SWAP_REPLACEMENT_LOOKBACK_BLOCKS` blocks (default 240). If none is found, the order stays active with `SWAP_REPLACEMENT_NOT_FOUND`; there is deliberately no content fallback to a different nonce, because a different nonce cannot be the same signed transaction. If the nonce is unknown, it searches only blocks at/after the submission time (minus a 2-minute grace) for sender + router + calldata + value; an exact external replay mined inside that short grace is an accepted residual, and the tx-hash/ambiguity guards still apply. A unique matching transaction is adopted (hash/nonce updated, event/audit written); a found-but-mismatched same-nonce transaction is marked `REPLACED` only after its receipt reaches the chain's confirmation threshold; a pending mismatched candidate records `SWAP_REPLACEMENT_PENDING` and stays active; terminal writes are guarded by the original tx hash, so a concurrent adoption cannot be overwritten. Ambiguous/no matches record `SWAP_REPLACEMENT_AMBIGUOUS` / `SWAP_REPLACEMENT_NOT_FOUND`. A missing replacement never terminally drops an executed swap.
+- At current BSC sub-second block times, 240 blocks is only a few minutes, not hours. If the tracker was down longer than the lookback, keep the order active, use an independent explorer/RPC to locate the executed transaction, verify sender/router/calldata/value and nonce, and attach the verified hash through a reviewed operator action that updates only `tx_hash`/`nonce`, writes a `replacement_manually_attached` event and audit entry, and lets the tracker resume. Do not mark the order failed/dropped and do not create ledger rows manually. A first-class attach endpoint remains a Phase 9.x hardening item.
 - The tracking poller verifies sender, router, calldata, and value before confirming. Replaced/dropped/failed transactions never create accounting. Reorgs before accounting return the order to `PENDING`; post-accounting reorg compensation is manual and append-only (below).
-- Execution is enabled in production after the 2026-11-05 live acceptance. `SWAP_EXECUTION_ENABLED` and the kill switch remain rollback controls; `signing/cancel` works even during a kill switch.
+- BSC execution is enabled in production after the 2026-11-05 live acceptance. Ethereum remains behind `SWAP_ETHEREUM_EXECUTION_ENABLED` until its own live acceptance. `SWAP_EXECUTION_ENABLED` and the kill switch remain rollback controls; `signing/cancel` works even during a kill switch.
 
 ## Verification
 
 ```bash
-pnpm swap:live-check
+node scripts/swap-live-check.mjs bsc
+node scripts/swap-live-check.mjs ethereum
 ```
 
 The check prints only chain id, router bytecode size, and quote amounts; it never prints the RPC URL or API key. Never enable `SWAP_ENABLED=true` without a successful check and a reviewed allowlist.

@@ -13,6 +13,7 @@ import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/d
 import type {
   SwapBuildRequest,
   SwapBuildResponse,
+  SwapChainCode,
   SwapConfigResponse,
   SwapOrderDetail,
   SwapOrderSummary,
@@ -25,11 +26,11 @@ import type {
 import type { AuthContext } from '../auth/auth.types';
 import { AccountsService } from '../accounting/accounts.service';
 import { AuditService } from '../../shared/audit/audit.service';
-import { env } from '../../shared/config/env';
+import { env, executionEnabledForChain } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
-import { BscRpcService } from './bsc-rpc.service';
+import { EvmRpcService } from './evm-rpc.service';
 import {
   KYBER_SUPPORTED_SELECTORS,
   KyberCalldataError,
@@ -40,9 +41,9 @@ import {
 import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import {
-  DEFAULT_BSC_EXECUTOR,
-  DEFAULT_BSC_ROUTER,
   SWAP_CHAINS,
+  defaultExecutorForChain,
+  defaultRouterForChain,
   getSwapChain,
   getSwapToken,
   isCashEquivalentSymbol,
@@ -123,9 +124,9 @@ function normalizeAddress(value: string): string {
   return value.toLowerCase();
 }
 
-function routerAllowlist(): string[] {
+function routerAllowlist(chain: string): string[] {
   const configured = parseAddressList(env.SWAP_ROUTER_ALLOWLIST);
-  return configured.length > 0 ? configured : [DEFAULT_BSC_ROUTER.toLowerCase()];
+  return configured.length > 0 ? configured : [defaultRouterForChain(chain).toLowerCase()];
 }
 
 function selectorAllowlist(): string[] {
@@ -135,9 +136,9 @@ function selectorAllowlist(): string[] {
     .filter(Boolean);
 }
 
-function executorAllowlist(): string[] {
+function executorAllowlist(chain: string): string[] {
   const configured = parseAddressList(env.SWAP_EXECUTOR_ALLOWLIST);
-  return configured.length > 0 ? configured : [DEFAULT_BSC_EXECUTOR.toLowerCase()];
+  return configured.length > 0 ? configured : [defaultExecutorForChain(chain).toLowerCase()];
 }
 
 function tokenFor(address: string, chain: string, symbol: string): SwapToken {
@@ -159,7 +160,7 @@ export class SwapService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly kyber: KyberSwapClient,
-    private readonly rpc: BscRpcService,
+    private readonly rpc: EvmRpcService,
     private readonly audit: AuditService,
     private readonly accounts: AccountsService,
   ) {}
@@ -182,7 +183,11 @@ export class SwapService {
       executionEnabled: env.SWAP_EXECUTION_ENABLED && enabled,
       rpcConfigured: this.rpc.configured,
       walletAllowlistConfigured: allowlist.length > 0,
-      chains: SWAP_CHAINS,
+      chains: SWAP_CHAINS.map((chain) => ({
+        ...chain,
+        rpcConfigured: this.rpc.configuredFor(chain.code),
+        executionEnabled: Boolean(executionEnabledForChain(chain.code) && enabled),
+      })),
       quoteTtlSeconds: env.SWAP_QUOTE_TTL_SECONDS,
       maxPriceImpactBps: env.SWAP_MAX_PRICE_IMPACT_BPS,
       stepUpThresholdUsd: decimal(env.SWAP_STEP_UP_THRESHOLD_USD).toFixed(2),
@@ -484,7 +489,7 @@ export class SwapService {
     const pass = (check: string, detail: string | null = null) =>
       validation.push({ check, passed: true, detail });
 
-    if (!routerAllowlist().includes(normalizeAddress(built.routerAddress))) {
+    if (!routerAllowlist(order.chain).includes(normalizeAddress(built.routerAddress))) {
       await fail('router', 'SWAP_ROUTER_NOT_ALLOWED', 'Router is not in the allowlist');
     }
     pass('router');
@@ -582,7 +587,7 @@ export class SwapService {
       minOutBase: minOutBase.toString(),
       quotedAmountOut: built.amountOut,
       routerAddress: built.routerAddress,
-      executorAllowlist: executorAllowlist(),
+      executorAllowlist: executorAllowlist(order.chain),
       deadline,
     });
 
@@ -608,13 +613,13 @@ export class SwapService {
 
     try {
       balance = tokenIn.native
-        ? await this.rpc.getNativeBalance(wallet)
-        : await this.rpc.getErc20Balance(tokenIn.address, wallet);
+        ? await this.rpc.getNativeBalance(order.chain, wallet)
+        : await this.rpc.getErc20Balance(order.chain, tokenIn.address, wallet);
     } catch {
       await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -622,7 +627,7 @@ export class SwapService {
       await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -640,12 +645,17 @@ export class SwapService {
 
     if (!tokenIn.native) {
       try {
-        allowance = await this.rpc.getErc20Allowance(tokenIn.address, wallet, built.routerAddress);
+        allowance = await this.rpc.getErc20Allowance(
+          order.chain,
+          tokenIn.address,
+          wallet,
+          built.routerAddress,
+        );
       } catch {
         await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
         throw new ServiceUnavailableException({
           code: 'SWAP_PROVIDER_UNAVAILABLE',
-          message: 'BSC RPC is unavailable',
+          message: 'RPC is unavailable',
         });
       }
 
@@ -653,7 +663,7 @@ export class SwapService {
         await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
         throw new ServiceUnavailableException({
           code: 'SWAP_PROVIDER_UNAVAILABLE',
-          message: 'BSC RPC is unavailable',
+          message: 'RPC is unavailable',
         });
       }
 
@@ -673,11 +683,12 @@ export class SwapService {
       pass('allowance', 'native input');
     }
 
-    let simulation: Awaited<ReturnType<BscRpcService['simulate']>> | null = null;
+    let simulation: Awaited<ReturnType<EvmRpcService['simulate']>> | null = null;
 
     if (!approvalRequired) {
       try {
         simulation = await this.rpc.simulate({
+          chain: order.chain,
           from: wallet,
           to: built.routerAddress,
           data: built.data,
@@ -687,7 +698,7 @@ export class SwapService {
         await this.recordBuildFailure(order, 'SWAP_RPC_UNAVAILABLE', meta);
         throw new ServiceUnavailableException({
           code: 'SWAP_PROVIDER_UNAVAILABLE',
-          message: 'BSC RPC is unavailable',
+          message: 'RPC is unavailable',
         });
       }
 
@@ -711,6 +722,7 @@ export class SwapService {
     if (gasEstimate) {
       try {
         await this.assertGasBalance({
+          chain: order.chain,
           wallet,
           tokenInNative: tokenIn.native,
           amountInBase: quotedAmountIn,
@@ -864,7 +876,10 @@ export class SwapService {
     assertStepUp(auth, order);
     this.assertWallet(order.walletAddress ?? undefined, true);
 
-    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+    if (
+      !order.routerAddress ||
+      !routerAllowlist(order.chain).includes(order.routerAddress.toLowerCase())
+    ) {
       throw new BadRequestException({
         code: 'SWAP_ROUTER_NOT_ALLOWED',
         message: 'Router is not in the allowlist',
@@ -933,7 +948,7 @@ export class SwapService {
       quotedAmountOut:
         order.builtAmountOut ?? toBaseUnits(order.amountOut, tokenOut.decimals).toString(),
       routerAddress: order.routerAddress,
-      executorAllowlist: executorAllowlist(),
+      executorAllowlist: executorAllowlist(order.chain),
       deadline: order.deadline,
     });
     const calldataIssue = calldataChecks.issues[0];
@@ -966,19 +981,19 @@ export class SwapService {
 
     try {
       balance = tokenIn.native
-        ? await this.rpc.getNativeBalance(wallet)
-        : await this.rpc.getErc20Balance(tokenIn.address, wallet);
+        ? await this.rpc.getNativeBalance(order.chain, wallet)
+        : await this.rpc.getErc20Balance(order.chain, tokenIn.address, wallet);
     } catch {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
     if (balance === null) {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -993,18 +1008,23 @@ export class SwapService {
 
     if (!tokenIn.native) {
       try {
-        allowance = await this.rpc.getErc20Allowance(tokenIn.address, wallet, order.routerAddress);
+        allowance = await this.rpc.getErc20Allowance(
+          order.chain,
+          tokenIn.address,
+          wallet,
+          order.routerAddress,
+        );
       } catch {
         throw new ServiceUnavailableException({
           code: 'SWAP_PROVIDER_UNAVAILABLE',
-          message: 'BSC RPC is unavailable',
+          message: 'RPC is unavailable',
         });
       }
 
       if (allowance === null) {
         throw new ServiceUnavailableException({
           code: 'SWAP_PROVIDER_UNAVAILABLE',
-          message: 'BSC RPC is unavailable',
+          message: 'RPC is unavailable',
         });
       }
 
@@ -1016,10 +1036,11 @@ export class SwapService {
       }
     }
 
-    let simulation: Awaited<ReturnType<BscRpcService['simulate']>>;
+    let simulation: Awaited<ReturnType<EvmRpcService['simulate']>>;
 
     try {
       simulation = await this.rpc.simulate({
+        chain: order.chain,
         from: wallet,
         to: order.routerAddress,
         data: order.calldata,
@@ -1028,7 +1049,7 @@ export class SwapService {
     } catch {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -1050,6 +1071,7 @@ export class SwapService {
     }
 
     await this.assertGasBalance({
+      chain: order.chain,
       wallet,
       tokenInNative: tokenIn.native,
       amountInBase: amountIn,
@@ -1116,9 +1138,9 @@ export class SwapService {
 
   async signing(auth: AuthContext, orderId: string, meta: SwapMeta): Promise<SwapOrderDetail> {
     this.assertEnabled();
-    this.assertExecutionEnabled();
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
+    this.assertExecutionEnabled(order.chain);
 
     if (order.status !== 'READY') {
       throw new ConflictException({
@@ -1130,7 +1152,10 @@ export class SwapService {
     assertStepUp(auth, order);
     this.assertWallet(order.walletAddress ?? undefined, true);
 
-    if (!order.routerAddress || !routerAllowlist().includes(order.routerAddress.toLowerCase())) {
+    if (
+      !order.routerAddress ||
+      !routerAllowlist(order.chain).includes(order.routerAddress.toLowerCase())
+    ) {
       throw new BadRequestException({
         code: 'SWAP_ROUTER_NOT_ALLOWED',
         message: 'Router is not in the allowlist',
@@ -1493,7 +1518,7 @@ export class SwapService {
 
     return {
       id: order.id,
-      chain: order.chain as 'bsc',
+      chain: order.chain as SwapChainCode,
       walletAddress: order.walletAddress,
       accountId: order.accountId,
       tokenIn: tokenFor(order.tokenIn, order.chain, order.tokenInSymbol),
@@ -1632,6 +1657,7 @@ export class SwapService {
   }
 
   private async assertGasBalance(input: {
+    chain: string;
     wallet: string;
     tokenInNative: boolean;
     amountInBase: string;
@@ -1641,19 +1667,19 @@ export class SwapService {
     let nativeBalance: string | null;
 
     try {
-      gasPrice = await this.rpc.getGasPrice();
-      nativeBalance = await this.rpc.getNativeBalance(input.wallet);
+      gasPrice = await this.rpc.getGasPrice(input.chain);
+      nativeBalance = await this.rpc.getNativeBalance(input.chain, input.wallet);
     } catch {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
     if (gasPrice === null || nativeBalance === null) {
       throw new ServiceUnavailableException({
         code: 'SWAP_PROVIDER_UNAVAILABLE',
-        message: 'BSC RPC is unavailable',
+        message: 'RPC is unavailable',
       });
     }
 
@@ -1668,11 +1694,11 @@ export class SwapService {
     }
   }
 
-  private assertExecutionEnabled(): void {
-    if (!env.SWAP_EXECUTION_ENABLED) {
+  private assertExecutionEnabled(chain: string): void {
+    if (!executionEnabledForChain(chain)) {
       throw new ServiceUnavailableException({
         code: 'SWAP_EXECUTION_DISABLED',
-        message: 'Swap execution is disabled',
+        message: 'Swap execution is disabled for this chain',
       });
     }
   }
@@ -1704,7 +1730,7 @@ export class SwapService {
       });
     }
 
-    if (!executorAllowlist().includes(decoded.callTarget)) {
+    if (!executorAllowlist(order.chain).includes(decoded.callTarget)) {
       throw new BadRequestException({
         code: 'SWAP_EXECUTOR_NOT_ALLOWED',
         message: 'Calldata executor is not in the current allowlist',
