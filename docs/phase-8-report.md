@@ -2,7 +2,7 @@
 
 Date: 2026-11-05
 
-Status: **accepted on 2026-11-05.** Live small BSC swap completed: 1000 POP → ~0.11167 USDC, tracking confirmed, accounting transaction created. Execution is enabled in production; known Phase 8.x hardening items are listed below.
+Status: **accepted on 2026-11-05.** Live small BSC swap completed: 1000 POP → ~0.11167 USDC, tracking confirmed, accounting transaction created. Execution is enabled in production. Phase 8.x tracking hardening was accepted in PR #28 (merge `232cab4`), deployed to production with API/worker `SUCCESS`, and `/health`/`/ready` returned 200; migration `0013` is additive. Remaining residuals are listed below.
 
 ## Live acceptance
 
@@ -89,7 +89,7 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010–0013 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 
-## Phase 8.x hardening (implemented; residuals below)
+## Phase 8.x hardening (accepted 2026-11-05; residuals below)
 
 - Gas/BNB preflight at build/ready, including native-input amount.
 - Stored calldata re-decode at `ready`, current selector allowlist re-check, and persisted `built_amount_out` (migration 0013) as the minOut upper bound.
