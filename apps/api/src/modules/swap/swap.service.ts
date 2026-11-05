@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -153,6 +154,8 @@ function tokenFor(address: string, chain: string, symbol: string): SwapToken {
 
 @Injectable()
 export class SwapService {
+  private readonly logger = new Logger(SwapService.name);
+
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly kyber: KyberSwapClient,
@@ -1473,6 +1476,7 @@ export class SwapService {
 
   private async recordBuildFailure(order: SwapOrder, code: string, meta: SwapMeta): Promise<void> {
     const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
+    this.logger.warn(`Swap ${order.id} build failed: ${bounded}`);
 
     await this.db.transaction(async (tx) => {
       const [row] = await tx
