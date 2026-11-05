@@ -13,9 +13,9 @@ Phase 9 provides BSC and Ethereum WalletConnect connection, quotes, router-level
 5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem wallet address(es). An empty allowlist disables builds.
 6. Set `SWAP_SELECTOR_ALLOWLIST=0xe21fd0e9,0x59e50fed` (`swap`, `swapGeneric`). An empty allowlist disables builds.
 7. Optionally set per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` router/executor allowlists. Empty lists use the chain-specific Kyber defaults; the legacy `SWAP_ROUTER_ALLOWLIST`/`SWAP_EXECUTOR_ALLOWLIST` remain BSC-only.
-8. Keep `SWAP_EXECUTION_ENABLED=false` until review and manual acceptance; BSC uses it as its execution gate. Ethereum also requires `SWAP_ETHEREUM_EXECUTION_ENABLED=true` after its own live acceptance. Set `SWAP_MAX_GAS_USD=5` (or a stricter cap).
+8. BSC execution uses `SWAP_EXECUTION_ENABLED` after its acceptance. Ethereum also requires `SWAP_ETHEREUM_EXECUTION_ENABLED=true` after its own live acceptance; keep that flag false until then. Set `SWAP_MAX_GAS_USD=5` (or a stricter cap).
 9. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required; set `SWAP_CONFIRMATIONS=15` (BSC default), `SWAP_ETHEREUM_CONFIRMATIONS=12`, `SWAP_TRACK_INTERVAL_SECONDS=15`, and `SWAP_DROP_TIMEOUT_SECONDS=1800` if a different policy is required.
-10. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
+10. Optionally override the per-chain router/executor allowlists; the defaults are the chain-specific Kyber router/executor addresses.
 11. Run `node scripts/swap-live-check.mjs bsc` and/or `node scripts/swap-live-check.mjs ethereum` with the production RPC/key and confirm the chain id, router bytecode presence (not router identity), and a read-only quote.
 12. Set `SWAP_ENABLED=true`, deploy/redeploy, and verify `GET /swap/config` plus one quote. The UI shows a disabled state until this is done.
 
@@ -45,7 +45,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Ethereum (Phase 9)
 
 - `ETHEREUM_RPC_URL` is required for Ethereum build/simulation/tracking; it may be a private/MEV-protected endpoint. Quotes use KyberSwap and can work without an RPC.
-- Ethereum tokens are USDC (6 decimals), LINK, BASED, APR, and native ETH. Router/executor defaults are the deterministic Kyber addresses; if `SWAP_ROUTER_ALLOWLIST`/`SWAP_EXECUTOR_ALLOWLIST` are set, they must include every enabled chain.
+- Ethereum tokens are USDC (6 decimals), LINK, BASED, APR, and native ETH. Router/executor defaults are the deterministic Kyber addresses. Use per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` allowlists; the legacy global lists are BSC-only.
 - Ethereum signing requires both `SWAP_EXECUTION_ENABLED=true` and `SWAP_ETHEREUM_EXECUTION_ENABLED=true`. The flag defaults to false and should be enabled only for acceptance/rollout. The kill switch remains global.
 - Ethereum confirmations default to `SWAP_ETHEREUM_CONFIRMATIONS=12`; BSC uses `SWAP_CONFIRMATIONS` or `SWAP_BSC_CONFIRMATIONS`.
 - WalletConnect/Tangem broadcasts the signed transaction through the wallet. The server cannot enforce MEV protection on that broadcast; use a wallet/device flow the owner trusts, and a private RPC for server-side reads/simulation.

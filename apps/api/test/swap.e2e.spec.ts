@@ -198,6 +198,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   const rpc = {
     configured: true,
     configuredFor: () => true,
+    ensureChain: async () => undefined,
     getErc20Allowance: async () => allowance,
     getErc20Balance: async () => '1000000000000000000000',
     getNativeBalance: async () => nativeBalance,
@@ -2271,6 +2272,70 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     });
     const events = await db.select().from(swapEvents).where(eq(swapEvents.orderId, orderId));
     expect(events.some((event) => event.type === 'reorg')).toBe(true);
+  }, 60_000);
+
+  it('returns a confirmed order to pending after repeated missing receipts', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    await db
+      .update(swapOrders)
+      .set({
+        status: 'CONFIRMED',
+        txHash: `0x${'e'.repeat(64)}`,
+        confirmedAt: new Date(),
+        blockNumber: 100,
+        confirmations: 15,
+        networkFeeWei: '100000000000000',
+        networkFeeUsd: '0.04166667',
+      })
+      .where(eq(swapOrders.id, orderId));
+
+    chainReceipt = null;
+    latestBlock = 114;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await tracking.tick();
+      const [current] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+      expect(current.status).toBe('CONFIRMED');
+      expect(
+        current.errors.some((code) => code.startsWith('SWAP_ACCOUNTING_RECEIPT_MISSING')),
+      ).toBe(true);
+      await db
+        .update(swapOrders)
+        .set({ updatedAt: new Date(Date.now() - 61_000) })
+        .where(eq(swapOrders.id, orderId));
+    }
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      status: 'PENDING',
+      confirmedAt: null,
+      accountingTransactionId: null,
+    });
+    const events = await db.select().from(swapEvents).where(eq(swapEvents.orderId, orderId));
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'reorg' &&
+          (event.payload as { reason?: string }).reason === 'receipt_missing_after_retries',
+      ),
+    ).toBe(true);
   }, 60_000);
 
   it('marks a reverted swap failed without accounting', async () => {

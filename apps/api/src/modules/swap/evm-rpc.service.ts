@@ -117,6 +117,10 @@ export class EvmRpcService {
     return Boolean(this.config(chain).url);
   }
 
+  async ensureChain(chain: string): Promise<void> {
+    await this.assertChain(chain);
+  }
+
   private async assertChain(chain: string): Promise<void> {
     const config = this.config(chain);
     if (!config.url) return;

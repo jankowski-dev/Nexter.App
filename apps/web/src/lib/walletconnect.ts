@@ -117,19 +117,21 @@ export function useWalletConnect(projectId: string | null) {
         throw new Error('Кошелёк не подключён');
       }
 
-      if (chainId !== input.chainId) {
+      const currentChain = await provider.request({ method: 'eth_chainId' });
+
+      if (chainIdFrom(currentChain) !== input.chainId) {
         await provider.request({
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: `0x${input.chainId.toString(16)}` }],
         });
-        const currentChain = await provider.request({ method: 'eth_chainId' });
+        const switchedChain = await provider.request({ method: 'eth_chainId' });
 
-        if (chainIdFrom(currentChain) !== input.chainId) {
+        if (chainIdFrom(switchedChain) !== input.chainId) {
           throw new Error('Кошелёк не переключился на нужную сеть');
         }
-
-        setChainId(input.chainId);
       }
+
+      setChainId(input.chainId);
 
       const value =
         input.value && input.value !== '0' ? `0x${BigInt(input.value).toString(16)}` : '0x0';

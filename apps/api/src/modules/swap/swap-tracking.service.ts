@@ -993,10 +993,26 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       if (latest === null) return;
 
       if (!receipt) {
+        const missingAttempts = order.errors.filter(
+          (code) =>
+            code === 'SWAP_ACCOUNTING_RECEIPT_MISSING' ||
+            code.startsWith('SWAP_ACCOUNTING_RECEIPT_MISSING_'),
+        ).length;
+
+        if (missingAttempts >= 2) {
+          await this.revertConfirmed(order, null, latest, 'receipt_missing_after_retries');
+          return;
+        }
+
         this.logger.warn(
           `Swap ${order.id} confirmed receipt is unavailable on ${order.chain}; keeping state`,
         );
-        await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_RECEIPT_MISSING');
+        await this.recordAccountingFailure(
+          order,
+          missingAttempts === 0
+            ? 'SWAP_ACCOUNTING_RECEIPT_MISSING'
+            : `SWAP_ACCOUNTING_RECEIPT_MISSING_${missingAttempts + 1}`,
+        );
         return;
       }
 

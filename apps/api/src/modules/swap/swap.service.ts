@@ -1131,6 +1131,15 @@ export class SwapService {
       });
     }
 
+    try {
+      await this.rpc.ensureChain(order.chain);
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'RPC is unavailable for this chain',
+      });
+    }
+
     if (order.status !== 'READY') {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',

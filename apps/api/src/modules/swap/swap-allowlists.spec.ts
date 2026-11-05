@@ -39,4 +39,9 @@ describe('swap allowlists', () => {
     expect(routerAllowlist('bsc')).toEqual([defaultRouterForChain('bsc').toLowerCase()]);
     expect(executorAllowlist('bsc')).toEqual([defaultExecutorForChain('bsc').toLowerCase()]);
   });
+
+  it('fails closed for unknown chains', () => {
+    expect(() => routerAllowlist('solana')).toThrow(/solana/);
+    expect(() => executorAllowlist('solana')).toThrow(/solana/);
+  });
 });
