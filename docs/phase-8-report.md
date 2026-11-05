@@ -24,6 +24,8 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Correct selector mapping: `0xe21fd0e9` = `swap`, `0x59e50fed` = `swapGeneric`; both are supported and must be allowlisted.
 - `SWAP_EXECUTOR_ALLOWLIST` with the BSC AggregationExecutorProxy default.
 - Simple-mode calldata is rejected until `firstPools`/`destTokenFeeData` can be validated; standard routes use the server-enforced order deadline and submit rejects after expiry.
+- Execution UI: build preview, allowance/`APPROVAL_REQUIRED` gate, exact approval, step-up prompt, WalletConnect/Tangem signing, swap submission, and live order status. Signing is gated by `SWAP_EXECUTION_ENABLED` (default false) until final review/manual acceptance.
+- `POST /swap/orders/:id/ready` re-checks allowance/balance/simulation and moves approved orders to `READY`; submit accepts `READY`/`BUILT`.
 - API-hosted tracking poller: `eth_getTransactionByHash` verification, receipt/confirmations, replaced/dropped, pre-accounting reorg handling, actual gas capture, and actual spent/return amounts from the router `Swapped` event.
 - Confirmed-swap accounting through the existing ledger: trade/swap transaction, postings, FIFO consumption, output lot, gas posting, trade group, `source=kyberswap`, idempotent by tx hash, using the actual on-chain amounts rather than quote amounts.
 - Accounting prerequisites: the wallet must already hold the input token and BNB for gas in the ledger; negative balances fail closed and retry after reconciliation.

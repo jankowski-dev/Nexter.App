@@ -42,6 +42,7 @@ export const swapConfigResponseSchema = z.object({
   providerMode: z.enum(['gateway', 'fallback']),
   walletConnectProjectId: z.string().nullable(),
   buildEnabled: z.boolean(),
+  executionEnabled: z.boolean(),
   rpcConfigured: z.boolean(),
   walletAllowlistConfigured: z.boolean(),
   chains: z.array(swapChainConfigSchema),
@@ -189,6 +190,8 @@ export const approvalsResponseSchema = z.object({
 });
 
 export const swapBuildResponseSchema = swapOrderDetailSchema.extend({
+  approvalRequired: z.boolean(),
+  allowance: z.string().nullable(),
   simulation: z
     .object({
       success: z.boolean(),

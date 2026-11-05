@@ -82,6 +82,19 @@ export class SwapController {
     });
   }
 
+  @Post('orders/:id/ready')
+  @HttpCode(HttpStatus.OK)
+  ready(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SwapBuildResponse> {
+    return this.swaps.ready(auth, id, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
   @Post('orders/:id/submitted')
   @HttpCode(HttpStatus.OK)
   submit(

@@ -138,7 +138,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let quotePriceImpact: string | null = '0.0010';
   let quoteAmountInUsd: string | number | null = '1.00';
   let quoteAmountOutUsd: string | number | null = '0.999';
-  let allowance = '0';
+  let allowance = '1000000000000000000000';
   let chainTx: RpcTransaction | null = null;
   let chainReceipt: RpcReceipt | null = null;
   let latestBlock = 1000;
@@ -239,6 +239,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_ROUTER_ALLOWLIST = router;
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
+    env.SWAP_EXECUTION_ENABLED = true;
     env.SWAP_QUOTE_TTL_SECONDS = 15;
     env.SWAP_MAX_PRICE_IMPACT_BPS = 200;
 
@@ -271,7 +272,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quotePriceImpact = '0.0010';
     quoteAmountInUsd = '1.00';
     quoteAmountOutUsd = '0.999';
-    allowance = '0';
+    allowance = '1000000000000000000000';
     chainTx = null;
     chainReceipt = null;
     latestBlock = 1000;
@@ -656,6 +657,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     const owner = await setupOwner(agent);
     quoteAmountInUsd = '600.00';
     quoteAmountOutUsd = '599.40';
+    allowance = '0';
 
     const quoted = await agent
       .post('/api/v1/swap/quote')
@@ -677,22 +679,22 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(200);
     expect(new Date(stepUp.body.stepUpUntil).getTime()).toBeGreaterThan(Date.now());
 
-    await agent
+    const built = await agent
       .post('/api/v1/swap/build')
       .set('x-csrf-token', owner.csrf)
       .send({ orderId, walletAddress: wallet })
       .expect(201);
+    expect(built.body).toMatchObject({
+      status: 'APPROVAL_REQUIRED',
+      approvalRequired: true,
+      simulation: null,
+    });
 
     env.SWAP_WALLET_ALLOWLIST = '';
     await agent
       .post('/api/v1/swap/approvals/build')
       .set('x-csrf-token', owner.csrf)
       .send({ orderId })
-      .expect(403);
-    await agent
-      .post(`/api/v1/swap/orders/${orderId}/submitted`)
-      .set('x-csrf-token', owner.csrf)
-      .send({ txHash: `0x${'d'.repeat(64)}` })
       .expect(403);
     env.SWAP_WALLET_ALLOWLIST = wallet;
 
@@ -736,6 +738,30 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .send({ txHash: `0x${'a'.repeat(64)}` })
       .expect(200);
     expect(approvalSubmitted.body.status).toBe('SUBMITTED');
+
+    const notReady = await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+    expect(notReady.body.error.code).toBe('SWAP_APPROVAL_REQUIRED');
+
+    allowance = '1000000000000000000';
+    const ready = await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(ready.body).toMatchObject({
+      status: 'READY',
+      approvalRequired: false,
+    });
+
+    env.SWAP_WALLET_ALLOWLIST = '';
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'d'.repeat(64)}` })
+      .expect(403);
+    env.SWAP_WALLET_ALLOWLIST = wallet;
 
     const submitted = await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)

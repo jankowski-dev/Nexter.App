@@ -104,7 +104,7 @@ export class ApprovalService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (order.status !== 'BUILT') {
+    if (order.status !== 'BUILT' && order.status !== 'APPROVAL_REQUIRED') {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,

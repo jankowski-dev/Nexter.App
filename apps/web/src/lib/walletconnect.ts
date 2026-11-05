@@ -2,6 +2,13 @@ import { EthereumProvider } from '@walletconnect/ethereum-provider';
 import { useCallback, useRef, useState } from 'react';
 
 const BSC_CHAIN_ID = 56;
+
+export interface SendTransactionInput {
+  to: string;
+  data: string;
+  value?: string;
+}
+
 type WalletProvider = Awaited<ReturnType<typeof EthereumProvider.init>>;
 
 function chainIdFrom(value: unknown): number | null {
@@ -100,6 +107,74 @@ export function useWalletConnect(projectId: string | null) {
     }
   }, []);
 
+  const sendTransaction = useCallback(
+    async (input: SendTransactionInput): Promise<string> => {
+      const provider = providerRef.current;
+
+      if (!provider || !address) {
+        throw new Error('Кошелёк не подключён');
+      }
+
+      if (chainId !== BSC_CHAIN_ID) {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: '0x38' }],
+        });
+        setChainId(BSC_CHAIN_ID);
+      }
+
+      const value =
+        input.value && input.value !== '0' ? `0x${BigInt(input.value).toString(16)}` : '0x0';
+      const hash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [
+          {
+            from: address,
+            to: input.to,
+            data: input.data,
+            value,
+          },
+        ],
+      });
+
+      if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+        throw new Error('Кошелёк вернул некорректный hash транзакции');
+      }
+
+      return hash;
+    },
+    [address, chainId],
+  );
+
+  const waitForReceipt = useCallback(async (txHash: string, timeoutMs = 180_000) => {
+    const provider = providerRef.current;
+
+    if (!provider) {
+      throw new Error('Кошелёк не подключён');
+    }
+
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      const receipt = (await provider.request({
+        method: 'eth_getTransactionReceipt',
+        params: [txHash],
+      })) as { status?: string } | null;
+
+      if (receipt) {
+        if (receipt.status === '0x0' || receipt.status === '0x00') {
+          throw new Error('Транзакция отклонена сетью');
+        }
+
+        return receipt;
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+    }
+
+    throw new Error('Транзакция не подтвердилась за отведённое время');
+  }, []);
+
   return {
     address,
     chainId,
@@ -110,5 +185,7 @@ export function useWalletConnect(projectId: string | null) {
     connect,
     disconnect,
     switchToBsc,
+    sendTransaction,
+    waitForReceipt,
   };
 }

@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 8 — Swap execution (in progress)**. Step-up TOTP, exact approvals, submission, WalletConnect/Tangem connection, calldata verification, API tracking, and confirmed-swap accounting are implemented. Execution UI/signing, final security review, and live Tangem acceptance remain.
+Current phase: **Phase 8 — Swap execution (in progress)**. Step-up TOTP, exact approvals, submission, WalletConnect/Tangem connection, calldata verification, API tracking, and confirmed-swap accounting are implemented. Execution UI and the allowance/READY flow are implemented; signing stays disabled behind `SWAP_EXECUTION_ENABLED` until final review and live Tangem acceptance.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 

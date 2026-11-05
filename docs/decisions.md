@@ -175,3 +175,9 @@ Format: date — decision — reason.
 - **Reorg policy.** Receipt and confirmation count are rechecked before accounting; a reorged transaction returns to `PENDING` and a reverted receipt becomes `FAILED`. Post-accounting reorg compensation is deferred to an append-only correction slice; 15 confirmations bound the risk.
 - **Replacement speed-ups are deferred.** A same-nonce replacement that actually executed is not adopted automatically; the order is marked `REPLACED`. This is acceptable while no execution UI exists and must be revisited before signing.
 - **Transaction source.** `kyberswap` is added to the transaction source contract enum; the swap order links to the created transaction and trade group.
+
+## Phase 8 — execution UI and allowance gate
+
+- **Build no longer fails on a first-time ERC-20 approval.** Insufficient allowance produces `APPROVAL_REQUIRED` with stored calldata; `POST /swap/orders/:id/ready` re-checks balance/allowance/simulation and moves the order to `READY`. Submit accepts `READY` or `BUILT`.
+- **Signing is gated.** `SWAP_EXECUTION_ENABLED` defaults to false and is exposed as `executionEnabled`; the UI allows build/approval preparation but hides WalletConnect signing until the owner enables it after final review and manual Tangem acceptance.
+- **The browser signs; the server never does.** Approval is exact and the swap transaction is built server-side, decoded/verified, simulated, and submitted as a hash; tracking/accounting remain server-side.
