@@ -872,6 +872,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         .set({
           accountingTransactionId: result.transaction.id,
           tradeGroupId: result.transaction.tradeGroupId,
+          errors: order.errors.filter((code) => !code.startsWith('SWAP_ACCOUNTING_')),
           updatedAt: new Date(),
         })
         .where(

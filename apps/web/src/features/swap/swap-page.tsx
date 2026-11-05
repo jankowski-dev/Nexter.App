@@ -949,8 +949,24 @@ export function SwapPage() {
                     >
                       {order.status}
                     </Badge>
-                    <Badge tone={order.accountingTransactionId ? 'success' : 'warning'}>
-                      {order.accountingTransactionId ? 'учёт создан' : 'учёта нет'}
+                    <Badge
+                      tone={
+                        order.accountingTransactionId
+                          ? 'success'
+                          : order.status === 'SUBMITTED' ||
+                              order.status === 'PENDING' ||
+                              order.status === 'CONFIRMED'
+                            ? 'warning'
+                            : 'neutral'
+                      }
+                    >
+                      {order.accountingTransactionId
+                        ? 'учёт создан'
+                        : order.status === 'SUBMITTED' ||
+                            order.status === 'PENDING' ||
+                            order.status === 'CONFIRMED'
+                          ? 'учёта нет'
+                          : 'не отправлен'}
                     </Badge>
                   </div>
                 </div>
@@ -969,7 +985,7 @@ export function SwapPage() {
                   ) : null}
                   {order.confirmations > 0 ? <span>{order.confirmations} подтв.</span> : null}
                 </div>
-                {order.errors.length > 0 ? (
+                {!order.accountingTransactionId && order.errors.length > 0 ? (
                   <div className="mt-1 break-all text-xs text-red-700">
                     Ошибки: {order.errors.join(', ')}
                   </div>
