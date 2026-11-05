@@ -1,0 +1,1 @@
+ALTER TABLE "swap_orders" ADD COLUMN "built_amount_out" numeric(36, 0);

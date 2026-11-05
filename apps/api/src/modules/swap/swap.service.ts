@@ -708,6 +708,33 @@ export class SwapService {
       await fail('gas', 'SWAP_GAS_INVALID', 'Gas estimate is not a bounded integer');
     }
 
+    if (gasEstimate) {
+      try {
+        await this.assertGasBalance({
+          wallet,
+          tokenInNative: tokenIn.native,
+          amountInBase: quotedAmountIn,
+          gasEstimate,
+        });
+      } catch (error) {
+        await this.recordBuildFailure(
+          order,
+          error instanceof BadRequestException
+            ? 'SWAP_INSUFFICIENT_GAS_BALANCE'
+            : 'SWAP_RPC_UNAVAILABLE',
+          meta,
+        );
+        throw error;
+      }
+      pass('gasBalance');
+    } else {
+      validation.push({
+        check: 'gasBalance',
+        passed: false,
+        detail: 'not checked: no gas estimate',
+      });
+    }
+
     const gasUsd =
       built.gasUsd && /^\d+(?:\.\d+)?$/.test(built.gasUsd) && built.gasUsd.length <= 32
         ? built.gasUsd
@@ -739,6 +766,7 @@ export class SwapService {
           routerAddress: normalizeAddress(built.routerAddress),
           calldata: built.data,
           transactionValue: built.transactionValue,
+          builtAmountOut: built.amountOut,
           gasEstimate,
           gasUsd,
           deadline,
@@ -869,6 +897,55 @@ export class SwapService {
       });
     }
 
+    if (!order.calldata || !order.walletAddress || !order.routerAddress) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order has no stored calldata',
+      });
+    }
+
+    if (!selectorAllowlist().includes(order.calldata.slice(0, 10).toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_SELECTOR_NOT_ALLOWED',
+        message: 'Calldata selector is not in the current allowlist',
+      });
+    }
+
+    let decoded;
+
+    try {
+      decoded = await decodeKyberSwapCalldata(order.calldata);
+    } catch {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Stored calldata could not be decoded',
+        details: { reason: 'SWAP_CALLDATA_INVALID' },
+      });
+    }
+
+    const calldataChecks = validateKyberSwapBuild(decoded, {
+      wallet: order.walletAddress,
+      tokenIn: tokenIn.address,
+      tokenOut: tokenOut.address,
+      nativeIn: tokenIn.native,
+      amountInBase: amountIn,
+      minOutBase: toBaseUnits(order.minOut, tokenOut.decimals).toString(),
+      quotedAmountOut:
+        order.builtAmountOut ?? toBaseUnits(order.amountOut, tokenOut.decimals).toString(),
+      routerAddress: order.routerAddress,
+      executorAllowlist: executorAllowlist(),
+      deadline: order.deadline,
+    });
+    const calldataIssue = calldataChecks.issues[0];
+
+    if (calldataIssue) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: calldataIssue.detail,
+        details: { reason: calldataIssue.code },
+      });
+    }
+
     if (!order.gasUsd) {
       throw new BadRequestException({
         code: 'SWAP_GAS_MISSING',
@@ -963,6 +1040,22 @@ export class SwapService {
       });
     }
 
+    const readyGasEstimate = simulation.gasEstimate ?? order.gasEstimate;
+
+    if (!readyGasEstimate) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_MISSING',
+        message: 'Gas estimate is missing',
+      });
+    }
+
+    await this.assertGasBalance({
+      wallet,
+      tokenInNative: tokenIn.native,
+      amountInBase: amountIn,
+      gasEstimate: readyGasEstimate,
+    });
+
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(swapOrders)
@@ -1027,7 +1120,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['BUILT', 'READY'].includes(order.status)) {
+    if (order.status !== 'READY') {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -1051,6 +1144,8 @@ export class SwapService {
       });
     }
 
+    await this.assertCalldataAllowlisted(order);
+
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
         .update(swapOrders)
@@ -1059,7 +1154,7 @@ export class SwapService {
           and(
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, userId),
-            inArray(swapOrders.status, ['BUILT', 'READY']),
+            eq(swapOrders.status, 'READY'),
             gt(swapOrders.deadline, Math.floor(Date.now() / 1000)),
           ),
         )
@@ -1536,11 +1631,90 @@ export class SwapService {
     }
   }
 
+  private async assertGasBalance(input: {
+    wallet: string;
+    tokenInNative: boolean;
+    amountInBase: string;
+    gasEstimate: string;
+  }): Promise<void> {
+    let gasPrice: string | null;
+    let nativeBalance: string | null;
+
+    try {
+      gasPrice = await this.rpc.getGasPrice();
+      nativeBalance = await this.rpc.getNativeBalance(input.wallet);
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
+
+    if (gasPrice === null || nativeBalance === null) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'BSC RPC is unavailable',
+      });
+    }
+
+    const gasCost = BigInt(input.gasEstimate) * BigInt(gasPrice);
+    const required = input.tokenInNative ? BigInt(input.amountInBase) + gasCost : gasCost;
+
+    if (BigInt(nativeBalance) < required) {
+      throw new BadRequestException({
+        code: 'SWAP_INSUFFICIENT_GAS_BALANCE',
+        message: 'Native balance is below the gas requirement',
+      });
+    }
+  }
+
   private assertExecutionEnabled(): void {
     if (!env.SWAP_EXECUTION_ENABLED) {
       throw new ServiceUnavailableException({
         code: 'SWAP_EXECUTION_DISABLED',
         message: 'Swap execution is disabled',
+      });
+    }
+  }
+
+  private async assertCalldataAllowlisted(order: SwapOrder): Promise<void> {
+    if (!order.calldata) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order has no stored calldata',
+      });
+    }
+
+    if (!selectorAllowlist().includes(order.calldata.slice(0, 10).toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_SELECTOR_NOT_ALLOWED',
+        message: 'Calldata selector is not in the current allowlist',
+      });
+    }
+
+    let decoded: DecodedKyberSwap;
+
+    try {
+      decoded = await decodeKyberSwapCalldata(order.calldata);
+    } catch {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Stored calldata could not be decoded',
+        details: { reason: 'SWAP_CALLDATA_INVALID' },
+      });
+    }
+
+    if (!executorAllowlist().includes(decoded.callTarget)) {
+      throw new BadRequestException({
+        code: 'SWAP_EXECUTOR_NOT_ALLOWED',
+        message: 'Calldata executor is not in the current allowlist',
+      });
+    }
+
+    if (!getSwapToken(order.chain, order.tokenIn) || !getSwapToken(order.chain, order.tokenOut)) {
+      throw new BadRequestException({
+        code: 'SWAP_TOKEN_NOT_ALLOWED',
+        message: 'Stored token is not in the current registry',
       });
     }
   }

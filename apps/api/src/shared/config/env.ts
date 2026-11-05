@@ -80,6 +80,7 @@ export const envSchema = z.object({
   SWAP_CONFIRMATIONS: z.coerce.number().int().min(1).max(100).default(15),
   SWAP_TRACK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   SWAP_DROP_TIMEOUT_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
+  SWAP_REPLACEMENT_LOOKBACK_BLOCKS: z.coerce.number().int().min(3).max(1200).default(240),
   SWAP_WALLET_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),

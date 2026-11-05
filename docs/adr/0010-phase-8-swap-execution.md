@@ -87,15 +87,23 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 - For an ERC-20 input with insufficient allowance, build stores the validated calldata and enters `APPROVAL_REQUIRED` instead of failing simulation; the response exposes `approvalRequired`, `allowance`, and a null `simulation`.
 - `POST /swap/orders/:id/ready` re-checks balance, allowance, deadline, wallet/router allowlists, step-up and simulation; it moves `APPROVAL_REQUIRED`/`BUILT` to `READY` or returns `SWAP_APPROVAL_REQUIRED`. It does not clear `AWAITING_SIGNATURE`.
 - Submit accepts `BUILT`, `READY`, `AWAITING_SIGNATURE`, or a built `EXPIRED` order as signed-hash recovery. `POST /signing` sets the short-lived signing lock; `/signing/cancel` releases it without requiring the kill switch.
-- Signing is browser-side through WalletConnect/Tangem. The UI builds, prepares an exact approval, waits for the approval receipt, calls `ready`, marks `AWAITING_SIGNATURE`, signs the swap, and submits the hash. Approval submission is tracked server-side (confirmed/failed/timeout).
+- Signing is browser-side through WalletConnect/Tangem and requires `READY`. For a non-approval build the UI calls `ready` before enabling signing; for a first-time approval it prepares the exact approval, waits for the approval receipt, calls `ready`, marks `AWAITING_SIGNATURE`, signs the swap, and submits the hash. Approval submission is tracked server-side (confirmed/failed/timeout).
 - `SWAP_EXECUTION_ENABLED` (default false) is exposed as `executionEnabled`; the UI hides signing until the owner enables it after review/manual acceptance. Build and approval preparation remain available for verification.
+
+### Phase 8.x tracking hardening
+
+- `ready` re-decodes the stored calldata, re-checks the current selector/router/recipient/token/amount/minOut/executor allowlists, and uses the persisted `built_amount_out` as the minOut upper bound before simulation. Legacy orders without it fall back to the stored quote output.
+- Gas preflight compares the native BNB balance with `gasEstimate * eth_gasPrice` (plus amountIn for native input) at build/ready. It covers swap gas only; first-time approvals need additional BNB.
+- `POST /signing` requires `READY`; `BUILT` orders must pass `ready` first.
+- When the original tx hash is missing, the tracker searches recent blocks (`SWAP_REPLACEMENT_LOOKBACK_BLOCKS`, default 240) by same nonce when known, or by sender/router/calldata/value when the nonce is unknown; the content search is bounded to blocks at/after submission (2-minute grace). A unique match is adopted and continues tracking/accounting. A found-but-mismatched same-nonce candidate stays active (`SWAP_REPLACEMENT_PENDING`) until its receipt reaches `SWAP_CONFIRMATIONS`, then marks `REPLACED`; not-found/ambiguous matches keep the order active and record an anomaly. Terminal status writes are guarded by the expected tx hash. It no longer terminally drops an unobserved executed swap.
+- Post-accounting reorg policy: `SWAP_CONFIRMATIONS` (default 15) is treated as final for accounting. The tracker does not automatically reverse an already-accounted swap; a detected deep reorg requires freezing new execution and an append-only manual compensating transaction. Automatic compensation remains a Phase 9/prerequisite item.
 
 ### Submission and tracking
 
 - `POST /swap/orders/:id/submitted` accepts a BSC tx hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/`EXPIRED` order, verifies ownership/state, and records `SUBMITTED` + event + audit. It is a recovery path and is allowed during a kill switch/execution disable; tracking verifies the tx.
 - An API-hosted `SwapTrackingService` poller (in-process tick guard, conditional status updates) polls the receipt, waits for the configured confirmations, records actual gas, and detects replaced/dropped txs. The ledger's per-user advisory lock and `source/sourceId` idempotency prevent duplicate accounting. The worker remains reserved for future decoupling.
-- Mempool replacement: a different tx hash for the same nonce marks `REPLACED`; dropped nonce marks `DROPPED`.
-- Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). A reorg after accounting is outside this slice; 15 confirmations make it unlikely, and any correction must be an append-only compensating transaction in a later slice.
+- Mempool replacement: a same-nonce transaction that matches the order is adopted under its new hash; a different tx hash for the same nonce marks `REPLACED`. A missing replacement is not terminal: the order stays active and records `SWAP_REPLACEMENT_NOT_FOUND`.
+- Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). After accounting, `SWAP_CONFIRMATIONS` (default 15) is the finality bound; a deeper reorg requires a manual append-only compensating transaction and is not automated in this phase.
 - A failed receipt marks `FAILED`; no accounting.
 - Confirmation creates exactly one accounting transaction; retries are idempotent by `(user, source=kyberswap, sourceId=tx hash)` under the ledger's per-user advisory lock. Tracking starts whenever `BSC_RPC_URL` is configured, independent of `SWAP_ENABLED`.
 - Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by actual `Swapped` amounts. Confirmed orders are retried with a 60-second accounting backoff and no 24-hour cutoff.
@@ -115,11 +123,12 @@ Failure/replaced/dropped never creates a transaction.
 
 ### Persistence
 
-Migrations `0010`, `0011`, and `0012` add:
+Migrations `0010`, `0011`, `0012`, and `0013` add:
 
 - `sessions.step_up_until`;
 - `token_approvals`;
 - swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `executed_amount_in`, `executed_amount_out`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
+- `swap_orders.built_amount_out` (base-unit integer bound used by `ready`);
 - unique partial indexes on non-null tx hashes and active approvals.
 
 Additive only.
