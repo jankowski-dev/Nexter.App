@@ -229,7 +229,14 @@ export function SwapPage() {
     try {
       const result = await cancelSwapSigning(quote.data.id);
       setBuildData((current) => (current ? { ...current, status: result.status } : current));
+      await liveOrder.refetch();
     } catch (error) {
+      const refreshed = await liveOrder.refetch();
+      if (refreshed.data) {
+        setBuildData((current) =>
+          current ? { ...current, status: refreshed.data.status } : current,
+        );
+      }
       setExecutionError(toRussianError(error, 'Не удалось отменить подпись'));
     }
   }
@@ -275,9 +282,16 @@ export function SwapPage() {
       await submitSignedSwap(hash);
     } catch (error) {
       try {
-        await cancelSwapSigning(quote.data.id);
+        const cancelled = await cancelSwapSigning(quote.data.id);
+        setBuildData((current) => (current ? { ...current, status: cancelled.status } : current));
+        await liveOrder.refetch();
       } catch {
-        // Leave the order in AWAITING_SIGNATURE; it can be re-checked via ready.
+        const refreshed = await liveOrder.refetch();
+        if (refreshed.data) {
+          setBuildData((current) =>
+            current ? { ...current, status: refreshed.data.status } : current,
+          );
+        }
       }
       setExecutionError(toRussianError(error, 'Не удалось подписать своп в Tangem'));
     } finally {

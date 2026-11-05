@@ -888,6 +888,58 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(200);
   }, 60_000);
 
+  it('marks a never-mined approval failed after the timeout', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    allowance = '0';
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const approval = await agent
+      .post('/api/v1/swap/approvals/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId })
+      .expect(201);
+    const approvalTxHash = `0x${'8'.repeat(64)}`;
+    await agent
+      .post(`/api/v1/swap/approvals/${approval.body.approval.id}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: approvalTxHash })
+      .expect(200);
+
+    await db
+      .update(tokenApprovals)
+      .set({ submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000) })
+      .where(eq(tokenApprovals.id, approval.body.approval.id));
+
+    chainTx = {
+      hash: approvalTxHash,
+      from: wallet,
+      to: tokenIn,
+      input: approval.body.calldata,
+      value: '0x0',
+      nonce: 11,
+      blockNumber: null,
+    };
+    chainReceipt = null;
+    latestBlock = 120;
+    await app.get(SwapTrackingService).tick();
+
+    const [tracked] = await db
+      .select()
+      .from(tokenApprovals)
+      .where(eq(tokenApprovals.id, approval.body.approval.id));
+    expect(tracked.status).toBe('FAILED');
+  }, 60_000);
+
   it('blocks submission while execution is disabled', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
