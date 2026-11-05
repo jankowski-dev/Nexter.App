@@ -19,7 +19,7 @@ Phase 8 delivers:
 - WalletConnect v2 connection from the web app to Tangem on BSC;
 - exact-amount ERC-20 approval build and submission tracking;
 - step-up TOTP for swaps whose input USD value exceeds $500;
-- `POST /swap/orders/:id/submitted` and worker tracking;
+- `POST /swap/orders/:id/submitted` and API-hosted tracking;
 - confirmed-swap accounting: transaction, postings, FIFO consumption, new lot, gas, and trade-group link;
 - failure/replaced/dropped handling with no accounting transaction;
 - kill switch and the Phase 7 allowlists remain mandatory.
@@ -84,32 +84,33 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 ### Submission and tracking
 
 - `POST /swap/orders/:id/submitted` accepts a BSC tx hash, verifies order ownership/state/allowlists/step-up, and records `SUBMITTED` + event + audit.
-- Worker job `swap-track` polls the receipt with backoff, waits for 15 confirmations, records actual gas, and detects replaced/dropped txs.
+- An API-hosted `SwapTrackingService` poller (in-process tick guard, conditional status updates) polls the receipt, waits for the configured confirmations, records actual gas, and detects replaced/dropped txs. The ledger's per-user advisory lock and `source/sourceId` idempotency prevent duplicate accounting. The worker remains reserved for future decoupling.
 - Mempool replacement: a different tx hash for the same nonce marks `REPLACED`; dropped nonce marks `DROPPED`.
-- Reorgs: confirmation count is recomputed; a reorged tx returns to `PENDING`.
+- Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). A reorg after accounting is outside this slice; 15 confirmations make it unlikely, and any correction must be an append-only compensating transaction in a later slice.
 - A failed receipt marks `FAILED`; no accounting.
-- Confirmation creates exactly one accounting transaction; retries are idempotent by `swap_order_id`/tx hash.
+- Confirmation creates exactly one accounting transaction; retries are idempotent by `(user, source=kyberswap, sourceId=tx hash)` under the ledger's per-user advisory lock. Tracking starts whenever `BSC_RPC_URL` is configured, independent of `SWAP_ENABLED`.
+- Cash-equivalent legs derive USD from the actual on-chain amount; non-cash legs scale the quote USD by actual `Swapped` amounts. Confirmed orders are retried with a 60-second accounting backoff and no 24-hour cutoff.
 
 ### Accounting
 
 On confirmed swap:
 
-- transaction type `trade`, subtype `swap`, source `kyberswap`, `sourceId = tx hash`;
+- transaction type `trade`, subtype `swap`, source `kyberswap` (contract enum), `sourceId = tx hash`;
 - postings: wallet tokenIn −amount, External +amount, wallet tokenOut +amount, External −amount, gas BNB −fee/External +fee;
 - consume FIFO lots for tokenIn (if non-cash);
 - create a trade group and a lot for tokenOut (if non-cash) with cost basis = tokenIn USD + gas (subject to `includeGasInCostBasis`);
 - record `network_fee_wei`/`network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
-- link `swap_orders` to the transaction; idempotency by order id.
+- link `swap_orders` to the transaction; idempotency by `(user, source=kyberswap, sourceId=tx hash)`.
 
 Failure/replaced/dropped never creates a transaction.
 
 ### Persistence
 
-Migrations `0010` and `0011` add:
+Migrations `0010`, `0011`, and `0012` add:
 
 - `sessions.step_up_until`;
 - `token_approvals`;
-- swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
+- swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `executed_amount_in`, `executed_amount_out`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
 - unique partial indexes on non-null tx hashes and active approvals.
 
 Additive only.

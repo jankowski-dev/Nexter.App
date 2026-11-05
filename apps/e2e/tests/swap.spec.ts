@@ -98,6 +98,8 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         tokenOut: { symbol: 'BASED', name: 'BASED', address: based, decimals: 18, native: false },
         amountIn: '1.000000000000000000',
         amountOut: '2.000000000000000000',
+        executedAmountIn: null,
+        executedAmountOut: null,
         amountInUsd: '1.00',
         amountOutUsd: '0.99',
         minOut: '1.990000000000000000',

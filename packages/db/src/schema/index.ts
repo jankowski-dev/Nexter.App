@@ -115,7 +115,7 @@ export type TransactionType =
   'trade' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
 export type TransactionSubtype =
   'buy' | 'sell' | 'swap' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
-export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'system';
+export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system';
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
 
 export const chains = pgTable(
@@ -452,6 +452,8 @@ export const swapOrders = pgTable(
     amountIn: numeric('amount_in', { precision: 36, scale: 18 }).notNull(),
     amountInUsd: numeric('amount_in_usd', { precision: 24, scale: 8 }),
     amountOut: numeric('amount_out', { precision: 36, scale: 18 }).notNull(),
+    executedAmountIn: numeric('executed_amount_in', { precision: 36, scale: 18 }),
+    executedAmountOut: numeric('executed_amount_out', { precision: 36, scale: 18 }),
     minOut: numeric('min_out', { precision: 36, scale: 18 }).notNull(),
     slippageBps: integer('slippage_bps').notNull(),
     priceImpactBps: integer('price_impact_bps'),

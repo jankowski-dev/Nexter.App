@@ -40,7 +40,9 @@ export function TradesPage() {
   const deferredSearch = useDeferredValue(search);
   const filters = {
     status: status ? (status as 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale') : undefined,
-    source: source ? (source as 'manual' | 'notion' | 'onchain' | 'system') : undefined,
+    source: source
+      ? (source as 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system')
+      : undefined,
     assetId: assetId || undefined,
     from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
     to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
@@ -143,6 +145,7 @@ export function TradesPage() {
                 <option value="">Все источники</option>
                 <option value="manual">Ручные</option>
                 <option value="notion">Notion</option>
+                <option value="kyberswap">KyberSwap</option>
               </Select>
               <Select value={pnl} onChange={(event) => setPnl(event.target.value)} aria-label="P&L">
                 <option value="">Любой P&L</option>
@@ -297,6 +300,7 @@ export function TradesPage() {
               <option value="">Все источники</option>
               <option value="manual">Ручные</option>
               <option value="notion">Notion</option>
+              <option value="kyberswap">KyberSwap</option>
             </Select>
           </Card>
 

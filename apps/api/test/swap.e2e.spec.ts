@@ -1,16 +1,34 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { encodeFunctionData } from 'viem';
-import { createDb, swapOrders, type Database } from '@nexter/db';
+import { encodeAbiParameters, encodeFunctionData, toEventSelector } from 'viem';
+import {
+  auditLog,
+  createDb,
+  lots,
+  postings,
+  swapEvents,
+  swapOrders,
+  transactions,
+  type Database,
+} from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
-import { BscRpcService } from '../src/modules/swap/bsc-rpc.service';
+import { AccountsService } from '../src/modules/accounting/accounts.service';
+import { AssetsService } from '../src/modules/accounting/assets.service';
+import { LedgerService } from '../src/modules/accounting/ledger.service';
+import {
+  BscRpcService,
+  type RpcReceipt,
+  type RpcTransaction,
+} from '../src/modules/swap/bsc-rpc.service';
 import { KYBER_ROUTER_ABI } from '../src/modules/swap/kyber-calldata';
 import { KyberSwapClient } from '../src/modules/swap/kyber-swap.client';
+import { SwapTrackingService } from '../src/modules/swap/swap-tracking.service';
+import { getSwapToken } from '../src/modules/swap/token-registry';
 import { env } from '../src/shared/config/env';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -29,6 +47,7 @@ const selectorAllowlist = `${selector},0x59e50fed`;
 const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
+const chainlinkAddress = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd';
 
 function makeBuildData(
   overrides: {
@@ -75,6 +94,29 @@ function makeBuildData(
   });
 }
 
+function swappedLog(
+  spentAmount: bigint,
+  returnAmount: bigint,
+  srcToken = tokenIn,
+  dstToken = tokenOut,
+) {
+  return {
+    address: router,
+    topics: [toEventSelector('Swapped(address,address,address,address,uint256,uint256)')],
+    data: encodeAbiParameters(
+      [
+        { type: 'address' },
+        { type: 'address' },
+        { type: 'address' },
+        { type: 'address' },
+        { type: 'uint256' },
+        { type: 'uint256' },
+      ],
+      [wallet, srcToken, dstToken, wallet, spentAmount, returnAmount],
+    ),
+  };
+}
+
 function csrfFrom(response: request.Response): string {
   const setCookie = response.headers['set-cookie'];
   const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
@@ -97,6 +139,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let quoteAmountInUsd: string | number | null = '1.00';
   let quoteAmountOutUsd: string | number | null = '0.999';
   let allowance = '0';
+  let chainTx: RpcTransaction | null = null;
+  let chainReceipt: RpcReceipt | null = null;
+  let latestBlock = 1000;
+  let latestNonce = 7;
+  let blockTimestamp = Math.floor(Date.now() / 1000);
 
   const kyber = {
     configured: true,
@@ -141,6 +188,15 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     getErc20Allowance: async () => allowance,
     getErc20Balance: async () => '1000000000000000000000',
     getNativeBalance: async () => '1000000000000000000',
+    getTransactionByHash: async () => chainTx,
+    getTransactionReceipt: async () => chainReceipt,
+    getBlockNumber: async () => latestBlock,
+    getTransactionCount: async () => latestNonce,
+    getBlock: async () => ({
+      number: latestBlock,
+      timestamp: blockTimestamp,
+      hash: `0x${'f'.repeat(64)}`,
+    }),
     simulate: async () => {
       if (rpcFailure) throw new Error('rpc unavailable');
 
@@ -216,6 +272,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quoteAmountInUsd = '1.00';
     quoteAmountOutUsd = '0.999';
     allowance = '0';
+    chainTx = null;
+    chainReceipt = null;
+    latestBlock = 1000;
+    latestNonce = 7;
+    blockTimestamp = Math.floor(Date.now() / 1000);
     env.SWAP_KILL_SWITCH = false;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     await db.execute(sql`truncate table users restart identity cascade`);
@@ -720,5 +781,414 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quoteAmountInUsd = null;
     quoteAmountOutUsd = null;
     await quote().expect(400);
+  }, 60_000);
+
+  it('tracks a confirmed swap and writes idempotent accounting', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+    const tracking = app.get(SwapTrackingService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const tokenInAsset = await assets.ensureForSwapToken('bsc', getSwapToken('bsc', tokenIn)!);
+    const bnbAsset = await assets.ensureForSwapToken('bsc', {
+      symbol: 'BNB',
+      name: 'BNB',
+      address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+      decimals: 18,
+      native: true,
+    });
+
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: tokenInAsset.id,
+        amount: '10',
+        usdValue: '10',
+      },
+      {},
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: bnbAsset.id,
+        amount: '0.1',
+        usdValue: '60',
+      },
+      {},
+    );
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'1'.repeat(64)}`;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'f'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [swappedLog(1_000_000_000_000_000_000n, 2_100_000_000_000_000_000n)],
+    };
+    latestBlock = 114;
+    blockTimestamp = Math.floor(Date.now() / 1000);
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      status: 'CONFIRMED',
+      confirmations: 15,
+      blockNumber: 100,
+      executedAmountIn: '1.000000000000000000',
+      executedAmountOut: '2.100000000000000000',
+      networkFeeWei: '100000000000000',
+      networkFeeUsd: '0.04166667',
+    });
+    expect(order.accountingTransactionId).toBeTruthy();
+    expect(order.tradeGroupId).toBeTruthy();
+
+    const [accounting] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, order.accountingTransactionId!));
+    expect(accounting).toMatchObject({
+      type: 'trade',
+      subtype: 'swap',
+      source: 'kyberswap',
+      sourceId: txHash,
+    });
+
+    const accountingPostings = await db
+      .select()
+      .from(postings)
+      .where(eq(postings.transactionId, accounting.id));
+    expect(accountingPostings).toHaveLength(6);
+
+    const [lot] = await db
+      .select()
+      .from(lots)
+      .where(eq(lots.acquisitionTransactionId, accounting.id));
+    expect(lot?.amount).toBe('2.100000000000000000');
+
+    const auditAsset = await assets.ensureForSwapToken(
+      'bsc',
+      {
+        symbol: `AUDIT${Date.now()}`,
+        name: 'Audit Asset',
+        address: `0x${'a'.repeat(40)}`,
+        decimals: 18,
+        native: false,
+      },
+      undefined,
+      owner.userId,
+    );
+    const assetAudits = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.userId, owner.userId),
+          eq(auditLog.action, 'accounting.asset_created'),
+          eq(auditLog.entityId, auditAsset.id),
+        ),
+      );
+    expect(assetAudits).toHaveLength(1);
+
+    await tracking.tick();
+    const repeats = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.source, 'kyberswap'), eq(transactions.sourceId, txHash)));
+    expect(repeats).toHaveLength(1);
+  }, 60_000);
+
+  it('accounts a cash-equivalent output from the actual on-chain amount', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+    const tracking = app.get(SwapTrackingService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const link = getSwapToken('bsc', chainlinkAddress)!;
+    const linkAsset = await assets.ensureForSwapToken('bsc', link);
+    const usdcAsset = await assets.ensureForSwapToken('bsc', getSwapToken('bsc', tokenIn)!);
+    const bnbAsset = await assets.ensureForSwapToken('bsc', {
+      symbol: 'BNB',
+      name: 'BNB',
+      address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+      decimals: 18,
+      native: true,
+    });
+
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: linkAsset.id,
+        amount: '1',
+        usdValue: '2',
+      },
+      {},
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: bnbAsset.id,
+        amount: '0.1',
+        usdValue: '60',
+      },
+      {},
+    );
+
+    quoteAmountInUsd = '2';
+    quoteAmountOutUsd = '2.00000001';
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: chainlinkAddress,
+        tokenOut: tokenIn,
+        amountIn: '1',
+        walletAddress: wallet,
+      })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+
+    buildData = makeBuildData({ srcToken: chainlinkAddress, dstToken: tokenIn });
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'4'.repeat(64)}`;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 9,
+      blockNumber: 102,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 102,
+      blockHash: `0x${'c'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [
+        swappedLog(
+          1_000_000_000_000_000_000n,
+          2_000_000_000_000_000_000n,
+          chainlinkAddress,
+          tokenIn,
+        ),
+      ],
+    };
+    latestBlock = 116;
+    blockTimestamp = Math.floor(Date.now() / 1000);
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      status: 'CONFIRMED',
+      accountingTransactionId: expect.any(String),
+      executedAmountOut: '2.000000000000000000',
+    });
+
+    const accountingPostings = await db
+      .select()
+      .from(postings)
+      .where(eq(postings.transactionId, order.accountingTransactionId!));
+    expect(accountingPostings).toHaveLength(6);
+    expect(accountingPostings.find((posting) => posting.assetId === usdcAsset.id)?.amount).toBe(
+      '2.000000000000000000',
+    );
+  }, 60_000);
+
+  it('marks a replaced transaction without accounting', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'3'.repeat(64)}` })
+      .expect(200);
+
+    await db.update(swapOrders).set({ nonce: 7 }).where(eq(swapOrders.id, orderId));
+    latestNonce = 8;
+    chainTx = null;
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({ status: 'REPLACED', accountingTransactionId: null });
+  }, 60_000);
+
+  it('returns a confirmed order to pending when confirmations drop', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    await db
+      .update(swapOrders)
+      .set({
+        status: 'CONFIRMED',
+        txHash: `0x${'d'.repeat(64)}`,
+        confirmedAt: new Date(),
+        blockNumber: 100,
+        confirmations: 15,
+        networkFeeWei: '100000000000000',
+        networkFeeUsd: '0.04166667',
+      })
+      .where(eq(swapOrders.id, orderId));
+
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'d'.repeat(64)}`,
+      transactionHash: `0x${'d'.repeat(64)}`,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 105;
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      status: 'PENDING',
+      confirmedAt: null,
+      accountingTransactionId: null,
+    });
+    const events = await db.select().from(swapEvents).where(eq(swapEvents.orderId, orderId));
+    expect(events.some((event) => event.type === 'reorg')).toBe(true);
+  }, 60_000);
+
+  it('marks a reverted swap failed without accounting', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'2'.repeat(64)}`;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 8,
+      blockNumber: 101,
+    };
+    chainReceipt = {
+      status: false,
+      blockNumber: 101,
+      blockHash: `0x${'e'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '50000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 115;
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({ status: 'FAILED', accountingTransactionId: null });
+
+    const accounting = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.source, 'kyberswap'), eq(transactions.sourceId, txHash)));
+    expect(accounting).toHaveLength(0);
   }, 60_000);
 });

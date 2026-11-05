@@ -6,6 +6,7 @@ import { ExternalApiCallService } from './external-api-call.service';
 import { KyberSwapClient } from './kyber-swap.client';
 import { SwapController } from './swap.controller';
 import { SwapService } from './swap.service';
+import { SwapTrackingService } from './swap-tracking.service';
 
 @Module({
   imports: [AccountingModule],
@@ -13,6 +14,7 @@ import { SwapService } from './swap.service';
   providers: [
     SwapService,
     ApprovalService,
+    SwapTrackingService,
     ExternalApiCallService,
     {
       provide: KyberSwapClient,

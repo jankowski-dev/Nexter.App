@@ -82,6 +82,10 @@ export function isNativeToken(address: string): boolean {
   return address.toLowerCase() === BSC_NATIVE_ADDRESS.toLowerCase();
 }
 
+export function isCashEquivalentSymbol(symbol: string): boolean {
+  return ['USDC', 'USDT', 'BUSD', 'FDUSD'].includes(symbol.toUpperCase());
+}
+
 export function parseAddressList(value: string | undefined): string[] {
   if (!value) return [];
 

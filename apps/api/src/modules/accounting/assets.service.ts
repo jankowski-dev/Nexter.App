@@ -1,12 +1,16 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { assets, chains, type Asset, type Database, type DbExecutor } from '@nexter/db';
 import type { Asset as AssetContract } from '@nexter/contracts';
+import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 
 @Injectable()
 export class AssetsService {
-  constructor(@Inject(DB) private readonly db: Database) {}
+  constructor(
+    @Inject(DB) private readonly db: Database,
+    private readonly audit: AuditService,
+  ) {}
 
   private toContract(row: { asset: Asset; chainCode: string }): AssetContract {
     return {
@@ -47,6 +51,87 @@ export class AssetsService {
     }
 
     return this.toContract(row);
+  }
+
+  async ensureForSwapToken(
+    chainCode: string,
+    token: {
+      symbol: string;
+      name: string;
+      address: string;
+      decimals: number;
+      native: boolean;
+    },
+    executor: DbExecutor = this.db,
+    userId?: string,
+  ): Promise<Asset> {
+    if (executor === this.db) {
+      return this.db.transaction((tx) => this.ensureForSwapToken(chainCode, token, tx, userId));
+    }
+
+    const [chain] = await executor.select().from(chains).where(eq(chains.code, chainCode)).limit(1);
+
+    if (!chain) {
+      throw new Error(`Chain ${chainCode} is not configured`);
+    }
+
+    const [existing] = await executor
+      .select()
+      .from(assets)
+      .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, token.symbol)))
+      .limit(1);
+
+    if (existing) return existing;
+
+    const cashEquivalent = ['USDC', 'USDT', 'BUSD', 'FDUSD'].includes(token.symbol);
+    const [created] = await executor
+      .insert(assets)
+      .values({
+        chainId: chain.id,
+        symbol: token.symbol,
+        name: token.name,
+        contractAddress: token.native ? null : token.address.toLowerCase(),
+        decimals: token.decimals,
+        isStablecoin: cashEquivalent,
+        isCashEquivalent: cashEquivalent,
+        isVerified: true,
+        sourceId: 'swap-registry',
+        dataQuality: { source: 'swap-registry' },
+      })
+      .onConflictDoNothing({ target: [assets.chainId, assets.symbol] })
+      .returning();
+
+    if (created) {
+      await this.audit.log(
+        {
+          userId,
+          action: 'accounting.asset_created',
+          entityType: 'asset',
+          entityId: created.id,
+          after: {
+            chainCode,
+            symbol: created.symbol,
+            contractAddress: created.contractAddress,
+            source: 'swap-registry',
+          },
+        },
+        { executor, strict: true },
+      );
+
+      return created;
+    }
+
+    const [row] = await executor
+      .select()
+      .from(assets)
+      .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, token.symbol)))
+      .limit(1);
+
+    if (!row) {
+      throw new Error(`Failed to resolve asset ${token.symbol}`);
+    }
+
+    return row;
   }
 
   async require(assetId: string, executor: DbExecutor = this.db): Promise<Asset> {

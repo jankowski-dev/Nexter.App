@@ -37,7 +37,13 @@ export const transactionSubtypeSchema = z.enum([
   'income',
   'adjustment',
 ]);
-export const transactionSourceSchema = z.enum(['manual', 'notion', 'onchain', 'system']);
+export const transactionSourceSchema = z.enum([
+  'manual',
+  'notion',
+  'onchain',
+  'kyberswap',
+  'system',
+]);
 export const tradeGroupStatusSchema = z.enum(['open', 'partial', 'closed', 'reserve', 'for_sale']);
 
 export const chainSchema = z.object({

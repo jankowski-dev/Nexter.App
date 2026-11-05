@@ -43,6 +43,6 @@ import { TransactionsController } from './transactions.controller';
     ReportingService,
     TradeGroupsService,
   ],
-  exports: [AccountingBootstrapService, AccountsService, AssetsService],
+  exports: [AccountingBootstrapService, AccountsService, AssetsService, LedgerService],
 })
 export class AccountingModule {}
