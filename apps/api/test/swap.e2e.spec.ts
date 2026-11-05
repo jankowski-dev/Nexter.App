@@ -47,7 +47,7 @@ const selectorAllowlist = `${selector},0x59e50fed`;
 const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
 const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
-const linkToken = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd';
+const chainlinkAddress = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd';
 
 function makeBuildData(
   overrides: {
@@ -943,7 +943,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     const tracking = app.get(SwapTrackingService);
 
     const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
-    const link = getSwapToken('bsc', linkToken)!;
+    const link = getSwapToken('bsc', chainlinkAddress)!;
     const linkAsset = await assets.ensureForSwapToken('bsc', link);
     const usdcAsset = await assets.ensureForSwapToken('bsc', getSwapToken('bsc', tokenIn)!);
     const bnbAsset = await assets.ensureForSwapToken('bsc', {
@@ -984,7 +984,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .send({
         chain: 'bsc',
-        tokenIn: linkToken,
+        tokenIn: chainlinkAddress,
         tokenOut: tokenIn,
         amountIn: '1',
         walletAddress: wallet,
@@ -992,7 +992,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(201);
     const orderId = quoted.body.id as string;
 
-    buildData = makeBuildData({ srcToken: linkToken, dstToken: tokenIn });
+    buildData = makeBuildData({ srcToken: chainlinkAddress, dstToken: tokenIn });
     const built = await agent
       .post('/api/v1/swap/build')
       .set('x-csrf-token', owner.csrf)
@@ -1023,7 +1023,12 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       gasUsed: '100000',
       effectiveGasPrice: '0x3b9aca00',
       logs: [
-        swappedLog(1_000_000_000_000_000_000n, 2_000_000_000_000_000_000n, linkToken, tokenIn),
+        swappedLog(
+          1_000_000_000_000_000_000n,
+          2_000_000_000_000_000_000n,
+          chainlinkAddress,
+          tokenIn,
+        ),
       ],
     };
     latestBlock = 116;
