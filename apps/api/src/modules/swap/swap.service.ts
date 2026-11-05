@@ -1181,6 +1181,13 @@ export class SwapService {
       });
     }
 
+    if (order.status === 'EXPIRED' && !order.calldata) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Expired order has no signed build',
+      });
+    }
+
     const txHash = input.txHash.toLowerCase();
 
     try {

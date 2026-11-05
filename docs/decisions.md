@@ -150,7 +150,7 @@ Format: date — decision — reason.
 
 ## Phase 8 — Swap execution
 
-- **Execution is split into slices.** ADR 0010 covers WalletConnect/Tangem, exact approvals, step-up TOTP, worker tracking, and confirmed-swap accounting. The first slice adds step-up TOTP, exact approval build/submission, and order submission state; it does not sign, track, or write accounting yet.
+- **Execution is split into slices.** ADR 0010 covers WalletConnect/Tangem, exact approvals, step-up TOTP, API tracking, and confirmed-swap accounting. The first slice adds step-up TOTP, exact approval build/submission, and order submission state; it does not sign, track, or write accounting yet.
 - **Step-up is session-bound and fails closed.** `sessions.step_up_until` is set by a TOTP verification for five minutes and required for build/approval build/ready/signing when the stored input USD value exceeds `SWAP_STEP_UP_THRESHOLD_USD` (default $500). Missing/invalid USD requires step-up; quotes reject a missing provider `amountInUsd`. Failures use the existing 2FA throttle and are audited.
 - **Approvals are exact.** The server emits `approve(router, exactAmount)` only, validates the router allowlist and simulation, and never emits unlimited approvals.
 - **Submission is idempotent-by-state (superseded by the execution slice).** `POST /swap/orders/:id/submitted` accepts `BUILT`, `READY`, `AWAITING_SIGNATURE`, and `EXPIRED` and records a hash/event/audit as a recovery action; it does not require step-up or re-check allowlists because the wallet has already signed, and tracking verifies the tx. Tx hashes are unique; tracking verifies on-chain. Deadline is persisted on build. Approvals are exact, unique while active, and require the router/wallet allowlists and a live deadline.
@@ -179,14 +179,14 @@ Format: date — decision — reason.
 ## Phase 8 — execution UI and allowance gate
 
 - **Build no longer fails on a first-time ERC-20 approval.** Insufficient allowance produces `APPROVAL_REQUIRED` with stored calldata; `POST /swap/orders/:id/ready` re-checks balance/allowance/simulation and moves the order to `READY`. Submit accepts `READY` or `BUILT`.
-- **Signing is gated.** `SWAP_EXECUTION_ENABLED` defaults to false and is exposed as `executionEnabled`; the UI allows build/approval preparation but hides WalletConnect signing until the owner enables it after final review and manual Tangem acceptance.
+- **Signing is gated.** `SWAP_EXECUTION_ENABLED` defaults to false and is exposed as `executionEnabled`; the UI allows build/approval preparation but hides WalletConnect signing when execution is disabled; it is enabled after live acceptance.
 - **The browser signs; the server never does.** Approval is exact and the swap transaction is built server-side, decoded/verified, simulated, and submitted as a hash; tracking/accounting remain server-side.
 
 - **Signing lock recovery.** `POST /signing` moves `BUILT`/`READY` to `AWAITING_SIGNATURE`; `ready` must not clear that state. `/signing/cancel` releases it and works even when `SWAP_ENABLED`/kill switch blocks new execution. Approval tracking marks stale/failed approvals `FAILED` after the drop timeout so an approval can be rebuilt.
 
 - **Phase 8 accepted (2026-11-05).** Live small BSC swap completed: 1000 POP → ~0.11167 USDC, order `eca733c7…` CONFIRMED with 32+ confirmations, accounting transaction `989e9b2f…` (`tradeGroup=none` for cash-equivalent USDC). The first accounting attempt failed `NEGATIVE_BALANCE`/`NO_FUNDED_ACCOUNT`; adding BNB to the POP ledger account let the tracker auto-select the funded account and create accounting. Execution is enabled; kill switch and `SWAP_EXECUTION_ENABLED` are rollback controls.
 - **Approval hash recording is allowed while execution is disabled.** Approval alone cannot move funds; the wallet approves only the exact router/amount, and the swap still requires a separate signature. The UI hides approval signing with the execution flag, but an already-signed approval hash may be recorded.
-- **Signed-hash recovery is allowed while execution is disabled.** `POST /swap/orders/:id/submitted` records a hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE` order even during a kill switch/execution disable; tracking verifies it and no new execution is authorized.
+- **Signed-hash recovery is allowed while execution is disabled.** `POST /swap/orders/:id/submitted` records a hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/built `EXPIRED` order even during a kill switch/execution disable; tracking verifies it and no new execution is authorized.
 - **Gas cap.** `SWAP_MAX_GAS_USD` (default 5) is enforced at quote/build/ready; above it the operation fails closed.
 - **Light theme accepted.** ADR 0011 supersedes the former dark-theme rule; the owner requested a light UI for eye comfort. Rule 13/mega-prompt/UX spec now say light theme.
 - **Tracker deployment constraint.** The API hosts `SwapTrackingService`; production must run one API replica until a leader lock is added. Do not roll back to a pre-Phase-8 image with active/unaccounted orders.
