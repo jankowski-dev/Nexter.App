@@ -205,3 +205,4 @@ Format: date — decision — reason.
 - **Gas asset.** The tracker derives the native gas asset from the chain registry (BNB/ETH) and records it in the ledger with the native decimals.
 - **Chain-aware UI.** `/swap` selects BSC or Ethereum, switches WalletConnect to the selected chain, binds signing to the order's chain, and shows per-chain RPC/execution status.
 - **Rollback.** While any Ethereum order exists, rollback must stay on a Phase 9 image or use flags/kill switch; a pre-Phase-9 image cannot track or serve Ethereum orders.
+- **Phase 9 code deployed (2026-11-05).** PR #30 merged as `c869a12`; Railway API/worker deployments `SUCCESS`; `/health` and `/ready` 200; no migration required. Ethereum execution remains disabled (`SWAP_ETHEREUM_EXECUTION_ENABLED=false`) until `ETHEREUM_RPC_URL` is configured and a live Tangem acceptance is approved.

@@ -2,7 +2,7 @@
 
 Date: 2026-11-05
 
-Status: **implementation complete; live Ethereum acceptance pending explicit owner approval.**
+Status: **implementation deployed 2026-11-05; live Ethereum acceptance pending explicit owner approval.** PR #30 merged as `c869a12`; Railway API/worker deployments `SUCCESS`; `/health` and `/ready` 200; no schema migration. Ethereum execution remains disabled until `ETHEREUM_RPC_URL` is configured and a live Tangem acceptance is approved.
 
 ## Scope
 
