@@ -815,6 +815,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         },
         { strict: true },
       );
+
+      this.logger.log(`Swap ${order.id} accounting account selected: ${accountId}`);
     }
 
     const block = order.blockNumber ? await this.rpc.getBlock(order.blockNumber) : null;
@@ -908,6 +910,10 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         { executor: dbtx, strict: true },
       );
     });
+
+    this.logger.log(
+      `Swap ${order.id} accounted: transaction=${result.transaction.id} tradeGroup=${result.transaction.tradeGroupId ?? 'none'}`,
+    );
   }
 
   private async revertConfirmed(
@@ -1006,6 +1012,10 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   private async recordAccountingFailure(order: SwapOrder, code: string): Promise<void> {
     const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
     const exists = order.errors.includes(bounded);
+
+    if (!exists) {
+      this.logger.warn(`Swap ${order.id} accounting failed: ${bounded}`);
+    }
 
     await this.db.transaction(async (dbtx) => {
       await dbtx
