@@ -65,6 +65,10 @@ export class AssetsService {
     executor: DbExecutor = this.db,
     userId?: string,
   ): Promise<Asset> {
+    if (executor === this.db) {
+      return this.db.transaction((tx) => this.ensureForSwapToken(chainCode, token, tx, userId));
+    }
+
     const [chain] = await executor.select().from(chains).where(eq(chains.code, chainCode)).limit(1);
 
     if (!chain) {

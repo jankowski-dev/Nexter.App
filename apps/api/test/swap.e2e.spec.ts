@@ -6,6 +6,7 @@ import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
 import { encodeAbiParameters, encodeFunctionData, toEventSelector } from 'viem';
 import {
+  auditLog,
   createDb,
   lots,
   postings,
@@ -900,6 +901,30 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .from(lots)
       .where(eq(lots.acquisitionTransactionId, accounting.id));
     expect(lot?.amount).toBe('2.100000000000000000');
+
+    const auditAsset = await assets.ensureForSwapToken(
+      'bsc',
+      {
+        symbol: `AUDIT${Date.now()}`,
+        name: 'Audit Asset',
+        address: `0x${'a'.repeat(40)}`,
+        decimals: 18,
+        native: false,
+      },
+      undefined,
+      owner.userId,
+    );
+    const assetAudits = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.userId, owner.userId),
+          eq(auditLog.action, 'accounting.asset_created'),
+          eq(auditLog.entityId, auditAsset.id),
+        ),
+      );
+    expect(assetAudits).toHaveLength(1);
 
     await tracking.tick();
     const repeats = await db
