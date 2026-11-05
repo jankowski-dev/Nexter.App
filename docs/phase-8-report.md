@@ -39,14 +39,14 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Simple-mode calldata is rejected until `firstPools`/`destTokenFeeData` can be validated; standard routes use the server-enforced order deadline for new signing, while an already-signed hash can still be recorded.
 - Execution UI: build preview, allowance/`APPROVAL_REQUIRED` gate, exact approval, step-up prompt, WalletConnect/Tangem signing, swap submission, and live order status. Signing is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch; it was enabled after live acceptance.
 - `POST /swap/orders/:id/ready` re-checks allowance/balance/simulation and moves approved orders to `READY`; submit accepts `READY`/`BUILT`/`AWAITING_SIGNATURE`/built `EXPIRED` recovery.
-- API-hosted tracking poller: `eth_getTransactionByHash` verification, receipt/confirmations, replaced/dropped, pre-accounting reorg handling, actual gas capture, and actual spent/return amounts from the router `Swapped` event.
+- API-hosted tracking poller: `eth_getTransactionByHash` verification, replacement adoption, receipt/confirmations, pre-accounting reorg handling, actual gas capture, and actual spent/return amounts from the router `Swapped` event.
 - Confirmed-swap accounting through the existing ledger: trade/swap transaction, postings, FIFO consumption, output lot, gas posting, trade group, `source=kyberswap`, idempotent by tx hash, using the actual on-chain amounts rather than quote amounts.
 - Accounting prerequisites: the wallet must already hold the input token and BNB for gas in the ledger; negative balances fail closed and retry after reconciliation.
 
-- Migrations `0010` + `0011` (execution/approvals) and `0012` (executed amounts), all additive:
+- Migrations `0010`–`0013` (execution/approvals, executed amounts, built output bound), all additive:
   - `sessions.step_up_until`;
   - `token_approvals`;
-  - swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `nonce`, `deadline`, `confirmations`, `block_number`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`, submitted/confirmed timestamps;
+  - swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `nonce`, `deadline`, `confirmations`, `block_number`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`, `built_amount_out`, submitted/confirmed timestamps;
   - unique partial indexes on tx hashes and active approvals.
 - `POST /auth/step-up` — verifies a current TOTP, sets a 5-minute `stepUpUntil` on the session, uses the existing 2FA throttle, and audits success/failure. The step-up helper fails closed when the input USD value is missing/invalid; quotes now require a valid provider `amountInUsd` and store it on the order.
 - `POST /swap/build` now requires a fresh step-up when the quote input value exceeds `SWAP_STEP_UP_THRESHOLD_USD` (default $500).
@@ -60,6 +60,8 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD from the quote could mismatch the actual amount after rounding, leaving USDC-output swaps unaccounted. Fixed by deriving cash-leg USD from actual on-chain amounts; USDC-output regression test added. Final re-review: **PASS** after transactional tracker writes and atomic asset audit.
 
 Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Execution UI review: **PASS WITH CHANGES** — wallet binding, deadline, kill-switch UI, signed-hash visibility, approval tracking, and `AWAITING_SIGNATURE` signing lock fixes applied; remaining recovery/test items addressed; final acceptance review: **PASS WITH CHANGES**; acceptance blockers fixed and live acceptance completed.
+
+Phase 8.x re-review: **PASS WITH CHANGES** — closed the remaining Mediums by bounding nonce-less content search to blocks at/after submission, requiring a confirmed candidate before terminal `REPLACED` and guarding status writes by tx hash, re-checking selector/executor allowlists at signing, failing `ready` closed without a gas estimate, and correcting the runbook/ADR/docs. Residuals: manual attach-hash recovery outside the lookback, tracker leader lock, mocked WalletConnect tests, malformed gas, approval gas, RPC lookback cost.
 
 Phase 8.x tracking review: **FAIL** — one High (an executed swap could be terminally marked `REPLACED`/`DROPPED` when the original hash disappeared before the nonce was recorded or the replacement was outside the lookback) and Mediums (tautological ready minOut bound, missing selector re-check, signing bypassing `ready`, adoption race fallback, stale docs). Fixed by nonce-less sender/router/calldata/value search, configurable 240-block lookback, no terminal drop on not-found, adoption race recheck, persisted `built_amount_out` (migration 0013), selector re-check, `READY`-only signing, UI “Проверить готовность”, and doc updates.
 
@@ -83,17 +85,17 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 ## Verification
 
 - Typecheck, lint, format:check, build — pass.
-- API suite — **117 passed, 1 skipped** (adds replacement adoption/not-found, gas preflight, ready re-decode, selector/minOut re-check, signing-requires-ready, step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, and accounting idempotency).
+- API suite — **124 passed, 1 skipped** (adds replacement adoption/not-found/pending/ambiguous, submission-time-bound content search, built-output bounds, gas preflight, ready re-decode, selector/minOut re-check, signing-requires-ready, step-up, exact approval, approval submission, order submission, fail-closed USD, allowlist re-checks, duplicate approval handling, deadline persistence, calldata decode/validation, tracking/confirmation/replaced/reorg paths, and accounting idempotency).
 - Playwright — **5 passed** (swap connection/quote UI included).
 - Migrations 0010–0013 apply cleanly to the disposable PostgreSQL database. The app role denies DELETE on `token_approvals` (verified locally).
 
-## Phase 8.x hardening (completed)
+## Phase 8.x hardening (implemented; residuals below)
 
 - Gas/BNB preflight at build/ready, including native-input amount.
 - Stored calldata re-decode at `ready`, current selector allowlist re-check, and persisted `built_amount_out` (migration 0013) as the minOut upper bound.
-- Same-nonce speed-up replacement adoption; sender/router/calldata/value search when the nonce is unknown; no terminal drop on “not found”.
-- Adoption race recheck before any `REPLACED` fallback; tracking anomalies are audited.
-- Signing requires `READY`; the UI exposes “Проверить готовность” for non-approval `BUILT` orders.
+- Same-nonce speed-up replacement adoption; sender/router/calldata/value search bounded by submission time when the nonce is unknown; no terminal drop on “not found”.
+- Mismatched same-nonce candidates stay active until confirmed, then become `REPLACED`; terminal writes are guarded by tx hash and adoption races recheck the row.
+- Signing requires `READY` and re-checks current selector/executor/token allowlists; the UI exposes “Проверить готовность” for non-approval `BUILT` orders.
 - Post-accounting reorg policy and incident procedure documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
 - Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling, automated reorg compensation.
 

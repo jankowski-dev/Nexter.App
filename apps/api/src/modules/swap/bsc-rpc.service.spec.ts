@@ -109,6 +109,36 @@ describe('BscRpcService', () => {
     expect(matches.map((item) => item.hash)).toEqual([match.hash]);
   });
 
+  it('does not adopt content matches older than the submission bound', async () => {
+    const tx = {
+      hash: `0x${'d'.repeat(64)}`,
+      from: '0x1111111111111111111111111111111111111111',
+      to: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
+      input: '0x12345678',
+      value: '0x0',
+      nonce: '0x8',
+      blockNumber: '0x64',
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpcResponse('0x64'))
+      .mockResolvedValueOnce(
+        rpcResponse({ number: '0x64', timestamp: '0x64', transactions: [tx] }),
+      );
+    const service = new BscRpcService(fetchMock as unknown as typeof fetch);
+
+    const matches = await service.findMatchingTransactions({
+      owner: '0x1111111111111111111111111111111111111111',
+      router: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
+      calldata: '0x12345678',
+      value: '0',
+      lookbackBlocks: 0,
+      sinceTimestamp: 200,
+    });
+
+    expect(matches).toEqual([]);
+  });
+
   it('reports a missing contract and a reverted call', async () => {
     const missing = new BscRpcService(
       vi

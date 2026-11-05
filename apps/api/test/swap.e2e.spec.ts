@@ -131,6 +131,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
   let simulationSuccess = true;
+  let simulationGasEstimate: string | null = '120000';
   let rpcFailure = false;
   let buildData = makeBuildData();
   let buildRouter = router;
@@ -212,7 +213,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       return {
         success: simulationSuccess,
         revertReason: simulationSuccess ? null : 'execution reverted: test',
-        gasEstimate: simulationSuccess ? '120000' : null,
+        gasEstimate: simulationSuccess ? simulationGasEstimate : null,
         chainId: 56,
       };
     },
@@ -274,6 +275,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
 
   beforeEach(async () => {
     simulationSuccess = true;
+    simulationGasEstimate = '120000';
     rpcFailure = false;
     buildData = makeBuildData();
     buildRouter = router;
@@ -1387,6 +1389,97 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(order.errors).toContain('SWAP_REPLACEMENT_NOT_FOUND');
   }, 60_000);
 
+  it('records an anomaly instead of adopting an ambiguous replacement', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'1'.repeat(64)}` })
+      .expect(200);
+
+    chainTx = null;
+    matchingTxs = [
+      {
+        hash: `0x${'2'.repeat(64)}`,
+        from: wallet,
+        to: router,
+        input: built.body.calldata as string,
+        value: '0x0',
+        nonce: 8,
+        blockNumber: 100,
+      },
+      {
+        hash: `0x${'3'.repeat(64)}`,
+        from: wallet,
+        to: router,
+        input: built.body.calldata as string,
+        value: '0x0',
+        nonce: 9,
+        blockNumber: 101,
+      },
+    ];
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order.status).toBe('SUBMITTED');
+    expect(order.errors).toContain('SWAP_REPLACEMENT_AMBIGUOUS');
+  }, 60_000);
+
+  it('keeps an order active while a mismatched replacement is unconfirmed', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'4'.repeat(64)}` })
+      .expect(200);
+
+    await db.update(swapOrders).set({ nonce: 7 }).where(eq(swapOrders.id, orderId));
+    latestNonce = 8;
+    latestBlock = 105;
+    chainTx = null;
+    chainReceipt = null;
+    replacementTx = {
+      hash: `0x${'5'.repeat(64)}`,
+      from: wallet,
+      to: router,
+      input: makeBuildData({ amount: 2_000_000_000_000_000_000n }),
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order.status).toBe('SUBMITTED');
+    expect(order.errors).toContain('SWAP_REPLACEMENT_PENDING');
+  }, 60_000);
+
   it('does not adopt a different-nonce transaction when the stored nonce is known', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -1458,13 +1551,22 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     latestNonce = 8;
     chainTx = null;
     replacementTx = {
-      hash: `0x${'3'.repeat(64)}`,
+      hash: `0x${'8'.repeat(64)}`,
       from: wallet,
       to: router,
       input: makeBuildData({ amount: 2_000_000_000_000_000_000n }),
       value: '0x0',
       nonce: 7,
       blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'9'.repeat(64)}`,
+      transactionHash: `0x${'8'.repeat(64)}`,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
     };
     await tracking.tick();
 
@@ -1616,6 +1718,111 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     });
   }, 60_000);
 
+  it('persists the built output bound for ready', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    buildAmountOut = '2010000000000000000';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order.builtAmountOut).toBe('2010000000000000000');
+  }, 60_000);
+
+  it('falls back to the quote output bound for legacy orders', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    buildAmountOut = '2010000000000000000';
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    await db
+      .update(swapOrders)
+      .set({
+        builtAmountOut: null,
+        calldata: makeBuildData({ minOut: 2_005_000_000_000_000_000n }),
+      })
+      .where(eq(swapOrders.id, orderId));
+
+    const ready = await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(400);
+    expect(ready.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_MIN_OUT_MISMATCH' },
+    });
+  }, 60_000);
+
+  it('fails ready when no gas estimate is available', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+
+    await db.update(swapOrders).set({ gasEstimate: null }).where(eq(swapOrders.id, orderId));
+    simulationGasEstimate = null;
+    const ready = await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(400);
+    expect(ready.body.error.code).toBe('SWAP_GAS_MISSING');
+  }, 60_000);
+
+  it('re-checks the selector allowlist at signing', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
+    env.SWAP_SELECTOR_ALLOWLIST = '0x59e50fed';
+    const signing = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(400);
+    expect(signing.body.error.code).toBe('SWAP_SELECTOR_NOT_ALLOWED');
+  }, 60_000);
+
   it('requires ready before signing', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
@@ -1661,6 +1868,16 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .send({ orderId: quoted.body.id, walletAddress: wallet })
       .expect(400);
     expect(built.body.error.code).toBe('SWAP_INSUFFICIENT_GAS_BALANCE');
+    const [failedOrder] = await db
+      .select()
+      .from(swapOrders)
+      .where(eq(swapOrders.id, quoted.body.id));
+    expect(failedOrder.errors).toContain('SWAP_INSUFFICIENT_GAS_BALANCE');
+    const failedEvents = await db
+      .select()
+      .from(swapEvents)
+      .where(eq(swapEvents.orderId, quoted.body.id));
+    expect(failedEvents.some((event) => event.type === 'build_failed')).toBe(true);
     nativeBalance = '1000000000000000000';
   }, 60_000);
 

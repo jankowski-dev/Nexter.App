@@ -30,6 +30,14 @@ function toBaseUnits(value: string, decimals: number): bigint {
   return BigInt(decimal(value).mul(decimal('10').pow(decimals)).toFixed(0));
 }
 
+const TRACKING_ANOMALY_PREFIXES = ['SWAP_REPLACEMENT_', 'SWAP_TX_NOT_FOUND'];
+
+function withoutTrackingAnomalies(errors: string[]): string[] {
+  return errors.filter(
+    (item) => !TRACKING_ANOMALY_PREFIXES.some((prefix) => item.startsWith(prefix)),
+  );
+}
+
 @Injectable()
 export class SwapTrackingService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(SwapTrackingService.name);
@@ -339,11 +347,36 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
           if (candidate) {
             if (!this.replacementMatches(order, candidate)) {
-              await this.mark(order, 'REPLACED', {
-                reason: 'replacement_not_matching_order',
-                nonce: order.nonce,
-                latestNonce: count,
-              });
+              const receipt = await this.rpc.getTransactionReceipt(candidate.hash);
+              const confirmations = receipt
+                ? Math.max(0, latestBlock - receipt.blockNumber + 1)
+                : 0;
+
+              if (!receipt || confirmations < env.SWAP_CONFIRMATIONS) {
+                await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_PENDING', {
+                  candidateHash: candidate.hash,
+                  candidateBlock: receipt?.blockNumber ?? candidate.blockNumber,
+                  confirmations,
+                  nonce: order.nonce,
+                });
+                return;
+              }
+
+              const replaced = await this.mark(
+                order,
+                'REPLACED',
+                {
+                  reason: 'replacement_not_matching_order',
+                  nonce: order.nonce,
+                  latestNonce: count,
+                  candidateHash: candidate.hash,
+                  candidateBlock: receipt.blockNumber,
+                  confirmations,
+                },
+                order.txHash,
+              );
+
+              if (!replaced) await this.recheckAdoptionMiss(order);
               return;
             }
 
@@ -363,7 +396,11 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
               nonce: candidate.nonce ?? order.nonce,
             };
           } else {
-            await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_NOT_FOUND');
+            await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_NOT_FOUND', {
+              nonce: order.nonce,
+              latestNonce: count,
+              lookbackBlocks: env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
+            });
             return;
           }
         }
@@ -374,12 +411,21 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           calldata: order.calldata,
           value: order.transactionValue ?? '0',
           lookbackBlocks: env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
+          sinceTimestamp: Math.floor(
+            ((order.submittedAt ?? order.createdAt).getTime() - 120_000) / 1000,
+          ),
         });
 
         if (matches.length !== 1) {
           await this.recordTrackingAnomaly(
             order,
             matches.length > 1 ? 'SWAP_REPLACEMENT_AMBIGUOUS' : 'SWAP_REPLACEMENT_NOT_FOUND',
+            {
+              matchCount: matches.length,
+              candidateHashes: matches.slice(0, 10).map((item) => item.hash),
+              lookbackBlocks: env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
+              submittedAt: order.submittedAt?.toISOString() ?? null,
+            },
           );
           return;
         }
@@ -403,13 +449,16 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     }
 
     if (!tx) {
-      await this.recordTrackingAnomaly(order, 'SWAP_TX_NOT_FOUND');
+      await this.recordTrackingAnomaly(order, 'SWAP_TX_NOT_FOUND', {
+        submittedAt: order.submittedAt?.toISOString() ?? null,
+        nonce: order.nonce,
+      });
       return;
     }
 
     const mismatch = this.verifyTransaction(currentOrder, tx, txHash);
     if (mismatch) {
-      await this.mark(order, 'FAILED', { reason: mismatch, txHash });
+      await this.mark(currentOrder, 'FAILED', { reason: mismatch, txHash });
       return;
     }
 
@@ -421,12 +470,12 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     }
 
     if (receipt.transactionHash && receipt.transactionHash.toLowerCase() !== txHash.toLowerCase()) {
-      await this.mark(order, 'FAILED', { reason: 'receipt_hash_mismatch', txHash });
+      await this.mark(currentOrder, 'FAILED', { reason: 'receipt_hash_mismatch', txHash });
       return;
     }
 
     if (!receipt.status) {
-      await this.mark(order, 'FAILED', {
+      await this.mark(currentOrder, 'FAILED', {
         reason: 'receipt_failed',
         blockNumber: receipt.blockNumber,
       });
@@ -474,6 +523,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           blockNumber: tx.blockNumber ?? order.blockNumber,
           status: 'PENDING',
           confirmations: 0,
+          errors: withoutTrackingAnomalies(order.errors),
           updatedAt: new Date(),
         })
         .where(
@@ -495,6 +545,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           previousTxHash: order.txHash,
           txHash: tx.hash,
           nonce: tx.nonce,
+          blockNumber: tx.blockNumber,
         },
       });
 
@@ -528,7 +579,11 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_NOT_RECORDED');
   }
 
-  private async recordTrackingAnomaly(order: SwapOrder, code: string): Promise<void> {
+  private async recordTrackingAnomaly(
+    order: SwapOrder,
+    code: string,
+    details: Record<string, unknown> = {},
+  ): Promise<void> {
     const bounded = code.replaceAll(/[^A-Z0-9_]/g, '_').slice(0, 64);
     const exists = order.errors.includes(bounded);
 
@@ -550,7 +605,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       await dbtx.insert(swapEvents).values({
         orderId: order.id,
         type: 'tracking_anomaly',
-        payload: { code: bounded },
+        payload: { code: bounded, ...details },
       });
 
       await this.audit.log(
@@ -559,7 +614,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           action: 'swap.tracking_anomaly',
           entityType: 'swap_order',
           entityId: order.id,
-          after: { code: bounded, txHash: order.txHash },
+          after: { code: bounded, txHash: order.txHash, ...details },
         },
         { executor: dbtx, strict: true },
       );
@@ -630,6 +685,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, order.userId),
             eq(swapOrders.status, order.status),
+            eq(swapOrders.txHash, order.txHash as string),
           ),
         )
         .returning({ id: swapOrders.id });
@@ -691,6 +747,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           executedAmountOut,
           networkFeeWei: feeWei,
           networkFeeUsd: feeUsd,
+          errors: withoutTrackingAnomalies(order.errors),
           updatedAt: confirmedAt,
         })
         .where(
@@ -698,6 +755,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             eq(swapOrders.id, order.id),
             eq(swapOrders.userId, order.userId),
             eq(swapOrders.status, order.status),
+            eq(swapOrders.txHash, order.txHash as string),
           ),
         )
         .returning();
@@ -854,8 +912,18 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     order: SwapOrder,
     status: 'FAILED' | 'REPLACED' | 'DROPPED',
     payload: Record<string, unknown>,
-  ): Promise<void> {
-    await this.db.transaction(async (dbtx) => {
+    expectedTxHash: string | null = order.txHash,
+  ): Promise<boolean> {
+    return this.db.transaction(async (dbtx) => {
+      const conditions = [
+        eq(swapOrders.id, order.id),
+        eq(swapOrders.userId, order.userId),
+        inArray(swapOrders.status, [...ACTIVE_STATUSES]),
+        isNull(swapOrders.accountingTransactionId),
+      ];
+
+      if (expectedTxHash) conditions.push(eq(swapOrders.txHash, expectedTxHash));
+
       const [row] = await dbtx
         .update(swapOrders)
         .set({
@@ -864,17 +932,10 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           ...(status === 'FAILED' ? {} : { blockNumber: null }),
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(swapOrders.id, order.id),
-            eq(swapOrders.userId, order.userId),
-            inArray(swapOrders.status, [...ACTIVE_STATUSES]),
-            isNull(swapOrders.accountingTransactionId),
-          ),
-        )
+        .where(and(...conditions))
         .returning({ id: swapOrders.id });
 
-      if (!row) return;
+      if (!row) return false;
 
       await dbtx.insert(swapEvents).values({
         orderId: order.id,
@@ -893,6 +954,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         },
         { executor: dbtx, strict: true },
       );
+
+      return true;
     });
   }
 

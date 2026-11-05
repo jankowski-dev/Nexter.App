@@ -1042,14 +1042,19 @@ export class SwapService {
 
     const readyGasEstimate = simulation.gasEstimate ?? order.gasEstimate;
 
-    if (readyGasEstimate) {
-      await this.assertGasBalance({
-        wallet,
-        tokenInNative: tokenIn.native,
-        amountInBase: amountIn,
-        gasEstimate: readyGasEstimate,
+    if (!readyGasEstimate) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_MISSING',
+        message: 'Gas estimate is missing',
       });
     }
+
+    await this.assertGasBalance({
+      wallet,
+      tokenInNative: tokenIn.native,
+      amountInBase: amountIn,
+      gasEstimate: readyGasEstimate,
+    });
 
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -1138,6 +1143,8 @@ export class SwapService {
         message: 'Swap deadline has passed',
       });
     }
+
+    await this.assertCalldataAllowlisted(order);
 
     const updated = await this.db.transaction(async (tx) => {
       const [row] = await tx
@@ -1666,6 +1673,48 @@ export class SwapService {
       throw new ServiceUnavailableException({
         code: 'SWAP_EXECUTION_DISABLED',
         message: 'Swap execution is disabled',
+      });
+    }
+  }
+
+  private async assertCalldataAllowlisted(order: SwapOrder): Promise<void> {
+    if (!order.calldata) {
+      throw new ConflictException({
+        code: 'SWAP_STATE_INVALID',
+        message: 'Swap order has no stored calldata',
+      });
+    }
+
+    if (!selectorAllowlist().includes(order.calldata.slice(0, 10).toLowerCase())) {
+      throw new BadRequestException({
+        code: 'SWAP_SELECTOR_NOT_ALLOWED',
+        message: 'Calldata selector is not in the current allowlist',
+      });
+    }
+
+    let decoded: DecodedKyberSwap;
+
+    try {
+      decoded = await decodeKyberSwapCalldata(order.calldata);
+    } catch {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Stored calldata could not be decoded',
+        details: { reason: 'SWAP_CALLDATA_INVALID' },
+      });
+    }
+
+    if (!executorAllowlist().includes(decoded.callTarget)) {
+      throw new BadRequestException({
+        code: 'SWAP_EXECUTOR_NOT_ALLOWED',
+        message: 'Calldata executor is not in the current allowlist',
+      });
+    }
+
+    if (!getSwapToken(order.chain, order.tokenIn) || !getSwapToken(order.chain, order.tokenOut)) {
+      throw new BadRequestException({
+        code: 'SWAP_TOKEN_NOT_ALLOWED',
+        message: 'Stored token is not in the current registry',
       });
     }
   }

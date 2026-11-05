@@ -95,7 +95,7 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 - `ready` re-decodes the stored calldata, re-checks the current selector/router/recipient/token/amount/minOut/executor allowlists, and uses the persisted `built_amount_out` as the minOut upper bound before simulation. Legacy orders without it fall back to the stored quote output.
 - Gas preflight compares the native BNB balance with `gasEstimate * eth_gasPrice` (plus amountIn for native input) at build/ready. It covers swap gas only; first-time approvals need additional BNB.
 - `POST /signing` requires `READY`; `BUILT` orders must pass `ready` first.
-- When the original tx hash is missing, the tracker searches recent blocks (`SWAP_REPLACEMENT_LOOKBACK_BLOCKS`, default 240) by same nonce when known, or by sender/router/calldata/value when the nonce is unknown. A unique match is adopted and continues tracking/accounting; a found-but-mismatched same-nonce transaction marks `REPLACED`; not-found/ambiguous matches keep the order active and record an anomaly. It no longer terminally drops an unobserved executed swap.
+- When the original tx hash is missing, the tracker searches recent blocks (`SWAP_REPLACEMENT_LOOKBACK_BLOCKS`, default 240) by same nonce when known, or by sender/router/calldata/value when the nonce is unknown; the content search is bounded to blocks at/after submission (2-minute grace). A unique match is adopted and continues tracking/accounting. A found-but-mismatched same-nonce candidate stays active (`SWAP_REPLACEMENT_PENDING`) until its receipt reaches `SWAP_CONFIRMATIONS`, then marks `REPLACED`; not-found/ambiguous matches keep the order active and record an anomaly. Terminal status writes are guarded by the expected tx hash. It no longer terminally drops an unobserved executed swap.
 - Post-accounting reorg policy: `SWAP_CONFIRMATIONS` (default 15) is treated as final for accounting. The tracker does not automatically reverse an already-accounted swap; a detected deep reorg requires freezing new execution and an append-only manual compensating transaction. Automatic compensation remains a Phase 9/prerequisite item.
 
 ### Submission and tracking
@@ -123,11 +123,12 @@ Failure/replaced/dropped never creates a transaction.
 
 ### Persistence
 
-Migrations `0010`, `0011`, and `0012` add:
+Migrations `0010`, `0011`, `0012`, and `0013` add:
 
 - `sessions.step_up_until`;
 - `token_approvals`;
 - swap execution fields: `account_id`, `tx_hash`, `amount_in_usd`, `executed_amount_in`, `executed_amount_out`, `nonce`, `deadline`, `submitted_at`, `confirmed_at`, `block_number`, `confirmations`, `network_fee_wei`, `network_fee_usd`, `accounting_transaction_id`, `trade_group_id`;
+- `swap_orders.built_amount_out` (base-unit integer bound used by `ready`);
 - unique partial indexes on non-null tx hashes and active approvals.
 
 Additive only.

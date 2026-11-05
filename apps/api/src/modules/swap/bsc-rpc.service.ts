@@ -218,6 +218,7 @@ export class BscRpcService {
     calldata: string;
     value: string;
     lookbackBlocks?: number;
+    sinceTimestamp?: number;
   }): Promise<RpcTransaction[]> {
     if (!this.rpcUrl) return [];
 
@@ -237,7 +238,15 @@ export class BscRpcService {
       ]);
 
       if (!result || typeof result !== 'object') continue;
-      const transactions = (result as Record<string, unknown>).transactions;
+      const block = result as Record<string, unknown>;
+      const blockTimestamp = hexToNumber(block.timestamp);
+
+      if (input.sinceTimestamp !== undefined) {
+        if (blockTimestamp === null) continue;
+        if (blockTimestamp < input.sinceTimestamp) break;
+      }
+
+      const transactions = block.transactions;
 
       if (!Array.isArray(transactions)) continue;
 
