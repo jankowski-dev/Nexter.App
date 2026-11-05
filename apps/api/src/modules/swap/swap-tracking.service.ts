@@ -9,17 +9,19 @@ import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from '
 import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { confirmationsForChain, env } from '../../shared/config/env';
-import { DB } from '../../shared/db/db.module';
+import { DB, DB_POOL } from '../../shared/db/db.module';
 import { decimal, usdString } from '../../shared/money/decimal';
 import { AccountsService } from '../accounting/accounts.service';
 import { AssetsService } from '../accounting/assets.service';
 import { LedgerService } from '../accounting/ledger.service';
+import type { Pool, PoolClient } from 'pg';
 import { EvmRpcService, type RpcReceipt, type RpcTransaction } from './evm-rpc.service';
 import { KYBER_ROUTER_ABI } from './kyber-calldata';
 import { normalizeUsd } from './swap-step-up';
 import { getSwapToken, isCashEquivalentSymbol, nativeTokenForChain } from './token-registry';
 
 const ACTIVE_STATUSES = ['SUBMITTED', 'PENDING'] as const;
+const TRACKER_LOCK_KEY = '5712345678901234';
 
 function fromBaseUnits(value: string, decimals: number): string {
   return decimal(value).div(decimal('10').pow(decimals)).toFixed(decimals);
@@ -64,6 +66,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
   constructor(
     @Inject(DB) private readonly db: Database,
+    @Inject(DB_POOL) private readonly pool: Pool,
     private readonly rpc: EvmRpcService,
     private readonly accounts: AccountsService,
     private readonly assets: AssetsService,
@@ -89,8 +92,20 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
   async tick(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    let client: PoolClient | null = null;
+    let locked = false;
+    let destroyConnection = false;
 
     try {
+      client = await this.pool.connect();
+      const lease = await client.query<{ locked: boolean }>(
+        'select pg_try_advisory_lock($1::bigint) as locked',
+        [TRACKER_LOCK_KEY],
+      );
+
+      locked = lease.rows[0]?.locked === true;
+      if (!locked) return;
+
       const latestByChain = new Map<string, number | null>();
       const latestFor = async (chain: string): Promise<number | null> => {
         if (!latestByChain.has(chain)) {
@@ -171,6 +186,21 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         `Swap tracking tick failed: ${error instanceof Error ? error.message : 'unknown error'}`,
       );
     } finally {
+      if (client) {
+        if (locked) {
+          try {
+            await client.query('select pg_advisory_unlock($1::bigint)', [TRACKER_LOCK_KEY]);
+          } catch (error) {
+            destroyConnection = true;
+            this.logger.warn(
+              `Swap tracker advisory unlock failed: ${
+                error instanceof Error ? error.message : 'unknown error'
+              }`,
+            );
+          }
+        }
+        client.release(destroyConnection);
+      }
       this.running = false;
     }
   }

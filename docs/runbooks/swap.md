@@ -63,7 +63,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Signing requires `READY`. A `BUILT` order must pass `POST /swap/orders/:id/ready` first; the UI exposes “Проверить готовность” for that transition.
 - Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is controlled by `SWAP_EXECUTION_ENABLED` (and `SWAP_ETHEREUM_EXECUTION_ENABLED` for Ethereum) plus the kill switch.
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; it does not create accounting, and tracking verifies the tx.
-- The tracker is API-hosted and production must run a single API replica (or add a future leader lock). Do not roll back to a pre-Phase-9 image while any BSC or Ethereum order is active/unaccounted.
+- The tracker is API-hosted and uses a Postgres advisory lock, so multiple API replicas can run without double-processing. Do not roll back to a pre-Phase-9 image while any BSC or Ethereum order is active/unaccounted.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
 - A first-time ERC-20 swap with zero allowance enters `APPROVAL_REQUIRED`; after the exact approval, `POST /swap/orders/:id/ready` re-checks and moves it to `READY`.
 - Confirmed-swap accounting requires the wallet's input token and native gas balance (BNB/ETH) to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.

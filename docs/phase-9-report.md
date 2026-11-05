@@ -55,7 +55,6 @@ Completed 2026-11-05: see Live acceptance above.
 ## Residuals
 
 - Automated post-accounting reorg compensation (Phase 9 prerequisite from Phase 8.x).
-- Tracker leader lock/single API replica.
 - Mocked WalletConnect UI tests.
 - Malformed gas and approval-gas preflight.
 - Manual attach-hash endpoint for replacements older than the lookback.

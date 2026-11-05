@@ -61,7 +61,7 @@ Tracking/accounting review: **FAIL** — one High: cash-equivalent output USD fr
 
 Calldata slice review: **PASS WITH CHANGES** — simple-mode pool/fee validation gap and deadline upper bound fixed by rejecting simple mode; selector/executor docs corrected; real-tx fixture and swapGeneric e2e added. Execution UI review: **PASS WITH CHANGES** — wallet binding, deadline, kill-switch UI, signed-hash visibility, approval tracking, and `AWAITING_SIGNATURE` signing lock fixes applied; remaining recovery/test items addressed; final acceptance review: **PASS WITH CHANGES**; acceptance blockers fixed and live acceptance completed.
 
-Phase 8.x re-review: **PASS WITH CHANGES** — closed the remaining Mediums by bounding nonce-less content search to blocks at/after submission, requiring a confirmed candidate before terminal `REPLACED` and guarding status writes by tx hash, re-checking selector/executor allowlists at signing, failing `ready` closed without a gas estimate, and correcting the runbook/ADR/docs. Residuals: manual attach-hash recovery outside the lookback, tracker leader lock, mocked WalletConnect tests, malformed gas, approval gas, RPC lookback cost.
+Phase 8.x re-review: **PASS WITH CHANGES** — closed the remaining Mediums by bounding nonce-less content search to blocks at/after submission, requiring a confirmed candidate before terminal `REPLACED` and guarding status writes by tx hash, re-checking selector/executor allowlists at signing, failing `ready` closed without a gas estimate, and correcting the runbook/ADR/docs. Residuals: manual attach-hash recovery outside the lookback, mocked WalletConnect tests, malformed gas, approval gas, RPC lookback cost.
 
 Phase 8.x tracking review: **FAIL** — one High (an executed swap could be terminally marked `REPLACED`/`DROPPED` when the original hash disappeared before the nonce was recorded or the replacement was outside the lookback) and Mediums (tautological ready minOut bound, missing selector re-check, signing bypassing `ready`, adoption race fallback, stale docs). Fixed by nonce-less sender/router/calldata/value search, configurable 240-block lookback, no terminal drop on not-found, adoption race recheck, persisted `built_amount_out` (migration 0013), selector re-check, `READY`-only signing, UI “Проверить готовность”, and doc updates.
 
@@ -79,7 +79,6 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 - Automated post-accounting reorg compensation (append-only correction), if a deep reorg occurs.
 - Malformed receipt gas fields are an anomaly path; standard BSC receipts populate gasUsed/effectiveGasPrice.
 - A user-facing mistyped-tx correction flow.
-- Tracker leader lock (single API replica is still required).
 - Mocked WalletConnect UI tests for the execution flow.
 
 ## Verification
@@ -97,10 +96,10 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 - Mismatched same-nonce candidates stay active until confirmed, then become `REPLACED`; terminal writes are guarded by tx hash and adoption races recheck the row.
 - Signing requires `READY` and re-checks current selector/executor/token allowlists; the UI exposes “Проверить готовность” for non-approval `BUILT` orders.
 - Post-accounting reorg policy and incident procedure documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
-- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling, automated reorg compensation, manual attach-hash endpoint, and the accepted 2-minute content-search grace (an exact external replay within that window is a residual risk).
+- Remaining: mocked WalletConnect UI tests, malformed-gas anomaly handling, automated reorg compensation, manual attach-hash endpoint, and the accepted 2-minute content-search grace (an exact external replay within that window is a residual risk).
 
 ## Next
 
 1. Phase 9 — Ethereum: chain config, private RPC/MEV, confirmation thresholds, live acceptance.
-2. Phase 9 prerequisite: automated post-accounting reorg compensation and tracker leader lock.
+2. Phase 9 prerequisite: automated post-accounting reorg compensation.
 3. Phase 10 — on-chain reconciliation.
