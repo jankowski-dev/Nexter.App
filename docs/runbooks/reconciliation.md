@@ -9,6 +9,7 @@ RECONCILIATION_ENABLED=false
 RECONCILIATION_INDEX_INTERVAL_SECONDS=60
 RECONCILIATION_LOOKBACK_BLOCKS=100
 RECONCILIATION_MAX_BLOCKS_PER_TICK=50
+RECONCILIATION_STALE_RUN_SECONDS=3600
 ```
 
 Migration `0015` is a system data backfill of verified asset contract addresses/decimals; runtime repairs via `ensureForSwapToken` emit `accounting.asset_repaired` audit. `BSC_RPC_URL` and `ETHEREUM_RPC_URL` are used for balances, transfer logs, and receipts. The RPC chain ID is validated by `EvmRpcService`.
@@ -55,14 +56,16 @@ A mismatch is **not** auto-corrected. Do not edit or delete ledger rows. Record 
 
 Assets created by the Notion import may not have contract addresses. They are reported as `UNSUPPORTED` when they have a ledger balance; they are never treated as native or silently matched. Map them to verified contract addresses (or record an owner-approved exception) before claiming a clean reconciliation.
 
+## Gas backfill
+
 For already-accounted confirmed swap orders with a tx hash and missing `network_fee_wei`, a run fetches the receipt and fills the raw fee with `swap.gas_backfilled` audit. It does not invent USD gas values or rewrite accounting.
 
 ## Indexer
 
-The API-hosted indexer uses a Postgres advisory lock, so multiple API replicas are safe. It scans a bounded range per tick and advances `watched_addresses.last_indexed_block`; a failure leaves the cursor unchanged for retry. It indexes ERC-20 `Transfer` logs and non-zero native transfers. The indexer does not yet rewind on reorg; reconciliation uses live balances, so a stale transfer history does not change the balance comparison.
+The API-hosted indexer uses a Postgres advisory lock, so multiple API replicas are safe. It scans a bounded range per tick and advances `watched_addresses.last_indexed_block`; a failure leaves the cursor unchanged for retry. It indexes ERC-20 `Transfer` logs and non-zero native transfers. Cursor-only advances with no new transfers are system indexer state and do not write an audit row; data-bearing ticks are audited. The indexer does not yet rewind on reorg; reconciliation uses live balances, so a stale transfer history does not change the balance comparison.
 
 ## Rollback
 
 - Set `RECONCILIATION_ENABLED=false` and redeploy; the indexer stops, and persisted watch addresses/transfers/runs remain.
 - Do not delete reconciliation rows; they are audit evidence.
-- Migration `0014` is additive; no destructive rollback is required.
+- Migrations `0014`/`0015` are additive; no destructive rollback is required.

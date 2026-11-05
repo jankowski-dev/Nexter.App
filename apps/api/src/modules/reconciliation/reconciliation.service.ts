@@ -316,7 +316,10 @@ export class ReconciliationService {
             eq(reconciliationRuns.userId, userId),
             eq(reconciliationRuns.chain, input.chain),
             eq(reconciliationRuns.status, 'RUNNING'),
-            lt(reconciliationRuns.startedAt, new Date(Date.now() - 10 * 60 * 1000)),
+            lt(
+              reconciliationRuns.startedAt,
+              new Date(Date.now() - env.RECONCILIATION_STALE_RUN_SECONDS * 1000),
+            ),
           ),
         )
         .returning({ id: reconciliationRuns.id });
@@ -441,7 +444,7 @@ export class ReconciliationService {
               onchainBalance: decimal('0').toFixed(asset.decimals),
               delta: unsupportedBalance.toFixed(asset.decimals),
               status: 'UNSUPPORTED',
-              details: { reason: 'missing_contract_address' },
+              details: { reason: 'missing_contract_address', onchainBalanceKnown: false },
             });
           }
 
@@ -536,14 +539,19 @@ export class ReconciliationService {
         error instanceof Error ? error.message.slice(0, 500) : 'Reconciliation failed';
 
       await this.db.transaction(async (tx) => {
-        await tx
+        const [failed] = await tx
           .update(reconciliationRuns)
           .set({
             status: 'FAILED',
             error: message,
             completedAt: new Date(),
           })
-          .where(eq(reconciliationRuns.id, created.id));
+          .where(
+            and(eq(reconciliationRuns.id, created.id), eq(reconciliationRuns.status, 'RUNNING')),
+          )
+          .returning({ id: reconciliationRuns.id });
+
+        if (!failed) return;
 
         await this.audit.log(
           {
