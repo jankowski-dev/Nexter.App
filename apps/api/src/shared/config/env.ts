@@ -86,13 +86,20 @@ export const envSchema = z.object({
     emptyToUndefined,
     z.coerce.number().int().min(1).max(100).optional(),
   ),
-  SWAP_ETHEREUM_CONFIRMATIONS: z.coerce.number().int().min(1).max(100).default(12),
+  SWAP_ETHEREUM_CONFIRMATIONS: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(1).max(100).default(12),
+  ),
   SWAP_TRACK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(300).default(15),
   SWAP_DROP_TIMEOUT_SECONDS: z.coerce.number().int().min(300).max(86_400).default(1800),
   SWAP_REPLACEMENT_LOOKBACK_BLOCKS: z.coerce.number().int().min(3).max(1200).default(240),
   SWAP_WALLET_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_BSC_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_ETHEREUM_ROUTER_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_BSC_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SWAP_ETHEREUM_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_SELECTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   KYBERSWAP_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   KYBERSWAP_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
@@ -159,5 +166,7 @@ export function confirmationsForChain(chainCode: string): number {
 
 export function executionEnabledForChain(chainCode: string): boolean {
   if (!env.SWAP_EXECUTION_ENABLED) return false;
-  return chainCode === 'ethereum' ? env.SWAP_ETHEREUM_EXECUTION_ENABLED : true;
+  if (chainCode === 'bsc') return true;
+  if (chainCode === 'ethereum') return env.SWAP_ETHEREUM_EXECUTION_ENABLED;
+  return false;
 }

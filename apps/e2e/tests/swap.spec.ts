@@ -179,7 +179,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   });
 
   await page.goto('/swap');
-  await expect(page.getByRole('heading', { name: 'Своп' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Своп', exact: true })).toBeVisible();
   await expect(
     page.getByText(
       'Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum.',

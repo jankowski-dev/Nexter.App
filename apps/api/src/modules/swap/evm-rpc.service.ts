@@ -102,6 +102,7 @@ function hexToBigInt(value: unknown): string | null {
 @Injectable()
 export class EvmRpcService {
   private readonly logger = new Logger(EvmRpcService.name);
+  private readonly chainIds = new Map<string, number>();
   private readonly fetchImpl: typeof fetch;
 
   constructor(fetchImpl?: typeof fetch) {
@@ -116,6 +117,28 @@ export class EvmRpcService {
     return Boolean(this.config(chain).url);
   }
 
+  private async assertChain(chain: string): Promise<void> {
+    const config = this.config(chain);
+    if (!config.url) return;
+
+    const chainId = await this.getChainId(chain);
+
+    if (chainId !== config.chainId) {
+      throw new Error(
+        `${config.name} RPC chain id is ${chainId ?? 'unknown'}, expected ${config.chainId}`,
+      );
+    }
+  }
+
+  private async getChainId(chain: string): Promise<number | null> {
+    const cached = this.chainIds.get(chain);
+    if (cached !== undefined) return cached;
+
+    const chainId = hexToNumber(await this.call(chain, 'eth_chainId', []));
+    if (chainId !== null) this.chainIds.set(chain, chainId);
+    return chainId;
+  }
+
   async getErc20Allowance(
     chain: string,
     token: string,
@@ -123,6 +146,7 @@ export class EvmRpcService {
     spender: string,
   ): Promise<string | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     const data = `0xdd62ed3e${padAddress(owner)}${padAddress(spender)}`;
     const result = await this.call(chain, 'eth_call', [{ from: owner, to: token, data }, 'latest']);
     return hexToBigInt(result);
@@ -130,6 +154,7 @@ export class EvmRpcService {
 
   async getErc20Balance(chain: string, token: string, owner: string): Promise<string | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     const data = `0x70a08231${padAddress(owner)}`;
     const result = await this.call(chain, 'eth_call', [{ from: owner, to: token, data }, 'latest']);
     return hexToBigInt(result);
@@ -137,17 +162,20 @@ export class EvmRpcService {
 
   async getNativeBalance(chain: string, owner: string): Promise<string | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     const result = await this.call(chain, 'eth_getBalance', [owner, 'latest']);
     return hexToBigInt(result);
   }
 
   async getTransactionByHash(chain: string, hash: string): Promise<RpcTransaction | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     return parseTransaction(await this.call(chain, 'eth_getTransactionByHash', [hash]));
   }
 
   async getTransactionReceipt(chain: string, hash: string): Promise<RpcReceipt | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     const result = await this.call(chain, 'eth_getTransactionReceipt', [hash]);
 
     if (!result || typeof result !== 'object') return null;
@@ -193,16 +221,19 @@ export class EvmRpcService {
 
   async getBlockNumber(chain: string): Promise<number | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     return hexToNumber(await this.call(chain, 'eth_blockNumber', []));
   }
 
   async getTransactionCount(chain: string, owner: string): Promise<number | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     return hexToNumber(await this.call(chain, 'eth_getTransactionCount', [owner, 'latest']));
   }
 
   async getGasPrice(chain: string): Promise<string | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     return hexToBigInt(await this.call(chain, 'eth_gasPrice', []));
   }
 
@@ -216,6 +247,7 @@ export class EvmRpcService {
     sinceTimestamp?: number;
   }): Promise<RpcTransaction[]> {
     if (!this.configuredFor(input.chain)) return [];
+    await this.assertChain(input.chain);
 
     const latest = await this.getBlockNumber(input.chain);
     if (latest === null) return [];
@@ -272,6 +304,7 @@ export class EvmRpcService {
     lookbackBlocks = 60,
   ): Promise<RpcTransaction | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
 
     const latest = await this.getBlockNumber(chain);
     if (latest === null) return null;
@@ -303,6 +336,7 @@ export class EvmRpcService {
 
   async getBlock(chain: string, blockNumber: number): Promise<RpcBlock | null> {
     if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
     const result = await this.call(chain, 'eth_getBlockByNumber', [
       `0x${blockNumber.toString(16)}`,
       false,
@@ -340,8 +374,7 @@ export class EvmRpcService {
       };
     }
 
-    const chainHex = await this.call(input.chain, 'eth_chainId', []);
-    const chainId = hexToNumber(chainHex);
+    const chainId = await this.getChainId(input.chain);
 
     if (chainId !== config.chainId) {
       return {

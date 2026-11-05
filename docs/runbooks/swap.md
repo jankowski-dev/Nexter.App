@@ -10,10 +10,10 @@ Phase 9 provides BSC and Ethereum WalletConnect connection, quotes, router-level
    - `KYBERSWAP_API_KEY` and optionally `KYBERSWAP_BASE_URL=https://api.kyberswap.com/swap` (gateway), or
    - leave the key empty to use the public `https://aggregator-api.kyberswap.com` fallback.
 4. Set `BSC_RPC_URL` and/or `ETHEREUM_RPC_URL` for build/simulation (quotes work without them). Prefer a private/MEV-protected Ethereum RPC for reads/simulation.
-5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem BSC address(es). An empty allowlist disables builds.
+5. Set `SWAP_WALLET_ALLOWLIST` to the Tangem wallet address(es). An empty allowlist disables builds.
 6. Set `SWAP_SELECTOR_ALLOWLIST=0xe21fd0e9,0x59e50fed` (`swap`, `swapGeneric`). An empty allowlist disables builds.
-7. Optionally set `SWAP_EXECUTOR_ALLOWLIST`; the default is the BSC AggregationExecutorProxy `0x8F10B468b06c6FD214B65F87778827F7D113f996`.
-8. Keep `SWAP_EXECUTION_ENABLED=false` until final review and a successful manual Tangem acceptance; after acceptance, set it to `true` to enable signing. Set `SWAP_MAX_GAS_USD=5` (or a stricter cap).
+7. Optionally set per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` router/executor allowlists. Empty lists use the chain-specific Kyber defaults; the legacy `SWAP_ROUTER_ALLOWLIST`/`SWAP_EXECUTOR_ALLOWLIST` remain BSC-only.
+8. Keep `SWAP_EXECUTION_ENABLED=false` until review and manual acceptance; BSC uses it as its execution gate. Ethereum also requires `SWAP_ETHEREUM_EXECUTION_ENABLED=true` after its own live acceptance. Set `SWAP_MAX_GAS_USD=5` (or a stricter cap).
 9. Set `SWAP_STEP_UP_THRESHOLD_USD=500` unless a stricter local policy is required; set `SWAP_CONFIRMATIONS=15` (BSC default), `SWAP_ETHEREUM_CONFIRMATIONS=12`, `SWAP_TRACK_INTERVAL_SECONDS=15`, and `SWAP_DROP_TIMEOUT_SECONDS=1800` if a different policy is required.
 10. Optionally override `SWAP_ROUTER_ALLOWLIST`; the default is the Kyber MetaAggregationRouterV2 address.
 11. Run `node scripts/swap-live-check.mjs bsc` and/or `node scripts/swap-live-check.mjs ethereum` with the production RPC/key and confirm the chain id, router bytecode presence (not router identity), and a read-only quote.
@@ -58,12 +58,12 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; the API tracking poller verifies the swap transaction, tracks confirmations, and creates accounting on confirmation.
 - `POST /swap/approvals/:id/submitted` records the approval hash; the tracker confirms/fails it. Approval-only hash recording is allowed while execution is disabled because it cannot move funds.
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
-- Native gas preflight (`gasEstimate × eth_gasPrice`) fails closed when BNB is insufficient. The check covers swap gas only; a first-time approval needs additional BNB and can still fail at the approval step.
+- Native gas preflight (`gasEstimate × eth_gasPrice`) fails closed when the native balance (BNB/ETH) is insufficient. The check covers swap gas only; a first-time approval needs additional native gas and can still fail at the approval step.
 - `ready` re-decodes stored calldata and re-checks the current router, selector, recipient, token, amount, minOut, executor, approve-target, receiver, fee, permit and partial-fill allowlists. The stored build output (`built_amount_out`) is the upper bound for calldata `minReturnAmount`; legacy orders without it fall back to the stored quote output.
 - Signing requires `READY`. A `BUILT` order must pass `POST /swap/orders/:id/ready` first; the UI exposes “Проверить готовность” for that transition.
-- Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
+- Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is controlled by `SWAP_EXECUTION_ENABLED` (and `SWAP_ETHEREUM_EXECUTION_ENABLED` for Ethereum) plus the kill switch.
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; it does not create accounting, and tracking verifies the tx.
-- The tracker is API-hosted and production must run a single API replica (or add a future leader lock). Do not roll back to a pre-Phase-8 image while orders are active/unaccounted.
+- The tracker is API-hosted and production must run a single API replica (or add a future leader lock). Do not roll back to a pre-Phase-9 image while any BSC or Ethereum order is active/unaccounted.
 - Simple mode (`flags & 0x20`) is rejected until `firstPools`/`destTokenFeeData` can be validated. Some Kyber routes using pool `srcReceivers` may also be rejected; this is intentional fail-closed behavior.
 - A first-time ERC-20 swap with zero allowance enters `APPROVAL_REQUIRED`; after the exact approval, `POST /swap/orders/:id/ready` re-checks and moves it to `READY`.
 - Confirmed-swap accounting requires the wallet's input token and native gas balance (BNB/ETH) to exist in the ledger. A negative balance is recorded as `SWAP_ACCOUNTING_NEGATIVE_BALANCE` and retried every 60 seconds after reconciliation; it is never silently forced.
@@ -85,10 +85,10 @@ The check prints only chain id, router bytecode size, and quote amounts; it neve
 
 ## Rollback / incident
 
-1. Prefer `SWAP_KILL_SWITCH=true` / `SWAP_EXECUTION_ENABLED=false`; these stop new execution but keep the Phase 8 tracker running.
-2. Do not roll back to a pre-Phase-8 image while any `SUBMITTED`/`PENDING` order or `CONFIRMED` order with null `accounting_transaction_id` exists. Drain or account those orders first, or roll back only to a Phase 8 image.
+1. Prefer `SWAP_KILL_SWITCH=true` / `SWAP_EXECUTION_ENABLED=false`; these stop new execution but keep the tracker running.
+2. Do not roll back to a pre-Phase-9 image while any `SUBMITTED`/`PENDING` order or `CONFIRMED` order with null `accounting_transaction_id` exists. Drain or account those orders first. A Phase 8 image is BSC-only and cannot track or serve Ethereum orders; only roll back to it after every Ethereum order is terminal and accounted.
 3. Attach a signed hash via `POST /swap/orders/:id/submitted` even if execution is disabled; tracking will verify it.
 4. Never delete orders, approvals, events, or ledger rows. Corrections are append-only.
-5. Post-accounting reorg policy: `SWAP_CONFIRMATIONS` (default 15) is treated as final for accounting. The tracker stops watching `CONFIRMED` orders, so detect a deep reorg by periodically re-fetching the receipt/block for confirmed orders (or via an external chain monitor).
+5. Post-accounting reorg policy: the per-chain confirmation threshold (`SWAP_CONFIRMATIONS`/`SWAP_BSC_CONFIRMATIONS` for BSC, `SWAP_ETHEREUM_CONFIRMATIONS` for Ethereum) is treated as final for accounting. The tracker stops watching `CONFIRMED` orders, so detect a deep reorg by periodically re-fetching the receipt/block for confirmed orders (or via an external chain monitor).
 6. If a confirmed/accounted transaction is reorged out: set `SWAP_KILL_SWITCH=true`, preserve the order/events/tx hash, re-fetch the receipt and block, and do not edit or delete ledger rows. The owner/operator drafts an append-only compensating transaction through the accounting module and records the incident. Automatic compensation is a Phase 9 prerequisite.
 7. If the receipt is still canonical and confirmations are at or above `SWAP_CONFIRMATIONS`, no correction is needed; record the check and resume execution.

@@ -75,7 +75,14 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       const latestByChain = new Map<string, number | null>();
       const latestFor = async (chain: string): Promise<number | null> => {
         if (!latestByChain.has(chain)) {
-          latestByChain.set(chain, await this.rpc.getBlockNumber(chain));
+          try {
+            latestByChain.set(chain, await this.rpc.getBlockNumber(chain));
+          } catch (error) {
+            this.logger.warn(
+              `${chain} tracker RPC failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+            );
+            latestByChain.set(chain, null);
+          }
         }
         return latestByChain.get(chain) ?? null;
       };
@@ -985,11 +992,17 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
       if (latest === null) return;
 
-      const blockMismatch =
-        receipt !== null && order.blockNumber !== null && receipt.blockNumber !== order.blockNumber;
+      if (!receipt) {
+        this.logger.warn(
+          `Swap ${order.id} confirmed receipt is unavailable on ${order.chain}; keeping state`,
+        );
+        await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_RECEIPT_MISSING');
+        return;
+      }
+
+      const blockMismatch = order.blockNumber !== null && receipt.blockNumber !== order.blockNumber;
 
       if (
-        !receipt ||
         !receipt.status ||
         latest - receipt.blockNumber + 1 < confirmationsForChain(order.chain) ||
         blockMismatch

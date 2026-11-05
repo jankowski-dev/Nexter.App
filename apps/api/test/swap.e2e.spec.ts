@@ -29,7 +29,7 @@ import {
 import { KYBER_ROUTER_ABI } from '../src/modules/swap/kyber-calldata';
 import { KyberSwapClient } from '../src/modules/swap/kyber-swap.client';
 import { SwapTrackingService } from '../src/modules/swap/swap-tracking.service';
-import { getSwapToken } from '../src/modules/swap/token-registry';
+import { NATIVE_ADDRESS, getSwapToken } from '../src/modules/swap/token-registry';
 import { env } from '../src/shared/config/env';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -135,6 +135,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let simulationSuccess = true;
   let simulationGasEstimate: string | null = '120000';
   let rpcChainId = 56;
+  let rpcFailureChain: string | null = null;
   let rpcFailure = false;
   let buildData = makeBuildData();
   let buildRouter = router;
@@ -205,7 +206,10 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     findMatchingTransactions: async () => matchingTxs,
     getTransactionByHash: async () => chainTx,
     getTransactionReceipt: async () => chainReceipt,
-    getBlockNumber: async () => latestBlock,
+    getBlockNumber: async (chain: string) => {
+      if (rpcFailureChain === chain) throw new Error(`${chain} rpc down`);
+      return latestBlock;
+    },
     getTransactionCount: async () => latestNonce,
     getBlock: async () => ({
       number: latestBlock,
@@ -282,6 +286,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     simulationSuccess = true;
     simulationGasEstimate = '120000';
     rpcChainId = 56;
+    rpcFailureChain = null;
     rpcFailure = false;
     buildData = makeBuildData();
     buildRouter = router;
@@ -1295,6 +1300,204 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .from(transactions)
       .where(and(eq(transactions.source, 'kyberswap'), eq(transactions.sourceId, txHash)));
     expect(repeats).toHaveLength(1);
+  }, 60_000);
+
+  it('keeps BSC tracking when the Ethereum RPC fails', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const tracking = app.get(SwapTrackingService);
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const bscOrderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: bscOrderId, walletAddress: wallet })
+      .expect(201);
+    const bscHash = `0x${'a'.repeat(63)}1`;
+    await agent
+      .post(`/api/v1/swap/orders/${bscOrderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: bscHash })
+      .expect(200);
+
+    await db.insert(swapOrders).values({
+      userId: owner.userId,
+      chain: 'ethereum',
+      walletAddress: wallet,
+      tokenIn: ethereumTokenIn,
+      tokenOut: ethereumTokenOut,
+      tokenInSymbol: 'USDC',
+      tokenOutSymbol: 'LINK',
+      amountIn: '1',
+      amountOut: '2',
+      minOut: '1.99',
+      slippageBps: 50,
+      routeSummary: { amountIn: '1000000' },
+      status: 'SUBMITTED',
+      txHash: `0x${'b'.repeat(63)}2`,
+      submittedAt: new Date(),
+      quoteExpiresAt: new Date(Date.now() + 60_000),
+    });
+
+    chainTx = {
+      hash: bscHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'c'.repeat(64)}`,
+      transactionHash: bscHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 114;
+    rpcFailureChain = 'ethereum';
+    await tracking.tick();
+
+    const [bscOrder] = await db.select().from(swapOrders).where(eq(swapOrders.id, bscOrderId));
+    expect(bscOrder.status).toBe('CONFIRMED');
+    const [ethOrder] = await db
+      .select()
+      .from(swapOrders)
+      .where(eq(swapOrders.chain, 'ethereum'))
+      .limit(1);
+    expect(ethOrder?.status).toBe('SUBMITTED');
+  }, 60_000);
+
+  it('tracks and accounts an Ethereum swap with the ETH gas asset', async () => {
+    rpcChainId = 1;
+    buildAmountIn = '1000000';
+    buildData = makeBuildData({
+      srcToken: ethereumTokenIn,
+      dstToken: ethereumTokenOut,
+      amount: 1_000_000n,
+      minOut: 1_990_000_000_000_000_000n,
+    });
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+    const tracking = app.get(SwapTrackingService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'ethereum');
+    const tokenInAsset = await assets.ensureForSwapToken(
+      'ethereum',
+      getSwapToken('ethereum', ethereumTokenIn)!,
+    );
+    const ethAsset = await assets.ensureForSwapToken(
+      'ethereum',
+      getSwapToken('ethereum', NATIVE_ADDRESS)!,
+    );
+
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: tokenInAsset.id,
+        amount: '10',
+        usdValue: '10',
+      },
+      {},
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: ethAsset.id,
+        amount: '0.1',
+        usdValue: '300',
+      },
+      {},
+    );
+
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'ethereum',
+        tokenIn: ethereumTokenIn,
+        tokenOut: ethereumTokenOut,
+        amountIn: '1',
+        walletAddress: wallet,
+      })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'2'.repeat(63)}3`;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'3'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [swappedLog(1_000_000n, 2_100_000_000_000_000_000n, ethereumTokenIn, ethereumTokenOut)],
+    };
+    latestBlock = 111;
+    blockTimestamp = Math.floor(Date.now() / 1000);
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      chain: 'ethereum',
+      status: 'CONFIRMED',
+      confirmations: 12,
+      executedAmountIn: '1.000000000000000000',
+      executedAmountOut: '2.100000000000000000',
+    });
+    expect(order.accountingTransactionId).toBeTruthy();
+
+    const [accounting] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, order.accountingTransactionId!));
+    expect(accounting).toMatchObject({
+      type: 'trade',
+      subtype: 'swap',
+      source: 'kyberswap',
+      sourceId: txHash,
+    });
+    const accountingPostings = await db
+      .select()
+      .from(postings)
+      .where(eq(postings.transactionId, accounting.id));
+    expect(accountingPostings.find((posting) => posting.assetId === ethAsset.id)).toBeTruthy();
   }, 60_000);
 
   it('accounts a cash-equivalent output from the actual on-chain amount', async () => {

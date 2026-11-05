@@ -170,9 +170,21 @@ export function nativeTokenForChain(chainCode: string): SwapToken {
 }
 
 export function defaultRouterForChain(chainCode: string): string {
-  return DEFAULT_ROUTERS[chainCode as SwapChainCode] ?? DEFAULT_BSC_ROUTER;
+  const router = DEFAULT_ROUTERS[chainCode as SwapChainCode];
+
+  if (!router) {
+    throw new Error(`Default router is not configured for ${chainCode}`);
+  }
+
+  return router;
 }
 
 export function defaultExecutorForChain(chainCode: string): string {
-  return DEFAULT_EXECUTORS[chainCode as SwapChainCode] ?? DEFAULT_BSC_EXECUTOR;
+  const executor = DEFAULT_EXECUTORS[chainCode as SwapChainCode];
+
+  if (!executor) {
+    throw new Error(`Default executor is not configured for ${chainCode}`);
+  }
+
+  return executor;
 }

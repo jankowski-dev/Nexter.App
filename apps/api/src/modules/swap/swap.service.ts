@@ -38,12 +38,11 @@ import {
   validateKyberSwapBuild,
   type DecodedKyberSwap,
 } from './kyber-calldata';
+import { executorAllowlist, routerAllowlist, selectorAllowlist } from './swap-allowlists';
 import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import {
   SWAP_CHAINS,
-  defaultExecutorForChain,
-  defaultRouterForChain,
   getSwapChain,
   getSwapToken,
   isCashEquivalentSymbol,
@@ -122,23 +121,6 @@ function usdToPriceImpactBps(
 
 function normalizeAddress(value: string): string {
   return value.toLowerCase();
-}
-
-function routerAllowlist(chain: string): string[] {
-  const configured = parseAddressList(env.SWAP_ROUTER_ALLOWLIST);
-  return configured.length > 0 ? configured : [defaultRouterForChain(chain).toLowerCase()];
-}
-
-function selectorAllowlist(): string[] {
-  return (env.SWAP_SELECTOR_ALLOWLIST ?? '')
-    .split(',')
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-function executorAllowlist(chain: string): string[] {
-  const configured = parseAddressList(env.SWAP_EXECUTOR_ALLOWLIST);
-  return configured.length > 0 ? configured : [defaultExecutorForChain(chain).toLowerCase()];
 }
 
 function tokenFor(address: string, chain: string, symbol: string): SwapToken {
@@ -1141,6 +1123,13 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
     this.assertExecutionEnabled(order.chain);
+
+    if (!this.rpc.configuredFor(order.chain)) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_PROVIDER_UNAVAILABLE',
+        message: 'RPC is not configured for this chain',
+      });
+    }
 
     if (order.status !== 'READY') {
       throw new ConflictException({

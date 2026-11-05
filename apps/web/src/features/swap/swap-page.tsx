@@ -33,6 +33,16 @@ function isPositiveDecimal(value: string): boolean {
   return /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0;
 }
 
+function chainIdForCode(code: string): number | null {
+  if (code === 'bsc') return 56;
+  if (code === 'ethereum') return 1;
+  return null;
+}
+
+function explorerForChain(code: string): string {
+  return code === 'ethereum' ? 'https://etherscan.io' : 'https://bscscan.com';
+}
+
 export function SwapPage() {
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
   const [chainCode, setChainCode] = useState<'bsc' | 'ethereum'>('bsc');
@@ -213,13 +223,25 @@ export function SwapPage() {
 
   async function signApproval(): Promise<void> {
     if (!approvalData || !quote.data) return;
+    const approvalChainId = chainIdForCode(approvalData.approval.chain);
+
+    if (
+      approvalData.approval.orderId !== quote.data.id ||
+      approvalData.approval.chain !== quote.data.chain ||
+      approvalChainId === null ||
+      approvalChainId !== selectedChainId
+    ) {
+      setExecutionError('Сеть approval не совпадает с выбранной сетью. Обновите котировку.');
+      return;
+    }
+
     if (!canSignFor(approvalData.approval.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
 
     try {
       const hash = await wallet.sendTransaction({
-        chainId: selectedChainId,
+        chainId: approvalChainId,
         to: approvalData.to,
         data: approvalData.calldata,
         value: approvalData.value,
@@ -272,6 +294,18 @@ export function SwapPage() {
 
   async function signSwap(): Promise<void> {
     if (!buildData?.routerAddress || !buildData.calldata || !quote.data) return;
+    const orderChainId = chainIdForCode(buildData.chain);
+
+    if (
+      buildData.id !== quote.data.id ||
+      buildData.chain !== quote.data.chain ||
+      orderChainId === null ||
+      orderChainId !== selectedChainId
+    ) {
+      setExecutionError('Сеть сборки не совпадает с выбранной сетью. Обновите котировку.');
+      return;
+    }
+
     if (!canSignFor(buildData.walletAddress)) return;
     setExecutionBusy(true);
     setExecutionError(null);
@@ -287,7 +321,7 @@ export function SwapPage() {
 
     try {
       const hash = await wallet.sendTransaction({
-        chainId: selectedChainId,
+        chainId: orderChainId,
         to: buildData.routerAddress,
         data: buildData.calldata,
         value: buildData.transactionValue ?? '0',
@@ -401,7 +435,6 @@ export function SwapPage() {
   const chain = selectedChain ?? data.chains[0];
   const chainExecutionEnabled = chain.executionEnabled;
   const chainBuildEnabled = data.buildEnabled && chain.rpcConfigured;
-  const explorerBase = chain.code === 'ethereum' ? 'https://etherscan.io' : 'https://bscscan.com';
   const executionReady = buildData?.status === 'READY';
   const deadlineExpired = Boolean(buildData?.deadline && Date.now() / 1000 >= buildData.deadline);
   const executionOrder = liveOrder.data ?? buildData ?? quote.data;
@@ -503,6 +536,7 @@ export function SwapPage() {
                 className="mt-1"
                 value={chainCode}
                 onChange={(event) => selectChain(event.target.value as 'bsc' | 'ethereum')}
+                disabled={executionBusy || quote.isPending}
                 aria-label="Сеть свопа"
               >
                 {data.chains.map((item) => (
@@ -603,7 +637,7 @@ export function SwapPage() {
             <Button
               className="mt-2"
               onClick={() => quote.mutate()}
-              disabled={!canQuote || quote.isPending}
+              disabled={!canQuote || quote.isPending || executionBusy}
             >
               {quote.isPending ? 'Запрашиваю котировку…' : 'Получить котировку'}
             </Button>
@@ -807,7 +841,7 @@ export function SwapPage() {
             Подписанный hash:{' '}
             <a
               className="text-emerald-700 underline"
-              href={`${explorerBase}/tx/${swapTxHash}`}
+              href={`${explorerForChain(buildData?.chain ?? quote.data?.chain ?? chain.code)}/tx/${swapTxHash}`}
               target="_blank"
               rel="noreferrer"
             >
@@ -942,7 +976,7 @@ export function SwapPage() {
                     · tx{' '}
                     <a
                       className="break-all text-emerald-700 underline"
-                      href={`${explorerBase}/tx/${executionOrder.txHash}`}
+                      href={`${explorerForChain(executionOrder.chain)}/tx/${executionOrder.txHash}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -1030,7 +1064,7 @@ export function SwapPage() {
                   {order.txHash ? (
                     <a
                       className="break-all text-emerald-700 underline"
-                      href={`${explorerBase}/tx/${order.txHash}`}
+                      href={`${explorerForChain(order.chain)}/tx/${order.txHash}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -1053,10 +1087,10 @@ export function SwapPage() {
       <Card>
         <CardTitle>Ограничения Phase 9</CardTitle>
         <CardDescription>
-          BSC и Ethereum и подключение Tangem через WalletConnect уже доступны. Tracking и учёт
-          подтверждённых свопов работают; подпись включается через `SWAP_EXECUTION_ENABLED` после
-          финального review. Kill switch отключает новые котировки, чтение существующих ордеров
-          остаётся доступным.
+          BSC и Ethereum и подключение Tangem через WalletConnect доступны. Tracking и учёт
+          подтверждённых свопов работают; BSC-подпись включается через `SWAP_EXECUTION_ENABLED`,
+          Ethereum дополнительно требует `SWAP_ETHEREUM_EXECUTION_ENABLED` после live acceptance.
+          Kill switch отключает новые котировки, чтение существующих ордеров остаётся доступным.
         </CardDescription>
       </Card>
 

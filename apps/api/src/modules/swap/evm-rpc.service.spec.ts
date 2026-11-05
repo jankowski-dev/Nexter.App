@@ -67,6 +67,7 @@ describe('EvmRpcService', () => {
     };
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(rpcResponse('0x38'))
       .mockResolvedValueOnce(rpcResponse('0x3b9aca00'))
       .mockResolvedValueOnce(rpcResponse('0x64'))
       .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [tx] }));
@@ -96,6 +97,7 @@ describe('EvmRpcService', () => {
     };
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(rpcResponse('0x38'))
       .mockResolvedValueOnce(rpcResponse('0x64'))
       .mockResolvedValueOnce(rpcResponse({ number: '0x64', transactions: [wrongValue, match] }));
     const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
@@ -124,6 +126,7 @@ describe('EvmRpcService', () => {
     };
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(rpcResponse('0x38'))
       .mockResolvedValueOnce(rpcResponse('0x64'))
       .mockResolvedValueOnce(
         rpcResponse({ number: '0x64', timestamp: '0x64', transactions: [tx] }),
@@ -141,6 +144,31 @@ describe('EvmRpcService', () => {
     });
 
     expect(matches).toEqual([]);
+  });
+
+  it('uses the Ethereum RPC and rejects a chain id mismatch', async () => {
+    env.ETHEREUM_RPC_URL = 'http://eth.test';
+
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(rpcResponse('0x1'))
+        .mockResolvedValueOnce(rpcResponse('0x0'));
+      const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
+
+      expect(service.configuredFor('ethereum')).toBe(true);
+      await expect(
+        service.getNativeBalance('ethereum', '0x1111111111111111111111111111111111111111'),
+      ).resolves.toBe('0');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      const wrongChain = new EvmRpcService(
+        vi.fn().mockResolvedValue(rpcResponse('0x38')) as unknown as typeof fetch,
+      );
+      await expect(wrongChain.getBlockNumber('ethereum')).rejects.toThrow('expected 1');
+    } finally {
+      env.ETHEREUM_RPC_URL = undefined;
+    }
   });
 
   it('reports a missing contract and a reverted call', async () => {

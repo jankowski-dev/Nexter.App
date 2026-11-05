@@ -27,7 +27,7 @@
 
 ## Rollback
 
-- Railway: prefer `SWAP_KILL_SWITCH=true`/`SWAP_EXECUTION_ENABLED=false`; drain active/unaccounted swap orders before rolling back to a pre-Phase-8 image. The API hosts the swap tracker.
+- Railway: prefer `SWAP_KILL_SWITCH=true`/`SWAP_EXECUTION_ENABLED=false` and `SWAP_ETHEREUM_EXECUTION_ENABLED=false`; drain active/unaccounted BSC and Ethereum orders before rolling back. A pre-Phase-9 image cannot track or serve Ethereum orders; only roll back to it after every Ethereum order is terminal and accounted. The API hosts the swap tracker.
 - Database: restore PITR/dump only if a migration is destructive; prefer a forward fix for additive migrations.
 - After rollback, verify `/ready` and login.
 - Keep the failed deployment logs and the exact commit SHA.

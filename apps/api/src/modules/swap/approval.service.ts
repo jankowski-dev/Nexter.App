@@ -22,13 +22,9 @@ import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { EvmRpcService, padUint } from './evm-rpc.service';
+import { routerAllowlist } from './swap-allowlists';
 import { assertStepUp } from './swap-step-up';
-import {
-  defaultRouterForChain,
-  getSwapToken,
-  isNativeToken,
-  parseAddressList,
-} from './token-registry';
+import { getSwapToken, isNativeToken, parseAddressList } from './token-registry';
 
 interface SwapMeta {
   ip?: string;
@@ -43,11 +39,6 @@ function isUniqueViolation(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const candidate = error as { code?: string; cause?: { code?: string } };
   return candidate.code === '23505' || candidate.cause?.code === '23505';
-}
-
-function routerAllowlist(chain: string): string[] {
-  const configured = parseAddressList(env.SWAP_ROUTER_ALLOWLIST);
-  return configured.length > 0 ? configured : [defaultRouterForChain(chain).toLowerCase()];
 }
 
 @Injectable()

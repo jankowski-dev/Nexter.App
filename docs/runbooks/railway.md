@@ -203,7 +203,7 @@ Phase 6 is code/ops hardening with no schema migration. Before deploying:
 
 1. Add `ETHEREUM_RPC_URL` (private/MEV-preferred) and confirm `KYBERSWAP_API_KEY` works for Ethereum.
 2. Run `node scripts/swap-live-check.mjs ethereum`; verify chain id 1 and router bytecode.
-3. If router/executor allowlists are set, include both chains; otherwise defaults apply.
+3. Prefer per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` router/executor allowlists; the legacy global lists remain BSC-only. Empty lists use the chain-specific defaults.
 4. Deploy with `SWAP_ETHEREUM_EXECUTION_ENABLED=false`; verify `/swap` shows Ethereum and that signing is disabled.
 5. For acceptance, enable `SWAP_ETHEREUM_EXECUTION_ENABLED=true` for the window, perform a small Tangem swap, verify tracking/accounting, then keep it enabled only if accepted.
 6. Rollback: set `SWAP_ETHEREUM_EXECUTION_ENABLED=false` (or the global kill switch) and keep the tracker running for in-flight orders.

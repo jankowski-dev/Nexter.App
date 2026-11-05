@@ -28,7 +28,7 @@ const EXECUTION_COMPONENTS = [
   { name: 'clientData', type: 'bytes' },
 ] as const;
 
-/** Kyber MetaAggregationRouterV2 on BSC. Both functions share the same tuple shape. */
+/** Kyber MetaAggregationRouterV2 (BSC/Ethereum). Both functions share the same tuple shape. */
 export const KYBER_ROUTER_ABI = [
   {
     type: 'function',
