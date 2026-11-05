@@ -389,6 +389,14 @@ export function SwapPage() {
     walletAddress,
   ]);
 
+  function switchChain(nextCode: 'bsc' | 'ethereum'): void {
+    const target = config.data?.chains.find((item) => item.code === nextCode);
+    if (!target) return;
+
+    if (chainCode !== nextCode) selectChain(nextCode);
+    if (!wallet.onChain(target.chainId)) void wallet.switchToChain(target.chainId);
+  }
+
   function selectChain(nextCode: 'bsc' | 'ethereum'): void {
     const next = config.data?.chains.find((item) => item.code === nextCode);
     const nextTokens = next?.tokens ?? [];
@@ -480,14 +488,16 @@ export function SwapPage() {
             ) : null}
             {wallet.connected ? (
               <>
-                {!wallet.onChain(chain.chainId) ? (
+                {data.chains.map((item) => (
                   <Button
-                    variant="secondary"
-                    onClick={() => void wallet.switchToChain(chain.chainId)}
+                    key={item.code}
+                    variant={wallet.onChain(item.chainId) ? 'secondary' : 'ghost'}
+                    onClick={() => switchChain(item.code)}
+                    disabled={executionBusy}
                   >
-                    Переключить на {chain.name}
+                    {item.code === 'bsc' ? 'BSC' : 'Ethereum'}
                   </Button>
-                ) : null}
+                ))}
                 <Button variant="ghost" onClick={() => void wallet.disconnect()}>
                   Отключить
                 </Button>

@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Implementation and mocked/API verification are complete; live Ethereum acceptance is pending explicit owner approval.
+Accepted 2026-11-05. Implementation, mocked/API verification, and a live small Ethereum swap are complete.
 
 ## Context
 
