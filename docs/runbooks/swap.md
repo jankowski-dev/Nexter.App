@@ -26,7 +26,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Provider outage / rate limit
 
 - `429` and `5xx` are retried twice. A 429 maps to `SWAP_RATE_LIMITED`; network/provider exhaustion maps to `SWAP_PROVIDER_UNAVAILABLE`; other provider failures map to `SWAP_QUOTE_FAILED`/`SWAP_BUILD_FAILED`.
-- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s); `SWAP_EXECUTION_ENABLED` can also be disabled to hide signing, and submit is blocked server-side. Use `POST /swap/orders/:id/signing/cancel` to release an in-flight signing lock.
+- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s); `SWAP_EXECUTION_ENABLED` can also be disabled to hide signing. Submit remains available to record an already-signed hash; tracking verifies it. Use `POST /swap/orders/:id/signing/cancel` to release an in-flight signing lock.
 - Check `external_api_calls` for status/latency; it contains no secrets or response bodies.
 
 ## Key rotation
@@ -40,13 +40,14 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Token addresses are code-owned and require review; do not add arbitrary tokens in production.
 - Wallet/router/executor/selector allowlists are environment-owned. Changing them requires a redeploy and a new quote/build check. The application role must not have DELETE on swap tables, approvals, or events.
 - Step-up TOTP is required above the configured threshold; the session window is five minutes. Missing/invalid provider USD fails closed.
-- Calldata is decoded at router level before a build is accepted. Simple mode is rejected; standard aggregator routes use the server-enforced order deadline, which the execution UI must display before signing. Submission is rejected after the deadline.
+- Calldata is decoded at router level before a build is accepted. Simple mode is rejected; standard aggregator routes use the server-enforced order deadline, which the execution UI must display before signing. New signing is blocked after the deadline; a signed hash can still be recorded.
 
 ## Execution slice (Phase 8a)
 
-- `POST /auth/step-up` sets a five-minute step-up window; builds/submissions/approvals above `SWAP_STEP_UP_THRESHOLD_USD` require it.
+- `POST /auth/step-up` sets a five-minute step-up window; builds, approval builds, ready, and signing above `SWAP_STEP_UP_THRESHOLD_USD` require it. Submit is recovery-only.
 - Exact approvals use the router/spender allowlist; native inputs do not need approval; already-sufficient allowance returns 409.
-- `POST /swap/orders/:id/submitted` and approvals/:id/submitted record hashes; the API tracking poller verifies the swap transaction, tracks confirmations, and creates accounting on confirmation.
+- `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; the API tracking poller verifies the swap transaction, tracks confirmations, and creates accounting on confirmation.
+- `POST /swap/approvals/:id/submitted` records the approval hash; the tracker confirms/fails it. Approval-only hash recording is allowed while execution is disabled because it cannot move funds.
 - Builds reject calldata whose recipient, tokens, amount, minOut, executor, approve target, receivers, fees, permit or partial-fill flags do not match the quote.
 - Insufficient ERC-20 allowance moves the order to `APPROVAL_REQUIRED`; `POST /swap/orders/:id/ready` re-checks allowance/simulation and moves it to `READY`. Signing is controlled by `SWAP_EXECUTION_ENABLED` and the kill switch.
 - `POST /swap/orders/:id/submitted` records an already-signed hash even during a kill switch/execution disable; it does not create accounting, and tracking verifies the tx.

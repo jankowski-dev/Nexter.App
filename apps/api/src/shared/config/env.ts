@@ -70,10 +70,12 @@ export const envSchema = z.object({
   SWAP_STEP_UP_THRESHOLD_USD: z
     .string()
     .regex(/^\d+(?:\.\d+)?$/)
+    .refine((value) => Number(value) <= 1_000_000_000, 'Threshold is too large')
     .default('500'),
   SWAP_MAX_GAS_USD: z
     .string()
     .regex(/^\d+(?:\.\d+)?$/)
+    .refine((value) => Number(value) <= 10_000, 'Gas cap is too large')
     .default('5'),
   SWAP_CONFIRMATIONS: z.coerce.number().int().min(1).max(100).default(15),
   SWAP_TRACK_INTERVAL_SECONDS: z.coerce.number().int().min(5).max(300).default(15),

@@ -344,7 +344,14 @@ export class SwapService {
         ? route.gasUsd
         : null;
 
-    if (gasUsd && decimal(gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+    if (!gasUsd) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_MISSING',
+        message: 'Provider did not return a gas cost',
+      });
+    }
+
+    if (decimal(gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
       throw new BadRequestException({
         code: 'SWAP_GAS_TOO_HIGH',
         message: 'Quoted gas cost exceeds the configured cap',
@@ -706,7 +713,11 @@ export class SwapService {
         ? built.gasUsd
         : order.gasUsd;
 
-    if (gasUsd && decimal(gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+    if (!gasUsd) {
+      await fail('gas', 'SWAP_GAS_MISSING', 'Provider did not return a gas cost');
+    }
+
+    if (decimal(gasUsd!).gt(decimal(env.SWAP_MAX_GAS_USD))) {
       await fail('gas', 'SWAP_GAS_TOO_HIGH', 'Gas cost exceeds the configured cap');
     }
 
@@ -858,7 +869,14 @@ export class SwapService {
       });
     }
 
-    if (order.gasUsd && decimal(order.gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
+    if (!order.gasUsd) {
+      throw new BadRequestException({
+        code: 'SWAP_GAS_MISSING',
+        message: 'Stored swap order has no gas cost',
+      });
+    }
+
+    if (decimal(order.gasUsd).gt(decimal(env.SWAP_MAX_GAS_USD))) {
       throw new BadRequestException({
         code: 'SWAP_GAS_TOO_HIGH',
         message: 'Gas cost exceeds the configured cap',
@@ -1156,7 +1174,7 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE'].includes(order.status)) {
+    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE', 'EXPIRED'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
@@ -1179,7 +1197,7 @@ export class SwapService {
             and(
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
-              inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE']),
+              inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE', 'EXPIRED']),
             ),
           )
           .returning({ id: swapOrders.id });

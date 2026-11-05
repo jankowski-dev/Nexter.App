@@ -24,7 +24,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - WalletConnect v2 + Tangem signing;
 - exact ERC-20 approvals;
 - step-up TOTP over $500;
-- submission and worker tracking;
+- submission and API tracking;
 - confirmed-swap accounting;
 - failure/replaced/dropped handling.
 
@@ -36,7 +36,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
 - Router-level calldata decoding with viem: verifies tokens, recipient, input amount, minimum output, executor, approve target, source receivers, fees, permit and partial-fill flags before `BUILT`.
 - Correct selector mapping: `0xe21fd0e9` = `swap`, `0x59e50fed` = `swapGeneric`; both are supported and must be allowlisted.
 - `SWAP_EXECUTOR_ALLOWLIST` with the BSC AggregationExecutorProxy default.
-- Simple-mode calldata is rejected until `firstPools`/`destTokenFeeData` can be validated; standard routes use the server-enforced order deadline and submit rejects after expiry.
+- Simple-mode calldata is rejected until `firstPools`/`destTokenFeeData` can be validated; standard routes use the server-enforced order deadline for new signing, while an already-signed hash can still be recorded.
 - Execution UI: build preview, allowance/`APPROVAL_REQUIRED` gate, exact approval, step-up prompt, WalletConnect/Tangem signing, swap submission, and live order status. Signing is gated by `SWAP_EXECUTION_ENABLED` (default false) until final review/manual acceptance.
 - `POST /swap/orders/:id/ready` re-checks allowance/balance/simulation and moves approved orders to `READY`; submit accepts `READY`/`BUILT`.
 - API-hosted tracking poller: `eth_getTransactionByHash` verification, receipt/confirmations, replaced/dropped, pre-accounting reorg handling, actual gas capture, and actual spent/return amounts from the router `Swapped` event.
@@ -50,7 +50,7 @@ Phase 8 is scoped by ADR `0010-phase-8-swap-execution.md`:
   - unique partial indexes on tx hashes and active approvals.
 - `POST /auth/step-up` — verifies a current TOTP, sets a 5-minute `stepUpUntil` on the session, uses the existing 2FA throttle, and audits success/failure. The step-up helper fails closed when the input USD value is missing/invalid; quotes now require a valid provider `amountInUsd` and store it on the order.
 - `POST /swap/build` now requires a fresh step-up when the quote input value exceeds `SWAP_STEP_UP_THRESHOLD_USD` (default $500).
-- `POST /swap/orders/:id/submitted` — validates ownership, `BUILT` state, tx hash, and step-up; records `SUBMITTED`, event, and audit.
+- `POST /swap/orders/:id/submitted` — records a hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/`EXPIRED` order; tracking verifies the tx.
 - `POST /swap/approvals/build` — exact-amount ERC-20 approval calldata, spender/router allowlist, allowance check, deadline check, wallet allowlist, RPC simulation, audit; native token and already-sufficient allowance paths rejected.
 - `GET /swap/approvals` and `POST /swap/approvals/:id/submitted`.
 - Storage of an optional wallet account on quotes for future accounting.

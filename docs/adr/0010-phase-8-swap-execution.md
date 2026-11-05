@@ -49,7 +49,7 @@ Out of scope: Ethereum, unattended trading, hot wallets, seed phrases, and tax l
 
 - Add `sessions.step_up_until`.
 - `POST /auth/step-up` accepts a current TOTP code, verifies it with the existing TOTP service, and sets a 5-minute step-up window on the current session.
-- Build and submit require a fresh step-up when the order's `amountInUsd > SWAP_STEP_UP_THRESHOLD_USD` (default 500). A missing/invalid USD value fails closed and requires step-up; quotes require a valid provider `amountInUsd` and store it on the order.
+- Build, approval build, ready, and signing require a fresh step-up when the order's `amountInUsd > SWAP_STEP_UP_THRESHOLD_USD` (default 500). A missing/invalid USD value fails closed and requires step-up; quotes require a valid provider `amountInUsd` and store it on the order. Submit only records a hash for an already-signed order and does not require a fresh step-up.
 - Step-up attempts use the existing 2FA throttle; every success/failure is audited.
 - The UI prompts for a TOTP code only when the threshold is crossed.
 
@@ -76,7 +76,7 @@ Simple mode (`flags & 0x20`) is rejected: its `firstPools` and `destTokenFeeData
 
 Deadline handling is explicit:
 
-- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative and submission is rejected after it;
+- normal aggregator calldata has no router-level deadline (the deadline lives inside nested executor/DEX calls), so the server-enforced `swap_orders.deadline` is authoritative for new signing; an already-signed hash can still be recorded after it;
 - the execution UI must show this deadline and the wallet must confirm before signing; a transaction already signed by the wallet cannot be invalidated server-side.
 
 This is a deliberate limit: the server verifies the fields that determine recipient and minimum output and relies on the allowlisted executor for nested route semantics. Full recursive decoding of every DEX executor call is out of scope.
@@ -92,7 +92,7 @@ This is a deliberate limit: the server verifies the fields that determine recipi
 
 ### Submission and tracking
 
-- `POST /swap/orders/:id/submitted` accepts a BSC tx hash, verifies order ownership/state/allowlists/step-up, and records `SUBMITTED` + event + audit.
+- `POST /swap/orders/:id/submitted` accepts a BSC tx hash for an already-signed `BUILT`/`READY`/`AWAITING_SIGNATURE`/`EXPIRED` order, verifies ownership/state, and records `SUBMITTED` + event + audit. It is a recovery path and is allowed during a kill switch/execution disable; tracking verifies the tx.
 - An API-hosted `SwapTrackingService` poller (in-process tick guard, conditional status updates) polls the receipt, waits for the configured confirmations, records actual gas, and detects replaced/dropped txs. The ledger's per-user advisory lock and `source/sourceId` idempotency prevent duplicate accounting. The worker remains reserved for future decoupling.
 - Mempool replacement: a different tx hash for the same nonce marks `REPLACED`; dropped nonce marks `DROPPED`.
 - Reorgs before accounting are detected by re-checking the receipt and confirmation count; the order returns to `PENDING` (or `FAILED` if the receipt reverted). A reorg after accounting is outside this slice; 15 confirmations make it unlikely, and any correction must be an append-only compensating transaction in a later slice.

@@ -61,6 +61,8 @@ const reasonMessages: Record<string, string> = {
   SWAP_SELECTOR_NOT_ALLOWED: 'Selector не входит в allowlist. Обновите котировку.',
   SWAP_AMOUNT_INVALID: 'Провайдер вернул некорректную сумму.',
   SWAP_TX_VALUE_MISMATCH: 'Transaction value не совпал с ожидаемым.',
+  SWAP_GAS_TOO_HIGH: 'Стоимость газа выше настроенного лимита.',
+  SWAP_GAS_MISSING: 'Провайдер не вернул стоимость газа.',
   SWAP_INSUFFICIENT_BALANCE: 'На кошельке недостаточно токенов для этой суммы.',
 };
 

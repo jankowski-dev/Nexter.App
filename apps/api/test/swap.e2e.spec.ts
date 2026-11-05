@@ -428,6 +428,10 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .update(swapOrders)
       .set({ deadline: Math.floor(Date.now() / 1000) - 1 })
       .where(eq(swapOrders.id, orderId));
+    await app.get(SwapTrackingService).tick();
+    const [expiredOrder] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(expiredOrder.status).toBe('EXPIRED');
+
     const lateHash = await agent
       .post(`/api/v1/swap/orders/${orderId}/submitted`)
       .set('x-csrf-token', owner.csrf)
@@ -835,6 +839,14 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(400);
     env.SWAP_MAX_GAS_USD = '5';
 
+    quoteGasUsd = null;
+    await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(400);
+    quoteGasUsd = '0.05';
+
     const quoted = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
@@ -849,6 +861,18 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(built.body.error).toMatchObject({
       code: 'SWAP_VALIDATION_FAILED',
       details: { reason: 'SWAP_GAS_TOO_HIGH' },
+    });
+
+    await db.update(swapOrders).set({ gasUsd: null }).where(eq(swapOrders.id, quoted.body.id));
+    buildGasUsd = null;
+    const missing = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quoted.body.id, walletAddress: wallet })
+      .expect(400);
+    expect(missing.body.error).toMatchObject({
+      code: 'SWAP_VALIDATION_FAILED',
+      details: { reason: 'SWAP_GAS_MISSING' },
     });
     buildGasUsd = '0.05';
   }, 60_000);
