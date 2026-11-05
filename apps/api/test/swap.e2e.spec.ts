@@ -296,6 +296,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     latestNonce = 7;
     blockTimestamp = Math.floor(Date.now() / 1000);
     env.SWAP_KILL_SWITCH = false;
+    env.SWAP_ROUTER_ALLOWLIST = router;
+    env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
     await db.execute(sql`truncate table users restart identity cascade`);
     await db.execute(sql`truncate table external_api_calls restart identity cascade`);
@@ -1478,6 +1480,22 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
     expect(order.status).toBe('SUBMITTED');
     expect(order.errors).toContain('SWAP_REPLACEMENT_PENDING');
+
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'6'.repeat(64)}`,
+      transactionHash: `0x${'5'.repeat(64)}`,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 114;
+    await tracking.tick();
+
+    const [replaced] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(replaced.status).toBe('REPLACED');
+    expect(replaced.errors).not.toContain('SWAP_REPLACEMENT_PENDING');
   }, 60_000);
 
   it('does not adopt a different-nonce transaction when the stored nonce is known', async () => {
@@ -1821,6 +1839,14 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(400);
     expect(signing.body.error.code).toBe('SWAP_SELECTOR_NOT_ALLOWED');
+
+    env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
+    env.SWAP_EXECUTOR_ALLOWLIST = '0x3333333333333333333333333333333333333333';
+    const executorSigning = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(400);
+    expect(executorSigning.body.error.code).toBe('SWAP_EXECUTOR_NOT_ALLOWED');
   }, 60_000);
 
   it('requires ready before signing', async () => {

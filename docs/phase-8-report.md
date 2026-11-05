@@ -97,7 +97,7 @@ First slice review: **FAIL** — one High (step-up failed open on missing/numeri
 - Mismatched same-nonce candidates stay active until confirmed, then become `REPLACED`; terminal writes are guarded by tx hash and adoption races recheck the row.
 - Signing requires `READY` and re-checks current selector/executor/token allowlists; the UI exposes “Проверить готовность” for non-approval `BUILT` orders.
 - Post-accounting reorg policy and incident procedure documented (manual append-only correction; automated compensation is a Phase 9 prerequisite).
-- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling, automated reorg compensation.
+- Remaining: mocked WalletConnect UI tests, tracker leader lock, malformed-gas anomaly handling, automated reorg compensation, manual attach-hash endpoint, and the accepted 2-minute content-search grace (an exact external replay within that window is a residual risk).
 
 ## Next
 

@@ -354,7 +354,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
               if (!receipt || confirmations < env.SWAP_CONFIRMATIONS) {
                 await this.recordTrackingAnomaly(order, 'SWAP_REPLACEMENT_PENDING', {
-                  candidateHash: candidate.hash,
+                  candidateHash: candidate.hash.toLowerCase(),
                   candidateBlock: receipt?.blockNumber ?? candidate.blockNumber,
                   confirmations,
                   nonce: order.nonce,
@@ -369,7 +369,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
                   reason: 'replacement_not_matching_order',
                   nonce: order.nonce,
                   latestNonce: count,
-                  candidateHash: candidate.hash,
+                  candidateHash: candidate.hash.toLowerCase(),
                   candidateBlock: receipt.blockNumber,
                   confirmations,
                 },
@@ -388,7 +388,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             }
 
             tx = candidate;
-            txHash = candidate.hash;
+            txHash = candidate.hash.toLowerCase();
             currentOrder = {
               ...order,
               status: 'PENDING',
@@ -422,7 +422,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
             matches.length > 1 ? 'SWAP_REPLACEMENT_AMBIGUOUS' : 'SWAP_REPLACEMENT_NOT_FOUND',
             {
               matchCount: matches.length,
-              candidateHashes: matches.slice(0, 10).map((item) => item.hash),
+              candidateHashes: matches.slice(0, 10).map((item) => item.hash.toLowerCase()),
               lookbackBlocks: env.SWAP_REPLACEMENT_LOOKBACK_BLOCKS,
               submittedAt: order.submittedAt?.toISOString() ?? null,
             },
@@ -438,7 +438,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         }
 
         tx = matches[0];
-        txHash = matches[0].hash;
+        txHash = matches[0].hash.toLowerCase();
         currentOrder = {
           ...order,
           status: 'PENDING',
@@ -543,7 +543,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         type: 'replacement_adopted',
         payload: {
           previousTxHash: order.txHash,
-          txHash: tx.hash,
+          txHash: tx.hash.toLowerCase(),
           nonce: tx.nonce,
           blockNumber: tx.blockNumber,
         },
@@ -555,7 +555,11 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           action: 'swap.order_replacement_adopted',
           entityType: 'swap_order',
           entityId: order.id,
-          after: { previousTxHash: order.txHash, txHash: tx.hash, nonce: tx.nonce },
+          after: {
+            previousTxHash: order.txHash,
+            txHash: tx.hash.toLowerCase(),
+            nonce: tx.nonce,
+          },
         },
         { executor: dbtx, strict: true },
       );
@@ -929,6 +933,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         .set({
           status,
           confirmations: 0,
+          errors: withoutTrackingAnomalies(order.errors),
           ...(status === 'FAILED' ? {} : { blockNumber: null }),
           updatedAt: new Date(),
         })
