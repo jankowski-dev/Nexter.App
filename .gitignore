@@ -13,3 +13,4 @@ playwright-report
 blob-report
 apps/api/public/*
 !apps/api/public/.gitkeep
+data/

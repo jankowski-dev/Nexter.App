@@ -6,7 +6,10 @@ function configuredForChain(
   bscValue: string | undefined,
   ethereumValue: string | undefined,
 ): string[] {
-  return parseAddressList(chain === 'ethereum' ? ethereumValue : bscValue);
+  if (chain === 'bsc') return parseAddressList(bscValue);
+  if (chain === 'ethereum') return parseAddressList(ethereumValue);
+
+  throw new Error(`Unknown swap chain: ${chain}`);
 }
 
 export function routerAllowlist(chain: string): string[] {

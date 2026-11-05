@@ -30,11 +30,30 @@ function toBaseUnits(value: string, decimals: number): bigint {
 }
 
 const TRACKING_ANOMALY_PREFIXES = ['SWAP_REPLACEMENT_', 'SWAP_TX_NOT_FOUND'];
+const RECEIPT_MISSING_CODE = 'SWAP_ACCOUNTING_RECEIPT_MISSING';
 
 function withoutTrackingAnomalies(errors: string[]): string[] {
   return errors.filter(
     (item) => !TRACKING_ANOMALY_PREFIXES.some((prefix) => item.startsWith(prefix)),
   );
+}
+
+function receiptMissingAttempts(errors: string[]): number {
+  let attempts = 0;
+
+  for (const code of errors) {
+    if (code === RECEIPT_MISSING_CODE) {
+      attempts = Math.max(attempts, 1);
+      continue;
+    }
+
+    if (code.startsWith(`${RECEIPT_MISSING_CODE}_`)) {
+      const suffix = Number.parseInt(code.slice(RECEIPT_MISSING_CODE.length + 1), 10);
+      if (Number.isSafeInteger(suffix) && suffix > attempts) attempts = suffix;
+    }
+  }
+
+  return attempts;
 }
 
 @Injectable()
@@ -993,11 +1012,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
       if (latest === null) return;
 
       if (!receipt) {
-        const missingAttempts = order.errors.filter(
-          (code) =>
-            code === 'SWAP_ACCOUNTING_RECEIPT_MISSING' ||
-            code.startsWith('SWAP_ACCOUNTING_RECEIPT_MISSING_'),
-        ).length;
+        const missingAttempts = receiptMissingAttempts(order.errors);
 
         if (missingAttempts >= 2) {
           await this.revertConfirmed(order, null, latest, 'receipt_missing_after_retries');
@@ -1010,8 +1025,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         await this.recordAccountingFailure(
           order,
           missingAttempts === 0
-            ? 'SWAP_ACCOUNTING_RECEIPT_MISSING'
-            : `SWAP_ACCOUNTING_RECEIPT_MISSING_${missingAttempts + 1}`,
+            ? RECEIPT_MISSING_CODE
+            : `${RECEIPT_MISSING_CODE}_${missingAttempts + 1}`,
         );
         return;
       }
@@ -1289,6 +1304,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           executedAmountOut: null,
           networkFeeWei: null,
           networkFeeUsd: null,
+          errors: order.errors.filter((code) => !code.startsWith(RECEIPT_MISSING_CODE)),
           updatedAt: new Date(),
         })
         .where(
