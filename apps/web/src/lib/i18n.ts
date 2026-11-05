@@ -2,9 +2,9 @@ export const messages = {
   app: {
     name: 'Nexter',
     tagline: 'личные финансы',
-    phase: 'Фаза 8 · Swap execution',
+    phase: 'Фаза 9 · Swap execution',
     header: 'Личный финансовый учёт',
-    status: 'MVP-1 + котировки BSC',
+    status: 'MVP-1 + свопы BSC/Ethereum',
   },
   nav: {
     dashboard: 'Дашборд',

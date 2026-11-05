@@ -2,7 +2,17 @@
 
 Date: 2026-11-05
 
-Status: **implementation deployed 2026-11-05; live Ethereum acceptance pending explicit owner approval.** PR #30 merged as `c869a12`; Railway API/worker deployments `SUCCESS`; `/health` and `/ready` 200; no schema migration. Ethereum execution remains disabled until `ETHEREUM_RPC_URL` is configured and a live Tangem acceptance is approved.
+Status: **accepted on 2026-11-05.** PR #30 merged as `c869a12`; Railway API/worker deployments `SUCCESS`; `/health` and `/ready` 200; no schema migration. A live Ethereum swap completed and accounting was created.
+
+## Live acceptance
+
+On 2026-11-05 the owner approved and completed a small live Ethereum swap:
+
+- 0.0001 ETH → 0.22526 USDC on Ethereum mainnet;
+- order `92e1bada…`, tx `0x7ecdd673…`, 12 confirmations, status `CONFIRMED`;
+- the first accounting attempt failed `SWAP_ACCOUNTING_NO_FUNDED_ACCOUNT` because the Tangem Ethereum ledger account had no ETH balance;
+- after adding the ETH opening balance, the tracker created accounting and `/swap` shows “учёт создан”;
+- Ethereum execution remains enabled in production after acceptance; `SWAP_ETHEREUM_EXECUTION_ENABLED` and the global kill switch are rollback controls.
 
 ## Scope
 
@@ -18,9 +28,9 @@ Status: **implementation deployed 2026-11-05; live Ethereum acceptance pending e
 - `EvmRpcService` is chain-aware; BSC uses `BSC_RPC_URL`, Ethereum uses `ETHEREUM_RPC_URL`. It validates and caches `eth_chainId` before using an endpoint, so a wrong-chain RPC fails closed. `/signing` re-probes the chain before the signing lock.
 - Router/executor defaults are per chain. `SWAP_BSC_*`/`SWAP_ETHEREUM_*` allowlists are preferred; the legacy global lists stay BSC-only and are never inherited by Ethereum.
 - Tracking polls per-chain block numbers, isolates per-chain RPC failures, uses `SWAP_BSC_CONFIRMATIONS`/`SWAP_ETHEREUM_CONFIRMATIONS`, and derives the gas asset from the chain registry (BNB/ETH). Missing confirmed receipts are retried; after repeated misses the order returns to `PENDING` for re-tracking.
-- `SwapService.config()` exposes per-chain `rpcConfigured` and `executionEnabled`. Ethereum execution is off by default even when BSC execution is enabled.
+- `SwapService.config()` exposes per-chain `rpcConfigured` and `executionEnabled`. Ethereum execution is off by default for new deployments and was enabled in production after live acceptance.
 - `/signing` rejects Ethereum orders unless `SWAP_ETHEREUM_EXECUTION_ENABLED=true` and the global execution flag are both set.
-- The UI allows selecting BSC or Ethereum, resets token selection on chain change, shows RPC/execution status, binds signing to the order's chain/ID, and switches WalletConnect to the selected chain before signing.
+- The UI allows selecting BSC or Ethereum, exposes BSC/Ethereum wallet-switch buttons, resets token selection on chain change, shows RPC/execution status, binds signing to the order's chain/ID, and switches WalletConnect to the selected chain before signing.
 - `scripts/swap-live-check.mjs` supports `bsc` and `ethereum`; it prints only chain id, router bytecode size, and quote amounts, never RPC URLs or API keys.
 
 ## Verification
@@ -36,9 +46,11 @@ Status: **implementation deployed 2026-11-05; live Ethereum acceptance pending e
 1. Configure `ETHEREUM_RPC_URL` (prefer private/MEV-protected) and `KYBERSWAP_API_KEY`.
 2. Prefer per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` router/executor allowlists; legacy global lists are BSC-only. Empty lists use chain defaults.
 3. Run `node scripts/swap-live-check.mjs ethereum`.
-4. Enable `SWAP_ETHEREUM_EXECUTION_ENABLED=true` only for the acceptance window; keep the kill switch ready.
+4. `SWAP_ETHEREUM_EXECUTION_ENABLED=true` is enabled after acceptance; keep the kill switch ready.
 5. Execute a small swap with Tangem; verify build → ready → signing → submit → tracking → accounting, plus the rejection/cancel path.
 6. Record the order, tx hash, confirmations, accounting transaction, and deployment ID; disable the Ethereum flag if acceptance fails.
+
+Completed 2026-11-05: see Live acceptance above.
 
 ## Residuals
 
