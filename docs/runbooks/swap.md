@@ -26,7 +26,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Provider outage / rate limit
 
 - `429` and `5xx` are retried twice. A 429 maps to `SWAP_RATE_LIMITED`; network/provider exhaustion maps to `SWAP_PROVIDER_UNAVAILABLE`; other provider failures map to `SWAP_QUOTE_FAILED`/`SWAP_BUILD_FAILED`.
-- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s); `SWAP_EXECUTION_ENABLED` can also be disabled to hide signing, and submit is blocked server-side.
+- If the provider is degraded, enable the kill switch. Quotes are short-lived (15 s); `SWAP_EXECUTION_ENABLED` can also be disabled to hide signing, and submit is blocked server-side. Use `POST /swap/orders/:id/signing/cancel` to release an in-flight signing lock.
 - Check `external_api_calls` for status/latency; it contains no secrets or response bodies.
 
 ## Key rotation
@@ -56,7 +56,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 - Tracking starts whenever `BSC_RPC_URL` is configured, even if `SWAP_ENABLED=false`, so in-flight transactions continue to confirm and account during a rollback.
 - Speed-up/replacement transactions are detected as `REPLACED` but are not adopted automatically; a same-nonce replacement that actually executed is a known limitation for the execution slice.
 - The tracking poller verifies sender, router, calldata, and value before confirming. Replaced/dropped/failed transactions never create accounting. Reorgs before accounting return the order to `PENDING`; post-accounting reorg compensation is a later slice.
-- All execution endpoints remain disabled until `SWAP_ENABLED=true`, wallet/router/selector allowlists are set, and the remaining Phase 8 slices are reviewed. No signing UI exists yet.
+- All execution endpoints remain disabled until `SWAP_ENABLED=true`, wallet/router/selector allowlists are set, and the remaining Phase 8 slices are reviewed. The signing UI exists but stays disabled until `SWAP_EXECUTION_ENABLED=true`; `signing/cancel` works even during a kill switch.
 
 ## Verification
 

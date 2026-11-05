@@ -12,6 +12,7 @@ import {
   postings,
   swapEvents,
   swapOrders,
+  tokenApprovals,
   transactions,
   type Database,
 } from '@nexter/db';
@@ -739,6 +740,35 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(200);
     expect(approvalSubmitted.body.status).toBe('SUBMITTED');
 
+    const approvalTxHash = `0x${'a'.repeat(64)}`;
+    chainTx = {
+      hash: approvalTxHash,
+      from: wallet,
+      to: tokenIn,
+      input: approval.body.calldata,
+      value: '0x0',
+      nonce: 10,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'b'.repeat(64)}`,
+      transactionHash: approvalTxHash,
+      gasUsed: '50000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [],
+    };
+    latestBlock = 114;
+    const tracking = app.get(SwapTrackingService);
+    await tracking.tick();
+
+    const [trackedApproval] = await db
+      .select()
+      .from(tokenApprovals)
+      .where(eq(tokenApprovals.id, approval.body.approval.id));
+    expect(trackedApproval.status).toBe('CONFIRMED');
+
     const notReady = await agent
       .post(`/api/v1/swap/orders/${orderId}/ready`)
       .set('x-csrf-token', owner.csrf)
@@ -760,6 +790,15 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(signing.body.status).toBe('AWAITING_SIGNATURE');
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/ready`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
 
     env.SWAP_WALLET_ALLOWLIST = '';
     await agent
@@ -813,6 +852,40 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     quoteAmountInUsd = null;
     quoteAmountOutUsd = null;
     await quote().expect(400);
+  }, 60_000);
+
+  it('releases a signing lock under the kill switch', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({ chain: 'bsc', tokenIn, tokenOut, amountIn: '1', walletAddress: wallet })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
+    env.SWAP_KILL_SWITCH = true;
+    const cancelled = await agent
+      .post(`/api/v1/swap/orders/${orderId}/signing/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(cancelled.body.status).toBe('READY');
+    env.SWAP_KILL_SWITCH = false;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'9'.repeat(64)}` })
+      .expect(200);
   }, 60_000);
 
   it('blocks submission while execution is disabled', async () => {

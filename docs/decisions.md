@@ -181,3 +181,5 @@ Format: date — decision — reason.
 - **Build no longer fails on a first-time ERC-20 approval.** Insufficient allowance produces `APPROVAL_REQUIRED` with stored calldata; `POST /swap/orders/:id/ready` re-checks balance/allowance/simulation and moves the order to `READY`. Submit accepts `READY` or `BUILT`.
 - **Signing is gated.** `SWAP_EXECUTION_ENABLED` defaults to false and is exposed as `executionEnabled`; the UI allows build/approval preparation but hides WalletConnect signing until the owner enables it after final review and manual Tangem acceptance.
 - **The browser signs; the server never does.** Approval is exact and the swap transaction is built server-side, decoded/verified, simulated, and submitted as a hash; tracking/accounting remain server-side.
+
+- **Signing lock recovery.** `POST /signing` moves `BUILT`/`READY` to `AWAITING_SIGNATURE`; `ready` must not clear that state. `/signing/cancel` releases it and works even when `SWAP_ENABLED`/kill switch blocks new execution. Approval tracking marks stale/failed approvals `FAILED` after the drop timeout so an approval can be rebuilt.

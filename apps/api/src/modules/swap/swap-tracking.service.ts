@@ -188,7 +188,15 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
 
     const receipt = await this.rpc.getTransactionReceipt(txHash);
 
-    if (!receipt) return;
+    if (!receipt) {
+      if (
+        approval.submittedAt &&
+        Date.now() - approval.submittedAt.getTime() > env.SWAP_DROP_TIMEOUT_SECONDS * 1000
+      ) {
+        await this.markApproval(approval, 'FAILED', 'approval_not_mined');
+      }
+      return;
+    }
 
     if (!receipt.status) {
       await this.markApproval(approval, 'FAILED', 'approval_receipt_failed', receipt.blockNumber);
