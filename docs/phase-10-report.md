@@ -2,7 +2,7 @@
 
 Date: 2026-11-05
 
-Status: **implementation in progress; live reconciliation acceptance pending.**
+Status: **implementation accepted 2026-11-06; live reconciliation pending owner-run after the data freeze.** PR #34 is merged and deployed (`4171140`, API/worker `SUCCESS`, `/ready` 200). The live reconciliation run was not executed by the agent because agents have no production access and the Notion-derived data is still changing.
 
 ## Scope
 
