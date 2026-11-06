@@ -27,6 +27,35 @@ POST /api/v1/reconciliation/addresses
 
 Repeat for Ethereum. A reconciliation run also auto-adds wallet addresses seen on swap orders (audited).
 
+## Owner console recipe (no UI yet)
+
+After enabling `RECONCILIATION_ENABLED=true` and signing in, open `/swap` and run this in DevTools Console. It uses the existing session/CSRF cookies and prints only run results:
+
+```js
+(async () => {
+  const csrf = document.cookie
+    .split('; ')
+    .find((c) => c.startsWith('nexter_csrf='))
+    ?.split('=')[1];
+  if (!csrf) return console.error('CSRF cookie not found');
+  const headers = { 'content-type': 'application/json', 'x-csrf-token': csrf };
+  const wallet = '0x…';
+  for (const chain of ['bsc', 'ethereum']) {
+    await fetch('/api/v1/reconciliation/addresses', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ chain, address: wallet, label: 'Tangem' }),
+    });
+    const run = await fetch('/api/v1/reconciliation/run', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ chain }),
+    });
+    console.log(chain, run.status, JSON.stringify(await run.json(), null, 2));
+  }
+})();
+```
+
 ## Run
 
 ```http

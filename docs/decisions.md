@@ -217,4 +217,6 @@ Format: date — decision — reason.
 - **Indexer.** ERC-20 `Transfer` logs and non-zero native transfers are indexed into `indexed_transfers` by `event_key`; the API-hosted indexer uses a Postgres advisory lock, a bounded block range per tick, and a resumable per-address cursor.
 - **Reconciliation is a report, not a correction.** Runs compare aggregate ledger wallet balances with the sum of on-chain balances across watched addresses and persist `MATCH`/`MISMATCH`/`MISSING_ONCHAIN`/`MISSING_LEDGER` items. Mismatches are investigated and corrected only with new append-only ledger transactions.
 - **Gas backfill is raw-only.** Missing `network_fee_wei` on confirmed swap orders is filled from the receipt with audit; USD gas and accounting rows are not invented or rewritten.
-- **Rollout.** `RECONCILIATION_ENABLED` defaults to false; enabling it starts the indexer. No UI in Phase 10; API/runbook only. Migration `0014` is additive.
+- **Rollout.** `RECONCILIATION_ENABLED` defaults to false; enabling it starts the indexer. No UI in Phase 10; API/runbook only. Migrations `0014`/`0015` are additive.
+
+- **Phase 10 implementation accepted (2026-11-06).** PR #34 merged as `4171140`; API/worker deployments `SUCCESS`; `/ready` 200. Live reconciliation is pending an owner-run after the Notion-derived data stabilizes; agents have no production access. `RECONCILIATION_ENABLED` remains false until that run.
