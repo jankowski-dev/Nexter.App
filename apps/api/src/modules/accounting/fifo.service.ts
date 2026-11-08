@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { lotConsumptions, lots, tradeGroups, type DbExecutor } from '@nexter/db';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
 import { planFifo } from './fifo.math';
@@ -8,6 +8,7 @@ export interface ConsumeOptions {
   proceedsUsd?: Decimal;
   feeUsd?: Decimal;
   realize?: boolean;
+  groupIds?: string[];
 }
 
 export interface ConsumeResult {
@@ -27,10 +28,21 @@ export class FifoService {
     options: ConsumeOptions = {},
   ): Promise<ConsumeResult> {
     const amount = decimal(amountValue);
+    const groupFilter =
+      options.groupIds && options.groupIds.length > 0
+        ? inArray(lots.tradeGroupId, options.groupIds)
+        : undefined;
     const lotRows = await executor
       .select()
       .from(lots)
-      .where(and(eq(lots.userId, userId), eq(lots.assetId, assetId), gt(lots.remainingAmount, '0')))
+      .where(
+        and(
+          eq(lots.userId, userId),
+          eq(lots.assetId, assetId),
+          gt(lots.remainingAmount, '0'),
+          groupFilter,
+        ),
+      )
       .orderBy(asc(lots.acquiredAt), asc(lots.createdAt))
       .for('update');
 

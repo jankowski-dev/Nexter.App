@@ -38,6 +38,31 @@ export class AssetsService {
     return rows.map((row) => this.toContract(row));
   }
 
+  async findForSwapToken(
+    chainCode: string,
+    token: { symbol: string; address: string; native: boolean },
+    executor: DbExecutor = this.db,
+  ): Promise<Asset | null> {
+    const [chain] = await executor.select().from(chains).where(eq(chains.code, chainCode)).limit(1);
+
+    if (!chain) return null;
+
+    const [row] = await executor
+      .select()
+      .from(assets)
+      .where(
+        and(
+          eq(assets.chainId, chain.id),
+          token.native
+            ? eq(assets.symbol, token.symbol)
+            : eq(assets.contractAddress, token.address.toLowerCase()),
+        ),
+      )
+      .limit(1);
+
+    return row ?? null;
+  }
+
   async get(assetId: string): Promise<AssetContract> {
     const [row] = await this.db
       .select({ asset: assets, chainCode: chains.code })

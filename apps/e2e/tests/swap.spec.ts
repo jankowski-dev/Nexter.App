@@ -172,6 +172,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         calldata: null,
         transactionValue: null,
         gasEstimate: null,
+        closeGroupIds: [],
         errors: [],
         events: [],
       }),

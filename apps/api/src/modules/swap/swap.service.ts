@@ -8,8 +8,17 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { and, desc, eq, gt, inArray, lt, lte, ne, or } from 'drizzle-orm';
-import { swapEvents, swapOrders, type Database, type SwapOrder } from '@nexter/db';
+import { and, desc, eq, gt, inArray, lt, lte, ne, or, sql } from 'drizzle-orm';
+import {
+  lots,
+  swapEvents,
+  swapOrderCloseGroups,
+  swapOrders,
+  tradeGroups,
+  type Database,
+  type DbExecutor,
+  type SwapOrder,
+} from '@nexter/db';
 import type {
   SwapBuildRequest,
   SwapBuildResponse,
@@ -25,6 +34,7 @@ import type {
 } from '@nexter/contracts';
 import type { AuthContext } from '../auth/auth.types';
 import { AccountsService } from '../accounting/accounts.service';
+import { AssetsService } from '../accounting/assets.service';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env, executionEnabledForChain } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
@@ -145,6 +155,7 @@ export class SwapService {
     private readonly rpc: EvmRpcService,
     private readonly audit: AuditService,
     private readonly accounts: AccountsService,
+    private readonly assets: AssetsService,
   ) {}
 
   config(): SwapConfigResponse {
@@ -214,6 +225,17 @@ export class SwapService {
     }
 
     const amountInBase = toBaseUnits(input.amountIn, tokenIn.decimals);
+
+    if (input.closeGroupIds) {
+      await this.validateCloseGroups(
+        userId,
+        input.chain,
+        tokenIn,
+        tokenOut,
+        input.closeGroupIds,
+        input.amountIn,
+      );
+    }
 
     let route;
 
@@ -374,6 +396,27 @@ export class SwapService {
 
       if (!created) throw new Error('Failed to create swap quote');
 
+      if (input.closeGroupIds) {
+        const closeGroups = await this.validateCloseGroups(
+          userId,
+          input.chain,
+          tokenIn,
+          tokenOut,
+          input.closeGroupIds,
+          input.amountIn,
+          tx,
+        );
+
+        await tx.insert(swapOrderCloseGroups).values(
+          closeGroups.rows.map((row) => ({
+            orderId: created.id,
+            tradeGroupId: row.id,
+            assetId: closeGroups.assetId,
+            expectedAmount: row.remaining,
+          })),
+        );
+      }
+
       await tx.insert(swapEvents).values({
         orderId: created.id,
         type: 'quote_created',
@@ -381,6 +424,7 @@ export class SwapService {
           quoteExpiresAt: quoteExpiresAt.toISOString(),
           priceImpactBps,
           warnings,
+          closeGroupIds: input.closeGroupIds ?? [],
         },
       });
 
@@ -396,6 +440,7 @@ export class SwapService {
             tokenOut: tokenOut.symbol,
             amountIn: input.amountIn,
             amountOut: created.amountOut,
+            closeGroupIds: input.closeGroupIds ?? [],
             status: 'QUOTED',
           },
           ip: meta.ip,
@@ -428,6 +473,8 @@ export class SwapService {
         message: `Swap order is ${order.status}`,
       });
     }
+
+    await this.assertCloseGroupsUnchanged(order);
 
     assertStepUp(auth, order);
 
@@ -857,6 +904,7 @@ export class SwapService {
 
     assertStepUp(auth, order);
     this.assertWallet(order.walletAddress ?? undefined, true);
+    await this.assertCloseGroupsUnchanged(order);
 
     if (
       !order.routerAddress ||
@@ -1149,6 +1197,7 @@ export class SwapService {
 
     assertStepUp(auth, order);
     this.assertWallet(order.walletAddress ?? undefined, true);
+    await this.assertCloseGroupsUnchanged(order);
 
     if (
       !order.routerAddress ||
@@ -1476,6 +1525,152 @@ export class SwapService {
     return this.detail(userId, orderId, []);
   }
 
+  private async validateCloseGroups(
+    userId: string,
+    chain: SwapChainCode,
+    tokenIn: SwapToken,
+    tokenOut: SwapToken,
+    closeGroupIds: string[],
+    amountIn: string,
+    executor: DbExecutor = this.db,
+    enforceTotal = true,
+  ): Promise<{ assetId: string; rows: Array<{ id: string; remaining: string }> }> {
+    if (!isCashEquivalentSymbol(tokenOut.symbol)) {
+      throw new BadRequestException({
+        code: 'SWAP_CLOSE_OUTPUT_NOT_CASH',
+        message: 'Closing a position requires a cash-equivalent output asset',
+      });
+    }
+
+    const asset = await this.assets.findForSwapToken(chain, tokenIn, executor);
+
+    if (!asset || asset.isCashEquivalent) {
+      throw new BadRequestException({
+        code: 'SWAP_CLOSE_ASSET_INVALID',
+        message: 'Closing a position requires a non-cash input asset',
+      });
+    }
+
+    const rows = await executor
+      .select({
+        id: tradeGroups.id,
+        assetId: tradeGroups.assetId,
+        status: tradeGroups.status,
+        remaining: sql<string>`coalesce(sum(${lots.remainingAmount}), 0)::text`,
+      })
+      .from(tradeGroups)
+      .leftJoin(lots, eq(lots.tradeGroupId, tradeGroups.id))
+      .where(and(eq(tradeGroups.userId, userId), inArray(tradeGroups.id, closeGroupIds)))
+      .groupBy(tradeGroups.id, tradeGroups.assetId, tradeGroups.status);
+
+    if (rows.length !== closeGroupIds.length) {
+      throw new BadRequestException({
+        code: 'SWAP_CLOSE_GROUP_NOT_FOUND',
+        message: 'One or more close groups were not found',
+        details: { closeGroupIds },
+      });
+    }
+
+    let total = new Decimal(0);
+
+    for (const row of rows) {
+      if (row.assetId !== asset.id) {
+        throw new BadRequestException({
+          code: 'SWAP_CLOSE_GROUP_ASSET_MISMATCH',
+          message: 'Close group asset does not match the swap input asset',
+          details: { tradeGroupId: row.id },
+        });
+      }
+
+      if (row.status === 'closed') {
+        throw new BadRequestException({
+          code: 'SWAP_CLOSE_GROUP_CLOSED',
+          message: 'A selected close group is already closed',
+          details: { tradeGroupId: row.id },
+        });
+      }
+
+      const remaining = decimal(row.remaining);
+
+      if (remaining.lte(0)) {
+        throw new BadRequestException({
+          code: 'SWAP_CLOSE_GROUP_CLOSED',
+          message: 'A selected close group has no remaining amount',
+          details: { tradeGroupId: row.id },
+        });
+      }
+
+      total = total.plus(remaining);
+    }
+
+    if (enforceTotal && !total.eq(decimal(amountIn))) {
+      throw new BadRequestException({
+        code: 'SWAP_CLOSE_AMOUNT_MISMATCH',
+        message: 'Swap amount must equal the remaining amount of the selected close groups',
+        details: {
+          closeGroupIds,
+          amountIn: decimal(amountIn).toFixed(tokenIn.decimals),
+          closeTotal: total.toFixed(tokenIn.decimals),
+        },
+      });
+    }
+
+    return {
+      assetId: asset.id,
+      rows: rows.map((row) => ({ id: row.id, remaining: row.remaining })),
+    };
+  }
+
+  private async assertCloseGroupsUnchanged(order: SwapOrder): Promise<void> {
+    const stored = await this.db
+      .select()
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, order.id));
+
+    if (stored.length === 0) return;
+
+    if (stored.some((row) => !row.tradeGroupId)) {
+      throw new BadRequestException({
+        code: 'SWAP_CLOSE_GROUP_NOT_FOUND',
+        message: 'A selected close group no longer exists',
+      });
+    }
+
+    const tokenIn = getSwapToken(order.chain, order.tokenIn);
+    const tokenOut = getSwapToken(order.chain, order.tokenOut);
+
+    if (!tokenIn || !tokenOut) {
+      throw new BadRequestException({
+        code: 'SWAP_TOKEN_NOT_ALLOWED',
+        message: 'Stored token is not in the current registry',
+      });
+    }
+
+    const current = await this.validateCloseGroups(
+      order.userId,
+      order.chain as SwapChainCode,
+      tokenIn,
+      tokenOut,
+      stored.map((row) => row.tradeGroupId as string),
+      order.amountIn,
+      this.db,
+      false,
+    );
+    const remainingById = new Map(current.rows.map((row) => [row.id, row.remaining]));
+
+    for (const row of stored) {
+      const remaining = remainingById.get(row.tradeGroupId as string);
+
+      if (!remaining || !decimal(remaining).eq(decimal(row.expectedAmount))) {
+        throw new BadRequestException({
+          code: 'SWAP_CLOSE_GROUP_CHANGED',
+          message: 'A selected close group changed after the quote; request a new quote',
+          details: { tradeGroupId: row.tradeGroupId },
+        });
+      }
+    }
+  }
+
   private async detail(
     userId: string,
     orderId: string,
@@ -1488,6 +1683,10 @@ export class SwapService {
       .from(swapEvents)
       .where(eq(swapEvents.orderId, orderId))
       .orderBy(swapEvents.createdAt);
+    const closeGroups = await this.db
+      .select({ tradeGroupId: swapOrderCloseGroups.tradeGroupId })
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, orderId));
 
     return {
       ...this.summary(order),
@@ -1495,6 +1694,9 @@ export class SwapService {
       calldata: order.calldata,
       transactionValue: order.transactionValue,
       gasEstimate: order.gasEstimate,
+      closeGroupIds: closeGroups
+        .map((row) => row.tradeGroupId)
+        .filter((id): id is string => Boolean(id)),
       errors: [...order.errors, ...warnings],
       events: events.map((event) => ({
         id: event.id,

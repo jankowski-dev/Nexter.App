@@ -6,7 +6,14 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { and, asc, eq, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
-import { swapEvents, swapOrders, tokenApprovals, type Database, type SwapOrder } from '@nexter/db';
+import {
+  swapEvents,
+  swapOrderCloseGroups,
+  swapOrders,
+  tokenApprovals,
+  type Database,
+  type SwapOrder,
+} from '@nexter/db';
 import { AuditService } from '../../shared/audit/audit.service';
 import { confirmationsForChain, env } from '../../shared/config/env';
 import { DB, DB_POOL } from '../../shared/db/db.module';
@@ -1226,6 +1233,19 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
     // quote-derived USD can differ by rounding and the ledger rejects it.
     const usdValueIn = assetIn.isCashEquivalent ? undefined : inUsd;
     const usdValueOut = assetOut.isCashEquivalent || !outUsd ? undefined : outUsd;
+    const closeGroupRows = await this.db
+      .select({ tradeGroupId: swapOrderCloseGroups.tradeGroupId })
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, order.id));
+
+    if (closeGroupRows.some((row) => !row.tradeGroupId)) {
+      await this.recordAccountingFailure(order, 'SWAP_ACCOUNTING_CLOSE_GROUP_NOT_FOUND');
+      return;
+    }
+
+    const closeGroupIds = closeGroupRows
+      .map((row) => row.tradeGroupId)
+      .filter((id): id is string => Boolean(id));
 
     let result;
 
@@ -1241,6 +1261,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           amountOut: order.executedAmountOut,
           ...(usdValueIn ? { usdValueIn } : {}),
           ...(usdValueOut ? { usdValueOut } : {}),
+          ...(closeGroupIds.length > 0 ? { closeGroupIds } : {}),
           ...(fee ?? {}),
           occurredAt,
           notes: `KyberSwap ${tokenIn.symbol} -> ${tokenOut.symbol} (${order.txHash})`,
@@ -1287,6 +1308,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
         payload: {
           transactionId: result.transaction.id,
           tradeGroupId: result.transaction.tradeGroupId,
+          closeGroupIds,
         },
       });
 
@@ -1299,6 +1321,7 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           after: {
             transactionId: result.transaction.id,
             tradeGroupId: result.transaction.tradeGroupId,
+            closeGroupIds,
             source: 'kyberswap',
           },
         },

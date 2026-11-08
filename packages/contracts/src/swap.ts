@@ -67,6 +67,12 @@ export const swapQuoteRequestSchema = z
       .string()
       .regex(/^0x[0-9a-fA-F]{40}$/)
       .optional(),
+    closeGroupIds: z
+      .array(z.uuid())
+      .min(1)
+      .max(50)
+      .refine((ids) => new Set(ids).size === ids.length, 'Duplicate close group ids')
+      .optional(),
   })
   .refine((value) => value.tokenIn.toLowerCase() !== value.tokenOut.toLowerCase(), {
     message: 'tokenIn and tokenOut must differ',
@@ -113,6 +119,7 @@ export const swapOrderDetailSchema = swapOrderSummarySchema.extend({
   calldata: z.string().nullable(),
   transactionValue: z.string().nullable(),
   gasEstimate: z.string().nullable(),
+  closeGroupIds: z.array(z.uuid()),
   errors: z.array(z.string()),
   events: z.array(
     z.object({
