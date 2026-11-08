@@ -9,9 +9,10 @@ import { Setup2faPage } from '@/features/auth/setup-2fa-page';
 import { SetupPage } from '@/features/auth/setup-page';
 import { TwoFactorPage } from '@/features/auth/two-factor-page';
 import { TradeDetailPage } from '@/features/trades/trade-detail-page';
-import { TradesPage } from '@/features/trades/trades-page';
 import { WatchlistPage } from '@/features/watchlist/watchlist-page';
 import { SwapPage } from '@/features/swap/swap-page';
+import { OperationsPage } from '@/features/operations/operations-page';
+import { ReportsPage } from '@/features/reports/reports-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
@@ -134,13 +135,27 @@ const assetDetailRoute = createRoute({
 const tradesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/trades',
-  component: TradesPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/portfolio' });
+  },
 });
 
 const tradeDetailRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/trades/$tradeId',
   component: TradeDetailPage,
+});
+
+const operationsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/operations',
+  component: OperationsPage,
+});
+
+const reportsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/reports',
+  component: ReportsPage,
 });
 
 const importRoute = createRoute({
@@ -207,6 +222,8 @@ const routeTree = rootRoute.addChildren([
     assetDetailRoute,
     tradesRoute,
     tradeDetailRoute,
+    operationsRoute,
+    reportsRoute,
     importRoute,
     watchlistRoute,
     swapRoute,
