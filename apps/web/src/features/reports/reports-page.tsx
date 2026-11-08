@@ -1,26 +1,95 @@
 import { AllocationBar } from '@/components/charts/allocation-bar';
 import { BarChart } from '@/components/charts/bar-chart';
 import { LineChart } from '@/components/charts/line-chart';
+import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
+import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import {
+  downloadExport,
   fetchDashboardActivePositions,
   fetchDashboardAllocation,
-  fetchDashboardPnl,
   fetchDashboardSummary,
   fetchEquityCurve,
+  fetchReports,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatCount,
-  formatPct,
+  formatDate,
   formatSignedUsd,
   formatTokenAmount,
   formatUsd,
+  pluralizeRu,
   pnlTone,
 } from '@/lib/format';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
+import { useMemo, useState } from 'react';
+
+type PeriodPreset = '30d' | '90d' | '365d' | 'ytd' | 'all' | 'custom';
+
+const presetLabels: Record<PeriodPreset, string> = {
+  '30d': '30 дней',
+  '90d': '90 дней',
+  '365d': '12 месяцев',
+  ytd: 'С начала года',
+  all: 'Всё время',
+  custom: 'Свой период',
+};
+
+const operationLabels: Record<string, string> = {
+  deposit: 'Пополнения',
+  withdrawal: 'Выводы',
+  buy: 'Покупки',
+  sell: 'Продажи',
+  swap: 'Обмены',
+  transfer: 'Переводы',
+  income: 'Доход',
+  adjustment: 'Корректировки',
+  fee: 'Сборы',
+};
+
+function localDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function shiftDays(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return localDateString(date);
+}
+
+function monthLabel(month: string): string {
+  return new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
+    new Date(`${month}-01T00:00:00.000Z`),
+  );
+}
+
+function formatRatio(value: string | null): string {
+  if (!value) return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number);
+}
+
+function formatRate(value: string | null): string {
+  if (!value) return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number)}%`;
+}
 
 function Metric({
   label,
@@ -47,8 +116,42 @@ function Metric({
 }
 
 export function ReportsPage() {
+  const [preset, setPreset] = useState<PeriodPreset>('all');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [exportNotice, setExportNotice] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const period = useMemo(() => {
+    if (preset === 'custom') {
+      return {
+        from: customFrom || undefined,
+        to: customTo || undefined,
+      };
+    }
+
+    if (preset === 'all') return { from: undefined, to: undefined };
+    if (preset === 'ytd') {
+      return {
+        from: `${new Date().getFullYear()}-01-01`,
+        to: localDateString(new Date()),
+      };
+    }
+
+    const days = preset === '30d' ? 29 : preset === '90d' ? 89 : 364;
+    return { from: shiftDays(days), to: localDateString(new Date()) };
+  }, [customFrom, customTo, preset]);
+
+  const invalidPeriod = Boolean(
+    preset === 'custom' && customFrom && customTo && customFrom > customTo,
+  );
+
+  const reports = useQuery({
+    queryKey: ['reports', period.from ?? null, period.to ?? null],
+    queryFn: () => fetchReports(period.from, period.to),
+    enabled: !invalidPeriod,
+  });
   const summary = useQuery({ queryKey: ['dashboard-summary'], queryFn: fetchDashboardSummary });
-  const pnl = useQuery({ queryKey: ['dashboard-pnl'], queryFn: fetchDashboardPnl });
   const allocation = useQuery({
     queryKey: ['dashboard-allocation'],
     queryFn: fetchDashboardAllocation,
@@ -59,38 +162,39 @@ export function ReportsPage() {
   });
   const curve = useQuery({ queryKey: ['dashboard-equity-curve'], queryFn: fetchEquityCurve });
 
+  const exportMutation = useMutation({
+    mutationFn: ({
+      dataset,
+      format,
+      scoped,
+    }: {
+      dataset: 'transactions' | 'positions' | 'trade-groups';
+      format: 'csv' | 'json';
+      scoped: boolean;
+    }) => downloadExport(dataset, format, scoped ? { from: period.from, to: period.to } : {}),
+    onSuccess: (_data, variables) => {
+      setExportNotice(`Экспорт ${variables.dataset}.${variables.format} скачан.`);
+      setExportError(null);
+    },
+    onError: (error) => {
+      setExportNotice(null);
+      setExportError(toRussianError(error, 'Не удалось скачать экспорт'));
+    },
+  });
+
   const isLoading =
+    reports.isPending ||
     summary.isPending ||
-    pnl.isPending ||
     allocation.isPending ||
     active.isPending ||
     curve.isPending;
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Отчёты" subtitle="Загружаю статистику…" />
-        <LoadingRows rows={8} />
-      </div>
-    );
-  }
-
-  if (summary.isError || !summary.data) {
-    return (
-      <div className="space-y-6">
-        <PageHeader title="Отчёты" />
-        <ErrorState
-          message={toRussianError(summary.error, 'Не удалось загрузить отчёты')}
-          onRetry={() => void summary.refetch()}
-        />
-      </div>
-    );
-  }
-
-  const data = summary.data;
-  const pnlPoints = (pnl.data?.months ?? []).slice(-12).map((month) => ({
-    label: month.month.slice(5),
-    value: Number(month.totalUsd),
+  const report = reports.data;
+  const current = summary.data;
+  const monthly = report?.monthly.slice(-12) ?? [];
+  const monthlyPoints = monthly.map((month) => ({
+    label: monthLabel(month.month),
+    value: Number(month.realizedPnlUsd),
   }));
   const curvePoints = (curve.data?.points ?? []).map((point) => ({
     label: new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
@@ -106,124 +210,475 @@ export function ReportsPage() {
         subtitle="Статистика по портфелю, сделкам и издержкам. Налоги не рассчитываются."
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Капитал" value={formatUsd(data.equityUsd)} hint="Кэш + позиции" />
-        <Metric
-          label="Net deposits"
-          value={formatUsd(data.netDepositsUsd)}
-          hint="Пополнения − выводы"
-        />
-        <Metric
-          label="Реализованный P&L"
-          value={formatSignedUsd(data.realizedPnlUsd)}
-          tone={pnlTone(data.realizedPnlUsd)}
-        />
-        <Metric
-          label="Нереализованный P&L"
-          value={formatSignedUsd(data.unrealizedPnlUsd)}
-          tone={pnlTone(data.unrealizedPnlUsd)}
-        />
-        <Metric
-          label="Итого P&L"
-          value={formatSignedUsd(data.totalPnlUsd)}
-          tone={pnlTone(data.totalPnlUsd)}
-        />
-        <Metric label="Сборы" value={formatUsd(data.feesUsd)} hint="Все учтённые fees" />
-        <Metric
-          label="Активные позиции"
-          value={formatCount(data.activePositionsCount)}
-          hint={
-            data.missingPrices.length > 0 ? `Без цен: ${data.missingPrices.length}` : 'Все оценены'
-          }
-        />
-        <Metric
-          label="ROI"
-          value={data.roiPct ? formatPct(data.roiPct) : '—'}
-          hint="Total P&L / Net deposits"
-        />
-      </div>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardTitle>P&L по месяцам</CardTitle>
-          <CardDescription>Последние 12 месяцев.</CardDescription>
-          <div className="mt-4">
-            <BarChart points={pnlPoints} />
-          </div>
-        </Card>
-        <Card>
-          <CardTitle>Кривая капитала</CardTitle>
-          <CardDescription>{curve.data?.note ?? 'Текущая оценка капитала.'}</CardDescription>
-          <div className="mt-4">
-            <LineChart points={curvePoints} />
-          </div>
-        </Card>
-      </div>
-
       <Card>
-        <CardTitle>Аллокация</CardTitle>
-        <CardDescription>Доли кэша и активных позиций в капитале.</CardDescription>
-        <div className="mt-4">
-          <AllocationBar slices={allocation.data?.slices ?? []} />
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="block text-sm text-zinc-600">
+            Период
+            <Select
+              className="mt-1 w-44"
+              aria-label="Период отчёта"
+              value={preset}
+              onChange={(event) => setPreset(event.target.value as PeriodPreset)}
+            >
+              {(Object.keys(presetLabels) as PeriodPreset[]).map((item) => (
+                <option key={item} value={item}>
+                  {presetLabels[item]}
+                </option>
+              ))}
+            </Select>
+          </label>
+          {preset === 'custom' ? (
+            <>
+              <label className="block text-sm text-zinc-600">
+                С
+                <Input
+                  className="mt-1"
+                  type="date"
+                  aria-label="Начало периода"
+                  value={customFrom}
+                  onChange={(event) => setCustomFrom(event.target.value)}
+                />
+              </label>
+              <label className="block text-sm text-zinc-600">
+                По
+                <Input
+                  className="mt-1"
+                  type="date"
+                  aria-label="Конец периода"
+                  value={customTo}
+                  onChange={(event) => setCustomTo(event.target.value)}
+                />
+              </label>
+            </>
+          ) : null}
+          <div className="pb-2 text-xs text-zinc-500">
+            Часовой пояс: {report?.period.timezone ?? 'Europe/Minsk'}
+          </div>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              onClick={() =>
+                exportMutation.mutate({ dataset: 'transactions', format: 'csv', scoped: true })
+              }
+              disabled={exportMutation.isPending}
+            >
+              Транзакции за период
+            </Button>
+            <Button
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              onClick={() =>
+                exportMutation.mutate({ dataset: 'trade-groups', format: 'csv', scoped: false })
+              }
+              disabled={exportMutation.isPending}
+            >
+              Сделки
+            </Button>
+            <Button
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              onClick={() =>
+                exportMutation.mutate({ dataset: 'positions', format: 'csv', scoped: false })
+              }
+              disabled={exportMutation.isPending}
+            >
+              Позиции
+            </Button>
+          </div>
         </div>
+        {invalidPeriod ? (
+          <p className="mt-3 text-sm text-red-700">Дата начала не может быть позже даты конца.</p>
+        ) : null}
+        {exportNotice ? <p className="mt-3 text-sm text-emerald-700">{exportNotice}</p> : null}
+        {exportError ? <p className="mt-3 text-sm text-red-700">{exportError}</p> : null}
       </Card>
 
-      <Card>
-        <CardTitle>Активные позиции</CardTitle>
-        <CardDescription>Текущие позиции и нереализованный P&L.</CardDescription>
-        {!active.data || active.data.positions.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-600">Активных позиций нет.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                  <th className="py-2 pr-3 font-medium">Актив</th>
-                  <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                  <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                  <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
-                  <th className="py-2 text-right font-medium">P&L</th>
-                </tr>
-              </thead>
-              <tbody>
-                {active.data.positions.map((position) => (
-                  <tr
-                    key={position.asset.id}
-                    className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
-                  >
-                    <td className="py-2 pr-3">
-                      <div className="font-medium text-zinc-800">{position.asset.symbol}</div>
-                      <div className="text-xs text-zinc-500">{position.asset.chainCode}</div>
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                      {formatTokenAmount(position.amount)}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                      {formatUsd(position.valueUsd)}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                      {formatUsd(position.costBasisUsd)}
-                    </td>
-                    <td
-                      className={`py-2 text-right font-mono tabular-nums ${pnlTone(position.unrealizedPnlUsd)}`}
-                    >
-                      {formatSignedUsd(position.unrealizedPnlUsd)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {isLoading ? <LoadingRows rows={8} /> : null}
+
+      {summary.isError || !current ? (
+        <ErrorState
+          message={toRussianError(summary.error, 'Не удалось загрузить отчёты')}
+          onRetry={() => void summary.refetch()}
+        />
+      ) : null}
+
+      {reports.isError ? (
+        <ErrorState
+          message={toRussianError(reports.error, 'Не удалось загрузить статистику за период')}
+          onRetry={() => void reports.refetch()}
+        />
+      ) : null}
+
+      {!isLoading && current && report ? (
+        <>
+          <Card>
+            <CardTitle>Итоги за период</CardTitle>
+            <CardDescription>
+              Реализованный P&L по FIFO, сборы из транзакций и сетевой газ подтверждённых on-chain
+              обменов. Газ показан справочно и не вычитается повторно из P&L.
+            </CardDescription>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric
+                label="Реализованный P&L"
+                value={formatSignedUsd(report.summary.realizedPnlUsd)}
+                tone={pnlTone(report.summary.realizedPnlUsd)}
+                hint={`${formatCount(report.summary.tradesCount)} ${pluralizeRu(
+                  report.summary.tradesCount,
+                  'сделка',
+                  'сделки',
+                  'сделок',
+                )} с реализацией`}
+              />
+              <Metric
+                label="Валовой профит"
+                value={formatUsd(report.summary.grossProfitUsd)}
+                tone={pnlTone(report.summary.grossProfitUsd)}
+                hint={`${formatCount(report.summary.winningTrades)} ${pluralizeRu(
+                  report.summary.winningTrades,
+                  'прибыльная',
+                  'прибыльные',
+                  'прибыльных',
+                )}`}
+              />
+              <Metric
+                label="Валовой убыток"
+                value={formatUsd(report.summary.grossLossUsd)}
+                tone={Number(report.summary.grossLossUsd) > 0 ? 'text-red-700' : 'text-zinc-900'}
+                hint={`${formatCount(report.summary.losingTrades)} ${pluralizeRu(
+                  report.summary.losingTrades,
+                  'убыточная',
+                  'убыточные',
+                  'убыточных',
+                )}`}
+              />
+              <Metric
+                label="Profit factor"
+                value={formatRatio(report.summary.profitFactor)}
+                hint="Валовой профит / валовой убыток"
+              />
+              <Metric
+                label="Win rate"
+                value={formatRate(report.summary.winRatePct)}
+                hint={`${formatCount(report.summary.winningTrades)} ${pluralizeRu(
+                  report.summary.winningTrades,
+                  'победа',
+                  'победы',
+                  'побед',
+                )} / ${formatCount(report.summary.losingTrades)} ${pluralizeRu(
+                  report.summary.losingTrades,
+                  'поражение',
+                  'поражения',
+                  'поражений',
+                )}`}
+              />
+              <Metric
+                label="Сборы"
+                value={formatUsd(report.summary.feesUsd)}
+                hint="Учтённые fees транзакций"
+              />
+              <Metric
+                label="Сетевой газ"
+                value={formatUsd(report.summary.gasUsd)}
+                hint="Только подтверждённые обмены"
+              />
+              <Metric
+                label="Net deposits"
+                value={formatUsd(report.summary.netDepositsUsd)}
+                hint={`Пополнения ${formatUsd(
+                  report.summary.depositsUsd,
+                )} − выводы ${formatUsd(report.summary.withdrawalsUsd)}`}
+              />
+              <Metric
+                label="Доход"
+                value={formatUsd(report.summary.incomeUsd)}
+                tone={pnlTone(report.summary.incomeUsd)}
+                hint="Income-транзакции"
+              />
+              <Metric
+                label="Корректировки"
+                value={formatSignedUsd(report.summary.adjustmentsUsd)}
+                tone={pnlTone(report.summary.adjustmentsUsd)}
+                hint="Ручные корректировки"
+              />
+              <Metric
+                label="Транзакции"
+                value={formatCount(report.summary.transactionsCount)}
+                hint="Все записи за период"
+              />
+              <Metric
+                label="Net P&L за период"
+                value={formatSignedUsd(report.summary.netPnlUsd)}
+                tone={pnlTone(report.summary.netPnlUsd)}
+                hint="Реализовано + доход + корректировки − сборы"
+              />
+            </div>
+          </Card>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Card>
+              <CardTitle>Реализованный P&L по месяцам</CardTitle>
+              <CardDescription>Последние 12 месяцев выбранного периода.</CardDescription>
+              <div className="mt-4">
+                <BarChart points={monthlyPoints} />
+              </div>
+            </Card>
+            <Card>
+              <CardTitle>Помесячная детализация</CardTitle>
+              <CardDescription>P&L, сборы, газ и количество операций.</CardDescription>
+              {monthly.length === 0 ? (
+                <p className="mt-4 text-sm text-zinc-600">За выбранный период данных нет.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-3 font-medium">Месяц</th>
+                        <th className="py-2 pr-3 text-right font-medium">P&L</th>
+                        <th className="py-2 pr-3 text-right font-medium">Сборы</th>
+                        <th className="py-2 pr-3 text-right font-medium">Газ</th>
+                        <th className="py-2 pr-3 text-right font-medium">Net</th>
+                        <th className="py-2 text-right font-medium">Операции</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthly.map((month) => (
+                        <tr
+                          key={month.month}
+                          className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                        >
+                          <td className="py-2 pr-3 text-zinc-700">{monthLabel(month.month)}</td>
+                          <td
+                            className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
+                              month.realizedPnlUsd,
+                            )}`}
+                          >
+                            {formatSignedUsd(month.realizedPnlUsd)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                            {formatUsd(month.feesUsd)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                            {formatUsd(month.gasUsd)}
+                          </td>
+                          <td
+                            className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
+                              month.netPnlUsd,
+                            )}`}
+                          >
+                            {formatSignedUsd(month.netPnlUsd)}
+                          </td>
+                          <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
+                            {formatCount(month.transactionsCount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           </div>
-        )}
-      </Card>
 
-      <Card className="border-dashed">
-        <CardTitle>Расширенная статистика</CardTitle>
-        <CardDescription>
-          Profit factor, win rate, gross profit/loss, gas по confirmed swaps, разбивка по активам и
-          экспорт появятся в следующем обновлении.
-        </CardDescription>
-      </Card>
+          <Card>
+            <CardTitle>Разбивка по активам</CardTitle>
+            <CardDescription>
+              Реализованный результат по FIFO-списаниям за выбранный период.
+            </CardDescription>
+            {report.byAsset.length === 0 ? (
+              <p className="mt-4 text-sm text-zinc-600">
+                Нет реализованных сделок за выбранный период.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                      <th className="py-2 pr-3 font-medium">Актив</th>
+                      <th className="py-2 pr-3 text-right font-medium">P&L</th>
+                      <th className="py-2 pr-3 text-right font-medium">Выручка</th>
+                      <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
+                      <th className="py-2 pr-3 text-right font-medium">Сделок</th>
+                      <th className="py-2 text-right font-medium">Последнее списание</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.byAsset.map((row) => (
+                      <tr
+                        key={row.asset.id}
+                        className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                      >
+                        <td className="py-2 pr-3">
+                          <Link
+                            to="/portfolio/assets/$assetId"
+                            params={{ assetId: row.asset.id }}
+                            className="font-medium text-zinc-800 hover:text-emerald-800"
+                          >
+                            {row.asset.symbol}
+                          </Link>
+                          <div className="text-xs text-zinc-500">{row.asset.chainCode}</div>
+                        </td>
+                        <td
+                          className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
+                            row.realizedPnlUsd,
+                          )}`}
+                        >
+                          {formatSignedUsd(row.realizedPnlUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                          {formatUsd(row.proceedsUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                          {formatUsd(row.costBasisUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                          {formatCount(row.tradesCount)}
+                        </td>
+                        <td className="py-2 text-right text-zinc-600">
+                          {formatDate(row.lastDisposalAt)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <CardTitle>Операции за период</CardTitle>
+            <CardDescription>
+              Количество записей и сборы по подтипам. Подробный журнал — в разделе «Операции».
+            </CardDescription>
+            {report.operations.length === 0 ? (
+              <p className="mt-4 text-sm text-zinc-600">Операций за период нет.</p>
+            ) : (
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {report.operations.map((operation) => (
+                  <div
+                    key={operation.subtype}
+                    className="flex items-center justify-between rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                  >
+                    <span className="text-zinc-700">
+                      {operationLabels[operation.subtype] ?? operation.subtype}
+                    </span>
+                    <span className="font-mono tabular-nums text-zinc-600">
+                      {formatCount(operation.count)} · {formatUsd(operation.feesUsd)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Link
+              to="/operations"
+              className="mt-4 inline-block text-sm font-medium text-emerald-800 hover:text-emerald-700"
+            >
+              Открыть журнал операций →
+            </Link>
+          </Card>
+
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900">Текущий портфель</h2>
+            <p className="text-sm text-zinc-500">
+              Эти показатели не зависят от выбранного периода и отражают состояние на сейчас.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Капитал" value={formatUsd(current.equityUsd)} hint="Кэш + позиции" />
+            <Metric
+              label="Свободный кэш"
+              value={formatUsd(current.cashUsd)}
+              hint="USDT / USDC и другие cash-активы"
+            />
+            <Metric
+              label="Нереализованный P&L"
+              value={formatSignedUsd(current.unrealizedPnlUsd)}
+              tone={pnlTone(current.unrealizedPnlUsd)}
+              hint={`+${formatUsd(current.positiveUnrealizedUsd)} / −${formatUsd(
+                current.negativeUnrealizedUsd,
+              )}`}
+            />
+            <Metric
+              label="Активные позиции"
+              value={formatCount(current.activePositionsCount)}
+              hint={
+                current.missingPrices.length > 0
+                  ? `Без цен: ${current.missingPrices.length}`
+                  : 'Все оценены'
+              }
+            />
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-2">
+            <Card>
+              <CardTitle>Кривая капитала</CardTitle>
+              <CardDescription>{curve.data?.note ?? 'Текущая оценка капитала.'}</CardDescription>
+              <div className="mt-4">
+                <LineChart points={curvePoints} />
+              </div>
+            </Card>
+            <Card>
+              <CardTitle>Аллокация</CardTitle>
+              <CardDescription>Доли кэша и активных позиций в капитале.</CardDescription>
+              <div className="mt-4">
+                <AllocationBar slices={allocation.data?.slices ?? []} />
+              </div>
+            </Card>
+          </div>
+
+          <Card>
+            <CardTitle>Активные позиции</CardTitle>
+            <CardDescription>Текущие позиции и нереализованный P&L.</CardDescription>
+            {!active.data || active.data.positions.length === 0 ? (
+              <p className="mt-4 text-sm text-zinc-600">Активных позиций нет.</p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                      <th className="py-2 pr-3 font-medium">Актив</th>
+                      <th className="py-2 pr-3 text-right font-medium">Количество</th>
+                      <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
+                      <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
+                      <th className="py-2 text-right font-medium">P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {active.data.positions.map((position) => (
+                      <tr
+                        key={position.asset.id}
+                        className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                      >
+                        <td className="py-2 pr-3">
+                          <div className="font-medium text-zinc-800">{position.asset.symbol}</div>
+                          <div className="text-xs text-zinc-500">{position.asset.chainCode}</div>
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                          {formatTokenAmount(position.amount)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                          {formatUsd(position.valueUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                          {formatUsd(position.costBasisUsd)}
+                        </td>
+                        <td
+                          className={`py-2 text-right font-mono tabular-nums ${pnlTone(
+                            position.unrealizedPnlUsd,
+                          )}`}
+                        >
+                          {formatSignedUsd(position.unrealizedPnlUsd)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      ) : null}
     </div>
   );
 }

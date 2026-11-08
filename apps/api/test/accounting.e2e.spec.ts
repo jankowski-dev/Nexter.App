@@ -351,6 +351,162 @@ describe.runIf(canRun)('Accounting e2e', () => {
     expect((unbalanced.rows[0] as { n: number } | undefined)?.n).toBe(0);
   }, 60_000);
 
+  it('reports period statistics, asset breakdown and period-scoped export', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const allAssets = (await agent.get('/api/v1/assets').expect(200)).body.assets as Array<{
+      id: string;
+      symbol: string;
+      chainCode: string;
+    }>;
+    const asset = (symbol: string) => {
+      const found = allAssets.find((item) => item.chainCode === 'bsc' && item.symbol === symbol);
+      expect(found).toBeDefined();
+      return found as { id: string; symbol: string; chainCode: string };
+    };
+    const usdc = asset('USDC');
+    const bnb = asset('BNB');
+    const link = asset('LINK');
+
+    const wallet = (
+      (await agent.get('/api/v1/accounts').expect(200)).body.accounts as Array<{
+        id: string;
+        name: string;
+      }>
+    ).find((account) => account.name === 'Tangem BSC');
+    expect(wallet).toBeDefined();
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc.id,
+      amount: '1000',
+      usdValue: '1000',
+      occurredAt: '2026-01-05T12:00:00.000Z',
+    });
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: bnb.id,
+      amount: '1',
+      usdValue: '600',
+      occurredAt: '2026-01-05T12:00:00.000Z',
+    });
+    await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link.id,
+      amount: '10',
+      quoteAssetId: usdc.id,
+      quoteAmount: '150',
+      feeAssetId: bnb.id,
+      feeAmount: '0.001',
+      feeUsdValue: '0.6',
+      occurredAt: '2026-01-10T12:00:00.000Z',
+    });
+    await create(agent, owner.csrf, {
+      type: 'sell',
+      accountId: wallet?.id,
+      assetId: link.id,
+      amount: '4',
+      proceedsAssetId: usdc.id,
+      proceedsAmount: '80',
+      feeAssetId: bnb.id,
+      feeAmount: '0.001',
+      feeUsdValue: '0.6',
+      occurredAt: '2026-02-10T12:00:00.000Z',
+    });
+
+    const allTime = await agent.get('/api/v1/reports').expect(200);
+    expect(allTime.body.period).toMatchObject({ from: null, to: null });
+    expect(allTime.body.summary).toMatchObject({
+      realizedPnlUsd: '19.16000000',
+      grossProfitUsd: '19.16000000',
+      grossLossUsd: '0.00000000',
+      profitFactor: null,
+      winningTrades: 1,
+      losingTrades: 0,
+      winRatePct: '100.00',
+      feesUsd: '0.00000000',
+      gasUsd: '0.00000000',
+      depositsUsd: '1600.00000000',
+      withdrawalsUsd: '0.00000000',
+      netDepositsUsd: '1600.00000000',
+      netPnlUsd: '19.16000000',
+      transactionsCount: 4,
+      tradesCount: 1,
+    });
+    expect(allTime.body.byAsset).toEqual([
+      expect.objectContaining({
+        asset: expect.objectContaining({ symbol: 'LINK' }),
+        realizedPnlUsd: '19.16000000',
+        proceedsUsd: '80.00000000',
+        costBasisUsd: '60.24000000',
+        consumptionsCount: 1,
+        tradesCount: 1,
+      }),
+    ]);
+    expect(allTime.body.monthly).toHaveLength(2);
+    expect(allTime.body.operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ subtype: 'deposit', count: 2 }),
+        expect.objectContaining({ subtype: 'buy', count: 1 }),
+        expect.objectContaining({ subtype: 'sell', count: 1 }),
+      ]),
+    );
+
+    const february = await agent.get('/api/v1/reports?from=2026-02-01&to=2026-02-28').expect(200);
+    expect(february.body.period).toMatchObject({
+      from: '2026-02-01',
+      to: '2026-02-28',
+      timezone: 'Europe/Minsk',
+    });
+    expect(february.body.summary).toMatchObject({
+      realizedPnlUsd: '19.16000000',
+      feesUsd: '0.00000000',
+      depositsUsd: '0.00000000',
+      withdrawalsUsd: '0.00000000',
+      netDepositsUsd: '0.00000000',
+      netPnlUsd: '19.16000000',
+      transactionsCount: 1,
+      tradesCount: 1,
+    });
+    expect(february.body.monthly).toEqual([
+      expect.objectContaining({
+        month: '2026-02',
+        realizedPnlUsd: '19.16000000',
+        feesUsd: '0.00000000',
+        netPnlUsd: '19.16000000',
+        transactionsCount: 1,
+      }),
+    ]);
+    expect(february.body.operations).toEqual([
+      expect.objectContaining({ subtype: 'sell', count: 1, feesUsd: '0.00000000' }),
+    ]);
+
+    await agent.get('/api/v1/reports?from=2026-03-01&to=2026-02-01').expect(400);
+
+    const csv = await agent
+      .get('/api/v1/export/transactions.csv?from=2026-02-01&to=2026-02-28')
+      .expect(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text).toContain('sell');
+    expect(csv.text).not.toContain('buy');
+
+    const exportAudit = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, 'export.generated'));
+    expect(exportAudit).toHaveLength(1);
+    expect(exportAudit[0]?.after).toMatchObject({
+      dataset: 'transactions',
+      format: 'csv',
+      from: '2026-02-01',
+      to: '2026-02-28',
+    });
+  }, 60_000);
+
   it('captures a daily portfolio snapshot and uses it in the equity curve', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);

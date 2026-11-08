@@ -1,8 +1,11 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import type { TradeGroupSummary, Transaction } from '@nexter/contracts';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import type { Database } from '@nexter/db';
+import type { ReportsQuery, TradeGroupSummary, Transaction } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
+import { DB } from '../../shared/db/db.module';
 import { toCsv } from './csv';
 import { LedgerService } from './ledger.service';
+import { resolveReportPeriod, type ResolvedReportPeriod } from './report-period';
 import { ReportingService } from './reporting.service';
 import { TradeGroupsService } from './trade-groups.service';
 
@@ -17,6 +20,7 @@ interface ExportMeta {
 @Injectable()
 export class ExportService {
   constructor(
+    @Inject(DB) private readonly db: Database,
     private readonly ledger: LedgerService,
     private readonly reporting: ReportingService,
     private readonly tradeGroups: TradeGroupsService,
@@ -27,6 +31,7 @@ export class ExportService {
     userId: string,
     dataset: string,
     format: string,
+    query: ReportsQuery,
     meta: ExportMeta,
   ): Promise<{ contentType: string; fileName: string; body: string }> {
     if (!['transactions', 'positions', 'trade-groups'].includes(dataset)) {
@@ -44,11 +49,12 @@ export class ExportService {
 
     const typedDataset = dataset as ExportDataset;
     const typedFormat = format as ExportFormat;
+    const period = await resolveReportPeriod(this.db, userId, query.from, query.to);
     let rows: Array<Record<string, unknown>>;
     let json: unknown;
 
     if (typedDataset === 'transactions') {
-      const transactions = await this.allTransactions(userId);
+      const transactions = await this.allTransactions(userId, period);
       rows = transactions.map((transaction) => ({
         id: transaction.id,
         occurredAt: transaction.occurredAt,
@@ -88,7 +94,7 @@ export class ExportService {
       ];
       json = positions;
     } else {
-      const groups = await this.allTradeGroups(userId);
+      const groups = await this.allTradeGroups(userId, period);
       rows = groups.map((group) => ({
         id: group.id,
         asset: group.asset.symbol,
@@ -116,7 +122,14 @@ export class ExportService {
         userId,
         action: 'export.generated',
         entityType: 'export',
-        after: { dataset: typedDataset, format: typedFormat, rows: rows.length },
+        after: {
+          dataset: typedDataset,
+          format: typedFormat,
+          rows: rows.length,
+          from: period.from,
+          to: period.to,
+          timezone: period.timezone,
+        },
         ip: meta.ip,
         userAgent: meta.userAgent,
       },
@@ -132,12 +145,19 @@ export class ExportService {
     };
   }
 
-  private async allTransactions(userId: string): Promise<Transaction[]> {
+  private async allTransactions(
+    userId: string,
+    period: ResolvedReportPeriod,
+  ): Promise<Transaction[]> {
     const all: Transaction[] = [];
     let cursor: string | undefined;
+    const from = period.fromInstant?.toISOString();
+    const to = period.toInstantExclusive
+      ? new Date(period.toInstantExclusive.getTime() - 1).toISOString()
+      : undefined;
 
     do {
-      const page = await this.ledger.list(userId, { limit: 100, cursor });
+      const page = await this.ledger.list(userId, { limit: 100, cursor, from, to });
       all.push(...page.transactions);
       cursor = page.page.nextCursor ?? undefined;
       if (!page.page.hasMore) break;
@@ -146,12 +166,19 @@ export class ExportService {
     return all;
   }
 
-  private async allTradeGroups(userId: string): Promise<TradeGroupSummary[]> {
+  private async allTradeGroups(
+    userId: string,
+    period: ResolvedReportPeriod,
+  ): Promise<TradeGroupSummary[]> {
     const all: TradeGroupSummary[] = [];
     let cursor: string | undefined;
+    const from = period.fromInstant?.toISOString();
+    const to = period.toInstantExclusive
+      ? new Date(period.toInstantExclusive.getTime() - 1).toISOString()
+      : undefined;
 
     do {
-      const page = await this.tradeGroups.list(userId, { limit: 100, cursor });
+      const page = await this.tradeGroups.list(userId, { limit: 100, cursor, from, to });
       all.push(...page.data);
       cursor = page.page.nextCursor ?? undefined;
       if (!page.page.hasMore) break;

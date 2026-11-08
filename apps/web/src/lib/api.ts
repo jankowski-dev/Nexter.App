@@ -18,6 +18,7 @@ import {
   portfolioAssetDetailSchema,
   portfolioSnapshotSchema,
   positionsResponseSchema,
+  reportsResponseSchema,
   settingsSchema,
   stepUpResponseSchema,
   swapBuildResponseSchema,
@@ -50,6 +51,7 @@ import {
   type PortfolioAssetDetail,
   type PortfolioSnapshot,
   type PositionsResponse,
+  type ReportsResponse,
   type Settings,
   type StepUpResponse,
   type SwapChainCode,
@@ -338,6 +340,10 @@ export async function capturePortfolioSnapshot(): Promise<PortfolioSnapshot> {
   return apiPost('/api/v1/dashboard/snapshot', {}, portfolioSnapshotSchema);
 }
 
+export async function fetchReports(from?: string, to?: string): Promise<ReportsResponse> {
+  return apiFetch(`/api/v1/reports${queryString({ from, to })}`, {}, reportsResponseSchema);
+}
+
 export async function fetchTradeGroups(
   params: Partial<TradeGroupListQuery> = {},
 ): Promise<TradeGroupsResponse> {
@@ -539,11 +545,15 @@ export async function stepUp(code: string): Promise<StepUpResponse> {
 export async function downloadExport(
   dataset: 'transactions' | 'positions' | 'trade-groups',
   format: 'csv' | 'json',
+  period: { from?: string; to?: string } = {},
 ): Promise<void> {
-  const response = await fetch(`/api/v1/export/${dataset}.${format}`, {
-    credentials: 'include',
-    headers: { Accept: '*/*' },
-  });
+  const response = await fetch(
+    `/api/v1/export/${dataset}.${format}${queryString({ from: period.from, to: period.to })}`,
+    {
+      credentials: 'include',
+      headers: { Accept: '*/*' },
+    },
+  );
 
   if (!response.ok) {
     throw new ApiError('EXPORT_FAILED', 'Не удалось скачать экспорт');

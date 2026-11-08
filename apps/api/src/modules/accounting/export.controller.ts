@@ -1,6 +1,9 @@
-import { Controller, Get, Param, Req, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import type { ReportsQuery } from '@nexter/contracts';
+import { reportsQuerySchema } from '@nexter/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { ExportService } from './export.service';
@@ -15,10 +18,11 @@ export class ExportController {
     @CurrentAuth() auth: AuthContext,
     @Param('dataset') dataset: string,
     @Param('format') format: string,
+    @Query(new ZodValidationPipe(reportsQuerySchema)) query: ReportsQuery,
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<string> {
-    const result = await this.exports.export(auth.user.id, dataset, format, {
+    const result = await this.exports.export(auth.user.id, dataset, format, query, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
