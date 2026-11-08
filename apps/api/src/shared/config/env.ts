@@ -109,6 +109,11 @@ export const envSchema = z.object({
   RECONCILIATION_LOOKBACK_BLOCKS: z.coerce.number().int().min(1).max(50_000).default(100),
   RECONCILIATION_MAX_BLOCKS_PER_TICK: z.coerce.number().int().min(1).max(500).default(50),
   RECONCILIATION_STALE_RUN_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
+  PORTFOLIO_SNAPSHOTS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  PORTFOLIO_SNAPSHOT_INTERVAL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
   KYBERSWAP_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   KYBERSWAP_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   KYBERSWAP_CLIENT_ID: z.string().min(1).default('nexter'),

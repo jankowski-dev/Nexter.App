@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
   DashboardActivePositions,
@@ -8,15 +8,20 @@ import type {
   DashboardRecentTrades,
   DashboardSummary,
   EquityCurve,
+  PortfolioSnapshot,
 } from '@nexter/contracts';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { PortfolioSnapshotService } from './portfolio-snapshot.service';
 import { ReportingService } from './reporting.service';
 
 @ApiTags('accounting')
 @Controller('dashboard')
 export class DashboardController {
-  constructor(private readonly reporting: ReportingService) {}
+  constructor(
+    private readonly reporting: ReportingService,
+    private readonly snapshots: PortfolioSnapshotService,
+  ) {}
 
   @Get('summary')
   summary(@CurrentAuth() auth: AuthContext): Promise<DashboardSummary> {
@@ -51,5 +56,10 @@ export class DashboardController {
   @Get('data-quality')
   dataQuality(@CurrentAuth() auth: AuthContext): Promise<DashboardDataQuality> {
     return this.reporting.dataQuality(auth.user.id);
+  }
+
+  @Post('snapshot')
+  snapshot(@CurrentAuth() auth: AuthContext): Promise<PortfolioSnapshot> {
+    return this.snapshots.capture(auth.user.id);
   }
 }

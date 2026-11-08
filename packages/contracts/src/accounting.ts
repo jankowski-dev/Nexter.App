@@ -262,16 +262,34 @@ export const positionsResponseSchema = z.object({
   missingPrices: z.array(z.string()),
 });
 
+export const cashAssetSchema = z.object({
+  assetId: z.uuid(),
+  symbol: z.string(),
+  chainCode: z.string(),
+  amount: z.string(),
+  valueUsd: z.string(),
+});
+
 export const dashboardSummarySchema = z.object({
   cashUsd: z.string(),
+  cashByAsset: z.array(cashAssetSchema),
   positionsValueUsd: z.string(),
   equityUsd: z.string(),
   netDepositsUsd: z.string(),
   incomeUsd: z.string(),
   adjustmentsUsd: z.string(),
   feesUsd: z.string(),
+  gasUsd: z.string(),
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string(),
+  positiveUnrealizedUsd: z.string(),
+  negativeUnrealizedUsd: z.string(),
+  grossProfitUsd: z.string(),
+  grossLossUsd: z.string(),
+  profitFactor: z.string().nullable(),
+  winningTrades: z.number().int().nonnegative(),
+  losingTrades: z.number().int().nonnegative(),
+  winRatePct: z.string().nullable(),
   totalPnlUsd: z.string(),
   roiPct: z.string().nullable(),
   activePositionsCount: z.number().int().nonnegative(),
@@ -299,4 +317,5 @@ export type Price = z.infer<typeof priceSchema>;
 export type PricesResponse = z.infer<typeof pricesResponseSchema>;
 export type Position = z.infer<typeof positionSchema>;
 export type PositionsResponse = z.infer<typeof positionsResponseSchema>;
+export type CashAsset = z.infer<typeof cashAssetSchema>;
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>;

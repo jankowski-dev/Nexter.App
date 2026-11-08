@@ -1,13 +1,15 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import {
   accounts,
   assets,
   chains,
   lotConsumptions,
   lots,
+  portfolioSnapshots,
   postings,
   settings as settingsTable,
+  swapOrders,
   transactions,
   type Database,
 } from '@nexter/db';
@@ -219,19 +221,107 @@ export class ReportingService {
     );
     const netDeposits = await this.netDeposits(userId);
 
+    const cashRows = await this.db
+      .select({
+        assetId: assets.id,
+        symbol: assets.symbol,
+        chainCode: chains.code,
+        amount: sql<string>`coalesce(sum(${postings.amount}), 0)::text`,
+      })
+      .from(postings)
+      .innerJoin(accounts, eq(postings.accountId, accounts.id))
+      .innerJoin(assets, eq(postings.assetId, assets.id))
+      .innerJoin(chains, eq(assets.chainId, chains.id))
+      .where(
+        and(
+          eq(accounts.userId, userId),
+          eq(accounts.type, 'wallet'),
+          eq(assets.isCashEquivalent, true),
+        ),
+      )
+      .groupBy(assets.id, assets.symbol, chains.code)
+      .having(sql`coalesce(sum(${postings.amount}), 0) <> 0`);
+
+    const cashByAsset = cashRows
+      .map((row) => ({
+        assetId: row.assetId,
+        symbol: row.symbol,
+        chainCode: row.chainCode,
+        amount: decimal(row.amount).toFixed(18),
+        valueUsd: usdString(decimal(row.amount)),
+      }))
+      .sort((a, b) => decimal(b.valueUsd).comparedTo(decimal(a.valueUsd)));
+
+    const groupPnlRows = await this.db
+      .select({
+        groupId: lots.tradeGroupId,
+        total: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`,
+      })
+      .from(lotConsumptions)
+      .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
+      .where(and(eq(lots.userId, userId), isNotNull(lots.tradeGroupId)))
+      .groupBy(lots.tradeGroupId);
+
+    let grossProfit = new Decimal(0);
+    let grossLoss = new Decimal(0);
+    let winningTrades = 0;
+    let losingTrades = 0;
+
+    for (const row of groupPnlRows) {
+      const value = decimal(row.total);
+
+      if (value.gt(0)) {
+        grossProfit = grossProfit.plus(value);
+        winningTrades += 1;
+      } else if (value.lt(0)) {
+        grossLoss = grossLoss.plus(value.abs());
+        losingTrades += 1;
+      }
+    }
+
+    const positiveUnrealized = positions.positions.reduce((total, position) => {
+      const value = decimal(position.unrealizedPnlUsd ?? '0');
+      return value.gt(0) ? total.plus(value) : total;
+    }, new Decimal(0));
+    const negativeUnrealized = positions.positions.reduce((total, position) => {
+      const value = decimal(position.unrealizedPnlUsd ?? '0');
+      return value.lt(0) ? total.plus(value.abs()) : total;
+    }, new Decimal(0));
+
+    const [gasRow] = await this.db
+      .select({
+        total: sql<string>`coalesce(sum(${swapOrders.networkFeeUsd}), 0)::text`,
+      })
+      .from(swapOrders)
+      .where(and(eq(swapOrders.userId, userId), eq(swapOrders.status, 'CONFIRMED')));
+
     const totalPnl = realized.plus(unrealized).plus(income).plus(adjustments).minus(fees);
     const roiPct = netDeposits.gt(0) ? totalPnl.div(netDeposits).mul(100).toFixed(2) : null;
+    const totalTrades = winningTrades + losingTrades;
+    const profitFactor = grossLoss.gt(0) ? grossProfit.div(grossLoss).toFixed(4) : null;
+    const winRatePct =
+      totalTrades > 0 ? new Decimal(winningTrades).div(totalTrades).mul(100).toFixed(2) : null;
 
     return {
       cashUsd: positions.cashUsd,
+      cashByAsset,
       positionsValueUsd: positions.positionsValueUsd,
       equityUsd: positions.equityUsd,
       netDepositsUsd: usdString(netDeposits),
       incomeUsd: usdString(income),
       adjustmentsUsd: usdString(adjustments),
       feesUsd: usdString(fees),
+      gasUsd: usdString(decimal(gasRow?.total ?? '0')),
       realizedPnlUsd: usdString(realized),
       unrealizedPnlUsd: usdString(unrealized),
+      positiveUnrealizedUsd: usdString(positiveUnrealized),
+      negativeUnrealizedUsd: usdString(negativeUnrealized),
+      grossProfitUsd: usdString(grossProfit),
+      grossLossUsd: usdString(grossLoss),
+      profitFactor,
+      winningTrades,
+      losingTrades,
+      winRatePct,
       totalPnlUsd: usdString(totalPnl),
       roiPct,
       activePositionsCount: positions.positions.length,
@@ -484,6 +574,25 @@ export class ReportingService {
   }
 
   async equityCurve(userId: string): Promise<EquityCurve> {
+    const snapshots = await this.db
+      .select()
+      .from(portfolioSnapshots)
+      .where(eq(portfolioSnapshots.userId, userId))
+      .orderBy(asc(portfolioSnapshots.snapshotDate));
+
+    if (snapshots.length > 0) {
+      return {
+        valuation: 'daily-snapshots',
+        note: 'Ежедневные снимки капитала. История до первого снимка не пересчитывается.',
+        points: snapshots.map((row) => ({
+          date: new Date(`${row.snapshotDate}T00:00:00.000Z`).toISOString(),
+          cashUsd: row.cashUsd,
+          positionsValueUsd: row.positionsValueUsd,
+          equityUsd: row.equityUsd,
+        })),
+      };
+    }
+
     const rows = await this.db
       .select({
         assetId: postings.assetId,

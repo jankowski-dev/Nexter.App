@@ -16,6 +16,7 @@ import {
   importResponseSchema,
   importsResponseSchema,
   portfolioAssetDetailSchema,
+  portfolioSnapshotSchema,
   positionsResponseSchema,
   settingsSchema,
   stepUpResponseSchema,
@@ -44,6 +45,7 @@ import {
   type ImportResponse,
   type ImportsResponse,
   type PortfolioAssetDetail,
+  type PortfolioSnapshot,
   type PositionsResponse,
   type Settings,
   type StepUpResponse,
@@ -83,6 +85,7 @@ export type {
   ImportResponse,
   ImportsResponse,
   PortfolioAssetDetail,
+  PortfolioSnapshot,
   PositionsResponse,
   Settings,
   StepUpResponse,
@@ -312,6 +315,10 @@ export async function fetchDashboardDataQuality(): Promise<DashboardDataQuality>
 
 export async function fetchEquityCurve(): Promise<EquityCurve> {
   return apiFetch('/api/v1/dashboard/equity-curve', {}, equityCurveSchema);
+}
+
+export async function capturePortfolioSnapshot(): Promise<PortfolioSnapshot> {
+  return apiPost('/api/v1/dashboard/snapshot', {}, portfolioSnapshotSchema);
 }
 
 export async function fetchTradeGroups(
