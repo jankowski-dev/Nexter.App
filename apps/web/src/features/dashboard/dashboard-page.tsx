@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { toRussianError } from '@/lib/error-messages';
 import {
+  capturePortfolioSnapshot,
   fetchDashboardActivePositions,
   fetchDashboardAllocation,
   fetchDashboardDataQuality,
@@ -25,7 +26,7 @@ import {
   formatUsd,
   pnlTone,
 } from '@/lib/format';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState, type ReactNode } from 'react';
 
@@ -149,8 +150,16 @@ function DataQualityBanner() {
 }
 
 export function DashboardPage() {
+  const queryClient = useQueryClient();
   const [range, setRange] = useState<'30' | '90' | '365' | 'all'>('365');
   const summary = useQuery({ queryKey: ['dashboard-summary'], queryFn: fetchDashboardSummary });
+  const snapshot = useMutation({
+    mutationFn: capturePortfolioSnapshot,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard-equity-curve'] });
+    },
+  });
   const allocation = useQuery({
     queryKey: ['dashboard-allocation'],
     queryFn: fetchDashboardAllocation,
@@ -201,12 +210,15 @@ export function DashboardPage() {
   ).length;
   const rangeDays = range === '30' ? 30 : range === '90' ? 90 : range === '365' ? 365 : null;
   const cutoff = rangeDays ? Date.now() - rangeDays * 86_400_000 : null;
+  const dailyCurve = curve.data?.valuation === 'daily-snapshots';
   const curvePoints = (curve.data?.points ?? [])
     .filter((point) => !cutoff || new Date(point.date).getTime() >= cutoff)
     .map((point) => ({
-      label: new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
-        new Date(point.date),
-      ),
+      label: dailyCurve
+        ? formatDate(point.date)
+        : new Intl.DateTimeFormat('ru-RU', { month: 'short', year: '2-digit' }).format(
+            new Date(point.date),
+          ),
       value: Number(point.equityUsd),
     }));
   const pnlMonths = range === '30' ? 1 : range === '90' ? 3 : range === '365' ? 12 : 24;
@@ -320,15 +332,118 @@ export function DashboardPage() {
         />
       </div>
 
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-900">Качество торговли</h2>
+          <p className="text-sm text-zinc-500">
+            Реализованные сделки и нереализованные отклонения по открытым позициям.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <Metric
+            label="Profit factor"
+            value={data.profitFactor ? Number(data.profitFactor).toFixed(2) : '—'}
+            hint="Gross profit / gross loss"
+          />
+          <Metric
+            label="Gross profit"
+            value={formatUsd(data.grossProfitUsd)}
+            hint="Сумма прибыльных закрытых сделок"
+            tone="text-emerald-700"
+          />
+          <Metric
+            label="Gross loss"
+            value={formatUsd(data.grossLossUsd)}
+            hint="Сумма убыточных закрытых сделок"
+            tone={Number(data.grossLossUsd) > 0 ? 'text-red-700' : undefined}
+          />
+          <Metric
+            label="Win rate"
+            value={data.winRatePct ? `${data.winRatePct}%` : '—'}
+            hint={`${formatCount(data.winningTrades)} прибыльных / ${formatCount(data.losingTrades)} убыточных`}
+          />
+          <Metric
+            label="Плюс в нереализованном"
+            value={formatUsd(data.positiveUnrealizedUsd)}
+            hint="Сумма положительных открытых позиций"
+            tone="text-emerald-700"
+          />
+          <Metric
+            label="Минус в нереализованном"
+            value={formatUsd(data.negativeUnrealizedUsd)}
+            hint="Сумма отрицательных открытых позиций"
+            tone={Number(data.negativeUnrealizedUsd) > 0 ? 'text-red-700' : undefined}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-900">Ликвидность и издержки</h2>
+          <p className="text-sm text-zinc-500">
+            Свободный кэш вне позиций и стоимость confirmed swap-газа.
+          </p>
+        </div>
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr]">
+          <Card>
+            <CardTitle>Свободный кэш по активам</CardTitle>
+            <CardDescription>USDT / USDC и другие cash-equivalents вне позиций.</CardDescription>
+            {data.cashByAsset.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-600">Свободного кэша нет.</p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {data.cashByAsset.map((row) => (
+                  <div
+                    key={row.assetId}
+                    className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-2 text-sm last:border-0 last:pb-0"
+                  >
+                    <div>
+                      <div className="text-zinc-800">{row.symbol}</div>
+                      <div className="text-xs text-zinc-500">
+                        {row.chainCode} · {formatTokenAmount(row.amount)}
+                      </div>
+                    </div>
+                    <div className="font-mono tabular-nums text-zinc-700">
+                      {formatUsd(row.valueUsd)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <Metric label="Gas paid" value={formatUsd(data.gasUsd)} hint="Confirmed swaps" />
+          <Metric label="Все сборы" value={formatUsd(data.feesUsd)} hint="Учтённые fees" />
+        </div>
+      </div>
+
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Section
           title="Кривая капитала"
-          description="Исторические остатки, оцененные по текущим ценам."
+          description={
+            dailyCurve
+              ? 'Ежедневные снимки капитала.'
+              : 'Исторические остатки, оцененные по текущим ценам.'
+          }
+          action={
+            <Button
+              variant="secondary"
+              className="h-8 px-3 text-xs"
+              onClick={() => snapshot.mutate()}
+              disabled={snapshot.isPending}
+            >
+              {snapshot.isPending ? 'Сохраняю…' : 'Сделать снимок'}
+            </Button>
+          }
         >
           <LineChart points={curvePoints} />
           <p className="mt-2 text-xs text-zinc-500">
             {curve.data?.note ?? 'Историческая переоценка по текущим ценам.'}
           </p>
+          {snapshot.isError ? (
+            <p className="mt-1 text-xs text-red-700">
+              {toRussianError(snapshot.error, 'Не удалось сохранить снимок')}
+            </p>
+          ) : null}
         </Section>
 
         <Section title="Аллокация" description="Текущая структура капитала.">

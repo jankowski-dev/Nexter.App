@@ -216,9 +216,17 @@ export const equityCurvePointSchema = z.object({
 });
 
 export const equityCurveSchema = z.object({
-  valuation: z.literal('current-prices'),
+  valuation: z.enum(['current-prices', 'daily-snapshots']),
   note: z.string(),
   points: z.array(equityCurvePointSchema),
+});
+
+export const portfolioSnapshotSchema = z.object({
+  snapshotDate: z.string(),
+  cashUsd: z.string(),
+  positionsValueUsd: z.string(),
+  equityUsd: z.string(),
+  capturedAt: z.iso.datetime(),
 });
 
 export type Lot = z.infer<typeof lotSchema>;
@@ -243,3 +251,4 @@ export type DataQualityIssue = z.infer<typeof dataQualityIssueSchema>;
 export type DashboardDataQuality = z.infer<typeof dashboardDataQualitySchema>;
 export type EquityCurvePoint = z.infer<typeof equityCurvePointSchema>;
 export type EquityCurve = z.infer<typeof equityCurveSchema>;
+export type PortfolioSnapshot = z.infer<typeof portfolioSnapshotSchema>;

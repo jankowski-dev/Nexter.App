@@ -314,6 +314,20 @@ describe.runIf(canRun)('Accounting e2e', () => {
     expect(summary.body.unrealizedPnlUsd).toBe('19.16000000');
     expect(summary.body.totalPnlUsd).toBe('348.20000000');
     expect(summary.body.cashUsd).toBe('930.00000000');
+    expect(summary.body.cashByAsset).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ symbol: 'USDC', valueUsd: '930.00000000' }),
+      ]),
+    );
+    expect(summary.body.gasUsd).toBe('0.00000000');
+    expect(summary.body.grossProfitUsd).toBe('29.04000000');
+    expect(summary.body.grossLossUsd).toBe('0.00000000');
+    expect(summary.body.profitFactor).toBeNull();
+    expect(summary.body.winningTrades).toBe(1);
+    expect(summary.body.losingTrades).toBe(0);
+    expect(summary.body.winRatePct).toBe('100.00');
+    expect(summary.body.positiveUnrealizedUsd).toBe('19.76000000');
+    expect(summary.body.negativeUnrealizedUsd).toBe('0.60000000');
     expect(summary.body.missingPrices).toEqual([]);
     expect(new Decimal(summary.body.equityUsd).minus(summary.body.netDepositsUsd).toFixed(8)).toBe(
       summary.body.totalPnlUsd,
@@ -336,6 +350,59 @@ describe.runIf(canRun)('Accounting e2e', () => {
     );
     expect((unbalanced.rows[0] as { n: number } | undefined)?.n).toBe(0);
   }, 60_000);
+
+  it('captures a daily portfolio snapshot and uses it in the equity curve', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const assets = await getAssets(agent);
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    expect(usdc).toBeDefined();
+    expect(wallet).toBeDefined();
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc?.id,
+      amount: '100',
+      usdValue: '100',
+    });
+
+    const summary = await agent.get('/api/v1/dashboard/summary').expect(200);
+    expect(summary.body.cashUsd).toBe('100.00000000');
+    expect(summary.body.cashByAsset).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ symbol: 'USDC', valueUsd: '100.00000000' }),
+      ]),
+    );
+
+    const snapshot = await agent
+      .post('/api/v1/dashboard/snapshot')
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    expect(snapshot.body).toMatchObject({
+      cashUsd: '100.00000000',
+      positionsValueUsd: '0.00000000',
+      equityUsd: '100.00000000',
+    });
+    expect(snapshot.body.snapshotDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const curve = await agent.get('/api/v1/dashboard/equity-curve').expect(200);
+    expect(curve.body.valuation).toBe('daily-snapshots');
+    expect(curve.body.points).toHaveLength(1);
+    expect(curve.body.points[0]).toMatchObject({
+      cashUsd: '100.00000000',
+      positionsValueUsd: '0.00000000',
+      equityUsd: '100.00000000',
+    });
+
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.action, 'accounting.portfolio_snapshot'));
+    expect(audits.length).toBeGreaterThan(0);
+  }, 30_000);
 
   it('consumes lots only from the selected trade group when selling', async () => {
     const agent = request.agent(app.getHttpServer());

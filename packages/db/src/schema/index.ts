@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  date,
   index,
   integer,
   jsonb,
@@ -509,6 +510,26 @@ export const prices = pgTable(
   (table) => [
     index('prices_asset_observed_idx').on(table.assetId, table.observedAt),
     index('prices_import_idx').on(table.importId),
+  ],
+);
+
+export const portfolioSnapshots = pgTable(
+  'portfolio_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    snapshotDate: date('snapshot_date').notNull(),
+    cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),
+    positionsValueUsd: numeric('positions_value_usd', { precision: 24, scale: 8 }).notNull(),
+    equityUsd: numeric('equity_usd', { precision: 24, scale: 8 }).notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('portfolio_snapshots_user_date_unique').on(table.userId, table.snapshotDate),
+    index('portfolio_snapshots_user_date_idx').on(table.userId, table.snapshotDate),
   ],
 );
 
