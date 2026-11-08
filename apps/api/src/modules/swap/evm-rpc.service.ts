@@ -2,6 +2,52 @@ import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { getSwapChain } from './token-registry';
 
+export interface Erc20Metadata {
+  name: string;
+  symbol: string;
+  decimals: number;
+}
+
+function decodeString(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.startsWith('0x') || value === '0x') return null;
+
+  const hex = value.slice(2);
+  if (hex.length < 64) return null;
+
+  try {
+    const offset = Number(BigInt(`0x${hex.slice(0, 64)}`)) * 2;
+    if (offset + 64 <= hex.length) {
+      const length = Number(BigInt(`0x${hex.slice(offset, offset + 64)}`)) * 2;
+      if (length > 0 && length <= 200 && offset + 64 + length <= hex.length) {
+        const text = Buffer.from(hex.slice(offset + 64, offset + 64 + length), 'hex')
+          .toString('utf8')
+          .replace(/\0+$/g, '')
+          .trim();
+        if (text) return text;
+      }
+    }
+  } catch {
+    // Fall through to the bytes32 representation used by older tokens.
+  }
+
+  const text = Buffer.from(hex.slice(0, 64), 'hex').toString('utf8').replace(/\0+$/g, '').trim();
+  return text || null;
+}
+
+function decodeUint8(value: unknown): number | null {
+  if (typeof value !== 'string' || !value.startsWith('0x') || value === '0x') return null;
+
+  const hex = value.slice(2);
+  if (hex.length < 64) return null;
+
+  try {
+    const decoded = Number(BigInt(`0x${hex.slice(0, 64)}`));
+    return Number.isInteger(decoded) && decoded >= 0 && decoded <= 255 ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface SimulationResult {
   success: boolean;
   revertReason: string | null;
@@ -207,6 +253,28 @@ export class EvmRpcService {
     await this.assertChain(chain);
     const result = await this.call(chain, 'eth_getBalance', [owner, 'latest']);
     return hexToBigInt(result);
+  }
+
+  async getErc20Metadata(chain: string, token: string): Promise<Erc20Metadata | null> {
+    if (!this.configuredFor(chain)) return null;
+    await this.assertChain(chain);
+
+    const [nameResult, symbolResult, decimalsResult] = await Promise.all([
+      this.call(chain, 'eth_call', [{ to: token, data: '0x06fdde03' }, 'latest']),
+      this.call(chain, 'eth_call', [{ to: token, data: '0x95d89b41' }, 'latest']),
+      this.call(chain, 'eth_call', [{ to: token, data: '0x313ce567' }, 'latest']),
+    ]);
+    const name = decodeString(nameResult);
+    const symbol = decodeString(symbolResult);
+    const decimals = decodeUint8(decimalsResult);
+
+    if (!name || !symbol || decimals === null || decimals < 0 || decimals > 36) return null;
+
+    return {
+      name: name.slice(0, 100),
+      symbol: symbol.slice(0, 20),
+      decimals,
+    };
   }
 
   async getTransactionByHash(chain: string, hash: string): Promise<RpcTransaction | null> {
