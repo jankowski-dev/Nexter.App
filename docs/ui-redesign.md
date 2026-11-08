@@ -98,7 +98,7 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 ## Delivery order
 
 - **UI-0** — shell, navigation, Portfolio + trade journal merge, asset drawer, Operations/Reports pages, Import legacy link. No backend changes. Implemented.
-- **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend. Implemented: the Portfolio “Новая сделка” modal supports trade entry/exit, exchange, deposit, withdrawal, manual recording, embedded on-chain execution, and one/several/all open-group selection.
+- **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend. Implemented: the global “+ Операция” and the Portfolio “Новая сделка” use the same modal with Trade, Exchange, Transfer, Deposit, and Withdrawal tabs; manual recording, embedded on-chain execution, and one/several/all open-group selection. Income and adjustment live under “Дополнительно” to avoid a tab pile. The legacy manual dialog was removed.
 - **UI-2** — dashboard metrics and interactive charts, daily snapshots.
 - **UI-3** — watchlist groups, contract-address search, market data.
 - **UI-4** — reports/statistics.

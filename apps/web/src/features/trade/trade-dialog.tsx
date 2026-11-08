@@ -15,16 +15,22 @@ import { Decimal } from 'decimal.js';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { SwapPage } from '../swap/swap-page';
 
-type OperationMode = 'trade' | 'exchange' | 'deposit' | 'withdrawal';
+type OperationMode =
+  'trade' | 'exchange' | 'transfer' | 'deposit' | 'withdrawal' | 'income' | 'adjustment';
 type TradeSide = 'entry' | 'exit';
 type ExecutionMode = 'manual' | 'onchain';
 
 const modeLabels: Record<OperationMode, string> = {
   trade: 'Сделка',
   exchange: 'Обмен',
+  transfer: 'Перевод',
   deposit: 'Пополнение',
   withdrawal: 'Вывод',
+  income: 'Доход',
+  adjustment: 'Корректировка',
 };
+
+const primaryModes: OperationMode[] = ['trade', 'exchange', 'transfer', 'deposit', 'withdrawal'];
 
 const groupStatusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -168,6 +174,7 @@ export interface TradeDialogProps {
   initialAssetId?: string;
   initialAmount?: string;
   initialCloseGroupIds?: string[];
+  titleOverride?: string;
 }
 
 export function TradeDialog({
@@ -178,12 +185,16 @@ export function TradeDialog({
   initialAssetId = '',
   initialAmount = '',
   initialCloseGroupIds,
+  titleOverride,
 }: TradeDialogProps) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<OperationMode>(initialMode);
   const [side, setSide] = useState<TradeSide>(initialSide);
   const [execution, setExecution] = useState<ExecutionMode>('manual');
   const [accountId, setAccountId] = useState('');
+  const [fromAccountId, setFromAccountId] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
+  const [reason, setReason] = useState('');
   const [assetId, setAssetId] = useState(initialAssetId);
   const [quoteAssetId, setQuoteAssetId] = useState('');
   const [amount, setAmount] = useState(initialAmount);
@@ -224,6 +235,13 @@ export function TradeDialog({
   const selectedQuoteAsset = assets.find((asset) => asset.id === quoteAssetId);
   const selectedAssetIn = assets.find((asset) => asset.id === assetInId);
   const selectedAssetOut = assets.find((asset) => asset.id === assetOutId);
+  const fromAccount = walletAccounts.find((account) => account.id === fromAccountId);
+  const transferChainAccounts = fromAccount?.chainCode
+    ? walletAccounts.filter((account) => account.chainCode === fromAccount.chainCode)
+    : walletAccounts;
+  const transferAssets = assets.filter(
+    (asset) => !fromAccount?.chainCode || asset.chainCode === fromAccount.chainCode,
+  );
 
   const chainCode =
     mode === 'exchange' ? selectedAssetIn?.chainCode : (selectedAsset?.chainCode ?? null);
@@ -259,6 +277,9 @@ export function TradeDialog({
     setAmount(initialAmount);
     setSelectedGroupIds(initialCloseGroupIds ?? []);
     setAccountId('');
+    setFromAccountId('');
+    setToAccountId('');
+    setReason('');
     setQuoteAssetId('');
     setQuoteAmount('');
     setAssetInId('');
@@ -286,6 +307,29 @@ export function TradeDialog({
   useEffect(() => {
     if (!accountId && chainAccounts[0]) setAccountId(chainAccounts[0].id);
   }, [accountId, chainAccounts]);
+
+  useEffect(() => {
+    if (mode !== 'transfer') return;
+    if (!fromAccountId && chainAccounts[0]) setFromAccountId(chainAccounts[0].id);
+  }, [mode, fromAccountId, chainAccounts]);
+
+  useEffect(() => {
+    if (mode !== 'transfer' || toAccountId) return;
+    const next = chainAccounts.find((account) => account.id !== fromAccountId);
+    if (next) setToAccountId(next.id);
+  }, [mode, toAccountId, fromAccountId, chainAccounts]);
+
+  useEffect(() => {
+    if (mode !== 'transfer') return;
+
+    if (fromAccountId && !chainAccounts.some((account) => account.id === fromAccountId)) {
+      setFromAccountId(chainAccounts[0]?.id ?? '');
+    }
+
+    if (toAccountId && !chainAccounts.some((account) => account.id === toAccountId)) {
+      setToAccountId(chainAccounts.find((account) => account.id !== fromAccountId)?.id ?? '');
+    }
+  }, [mode, chainAccounts, fromAccountId, toAccountId]);
 
   useEffect(() => {
     if (mode !== 'trade' || side !== 'exit') return;
@@ -417,6 +461,44 @@ export function TradeDialog({
       };
     }
 
+    if (mode === 'transfer') {
+      return {
+        type: 'transfer',
+        fromAccountId,
+        toAccountId,
+        assetId,
+        amount,
+        ...(usdValue ? { usdValue } : {}),
+        ...occurred,
+        ...note,
+      };
+    }
+
+    if (mode === 'income') {
+      return {
+        type: 'income',
+        accountId,
+        assetId,
+        amount,
+        usdValue,
+        ...occurred,
+        ...note,
+      };
+    }
+
+    if (mode === 'adjustment') {
+      return {
+        type: 'adjustment',
+        accountId,
+        assetId,
+        amount,
+        usdValue,
+        reason,
+        ...occurred,
+        ...note,
+      };
+    }
+
     return {
       type: mode,
       accountId,
@@ -429,6 +511,32 @@ export function TradeDialog({
   }
 
   function canSubmit(): boolean {
+    if (mode === 'transfer') {
+      return Boolean(
+        fromAccountId &&
+        toAccountId &&
+        fromAccountId !== toAccountId &&
+        assetId &&
+        isPositiveDecimal(amount),
+      );
+    }
+
+    if (mode === 'income') {
+      return Boolean(
+        accountId && assetId && isPositiveDecimal(amount) && isPositiveDecimal(usdValue),
+      );
+    }
+
+    if (mode === 'adjustment') {
+      return Boolean(
+        accountId &&
+        assetId &&
+        isPositiveDecimal(amount) &&
+        isPositiveDecimal(usdValue) &&
+        reason.trim(),
+      );
+    }
+
     if (!accountId) return false;
 
     if (mode === 'trade' && side === 'entry') {
@@ -461,7 +569,8 @@ export function TradeDialog({
   }
 
   const title =
-    execution === 'onchain'
+    titleOverride ??
+    (execution === 'onchain'
       ? 'On-chain операция'
       : mode === 'trade'
         ? side === 'entry'
@@ -469,7 +578,7 @@ export function TradeDialog({
           : 'Закрытие позиции'
         : mode === 'exchange'
           ? 'Обмен крипты'
-          : modeLabels[mode];
+          : modeLabels[mode]);
 
   const description =
     execution === 'onchain'
@@ -505,7 +614,7 @@ export function TradeDialog({
     >
       <div className="space-y-4">
         <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-          {(Object.keys(modeLabels) as OperationMode[]).map((item) => (
+          {primaryModes.map((item) => (
             <button
               key={item}
               type="button"
@@ -525,6 +634,34 @@ export function TradeDialog({
               {modeLabels[item]}
             </button>
           ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+          <span>Дополнительно:</span>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('income');
+              setExecution('manual');
+              setError(null);
+            }}
+            className={mode === 'income' ? 'font-medium text-emerald-700' : 'hover:text-zinc-900'}
+          >
+            Доход
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMode('adjustment');
+              setExecution('manual');
+              setError(null);
+            }}
+            className={
+              mode === 'adjustment' ? 'font-medium text-emerald-700' : 'hover:text-zinc-900'
+            }
+          >
+            Корректировка
+          </button>
         </div>
 
         {(mode === 'trade' || mode === 'exchange') && (
@@ -836,6 +973,103 @@ export function TradeDialog({
               </>
             ) : null}
 
+            {mode === 'transfer' ? (
+              <>
+                <AccountSelect
+                  label="Со счёта"
+                  value={fromAccountId}
+                  onChange={(value) => {
+                    setFromAccountId(value);
+                    resetError();
+                  }}
+                  accounts={transferChainAccounts.filter((account) => account.id !== toAccountId)}
+                />
+                <AccountSelect
+                  label="На счёт"
+                  value={toAccountId}
+                  onChange={(value) => {
+                    setToAccountId(value);
+                    resetError();
+                  }}
+                  accounts={transferChainAccounts.filter((account) => account.id !== fromAccountId)}
+                />
+                {transferChainAccounts.length < 2 ? (
+                  <p className="md:col-span-2 text-xs text-amber-700">
+                    Для перевода нужен второй кошелёк на этой сети. Сейчас доступен только один.
+                  </p>
+                ) : null}
+                <AssetSelect
+                  label="Актив"
+                  value={assetId}
+                  onChange={(value) => {
+                    setAssetId(value);
+                    resetError();
+                  }}
+                  assets={transferAssets}
+                />
+                <DecimalField
+                  label="Количество"
+                  value={amount}
+                  onChange={(value) => {
+                    setAmount(value);
+                    resetError();
+                  }}
+                />
+                <DecimalField
+                  label="USD стоимость (опционально)"
+                  value={usdValue}
+                  onChange={(value) => {
+                    setUsdValue(value);
+                    resetError();
+                  }}
+                />
+              </>
+            ) : null}
+
+            {mode === 'income' || mode === 'adjustment' ? (
+              <>
+                <AssetSelect
+                  label="Актив"
+                  value={assetId}
+                  onChange={(value) => {
+                    setAssetId(value);
+                    resetError();
+                  }}
+                  assets={assets}
+                />
+                <DecimalField
+                  label="Количество"
+                  value={amount}
+                  onChange={(value) => {
+                    setAmount(value);
+                    resetError();
+                  }}
+                />
+                <DecimalField
+                  label="USD стоимость"
+                  value={usdValue}
+                  onChange={(value) => {
+                    setUsdValue(value);
+                    resetError();
+                  }}
+                />
+                {mode === 'adjustment' ? (
+                  <div className="md:col-span-2">
+                    <Field label="Причина корректировки">
+                      <Textarea
+                        value={reason}
+                        onChange={(event) => {
+                          setReason(event.target.value);
+                          resetError();
+                        }}
+                        placeholder="Обязательное поле"
+                      />
+                    </Field>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
             {mode === 'deposit' || mode === 'withdrawal' ? (
               <>
                 <AssetSelect
@@ -866,15 +1100,17 @@ export function TradeDialog({
               </>
             ) : null}
 
-            <AccountSelect
-              label="Кошелёк"
-              value={accountId}
-              onChange={(value) => {
-                setAccountId(value);
-                resetError();
-              }}
-              accounts={chainAccounts}
-            />
+            {mode !== 'transfer' ? (
+              <AccountSelect
+                label="Кошелёк"
+                value={accountId}
+                onChange={(value) => {
+                  setAccountId(value);
+                  resetError();
+                }}
+                accounts={chainAccounts}
+              />
+            ) : null}
             <Field label="Дата (опционально)">
               <Input
                 type="date"

@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { ManualEntryDialog } from '@/features/manual/manual-entry-dialog';
+import { TradeDialog } from '@/features/trade/trade-dialog';
 import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { authMeResponseSchema } from '@nexter/contracts';
@@ -126,7 +126,12 @@ export function RootLayout() {
           </main>
         </div>
       </div>
-      <ManualEntryDialog open={manualOpen} onClose={() => setManualOpen(false)} />
+      <TradeDialog
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        initialMode="trade"
+        titleOverride="Новая операция"
+      />
     </div>
   );
 }
