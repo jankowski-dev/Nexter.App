@@ -226,7 +226,9 @@ export function DashboardPage() {
               <Link to="/portfolio">Портфель</Link>
             </Button>
             <Button asChild>
-              <Link to="/trades">Сделки</Link>
+              <Link to="/portfolio" hash="trades">
+                Сделки
+              </Link>
             </Button>
           </>
         }
@@ -403,7 +405,11 @@ export function DashboardPage() {
           title="Последние сделки"
           description="Последние торговые группы."
           action={
-            <Link to="/trades" className="text-sm text-emerald-700 hover:text-emerald-800">
+            <Link
+              to="/portfolio"
+              hash="trades"
+              className="text-sm text-emerald-700 hover:text-emerald-800"
+            >
               Все сделки →
             </Link>
           }

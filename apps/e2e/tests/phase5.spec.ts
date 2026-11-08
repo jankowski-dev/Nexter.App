@@ -122,17 +122,36 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Последние сделки')).toBeVisible();
   await expect(page.getByText(/135,00/).first()).toBeVisible();
 
+  await page.goto('/operations');
+  await expect(page.getByRole('heading', { name: 'Операции' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Журнал операций' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Пополнения' }).click();
+  await expect(page.getByText('Пополнение').first()).toBeVisible();
+
+  await page.goto('/reports');
+  await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'P&L по месяцам' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Активные позиции' }).first()).toBeVisible();
+
+  await page.goto('/trades');
+  await expect(page).toHaveURL(/\/portfolio$/);
+
   await page.goto('/portfolio');
   await expect(page.getByRole('heading', { name: 'Портфель' })).toBeVisible();
   await expect(page.getByText('Позиции по активам')).toBeVisible();
-  await page.getByRole('link', { name: 'BASED' }).first().click();
+  await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
+  const assetDrawer = page.getByRole('dialog');
+  await expect(assetDrawer.getByRole('heading', { name: 'Лоты' })).toBeVisible();
+  await expect(assetDrawer.getByRole('heading', { name: 'Сделки' })).toBeVisible();
+  await expect(assetDrawer.getByRole('heading', { name: 'Транзакции' })).toBeVisible();
+  await assetDrawer.getByRole('link', { name: 'Открыть полную карточку' }).click();
   await expect(page).toHaveURL(/\/portfolio\/assets\//);
   await expect(page.getByRole('heading', { name: /BASED/ })).toBeVisible();
   await expect(page.getByText('Лоты').first()).toBeVisible();
   await expect(page.getByText('Сделки').first()).toBeVisible();
   await expect(page.getByText('Транзакции').first()).toBeVisible();
 
-  await page.goto('/trades');
+  await page.goto('/portfolio');
   await expect(page.getByRole('heading', { name: 'Сделки' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Торговые группы' })).toBeVisible();
   await page.getByRole('link', { name: 'BASED' }).first().click();
@@ -201,7 +220,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await manualDialog.getByRole('button', { name: 'Сохранить операцию' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.goto('/trades');
+  await page.goto('/portfolio');
   await page.getByRole('tab', { name: 'Активность' }).click();
   await expect(page.getByText('deposit / deposit').first()).toBeVisible();
 });

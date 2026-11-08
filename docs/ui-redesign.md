@@ -1,0 +1,106 @@
+# UI redesign — target information architecture
+
+Status: **UI-0 implemented; UI-1..UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
+
+## Goals
+
+- Reduce the number of steps for the core workflow: open/close a trade, exchange assets, record a deposit/withdrawal.
+- Merge portfolio and trade management into one workspace.
+- Make the dashboard a decision screen, not a wall of cards.
+- Add user-defined watchlist groups and contract-address token discovery.
+- Keep every swap security gate: allowlists, calldata verification, exact approvals, step-up TOTP above $500, kill switch, WalletConnect signing. UI automation may reduce quote/build clicks, but never signs automatically.
+
+## Final navigation
+
+| Item       | Contents                                                                       |
+| ---------- | ------------------------------------------------------------------------------ |
+| Dashboard  | Capital, P&L, profit factor, cash, gas, active positions, interactive charts   |
+| Portfolio  | Asset strip/table, side drawer per asset, trade journal below                  |
+| Operations | Deposits, withdrawals, exchanges; no trades                                    |
+| Watchlist  | User-created groups, contract-address token search, token cards                |
+| Reports    | P&L, trade statistics, operations, fees/gas, exports                           |
+| Settings   | Existing settings, security, accounts, audit, data quality; legacy import link |
+
+- No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
+- No separate **Swap** entry. `/swap` stays a hidden legacy route until UI-1 embeds the swap flow in the trade/exchange modal.
+- Import is legacy under Settings until the clean cutover; it is not part of the go-live path.
+
+## Portfolio
+
+- Summary cards: cash, positions value, equity, position count.
+- Asset table: quantity, price, average price, value, cost basis, unrealized P&L, share.
+- Clicking an asset opens a right-side drawer with lots, trade groups, transactions, thesis/tags, and a link to the full asset card.
+- Below the assets: trade journal with the existing position/activity tabs and filters.
+- "New trade" opens the trade modal; UI-0 temporarily reuses the manual-entry dialog.
+
+## Trade / exchange modal (UI-1)
+
+One modal with four modes:
+
+```text
+[ Trade ] [ Exchange ] [ Deposit ] [ Withdrawal ]
+
+Entry / Exit
+From: USDT [balance]  ->  To: TOKEN [selector]
+Amount: [ ... ] [Max]       approx. $...
+```
+
+- Quote is fetched automatically after a debounced amount change. There is no separate "get quote" button.
+- Two explicit execution paths: **record manually** or **execute on-chain**.
+- On-chain path: auto-build after "Continue", inline approval if needed, WalletConnect signature, tracking, accounting. Step-up TOTP and calldata verification stay mandatory.
+- Manual path: compact price/fee/date/account/note fields, no wallet interaction.
+- Never create a manual ledger row and an on-chain accounting row for the same action.
+
+### Closing positions
+
+- A swap order may carry `closeGroupIds: string[]` (single, multiple, or all open groups for a token).
+- Accounting consumes lots only from the selected groups (FIFO inside the selection), allocates proceeds proportionally, and refreshes each group to `closed`/`partial`.
+- Validate ownership, asset, open status, and remaining amount at build/sign; fail closed if anything changed.
+- Partial close of one group is a later extension (`closeLegs: [{ tradeGroupId, amount }]`).
+
+### Exchange semantics
+
+- A crypto-to-crypto exchange is an **operation**, not a trade group. It appears in Operations, not in the trade journal.
+- The source lot is consumed and realized P&L is recognized; the destination lot is created without a trade group. This preserves ledger correctness without presenting the exchange as a trade.
+- A pure cost-basis transfer without P&L is a different accounting policy and requires explicit owner approval; do not implement it implicitly.
+
+## Dashboard / reports
+
+Required metrics beyond the current dashboard:
+
+- Profit factor: gross realized profit / absolute gross realized loss (formula shown in a tooltip).
+- Gross positive/negative unrealized P&L.
+- Win/loss parity: winning vs losing closed trades in absolute USD.
+- Free cash outside positions, split by cash asset (USDT/USDC).
+- Gas paid from confirmed swap network fees; manual/imported gas remains unknown.
+- Daily portfolio snapshots after the clean cutover; historical points before the cutover stay approximate.
+- Interactive chart hover with date/value.
+
+Reports adds period filters, trade statistics, operations, fees/gas, asset breakdowns, and CSV export. No tax calculations.
+
+## Watchlist
+
+- User-created groups; a token has one primary group. The "Main" group feeds the trade asset picker.
+- Search by contract address with an explicit chain selector. Server-side metadata: on-chain symbol/name/decimals, CoinGecko price/icon, cached.
+- Store stable metadata and a cached icon; do not copy volatile market metrics into the asset row.
+- A token from the watchlist can be recorded manually. On-chain execution remains limited to the swap allowlist; show that distinction in the UI.
+- Arbitrary token creation must handle duplicate symbols/contracts and scam-token risk.
+
+## Backend work
+
+1. `swap_orders` / build request: `closeGroupIds` linkage; accounting consumes selected groups.
+2. Analytics endpoints: profit factor, gross win/loss, cash by asset, gas; daily snapshots.
+3. Watchlist groups schema and CRUD (ADR + migration).
+4. Market data service: CoinGecko + on-chain metadata, cache, icon proxy; no client-side trackers.
+5. Asset creation from contract address with duplicate/scam checks.
+6. Reports aggregation and export endpoints.
+
+## Delivery order
+
+- **UI-0** — shell, navigation, Portfolio + trade journal merge, asset drawer, Operations/Reports pages, Import legacy link. No backend changes. Implemented.
+- **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend.
+- **UI-2** — dashboard metrics and interactive charts, daily snapshots.
+- **UI-3** — watchlist groups, contract-address search, market data.
+- **UI-4** — reports/statistics.
+- **UI-5** — remove hidden legacy swap/import from the go-live path, E2E, responsive polish.
+- Then the ADR 0014 clean cutover.

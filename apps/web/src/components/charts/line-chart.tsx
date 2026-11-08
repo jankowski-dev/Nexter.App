@@ -71,13 +71,11 @@ export function LineChart({
           strokeLinecap="round"
         />
         {coordinates.map((point, index) => (
-          <circle
-            key={points[index]?.label ?? index}
-            cx={point.x}
-            cy={point.y}
-            r="3"
-            fill={color}
-          />
+          <circle key={points[index]?.label ?? index} cx={point.x} cy={point.y} r="3" fill={color}>
+            <title>
+              {points[index]?.label}: {formatUsdCompact(String(points[index]?.value ?? 0))}
+            </title>
+          </circle>
         ))}
       </svg>
       <div className="flex justify-between text-xs text-zinc-500">

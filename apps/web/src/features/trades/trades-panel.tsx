@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/ui/page-header';
+
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchAssets, fetchTradeGroups, fetchTransactions } from '@/lib/api';
@@ -28,7 +28,7 @@ const statusTones: Record<string, 'neutral' | 'success' | 'warning' | 'info'> = 
   for_sale: 'warning',
 };
 
-export function TradesPage() {
+export function TradesPanel() {
   const [tab, setTab] = useState<'groups' | 'activity'>('groups');
   const [status, setStatus] = useState('');
   const [source, setSource] = useState('');
@@ -78,8 +78,6 @@ export function TradesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Сделки" subtitle="Торговые группы, активность и P&L." />
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
           <button

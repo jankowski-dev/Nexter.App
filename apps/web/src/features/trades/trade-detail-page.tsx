@@ -161,7 +161,9 @@ export function TradeDetailPage() {
         actions={
           <>
             <Button variant="secondary" asChild>
-              <Link to="/trades">Назад</Link>
+              <Link to="/portfolio" hash="trades">
+                Назад
+              </Link>
             </Button>
             <Button
               onClick={() => {

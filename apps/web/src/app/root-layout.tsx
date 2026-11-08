@@ -10,10 +10,9 @@ import { useState } from 'react';
 const navigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
   { to: '/portfolio', label: messages.nav.portfolio },
-  { to: '/trades', label: messages.nav.trades },
-  { to: '/import', label: messages.nav.imports },
+  { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
-  { to: '/swap', label: messages.nav.swap },
+  { to: '/reports', label: messages.nav.reports },
   { to: '/settings', label: messages.nav.settings },
 ] as const;
 

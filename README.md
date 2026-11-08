@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 10 — On-chain reconciliation (implementation and live execution accepted 2026-11-08; data reconciliation deferred to the go-live clean cutover per ADR 0014)**. Phase 9 — Ethereum execution is accepted (2026-11-05). Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC and Ethereum swaps completed; chain config, per-chain RPC/confirmations, chain-aware UI, tracking, and accounting are in place. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
+Current phase: **Phase 10 — On-chain reconciliation (implementation and live execution accepted 2026-11-08; data reconciliation deferred to the go-live clean cutover per ADR 0014)**. UI redesign UI-0 is implemented: new navigation, Portfolio + trade journal, asset drawer, Operations and Reports pages. Phase 9 — Ethereum execution is accepted (2026-11-05). Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC and Ethereum swaps completed; chain config, per-chain RPC/confirmations, chain-aware UI, tracking, and accounting are in place. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -134,6 +134,7 @@ npx pnpm@10.20.0 test:e2e
 ## Documentation
 
 - [`docs/mega-prompt.md`](docs/mega-prompt.md) — implementation contract
+- [`docs/ui-redesign.md`](docs/ui-redesign.md) — UI redesign IA, trade/exchange modal, and delivery order
 - [`docs/specs/`](docs/specs) — product, threat model, accounting, API/UX, KyberSwap
 - [`docs/adr/`](docs/adr) — architecture decisions
 - [`docs/runbooks/`](docs/runbooks) — Railway, restore, and auth break-glass procedures
