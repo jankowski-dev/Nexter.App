@@ -82,59 +82,41 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     },
   });
 
-  async function openManual() {
+  async function openOperation() {
     await page.getByRole('button', { name: '+ Операция' }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('Новая операция')).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
     return dialog;
   }
 
-  // Buy through the manual-entry dialog.
-  let dialog = await openManual();
-  await dialog.getByRole('button', { name: 'Покупка' }).click();
+  // Buy through the unified operation dialog.
+  let dialog = await openOperation();
   await dialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await dialog.getByLabel('Актив покупки').selectOption(based?.id ?? '');
-  await dialog.getByLabel('Количество актива').fill('100');
-  await dialog.getByLabel('Валюта покупки').selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Сумма валюты').fill('100');
-  await dialog.getByRole('button', { name: 'Сохранить операцию' }).click();
+  await dialog.getByLabel('Актив', { exact: true }).selectOption(based?.id ?? '');
+  await dialog.getByLabel('Количество BASED').fill('100');
+  await dialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdt?.id ?? '');
+  await dialog.getByLabel('Сумма USDT').fill('100');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  // Partial sell through the manual-entry dialog.
-  dialog = await openManual();
-  await dialog.getByRole('button', { name: 'Продажа' }).click();
-  await dialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await dialog.getByLabel('Актив продажи').selectOption(based?.id ?? '');
-  await dialog.getByLabel('Количество актива').fill('40');
-  await dialog.getByLabel('Валюта выручки').selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Сумма выручки').fill('100');
-  await dialog.getByRole('button', { name: 'Сохранить операцию' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-
-  // Income and adjustment require reasons/values and must be audited.
-  dialog = await openManual();
+  // Income and adjustment are secondary actions in the same dialog.
+  dialog = await openOperation();
   await dialog.getByRole('button', { name: 'Доход' }).click();
   await dialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await dialog
-    .getByLabel('Актив')
-    .first()
-    .selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Количество').first().fill('10');
-  await dialog.getByLabel('USD стоимость').first().fill('10');
-  await dialog.getByRole('button', { name: 'Сохранить операцию' }).click();
+  await dialog.getByLabel('Актив', { exact: true }).selectOption(usdt?.id ?? '');
+  await dialog.getByLabel('Количество', { exact: true }).fill('10');
+  await dialog.getByLabel('USD стоимость', { exact: true }).fill('10');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  dialog = await openManual();
+  dialog = await openOperation();
   await dialog.getByRole('button', { name: 'Корректировка' }).click();
   await dialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await dialog
-    .getByLabel('Актив')
-    .first()
-    .selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Количество').first().fill('5');
-  await dialog.getByLabel('USD стоимость').first().fill('5');
+  await dialog.getByLabel('Актив', { exact: true }).selectOption(usdt?.id ?? '');
+  await dialog.getByLabel('Количество', { exact: true }).fill('5');
+  await dialog.getByLabel('USD стоимость', { exact: true }).fill('5');
   await dialog.getByLabel('Причина корректировки').fill('Playwright adjustment');
-  await dialog.getByRole('button', { name: 'Сохранить операцию' }).click();
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // The buy+sell create one partial trade group with FIFO consumption.
@@ -144,6 +126,17 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await expect(page).toHaveURL(/\/trades\//);
   await expect(page.getByText('Ноги сделки')).toBeVisible();
   await expect(page.getByText('Списания').first()).toBeVisible();
+
+  // Partial sell from the trade detail preserves the selected group.
+  await page.getByRole('button', { name: 'Добавить продажу' }).click();
+  const firstSellDialog = page.getByRole('dialog');
+  await firstSellDialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
+  await firstSellDialog.getByLabel('Количество BASED').fill('40');
+  await firstSellDialog.getByLabel('Валюта выручки').selectOption(usdt?.id ?? '');
+  await firstSellDialog.getByLabel('Сумма выручки').fill('100');
+  await firstSellDialog.getByRole('button', { name: 'Добавить продажу' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('60', { exact: true }).first()).toBeVisible();
 
   // Sell more from the trade detail; the UI must show the reduced remaining amount.
   await page.getByRole('button', { name: 'Добавить продажу' }).click();

@@ -8,7 +8,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { ManualEntryDialog } from '../manual/manual-entry-dialog';
+import { TradeDialog } from '../trade/trade-dialog';
 
 type OperationFilter = 'all' | 'deposit' | 'withdrawal' | 'swap';
 
@@ -204,7 +204,12 @@ export function OperationsPage() {
         </Card>
       ) : null}
 
-      <ManualEntryDialog open={manualOpen} onClose={() => setManualOpen(false)} />
+      <TradeDialog
+        open={manualOpen}
+        onClose={() => setManualOpen(false)}
+        initialMode="deposit"
+        titleOverride="Новая операция"
+      />
     </div>
   );
 }

@@ -238,13 +238,13 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.getByRole('button', { name: '+ Операция' }).click();
   const manualDialog = page.getByRole('dialog');
-  await expect(manualDialog.getByText('Новая операция')).toBeVisible();
-  await manualDialog.getByRole('button', { name: 'Пополнение' }).click();
+  await expect(manualDialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
+  await manualDialog.getByRole('tab', { name: 'Пополнение' }).click();
   await manualDialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await manualDialog.getByLabel('Актив').selectOption(usdt?.id ?? '');
-  await manualDialog.getByLabel('Количество').fill('5');
-  await manualDialog.getByLabel('USD стоимость').fill('5');
-  await manualDialog.getByRole('button', { name: 'Сохранить операцию' }).click();
+  await manualDialog.getByLabel('Актив', { exact: true }).selectOption(usdt?.id ?? '');
+  await manualDialog.getByLabel('Количество', { exact: true }).fill('5');
+  await manualDialog.getByLabel('USD стоимость', { exact: true }).fill('5');
+  await manualDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/portfolio');
