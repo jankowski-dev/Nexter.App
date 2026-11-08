@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import {
   assets,
   auditLog,
@@ -14,19 +14,29 @@ import {
   imports,
   prices,
   watchlist,
+  watchlistGroups,
   type Database,
 } from '@nexter/db';
 import type {
   WatchlistCreateRequest,
   WatchlistEntry,
+  WatchlistFromContractRequest,
+  WatchlistGroup,
+  WatchlistGroupCreateRequest,
+  WatchlistGroupUpdateRequest,
+  WatchlistGroupsResponse,
   WatchlistListQuery,
   WatchlistResponse,
+  WatchlistTokenSearchQuery,
+  WatchlistTokenSearchResult,
   WatchlistUpdateRequest,
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
+import type { CoinGeckoMarket } from '../market-data/coingecko.client';
+import { MarketDataService } from '../market-data/market-data.service';
 
 interface WatchlistMeta {
   ip?: string;
@@ -50,13 +60,287 @@ export class WatchlistService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly audit: AuditService,
+    private readonly marketData: MarketDataService,
   ) {}
+
+  async listGroups(userId: string): Promise<WatchlistGroupsResponse> {
+    await this.ensureDefaultGroup(userId);
+
+    const rows = await this.db
+      .select({
+        group: watchlistGroups,
+        entryCount: sql<number>`count(${watchlist.id})::int`,
+      })
+      .from(watchlistGroups)
+      .leftJoin(
+        watchlist,
+        and(eq(watchlist.groupId, watchlistGroups.id), isNull(watchlist.archivedAt)),
+      )
+      .where(eq(watchlistGroups.userId, userId))
+      .groupBy(watchlistGroups.id)
+      .orderBy(asc(watchlistGroups.sortOrder), asc(watchlistGroups.name));
+
+    return {
+      groups: rows.map((row) => this.toGroupContract(row.group, Number(row.entryCount))),
+    };
+  }
+
+  async createGroup(
+    userId: string,
+    input: WatchlistGroupCreateRequest,
+    meta: WatchlistMeta,
+  ): Promise<WatchlistGroup> {
+    await this.ensureDefaultGroup(userId);
+
+    const [maxRow] = await this.db
+      .select({ max: sql<number>`coalesce(max(${watchlistGroups.sortOrder}), 0)::int` })
+      .from(watchlistGroups)
+      .where(eq(watchlistGroups.userId, userId));
+    const sortOrder = input.sortOrder ?? Number(maxRow?.max ?? 0) + 1;
+
+    const [created] = await this.db
+      .insert(watchlistGroups)
+      .values({
+        userId,
+        name: input.name,
+        sortOrder,
+        isDefault: false,
+      })
+      .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+      .returning();
+
+    if (!created) {
+      throw new ConflictException({
+        code: 'CONFLICT',
+        message: 'A watchlist group with this name already exists',
+      });
+    }
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'watchlist.group_created',
+        entityType: 'watchlist_group',
+        entityId: created.id,
+        after: { name: created.name, sortOrder: created.sortOrder },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
+
+    return this.toGroupContract(created, 0);
+  }
+
+  async updateGroup(
+    userId: string,
+    id: string,
+    input: WatchlistGroupUpdateRequest,
+    meta: WatchlistMeta,
+  ): Promise<WatchlistGroup> {
+    const existing = await this.requireGroup(userId, id);
+
+    if (input.name && input.name !== existing.name) {
+      const [duplicate] = await this.db
+        .select({ id: watchlistGroups.id })
+        .from(watchlistGroups)
+        .where(
+          and(
+            eq(watchlistGroups.userId, userId),
+            eq(watchlistGroups.name, input.name),
+            ne(watchlistGroups.id, id),
+          ),
+        )
+        .limit(1);
+
+      if (duplicate) {
+        throw new ConflictException({
+          code: 'CONFLICT',
+          message: 'A watchlist group with this name already exists',
+        });
+      }
+    }
+
+    const [updated] = await this.db
+      .update(watchlistGroups)
+      .set({
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.sortOrder !== undefined ? { sortOrder: input.sortOrder } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(watchlistGroups.id, id), eq(watchlistGroups.userId, userId)))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist group not found' });
+    }
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'watchlist.group_updated',
+        entityType: 'watchlist_group',
+        entityId: id,
+        before: { name: existing.name, sortOrder: existing.sortOrder },
+        after: { name: updated.name, sortOrder: updated.sortOrder },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
+
+    const [countRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(watchlist)
+      .where(and(eq(watchlist.groupId, id), isNull(watchlist.archivedAt)));
+
+    return this.toGroupContract(updated, Number(countRow?.count ?? 0));
+  }
+
+  async deleteGroup(userId: string, id: string, meta: WatchlistMeta): Promise<void> {
+    const existing = await this.requireGroup(userId, id);
+
+    if (existing.isDefault) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'The default watchlist group cannot be deleted',
+      });
+    }
+
+    const defaultGroup = await this.ensureDefaultGroup(userId);
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(watchlist)
+        .set({ groupId: defaultGroup.id, updatedAt: new Date() })
+        .where(and(eq(watchlist.userId, userId), eq(watchlist.groupId, id)));
+
+      await tx
+        .delete(watchlistGroups)
+        .where(and(eq(watchlistGroups.id, id), eq(watchlistGroups.userId, userId)));
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'watchlist.group_deleted',
+          entityType: 'watchlist_group',
+          entityId: id,
+          before: { name: existing.name, sortOrder: existing.sortOrder },
+          after: { movedToGroupId: defaultGroup.id },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
+  }
+
+  async searchToken(
+    userId: string,
+    query: WatchlistTokenSearchQuery,
+  ): Promise<WatchlistTokenSearchResult> {
+    return this.marketData.search(userId, query.chain, query.address);
+  }
+
+  async fetchIcon(url: string): Promise<{ body: Buffer; contentType: string }> {
+    return this.marketData.fetchIcon(url);
+  }
+
+  async fromContract(
+    userId: string,
+    input: WatchlistFromContractRequest,
+    meta: WatchlistMeta,
+  ): Promise<WatchlistEntry> {
+    const group = input.groupId
+      ? await this.requireGroup(userId, input.groupId)
+      : await this.ensureDefaultGroup(userId);
+    const { asset } = await this.marketData.ensureAsset(userId, input.chain, input.address);
+
+    return this.create(
+      userId,
+      {
+        assetId: asset.id,
+        groupId: group.id,
+        thesis: input.thesis ?? null,
+        tags: input.tags ?? [],
+        priority: input.priority ?? 0,
+      },
+      meta,
+    );
+  }
+
+  private async ensureDefaultGroup(userId: string) {
+    const [existing] = await this.db
+      .select()
+      .from(watchlistGroups)
+      .where(and(eq(watchlistGroups.userId, userId), eq(watchlistGroups.isDefault, true)))
+      .limit(1);
+
+    if (existing) return existing;
+
+    const [created] = await this.db
+      .insert(watchlistGroups)
+      .values({
+        userId,
+        name: 'Основная',
+        sortOrder: 0,
+        isDefault: true,
+      })
+      .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+      .returning();
+
+    if (created) {
+      await this.audit.log(
+        {
+          userId,
+          action: 'watchlist.group_created',
+          entityType: 'watchlist_group',
+          entityId: created.id,
+          after: { name: created.name, sortOrder: created.sortOrder, isDefault: true },
+        },
+        { strict: true },
+      );
+      return created;
+    }
+
+    const [fallback] = await this.db
+      .select()
+      .from(watchlistGroups)
+      .where(and(eq(watchlistGroups.userId, userId), eq(watchlistGroups.isDefault, true)))
+      .limit(1);
+
+    if (!fallback) throw new Error('Failed to ensure default watchlist group');
+    return fallback;
+  }
+
+  private async requireGroup(userId: string, id: string) {
+    const [group] = await this.db
+      .select()
+      .from(watchlistGroups)
+      .where(and(eq(watchlistGroups.id, id), eq(watchlistGroups.userId, userId)))
+      .limit(1);
+
+    if (!group) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist group not found' });
+    }
+
+    return group;
+  }
 
   async list(userId: string, query: WatchlistListQuery): Promise<WatchlistResponse> {
     await this.backfillFromNotion(userId);
+    await this.ensureDefaultGroup(userId);
 
     const conditions = [eq(watchlist.userId, userId)];
     if (!query.includeArchived) conditions.push(isNull(watchlist.archivedAt));
+    if (query.groupId) {
+      const group = await this.requireGroup(userId, query.groupId);
+      conditions.push(
+        group.isDefault
+          ? or(eq(watchlist.groupId, group.id), isNull(watchlist.groupId))!
+          : eq(watchlist.groupId, group.id),
+      );
+    }
     if (query.search) {
       const pattern = `%${query.search}%`;
       conditions.push(or(ilike(assets.symbol, pattern), ilike(assets.name, pattern))!);
@@ -110,9 +394,18 @@ export class WatchlistService {
       }),
     );
     const priceByAsset = await this.priceContext(page.data.map((row) => row.entry.assetId));
+    const marketByCoingeckoId = await this.marketData.getMarkets(
+      page.data.map((row) => row.asset.coingeckoId).filter((id): id is string => Boolean(id)),
+    );
 
     return {
-      data: page.data.map((row) => this.toContract(row, priceByAsset.get(row.entry.assetId))),
+      data: page.data.map((row) =>
+        this.toContract(
+          row,
+          priceByAsset.get(row.entry.assetId),
+          row.asset.coingeckoId ? marketByCoingeckoId.get(row.asset.coingeckoId) : undefined,
+        ),
+      ),
       page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
     };
   }
@@ -123,6 +416,9 @@ export class WatchlistService {
     meta: WatchlistMeta,
   ): Promise<WatchlistEntry> {
     await this.requireAsset(input.assetId);
+    const group = input.groupId
+      ? await this.requireGroup(userId, input.groupId)
+      : await this.ensureDefaultGroup(userId);
 
     const [existing] = await this.db
       .select()
@@ -146,6 +442,7 @@ export class WatchlistService {
           .values({
             userId,
             assetId: input.assetId,
+            groupId: group.id,
             thesis: input.thesis ?? null,
             tags: input.tags ?? [],
             priority: input.priority ?? 0,
@@ -160,7 +457,7 @@ export class WatchlistService {
             action: 'watchlist.created',
             entityType: 'watchlist',
             entityId: created.id,
-            after: input,
+            after: { ...input, groupId: group.id },
             ip: meta.ip,
             userAgent: meta.userAgent,
           },
@@ -203,10 +500,18 @@ export class WatchlistService {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist entry not found' });
     }
 
+    const targetGroup =
+      input.groupId !== undefined
+        ? input.groupId
+          ? await this.requireGroup(userId, input.groupId)
+          : await this.ensureDefaultGroup(userId)
+        : null;
+
     await this.db.transaction(async (tx) => {
       await tx
         .update(watchlist)
         .set({
+          groupId: targetGroup ? targetGroup.id : existing.groupId,
           thesis: input.thesis !== undefined ? input.thesis : existing.thesis,
           tags: input.tags !== undefined ? input.tags : existing.tags,
           priority: input.priority !== undefined ? input.priority : existing.priority,
@@ -302,9 +607,11 @@ export class WatchlistService {
 
     const assetRows = await this.db.select().from(assets).where(eq(assets.chainId, bsc.id));
     const assetBySymbol = new Map(assetRows.map((asset) => [asset.symbol, asset]));
+    const defaultGroup = await this.ensureDefaultGroup(userId);
     const values: Array<{
       userId: string;
       assetId: string;
+      groupId: string;
       thesis: string | null;
       tags: string[];
     }> = [];
@@ -339,6 +646,7 @@ export class WatchlistService {
       values.push({
         userId,
         assetId: asset.id,
+        groupId: defaultGroup.id,
         thesis: typeof data.description === 'string' ? data.description : null,
         tags,
       });
@@ -385,7 +693,15 @@ export class WatchlistService {
     }
 
     const priceByAsset = await this.priceContext([row.entry.assetId]);
-    return this.toContract(row, priceByAsset.get(row.entry.assetId));
+    const marketByCoingeckoId = row.asset.coingeckoId
+      ? await this.marketData.getMarkets([row.asset.coingeckoId])
+      : new Map<string, CoinGeckoMarket>();
+
+    return this.toContract(
+      row,
+      priceByAsset.get(row.entry.assetId),
+      row.asset.coingeckoId ? marketByCoingeckoId.get(row.asset.coingeckoId) : undefined,
+    );
   }
 
   private async priceContext(
@@ -431,6 +747,21 @@ export class WatchlistService {
     return result;
   }
 
+  private toGroupContract(
+    row: typeof watchlistGroups.$inferSelect,
+    entryCount: number,
+  ): WatchlistGroup {
+    return {
+      id: row.id,
+      name: row.name,
+      sortOrder: row.sortOrder,
+      isDefault: row.isDefault,
+      entryCount,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
   private toContract(
     row: {
       entry: typeof watchlist.$inferSelect;
@@ -442,13 +773,22 @@ export class WatchlistService {
       latestObservedAt: Date | null;
       previous: string | null;
     },
+    market?: CoinGeckoMarket,
   ): WatchlistEntry {
-    const latest = price?.latest ?? null;
+    const latest = market?.priceUsd ?? price?.latest ?? null;
     const previous = price?.previous ?? null;
     const change =
-      latest && previous && decimal(previous).gt(0)
+      market?.change24hPct ??
+      (latest && previous && decimal(previous).gt(0)
         ? decimal(latest).minus(previous).div(previous).mul(100).toFixed(2)
-        : null;
+        : null);
+    const derivedPrevious =
+      previous ??
+      (latest && change && decimal(change).gt(-100)
+        ? decimal(latest)
+            .div(decimal('1').plus(decimal(change).div(100)))
+            .toFixed(8)
+        : null);
 
     return {
       id: row.entry.id,
@@ -465,6 +805,8 @@ export class WatchlistService {
         isCashEquivalent: row.asset.isCashEquivalent,
         isVerified: row.asset.isVerified,
       },
+      groupId: row.entry.groupId,
+      logoUrl: row.asset.logoUrl ?? market?.logoUrl ?? null,
       thesis: row.entry.thesis,
       tags: row.entry.tags,
       priority: row.entry.priority,
@@ -472,7 +814,7 @@ export class WatchlistService {
       createdAt: row.entry.createdAt.toISOString(),
       updatedAt: row.entry.updatedAt.toISOString(),
       priceUsd: latest,
-      price24hAgoUsd: previous,
+      price24hAgoUsd: derivedPrevious,
       change24hPct: change,
     };
   }

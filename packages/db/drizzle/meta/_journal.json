@@ -127,6 +127,13 @@
       "when": 1794167968656,
       "tag": "0017_silky_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1794170694882,
+      "tag": "0018_outgoing_leader",
+      "breakpoints": true
     }
   ]
 }

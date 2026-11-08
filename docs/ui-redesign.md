@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0, UI-1, and UI-2 implemented; UI-3..UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
+Status: **UI-0, UI-1, UI-2, and UI-3 implemented; UI-4..UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
 
 ## Goals
 
@@ -100,7 +100,7 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 - **UI-0** — shell, navigation, Portfolio + trade journal merge, asset drawer, Operations/Reports pages, Import legacy link. No backend changes. Implemented.
 - **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend. Implemented: the global “+ Операция” and the Portfolio “Новая сделка” use the same modal with Trade, Exchange, Deposit, and Withdrawal tabs; manual recording, embedded on-chain execution, and one/several/all open-group selection. Income and adjustment live under “Дополнительно” to avoid a tab pile. Internal transfer was removed from the UI because the owner does not send crypto to third parties and the current setup has one wallet per chain; the backend transfer endpoint remains for a future multi-wallet flow. The legacy manual dialog was removed.
 - **UI-2** — dashboard metrics and interactive charts, daily snapshots. Implemented: profit factor, gross profit/loss, win rate, positive/negative unrealized, cash by asset, gas paid, daily snapshot capture, snapshot-backed equity curve, and hover tooltips on line/bar charts.
-- **UI-3** — watchlist groups, contract-address search, market data.
+- **UI-3** — watchlist groups, contract-address search, market data. Implemented: user-created groups with a default group, group moves, contract-address search with on-chain metadata, CoinGecko price/icon enrichment, server-side icon proxy, and watchlist cards with prices.
 - **UI-4** — reports/statistics.
 - **UI-5** — remove hidden legacy swap/import from the go-live path, E2E, responsive polish.
 - Then the ADR 0014 clean cutover.

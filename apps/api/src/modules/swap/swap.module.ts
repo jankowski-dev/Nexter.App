@@ -26,5 +26,6 @@ import { SwapTrackingService } from './swap-tracking.service';
       useFactory: () => new EvmRpcService(),
     },
   ],
+  exports: [EvmRpcService],
 })
 export class SwapModule {}

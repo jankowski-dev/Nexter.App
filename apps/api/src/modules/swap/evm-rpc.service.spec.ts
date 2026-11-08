@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { encodeAbiParameters } from 'viem';
 import { EvmRpcService } from './evm-rpc.service';
 import { env } from '../../shared/config/env';
 
@@ -36,6 +37,27 @@ describe('EvmRpcService', () => {
       chainId: 56,
     });
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('reads ERC-20 name, symbol and decimals', async () => {
+    const name = encodeAbiParameters([{ type: 'string' }], ['Test Token']);
+    const symbol = encodeAbiParameters([{ type: 'string' }], ['TST']);
+    const decimals = encodeAbiParameters([{ type: 'uint8' }], [18]);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(rpcResponse('0x38'))
+      .mockResolvedValueOnce(rpcResponse(name))
+      .mockResolvedValueOnce(rpcResponse(symbol))
+      .mockResolvedValueOnce(rpcResponse(decimals));
+    const service = new EvmRpcService(fetchMock as unknown as typeof fetch);
+
+    await expect(
+      service.getErc20Metadata('bsc', '0x1111111111111111111111111111111111111111'),
+    ).resolves.toEqual({
+      name: 'Test Token',
+      symbol: 'TST',
+      decimals: 18,
+    });
   });
 
   it('rejects a non-BSC RPC chain', async () => {

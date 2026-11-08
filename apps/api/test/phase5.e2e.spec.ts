@@ -378,6 +378,48 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       change24hPct: null,
     });
 
+    const watchlistGroups = await agent.get('/api/v1/watchlist/groups').expect(200);
+    expect(watchlistGroups.body.groups).toEqual([
+      expect.objectContaining({ name: 'Основная', isDefault: true, entryCount: 1 }),
+    ]);
+    const defaultGroupId = watchlistGroups.body.groups[0].id as string;
+    expect(watchlistCreated.body.groupId).toBe(defaultGroupId);
+
+    const customGroup = await agent
+      .post('/api/v1/watchlist/groups')
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'Наблюдение' })
+      .expect(201);
+    expect(customGroup.body).toMatchObject({
+      name: 'Наблюдение',
+      isDefault: false,
+      entryCount: 0,
+    });
+
+    const movedEntry = await agent
+      .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ groupId: customGroup.body.id })
+      .expect(200);
+    expect(movedEntry.body.groupId).toBe(customGroup.body.id);
+
+    const filteredGroup = await agent
+      .get(`/api/v1/watchlist?groupId=${customGroup.body.id}`)
+      .expect(200);
+    expect(filteredGroup.body.data).toHaveLength(1);
+    expect(filteredGroup.body.data[0].id).toBe(watchlistCreated.body.id);
+
+    await agent
+      .delete(`/api/v1/watchlist/groups/${customGroup.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(204);
+    const afterGroupDelete = await agent.get('/api/v1/watchlist').expect(200);
+    expect(
+      afterGroupDelete.body.data.find(
+        (entry: { id: string }) => entry.id === watchlistCreated.body.id,
+      ).groupId,
+    ).toBe(defaultGroupId);
+
     const link = asset('LINK');
     await agent
       .post(`/api/v1/prices/${link.id}`)

@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { assets, chains, type Asset, type Database, type DbExecutor } from '@nexter/db';
 import type { Asset as AssetContract } from '@nexter/contracts';
@@ -61,6 +61,131 @@ export class AssetsService {
       .limit(1);
 
     return row ?? null;
+  }
+
+  async ensureMarketAsset(
+    userId: string,
+    chainCode: string,
+    token: {
+      symbol: string;
+      name: string;
+      address: string;
+      decimals: number;
+      coingeckoId?: string | null;
+      logoUrl?: string | null;
+    },
+    executor: DbExecutor = this.db,
+  ): Promise<Asset> {
+    if (executor === this.db) {
+      return this.db.transaction((tx) => this.ensureMarketAsset(userId, chainCode, token, tx));
+    }
+
+    const [chain] = await executor.select().from(chains).where(eq(chains.code, chainCode)).limit(1);
+    if (!chain) throw new Error(`Chain ${chainCode} is not configured`);
+
+    const address = token.address.toLowerCase();
+    const [existingByContract] = await executor
+      .select()
+      .from(assets)
+      .where(and(eq(assets.chainId, chain.id), eq(assets.contractAddress, address)))
+      .limit(1);
+
+    if (existingByContract) {
+      const updates: Partial<typeof assets.$inferInsert> = {};
+      if (!existingByContract.coingeckoId && token.coingeckoId) {
+        updates.coingeckoId = token.coingeckoId;
+      }
+      if (!existingByContract.logoUrl && token.logoUrl) updates.logoUrl = token.logoUrl;
+
+      if (Object.keys(updates).length === 0) return existingByContract;
+
+      const [updated] = await executor
+        .update(assets)
+        .set({ ...updates, updatedAt: new Date() })
+        .where(eq(assets.id, existingByContract.id))
+        .returning();
+
+      if (!updated) throw new Error('Failed to update market asset');
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'accounting.asset_metadata_updated',
+          entityType: 'asset',
+          entityId: updated.id,
+          after: {
+            chainCode,
+            symbol: updated.symbol,
+            coingeckoId: updated.coingeckoId,
+            logoUrl: updated.logoUrl,
+          },
+        },
+        { executor, strict: true },
+      );
+
+      return updated;
+    }
+
+    const [created] = await executor
+      .insert(assets)
+      .values({
+        chainId: chain.id,
+        symbol: token.symbol,
+        name: token.name,
+        contractAddress: address,
+        decimals: token.decimals,
+        coingeckoId: token.coingeckoId ?? null,
+        logoUrl: token.logoUrl ?? null,
+        isStablecoin: false,
+        isCashEquivalent: false,
+        isVerified: false,
+        sourceId: 'watchlist',
+        dataQuality: { source: 'coingecko' },
+      })
+      .onConflictDoNothing({ target: [assets.chainId, assets.symbol] })
+      .returning();
+
+    if (!created) {
+      const [conflict] = await executor
+        .select()
+        .from(assets)
+        .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, token.symbol)))
+        .limit(1);
+
+      if (conflict && conflict.contractAddress !== address) {
+        throw new ConflictException({
+          code: 'ASSET_SYMBOL_CONFLICT',
+          message: 'An asset with this symbol already exists on the chain',
+          details: {
+            symbol: token.symbol,
+            chainCode,
+            existingContractAddress: conflict.contractAddress,
+            requestedContractAddress: address,
+          },
+        });
+      }
+
+      if (conflict) return conflict;
+      throw new Error('Failed to create market asset');
+    }
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'accounting.asset_created',
+        entityType: 'asset',
+        entityId: created.id,
+        after: {
+          chainCode,
+          symbol: created.symbol,
+          contractAddress: created.contractAddress,
+          source: 'watchlist',
+        },
+      },
+      { executor, strict: true },
+    );
+
+    return created;
   }
 
   async get(assetId: string): Promise<AssetContract> {

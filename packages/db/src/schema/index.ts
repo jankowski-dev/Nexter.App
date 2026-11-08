@@ -145,6 +145,7 @@ export const assets = pgTable(
     contractAddress: text('contract_address'),
     decimals: integer('decimals').notNull().default(18),
     coingeckoId: text('coingecko_id'),
+    logoUrl: text('logo_url'),
     isStablecoin: boolean('is_stablecoin').notNull().default(false),
     isCashEquivalent: boolean('is_cash_equivalent').notNull().default(false),
     isVerified: boolean('is_verified').notNull().default(false),
@@ -291,6 +292,28 @@ export const tradeGroups = pgTable(
   ],
 );
 
+export const watchlistGroups = pgTable(
+  'watchlist_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    isDefault: boolean('is_default').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('watchlist_groups_user_name_unique').on(table.userId, table.name),
+    index('watchlist_groups_user_sort_idx').on(table.userId, table.sortOrder),
+    uniqueIndex('watchlist_groups_user_default_unique')
+      .on(table.userId)
+      .where(sql`${table.isDefault} = true`),
+  ],
+);
+
 export const watchlist = pgTable(
   'watchlist',
   {
@@ -301,6 +324,7 @@ export const watchlist = pgTable(
     assetId: uuid('asset_id')
       .notNull()
       .references(() => assets.id, { onDelete: 'cascade' }),
+    groupId: uuid('group_id').references(() => watchlistGroups.id, { onDelete: 'set null' }),
     thesis: text('thesis'),
     tags: text('tags')
       .array()
@@ -315,6 +339,7 @@ export const watchlist = pgTable(
     uniqueIndex('watchlist_user_asset_unique').on(table.userId, table.assetId),
     index('watchlist_user_priority_idx').on(table.userId, table.priority),
     index('watchlist_user_archived_idx').on(table.userId, table.archivedAt),
+    index('watchlist_user_group_idx').on(table.userId, table.groupId),
   ],
 );
 

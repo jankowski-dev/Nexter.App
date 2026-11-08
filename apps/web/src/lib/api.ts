@@ -29,7 +29,10 @@ import {
   tradeGroupsResponseSchema,
   transactionsPageResponseSchema,
   watchlistEntrySchema,
+  watchlistGroupSchema,
+  watchlistGroupsResponseSchema,
   watchlistResponseSchema,
+  watchlistTokenSearchResultSchema,
   type AccountsResponse,
   type ApprovalBuildResponse,
   type AssetsResponse,
@@ -64,7 +67,14 @@ import {
   type UpdateSettingsRequest,
   type WatchlistCreateRequest,
   type WatchlistEntry,
+  type WatchlistFromContractRequest,
+  type WatchlistGroup,
+  type WatchlistGroupCreateRequest,
+  type WatchlistGroupUpdateRequest,
+  type WatchlistGroupsResponse,
   type WatchlistResponse,
+  type WatchlistTokenSearchQuery,
+  type WatchlistTokenSearchResult,
   type WatchlistUpdateRequest,
 } from '@nexter/contracts';
 
@@ -98,7 +108,14 @@ export type {
   TradeGroupsResponse,
   TransactionsPageResponse,
   WatchlistEntry,
+  WatchlistFromContractRequest,
+  WatchlistGroup,
+  WatchlistGroupCreateRequest,
+  WatchlistGroupUpdateRequest,
+  WatchlistGroupsResponse,
   WatchlistResponse,
+  WatchlistTokenSearchQuery,
+  WatchlistTokenSearchResult,
 };
 
 export interface NotionImportRawPayload {
@@ -374,9 +391,10 @@ export async function fetchTransactions(
 export async function fetchWatchlist(
   includeArchived = false,
   cursor?: string,
+  groupId?: string,
 ): Promise<WatchlistResponse> {
   return apiFetch(
-    `/api/v1/watchlist${queryString({ includeArchived, cursor })}`,
+    `/api/v1/watchlist${queryString({ includeArchived, cursor, groupId })}`,
     {},
     watchlistResponseSchema,
   );
@@ -395,6 +413,43 @@ export async function updateWatchlist(
 
 export async function archiveWatchlist(id: string): Promise<void> {
   await apiDelete(`/api/v1/watchlist/${id}`);
+}
+
+export async function fetchWatchlistGroups(): Promise<WatchlistGroupsResponse> {
+  return apiFetch('/api/v1/watchlist/groups', {}, watchlistGroupsResponseSchema);
+}
+
+export async function createWatchlistGroup(
+  body: WatchlistGroupCreateRequest,
+): Promise<WatchlistGroup> {
+  return apiPost('/api/v1/watchlist/groups', body, watchlistGroupSchema);
+}
+
+export async function updateWatchlistGroup(
+  id: string,
+  body: WatchlistGroupUpdateRequest,
+): Promise<WatchlistGroup> {
+  return apiPatch(`/api/v1/watchlist/groups/${id}`, body, watchlistGroupSchema);
+}
+
+export async function deleteWatchlistGroup(id: string): Promise<void> {
+  await apiDelete(`/api/v1/watchlist/groups/${id}`);
+}
+
+export async function searchWatchlistToken(
+  query: WatchlistTokenSearchQuery,
+): Promise<WatchlistTokenSearchResult> {
+  return apiFetch(
+    `/api/v1/watchlist/search${queryString(query)}`,
+    {},
+    watchlistTokenSearchResultSchema,
+  );
+}
+
+export async function createWatchlistFromContract(
+  body: WatchlistFromContractRequest,
+): Promise<WatchlistEntry> {
+  return apiPost('/api/v1/watchlist/from-contract', body, watchlistEntrySchema);
 }
 
 export async function fetchSettings(): Promise<Settings> {
