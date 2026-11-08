@@ -1,6 +1,8 @@
 // The API image serves the built SPA from apps/web/dist. Keep apps/web/** and
 // packages/** in the Railway API watch patterns, otherwise frontend-only merges
 // are reported as "No deployment needed" and production keeps the old bundle.
+// If the Railway dashboard has custom watch paths, update them there too; the
+// service-level setting takes precedence over this config-as-code hint.
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
