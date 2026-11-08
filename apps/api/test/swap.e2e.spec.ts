@@ -13,6 +13,7 @@ import {
   lots,
   postings,
   swapEvents,
+  swapOrderCloseGroups,
   swapOrders,
   tokenApprovals,
   transactions,
@@ -433,6 +434,124 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(cancelled.body.status).toBe('CANCELLED');
+  }, 60_000);
+
+  it('links a swap to selected close groups and fails when a group changes', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const assets = assetsResponse.body.assets as Array<{
+      id: string;
+      symbol: string;
+      chainCode: string;
+      contractAddress: string | null;
+    }>;
+    const accountsResponse = await agent.get('/api/v1/accounts').expect(200);
+    const accounts = accountsResponse.body.accounts as Array<{
+      id: string;
+      name: string;
+      type: string;
+    }>;
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const based = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'BASED');
+    const ledgerWallet = accounts.find(
+      (account) => account.name === 'Tangem BSC' && account.type === 'wallet',
+    );
+
+    expect(usdc?.contractAddress).toBeTruthy();
+    expect(based?.contractAddress).toBeTruthy();
+    expect(ledgerWallet).toBeDefined();
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'deposit',
+        accountId: ledgerWallet?.id,
+        assetId: usdc?.id,
+        amount: '1000',
+        usdValue: '1000',
+      })
+      .expect(201);
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: ledgerWallet?.id,
+        assetId: based?.id,
+        amount: '10',
+        quoteAssetId: usdc?.id,
+        quoteAmount: '20',
+      })
+      .expect(201);
+
+    const groupsResponse = await agent.get(`/api/v1/trade-groups?assetId=${based?.id}`).expect(200);
+    const group = (
+      groupsResponse.body.data as Array<{
+        id: string;
+        remainingAmount: string;
+      }>
+    ).find((item) => item.remainingAmount.startsWith('10.'));
+
+    expect(group).toBeDefined();
+
+    const quote = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(201);
+
+    expect(quote.body.closeGroupIds).toEqual([group?.id]);
+    const closeRows = await db
+      .select()
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, quote.body.id));
+    expect(closeRows).toHaveLength(1);
+    expect(closeRows[0]?.tradeGroupId).toBe(group?.id);
+    expect(closeRows[0]?.expectedAmount).toBe('10.000000000000000000');
+
+    const mismatch = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '9',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(400);
+    expect(mismatch.body.error.code).toBe('SWAP_CLOSE_AMOUNT_MISMATCH');
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: ledgerWallet?.id,
+        assetId: based?.id,
+        amount: '1',
+        proceedsAssetId: usdc?.id,
+        proceedsAmount: '2',
+        tradeGroupId: group?.id,
+      })
+      .expect(201);
+
+    const changed = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId: quote.body.id, walletAddress: wallet })
+      .expect(400);
+    expect(changed.body.error.code).toBe('SWAP_CLOSE_GROUP_CHANGED');
   }, 60_000);
 
   it('rejects calldata with a different recipient or a lower minimum output', async () => {

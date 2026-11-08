@@ -141,6 +141,12 @@ export const manualSwapSchema = z.object({
   amountOut: positiveDecimalSchema,
   usdValueIn: positiveDecimalSchema.optional(),
   usdValueOut: positiveDecimalSchema.optional(),
+  closeGroupIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(50)
+    .refine((ids) => new Set(ids).size === ids.length, 'Duplicate close group ids')
+    .optional(),
   ...feeFields,
   ...manualBase,
 });

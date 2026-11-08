@@ -113,6 +113,13 @@
       "when": 1793915572035,
       "tag": "0015_asset_contract_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794158497277,
+      "tag": "0016_cheerful_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }

@@ -61,6 +61,7 @@ type LotWork =
       proceedsUsd: Decimal;
       feeUsd: Decimal;
       realize: boolean;
+      groupIds?: string[];
     };
 
 export interface LedgerMeta {
@@ -384,6 +385,7 @@ export class LedgerService {
               proceedsUsd,
               feeUsd: includeGas && fee ? fee.usd : new Decimal(0),
               realize: true,
+              groupIds: input.tradeGroupId ? [input.tradeGroupId] : undefined,
             });
           }
 
@@ -454,6 +456,71 @@ export class LedgerService {
             });
           }
 
+          if (input.closeGroupIds) {
+            if (!tokenOut.isCashEquivalent) {
+              throw new BadRequestException({
+                code: 'SWAP_CLOSE_OUTPUT_NOT_CASH',
+                message: 'Closing a position requires a cash-equivalent output asset',
+              });
+            }
+
+            const closeRows = await tx
+              .select({
+                id: tradeGroups.id,
+                assetId: tradeGroups.assetId,
+                status: tradeGroups.status,
+                remaining: sql<string>`coalesce(sum(${lots.remainingAmount}), 0)::text`,
+              })
+              .from(tradeGroups)
+              .leftJoin(lots, eq(lots.tradeGroupId, tradeGroups.id))
+              .where(
+                and(eq(tradeGroups.userId, userId), inArray(tradeGroups.id, input.closeGroupIds)),
+              )
+              .groupBy(tradeGroups.id, tradeGroups.assetId, tradeGroups.status);
+
+            if (closeRows.length !== input.closeGroupIds.length) {
+              throw new BadRequestException({
+                code: 'SWAP_CLOSE_GROUP_NOT_FOUND',
+                message: 'One or more close groups were not found',
+                details: { closeGroupIds: input.closeGroupIds },
+              });
+            }
+
+            let closeTotal = new Decimal(0);
+
+            for (const group of closeRows) {
+              if (group.assetId !== tokenIn.id) {
+                throw new BadRequestException({
+                  code: 'SWAP_CLOSE_GROUP_ASSET_MISMATCH',
+                  message: 'Close group asset does not match the swap input asset',
+                  details: { tradeGroupId: group.id },
+                });
+              }
+
+              if (group.status === 'closed') {
+                throw new BadRequestException({
+                  code: 'SWAP_CLOSE_GROUP_CLOSED',
+                  message: 'A selected close group is already closed',
+                  details: { tradeGroupId: group.id },
+                });
+              }
+
+              closeTotal = closeTotal.plus(decimal(group.remaining));
+            }
+
+            if (!closeTotal.eq(amountIn)) {
+              throw new BadRequestException({
+                code: 'SWAP_CLOSE_AMOUNT_MISMATCH',
+                message: 'Swap amount must equal the remaining amount of the selected close groups',
+                details: {
+                  closeGroupIds: input.closeGroupIds,
+                  amountIn: amountIn.toFixed(tokenIn.decimals),
+                  closeTotal: closeTotal.toFixed(tokenIn.decimals),
+                },
+              });
+            }
+          }
+
           const fee = await resolveFee(input.feeAssetId, input.feeAmount, input.feeUsdValue);
           const feeCapitalized = !tokenOut.isCashEquivalent && includeGas;
           feesUsd = fee && !feeCapitalized ? fee.usd : new Decimal(0);
@@ -472,6 +539,7 @@ export class LedgerService {
               proceedsUsd: inUsd,
               feeUsd: new Decimal(0),
               realize: true,
+              groupIds: input.closeGroupIds,
             });
           }
 
@@ -712,6 +780,7 @@ export class LedgerService {
               proceedsUsd: item.proceedsUsd,
               feeUsd: item.feeUsd,
               realize: item.realize,
+              groupIds: item.groupIds,
             },
           );
         }

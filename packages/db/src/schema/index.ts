@@ -592,6 +592,28 @@ export const swapOrders = pgTable(
   ],
 );
 
+export const swapOrderCloseGroups = pgTable(
+  'swap_order_close_groups',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => swapOrders.id, { onDelete: 'cascade' }),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    expectedAmount: numeric('expected_amount', { precision: 36, scale: 18 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('swap_order_close_groups_order_idx').on(table.orderId),
+    uniqueIndex('swap_order_close_groups_order_group_unique').on(table.orderId, table.tradeGroupId),
+  ],
+);
+
 export const swapEvents = pgTable(
   'swap_events',
   {

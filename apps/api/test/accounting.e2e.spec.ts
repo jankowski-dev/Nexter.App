@@ -337,6 +337,93 @@ describe.runIf(canRun)('Accounting e2e', () => {
     expect((unbalanced.rows[0] as { n: number } | undefined)?.n).toBe(0);
   }, 60_000);
 
+  it('consumes lots only from the selected trade group when selling', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const assets = await getAssets(agent);
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    expect(usdc).toBeDefined();
+    expect(link).toBeDefined();
+    expect(wallet).toBeDefined();
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdc?.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+    await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '10',
+      quoteAssetId: usdc?.id,
+      quoteAmount: '100',
+    });
+    await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '5',
+      quoteAssetId: usdc?.id,
+      quoteAmount: '75',
+    });
+
+    const groupsResponse = await agent.get(`/api/v1/trade-groups?assetId=${link?.id}`).expect(200);
+    const groups = groupsResponse.body.data as Array<{
+      id: string;
+      status: string;
+      remainingAmount: string;
+      totalPnlUsd: string | null;
+    }>;
+    const target = groups.find((group) => group.remainingAmount.startsWith('5.'));
+    const other = groups.find((group) => group.remainingAmount.startsWith('10.'));
+
+    expect(target).toBeDefined();
+    expect(other).toBeDefined();
+
+    const sell = await create(agent, owner.csrf, {
+      type: 'sell',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '5',
+      proceedsAssetId: usdc?.id,
+      proceedsAmount: '100',
+      tradeGroupId: target?.id,
+    });
+    expect(sell.body.transaction.tradeGroupId).toBe(target?.id);
+
+    const afterResponse = await agent.get(`/api/v1/trade-groups?assetId=${link?.id}`).expect(200);
+    const after = afterResponse.body.data as Array<{
+      id: string;
+      status: string;
+      remainingAmount: string;
+      totalPnlUsd: string | null;
+    }>;
+    const targetAfter = after.find((group) => group.id === target?.id);
+    const otherAfter = after.find((group) => group.id === other?.id);
+
+    expect(targetAfter?.status).toBe('closed');
+    expect(targetAfter?.remainingAmount).toBe('0.000000000000000000');
+    expect(otherAfter?.status).toBe('open');
+    expect(otherAfter?.remainingAmount).toBe('10.000000000000000000');
+
+    const lotRows = await db
+      .select()
+      .from(lots)
+      .where(and(eq(lots.userId, owner.userId), eq(lots.assetId, link?.id ?? '')));
+    expect(lotRows.find((lot) => lot.tradeGroupId === target?.id)?.remainingAmount).toBe(
+      '0.000000000000000000',
+    );
+    expect(lotRows.find((lot) => lot.tradeGroupId === other?.id)?.remainingAmount).toBe(
+      '10.000000000000000000',
+    );
+  }, 30_000);
+
   it('rejects a transaction that would make a wallet balance negative', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
