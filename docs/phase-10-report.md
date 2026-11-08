@@ -2,7 +2,7 @@
 
 Date: 2026-11-05 (live run: 2026-11-08)
 
-Status: **implementation and live execution accepted 2026-11-08; data reconciliation open.** PR #34 is merged and deployed (`4171140`, API/worker `SUCCESS`, `/ready` 200). Both live runs completed and persisted their items. Ten non-zero supported assets differ from the watched wallet and require append-only corrections or documented owner-approved exceptions. No reconciliation code defect was found.
+Status: **implementation and live execution accepted 2026-11-08; data reconciliation deferred to the go-live clean cutover (ADR 0014).** PR #34 is merged and deployed (`4171140`, API/worker `SUCCESS`, `/ready` 200). Both live runs completed and persisted their items. Ten non-zero supported assets differ from the watched wallet; the owner chose not to migrate or correct the legacy Notion-derived ledger. No reconciliation code defect was found.
 
 ## First live run
 
@@ -16,13 +16,15 @@ The owner ran BSC and Ethereum reconciliation on 2026-11-08. Both runs completed
 
 The run used the watch-only address auto-seeded from swap orders, and the same address was returned for both chains. It was verified against public RPC: native and token balances match the run items exactly. A second address from an old UI note has zero balances on both chains and is not the active wallet.
 
-The mismatches are data divergence between the current ledger/import and the on-chain wallet, not a reconciliation code failure. Public explorer history shows recent POP/USDC swap activity on 2026-11-03 through 2026-11-05, and the resulting balances are not fully reflected in the ledger. The watched BSC address also has no BSC-USD (USDT) transfer history, so the imported USDT cash balance is outside that wallet. No ledger corrections were applied automatically. Exact balances are intentionally not recorded in this document; they remain in the persisted run items.
+The mismatches are data divergence between the current ledger/import and the on-chain wallet, not a reconciliation code failure. Public explorer history shows recent POP/USDC swap activity on 2026-11-03 through 2026-11-05, and the resulting balances are not fully reflected in the ledger. The watched BSC address also has no BSC-USD (USDT) transfer history, so the imported USDT cash balance is outside that wallet. No ledger corrections were applied automatically.
+
+Under ADR 0014, the legacy Notion-derived data will not be migrated or corrected. When the service is ready for real use, the old database will be archived and a clean ledger epoch will start with opening balances at market value. The triage below is retained as evidence of why the legacy ledger is not the go-forward source of truth; exact deltas remain in the persisted run items.
 
 ## Discrepancy triage
 
-The run is a report, not a correction. Each item needs evidence before any append-only correction. Exact deltas are in the persisted run items; the table records the likely category and the required evidence.
+The run is a report, not a correction. The table records the likely cause of each legacy difference. These items are not scheduled for correction; the clean cutover re-baselines the go-forward ledger instead.
 
-| Chain    | Asset | Status            | Direction         | Likely category                                                 | Required before correction                                                       |
+| Chain    | Asset | Status            | Direction         | Likely category                                                 | Evidence if investigated                                                         |
 | -------- | ----- | ----------------- | ----------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | BSC      | APR   | `MISMATCH`        | ledger > on-chain | Unrecorded disposal/outbound transfer or stale imported balance | On-chain transfer log plus the matching Notion/manual transaction or a new entry |
 | BSC      | BASED | `MISMATCH`        | ledger > on-chain | Unrecorded disposal/outbound transfer or stale imported balance | On-chain transfer log plus the matching Notion/manual transaction or a new entry |
@@ -40,17 +42,18 @@ Custody is the main open question. The Phase 4 Notion import maps all `Source` a
 ## Acceptance status
 
 - **Phase 10 implementation and live execution: accepted.** The runs completed, persisted summaries/items, and produced the expected comparison. The BSC USDC exact match and the address verification confirm the RPC, decimal, asset, and persistence path.
-- **Phase 10 data reconciliation: open.** Ten non-zero supported assets are not `MATCH`. Phase 10 is not claimed as a clean reconciliation. Data acceptance closes when every non-zero supported asset is `MATCH` or a documented, owner-approved exception, or when the missing custody addresses are added and the runs are repeated.
-- **Unsupported assets:** all 30 have zero ledger balance. Mapping them to verified contracts or excluding them is master-data cleanup, not a balance blocker.
+- **Phase 10 data reconciliation: deferred to the go-live clean cutover.** Ten non-zero supported assets are not `MATCH`. They are expected legacy drift and are not a code defect. Under ADR 0014, the old ledger is archived and the go-forward ledger is re-baselined with opening balances instead of correcting legacy rows.
+- **Unsupported assets:** all 30 have zero ledger balance. They are legacy master-data gaps and do not block the clean cutover.
+- **Current production data:** left as-is until the cutover so the owner can inspect it. The known mismatches will remain visible; they are not a Phase 11/UI blocker.
 
-## Next owner actions
+## Next owner actions (at go-live, not now)
 
-1. Confirm the watched address is the Tangem wallet that holds the ledger positions. The auto-seeded address is the active one; the old UI address is empty.
-2. Decide the custody model for the imported assets: watched wallet, other wallet, another chain, or exchange. Add watch addresses where applicable.
-3. Export the ledger wallet balances/transactions and compare them with the on-chain transfer history for the ten items above.
-4. Record corrections only as new append-only transactions with evidence; do not edit or delete ledger rows.
-5. Map or exclude the 30 zero-balance unsupported assets as master-data cleanup.
-6. Re-run BSC and Ethereum, attach the new run IDs, and close data acceptance only when the non-zero set is `MATCH` or explicitly excepted.
+1. Finish Phase 11 and the UI redesign; freeze the cutover date.
+2. Take and verify a full backup of the current production database.
+3. Create the clean database/schema, run migrations, and bootstrap the owner.
+4. Add the actual watched addresses and enter current holdings as `adjustment` opening balances at market value.
+5. Run BSC and Ethereum reconciliation; record the cutover evidence and keep the old database as a read-only archive.
+6. Decide the legacy Notion Import navigation/role during the UI redesign.
 
 ## Scope
 
@@ -99,7 +102,8 @@ For each chain, a reconciliation run must complete and all non-zero assets must 
 
 ## Residuals
 
-- Ledger/import data remediation and custody/chain mapping for the ten non-zero differences.
+- Legacy data retirement via the ADR 0014 clean cutover: archive the old database, start a new ledger epoch, and enter opening balances. No legacy corrections are planned.
+- Opening-balance onboarding UI and the final legacy-import navigation decision.
 - Reconciliation UI and scheduled reports.
 - Automatic discovery/validation of arbitrary ERC-20 tokens held by watched addresses.
 - Historical indexing from genesis (current indexer starts from the configured lookback).

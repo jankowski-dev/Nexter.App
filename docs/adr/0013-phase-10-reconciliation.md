@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress. Implementation and local verification; live reconciliation acceptance pending.
+Implementation and live execution accepted (2026-11-08). Data reconciliation is deferred to the go-live clean cutover in ADR 0014.
 
 ## Context
 
