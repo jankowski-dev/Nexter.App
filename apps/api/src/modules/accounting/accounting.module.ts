@@ -16,6 +16,8 @@ import { PositionsController } from './positions.controller';
 import { PricingService } from './pricing.service';
 import { PricesController } from './prices.controller';
 import { ReportingService } from './reporting.service';
+import { ReportsController } from './reports.controller';
+import { ReportsService } from './reports.service';
 import { TradeGroupsController } from './trade-groups.controller';
 import { TradeGroupsService } from './trade-groups.service';
 import { TransactionsController } from './transactions.controller';
@@ -29,6 +31,7 @@ import { TransactionsController } from './transactions.controller';
     PortfolioController,
     PositionsController,
     PricesController,
+    ReportsController,
     TradeGroupsController,
     TransactionsController,
   ],
@@ -43,6 +46,7 @@ import { TransactionsController } from './transactions.controller';
     PortfolioService,
     PricingService,
     ReportingService,
+    ReportsService,
     TradeGroupsService,
   ],
   exports: [AccountingBootstrapService, AccountsService, AssetsService, LedgerService],
