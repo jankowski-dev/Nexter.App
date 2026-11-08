@@ -110,6 +110,18 @@ A mismatch is **not** auto-corrected. Do not edit or delete ledger rows. Record 
 5. Do not invent cost basis or USD gas. Dust and airdrops need an owner-approved accounting policy or an explicit exception.
 6. Record corrections only as new append-only transactions with evidence. If custody is missing, add the watch address and rerun. Keep the new run IDs with the evidence.
 
+## Clean cutover (legacy data)
+
+ADR 0014 retires the legacy Notion-derived ledger at go-live. Do not spend time correcting the ten known legacy differences. After Phase 11 and the UI redesign:
+
+1. Take and verify a full backup of the current production database.
+2. Create a clean database/schema, run migrations, and bootstrap the owner.
+3. Add the actual watch addresses.
+4. Enter current holdings as `adjustment` opening balances at market value on the cutover date.
+5. Run BSC and Ethereum reconciliation; record the evidence and keep the old database read-only as the archive.
+
+Do not delete or truncate the old database without a verified backup. Agents do not perform the production cutover.
+
 ## Imported assets
 
 Assets created by the Notion import may not have contract addresses. They are reported as `UNSUPPORTED` when they have a ledger balance; they are never treated as native or silently matched. A zero-balance imported asset appears in `summary.unsupportedAssets` but does not produce an item and does not affect balance reconciliation. Map them to verified contract addresses (or record an owner-approved exception) before claiming clean master data.
