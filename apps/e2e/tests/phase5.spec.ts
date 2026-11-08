@@ -60,6 +60,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   ).accounts;
   const based = assets.find((asset) => asset.symbol === 'BASED');
   const usdt = assets.find((asset) => asset.symbol === 'USDT');
+  const usdc = assets.find((asset) => asset.symbol === 'USDC');
   const wallet = accounts.find((account) => account.name === 'Tangem BSC');
   expect(based).toBeDefined();
   expect(usdt).toBeDefined();
@@ -166,6 +167,32 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await noteDialog.getByRole('textbox').fill('Playwright trade note');
   await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Playwright trade note')).toBeVisible();
+
+  await page.goto('/portfolio');
+  await page.getByRole('button', { name: 'Новая сделка' }).click();
+  const tradeDialog = page.getByRole('dialog');
+  await expect(tradeDialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
+  await tradeDialog.getByLabel('Актив', { exact: true }).selectOption(based?.id ?? '');
+  await tradeDialog.getByLabel('Количество BASED').fill('1');
+  await tradeDialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdc?.id ?? '');
+  await tradeDialog.getByLabel('Сумма USDC').fill('2');
+  await tradeDialog.getByRole('button', { name: 'Выполнить on-chain' }).click();
+  await expect(tradeDialog.getByText('Кошелёк Tangem')).toBeVisible();
+  await tradeDialog.getByRole('button', { name: 'Записать' }).click();
+  await tradeDialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdt?.id ?? '');
+  await tradeDialog.getByLabel('Сумма USDT').fill('2');
+  await tradeDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
+  const assetDrawerForClose = page.getByRole('dialog');
+  await assetDrawerForClose.getByRole('button', { name: 'Закрыть позиции' }).click();
+  const closeDialog = page.getByRole('dialog');
+  await expect(closeDialog.getByText('Закрываемые позиции')).toBeVisible();
+  await closeDialog.getByRole('checkbox').first().check();
+  await expect(closeDialog.getByLabel(/Количество BASED/)).not.toHaveValue('');
+  await closeDialog.getByRole('button', { name: 'Отмена' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/watchlist');
   await expect(page.getByRole('heading', { name: 'Наблюдение' })).toBeVisible();

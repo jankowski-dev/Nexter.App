@@ -15,13 +15,17 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
-import { ManualEntryDialog } from '../manual/manual-entry-dialog';
 import { TradesPanel } from '../trades/trades-panel';
+import { TradeDialog } from '../trade/trade-dialog';
 import { AssetDrawer } from './asset-drawer';
 
 export function PortfolioPage() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [manualOpen, setManualOpen] = useState(false);
+  const [tradeOpen, setTradeOpen] = useState(false);
+  const [tradeInitial, setTradeInitial] = useState<{
+    side: 'entry' | 'exit';
+    assetId: string;
+  }>({ side: 'entry', assetId: '' });
   const positions = useQuery({ queryKey: ['positions'], queryFn: fetchPositions });
 
   if (positions.isPending) {
@@ -57,7 +61,14 @@ export function PortfolioPage() {
             <Button variant="secondary" asChild>
               <Link to="/operations">Операции</Link>
             </Button>
-            <Button onClick={() => setManualOpen(true)}>Новая сделка</Button>
+            <Button
+              onClick={() => {
+                setTradeInitial({ side: 'entry', assetId: '' });
+                setTradeOpen(true);
+              }}
+            >
+              Новая сделка
+            </Button>
           </>
         }
       />
@@ -197,8 +208,21 @@ export function PortfolioPage() {
         <TradesPanel />
       </section>
 
-      <AssetDrawer assetId={selectedAssetId} onClose={() => setSelectedAssetId(null)} />
-      <ManualEntryDialog open={manualOpen} onClose={() => setManualOpen(false)} />
+      <AssetDrawer
+        assetId={selectedAssetId}
+        onClose={() => setSelectedAssetId(null)}
+        onTrade={(input) => {
+          setTradeInitial({ side: input.side, assetId: input.assetId });
+          setTradeOpen(true);
+        }}
+      />
+      <TradeDialog
+        open={tradeOpen}
+        onClose={() => setTradeOpen(false)}
+        initialMode="trade"
+        initialSide={tradeInitial.side}
+        initialAssetId={tradeInitial.assetId}
+      />
     </div>
   );
 }

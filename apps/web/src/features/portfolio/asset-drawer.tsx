@@ -48,7 +48,15 @@ function Metric({
   );
 }
 
-export function AssetDrawer({ assetId, onClose }: { assetId: string | null; onClose: () => void }) {
+export function AssetDrawer({
+  assetId,
+  onClose,
+  onTrade,
+}: {
+  assetId: string | null;
+  onClose: () => void;
+  onTrade?: (input: { assetId: string; side: 'entry' | 'exit' }) => void;
+}) {
   const detail = useQuery({
     queryKey: ['portfolio-asset', assetId],
     queryFn: () => fetchPortfolioAsset(assetId as string),
@@ -57,6 +65,11 @@ export function AssetDrawer({ assetId, onClose }: { assetId: string | null; onCl
 
   const data = detail.data;
   const position = data?.position;
+  const hasOpenGroups = Boolean(
+    data?.tradeGroups.some(
+      (group) => group.status !== 'closed' && Number(group.remainingAmount) > 0,
+    ),
+  );
 
   return (
     <Drawer
@@ -70,15 +83,38 @@ export function AssetDrawer({ assetId, onClose }: { assetId: string | null; onCl
       }
       footer={
         data ? (
-          <Button variant="secondary" asChild>
-            <Link
-              to="/portfolio/assets/$assetId"
-              params={{ assetId: data.asset.id }}
-              onClick={onClose}
-            >
-              Открыть полную карточку
-            </Link>
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            {onTrade ? (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  onClose();
+                  onTrade({ assetId: data.asset.id, side: 'entry' });
+                }}
+              >
+                Купить
+              </Button>
+            ) : null}
+            {onTrade && hasOpenGroups ? (
+              <Button
+                onClick={() => {
+                  onClose();
+                  onTrade({ assetId: data.asset.id, side: 'exit' });
+                }}
+              >
+                Закрыть позиции
+              </Button>
+            ) : null}
+            <Button variant="secondary" asChild>
+              <Link
+                to="/portfolio/assets/$assetId"
+                params={{ assetId: data.asset.id }}
+                onClick={onClose}
+              >
+                Открыть полную карточку
+              </Link>
+            </Button>
+          </div>
         ) : null
       }
     >

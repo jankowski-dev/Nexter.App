@@ -43,13 +43,31 @@ function explorerForChain(code: string): string {
   return code === 'ethereum' ? 'https://etherscan.io' : 'https://bscscan.com';
 }
 
-export function SwapPage() {
+export interface SwapPanelProps {
+  embedded?: boolean;
+  autoQuote?: boolean;
+  initialChain?: 'bsc' | 'ethereum';
+  initialTokenIn?: string;
+  initialTokenOut?: string;
+  initialAmountIn?: string;
+  closeGroupIds?: string[];
+}
+
+export function SwapPage({
+  embedded = false,
+  autoQuote = false,
+  initialChain = 'bsc',
+  initialTokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d',
+  initialTokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d',
+  initialAmountIn = '1',
+  closeGroupIds,
+}: SwapPanelProps = {}) {
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
-  const [chainCode, setChainCode] = useState<'bsc' | 'ethereum'>('bsc');
+  const [chainCode, setChainCode] = useState<'bsc' | 'ethereum'>(initialChain);
   const selectedChainId = chainCode === 'ethereum' ? 1 : 56;
-  const [tokenIn, setTokenIn] = useState('0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d');
-  const [tokenOut, setTokenOut] = useState('0x1d28d989f9e3ccb8b15d0cec601734514f958e4d');
-  const [amountIn, setAmountIn] = useState('1');
+  const [tokenIn, setTokenIn] = useState(initialTokenIn);
+  const [tokenOut, setTokenOut] = useState(initialTokenOut);
+  const [amountIn, setAmountIn] = useState(initialAmountIn);
   const [walletAddress, setWalletAddress] = useState('');
   const [slippageBps, setSlippageBps] = useState<number | null>(null);
 
@@ -68,8 +86,30 @@ export function SwapPage() {
         amountIn,
         slippageBps: slippageBps ?? config.data?.defaultSlippageBps ?? 50,
         walletAddress: walletAddress || undefined,
+        ...(closeGroupIds && closeGroupIds.length > 0 ? { closeGroupIds } : {}),
       }),
   });
+
+  useEffect(() => {
+    if (!autoQuote || !config.data?.enabled || !walletAddress) return;
+    if (!isPositiveDecimal(amountIn) || !tokenIn || !tokenOut) return;
+    if (tokenIn.toLowerCase() === tokenOut.toLowerCase()) return;
+
+    const timer = window.setTimeout(() => {
+      quote.mutate();
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    autoQuote,
+    config.data?.enabled,
+    walletAddress,
+    amountIn,
+    tokenIn,
+    tokenOut,
+    slippageBps,
+    quote.mutate,
+  ]);
 
   const [buildData, setBuildData] = useState<SwapBuildResponse | null>(null);
   const [approvalData, setApprovalData] = useState<ApprovalBuildResponse | null>(null);
@@ -111,6 +151,7 @@ export function SwapPage() {
       const page = await fetchSwapOrders({ limit: 5 });
       return Promise.all(page.data.map((order) => fetchSwapOrder(order.id)));
     },
+    enabled: !embedded,
     refetchInterval: 5_000,
   });
 
@@ -421,7 +462,7 @@ export function SwapPage() {
   if (config.isPending) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Своп" subtitle="Загружаю конфигурацию…" />
+        {embedded ? null : <PageHeader title="Своп" subtitle="Загружаю конфигурацию…" />}
         <LoadingRows rows={6} />
       </div>
     );
@@ -430,7 +471,7 @@ export function SwapPage() {
   if (config.isError || !config.data) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Своп" />
+        {embedded ? null : <PageHeader title="Своп" />}
         <ErrorState
           message={toRussianError(config.error, 'Не удалось загрузить конфигурацию свопов')}
           onRetry={() => void config.refetch()}
@@ -448,16 +489,18 @@ export function SwapPage() {
   const executionOrder = liveOrder.data ?? buildData ?? quote.data;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Своп"
-        subtitle="Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum."
-        actions={
-          <Badge tone={data.enabled ? 'success' : 'warning'}>
-            {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
-          </Badge>
-        }
-      />
+    <div className={embedded ? 'space-y-4' : 'space-y-6'}>
+      {embedded ? null : (
+        <PageHeader
+          title="Своп"
+          subtitle="Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum."
+          actions={
+            <Badge tone={data.enabled ? 'success' : 'warning'}>
+              {data.enabled ? 'Котировки включены' : data.killSwitch ? 'Kill switch' : 'Отключено'}
+            </Badge>
+          }
+        />
+      )}
 
       {!data.enabled ? (
         <Card className="border-amber-200 bg-amber-50">
@@ -1009,100 +1052,105 @@ export function SwapPage() {
         )}
       </Card>
 
-      <Card>
-        <CardTitle>Последние свопы</CardTitle>
-        <CardDescription>
-          История ордеров и статус учёта. Обновляется автоматически.
-        </CardDescription>
-        {recentOrders.isPending ? <LoadingRows rows={3} /> : null}
-        {recentOrders.isError ? (
-          <p className="mt-3 text-sm text-red-700">Не удалось загрузить историю свопов.</p>
-        ) : null}
-        {recentOrders.data?.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-600">Свопов пока нет.</p>
-        ) : null}
-        {recentOrders.data?.length ? (
-          <div className="mt-4 space-y-2">
-            {recentOrders.data.map((order) => (
-              <div
-                key={order.id}
-                className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="font-medium text-zinc-900">
-                    {formatTokenAmount(order.amountIn, 6)} {order.tokenIn.symbol} →{' '}
-                    {formatTokenAmount(order.amountOut, 6)} {order.tokenOut.symbol}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge
-                      tone={
-                        order.status === 'CONFIRMED'
-                          ? 'success'
-                          : order.status === 'FAILED' ||
-                              order.status === 'REPLACED' ||
-                              order.status === 'DROPPED'
-                            ? 'danger'
-                            : 'neutral'
-                      }
-                    >
-                      {order.status}
-                    </Badge>
-                    <Badge
-                      tone={
-                        order.accountingTransactionId
-                          ? 'success'
-                          : order.status === 'SUBMITTED' ||
-                              order.status === 'PENDING' ||
-                              order.status === 'CONFIRMED'
-                            ? 'warning'
-                            : 'neutral'
-                      }
-                    >
-                      {order.accountingTransactionId
-                        ? 'учёт создан'
-                        : order.status === 'SUBMITTED' ||
-                            order.status === 'PENDING' ||
+      {embedded ? null : (
+        <>
+          <Card>
+            <CardTitle>Последние свопы</CardTitle>
+            <CardDescription>
+              История ордеров и статус учёта. Обновляется автоматически.
+            </CardDescription>
+            {recentOrders.isPending ? <LoadingRows rows={3} /> : null}
+            {recentOrders.isError ? (
+              <p className="mt-3 text-sm text-red-700">Не удалось загрузить историю свопов.</p>
+            ) : null}
+            {recentOrders.data?.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-600">Свопов пока нет.</p>
+            ) : null}
+            {recentOrders.data?.length ? (
+              <div className="mt-4 space-y-2">
+                {recentOrders.data.map((order) => (
+                  <div
+                    key={order.id}
+                    className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="font-medium text-zinc-900">
+                        {formatTokenAmount(order.amountIn, 6)} {order.tokenIn.symbol} →{' '}
+                        {formatTokenAmount(order.amountOut, 6)} {order.tokenOut.symbol}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          tone={
                             order.status === 'CONFIRMED'
-                          ? 'учёта нет'
-                          : 'не отправлен'}
-                    </Badge>
+                              ? 'success'
+                              : order.status === 'FAILED' ||
+                                  order.status === 'REPLACED' ||
+                                  order.status === 'DROPPED'
+                                ? 'danger'
+                                : 'neutral'
+                          }
+                        >
+                          {order.status}
+                        </Badge>
+                        <Badge
+                          tone={
+                            order.accountingTransactionId
+                              ? 'success'
+                              : order.status === 'SUBMITTED' ||
+                                  order.status === 'PENDING' ||
+                                  order.status === 'CONFIRMED'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {order.accountingTransactionId
+                            ? 'учёт создан'
+                            : order.status === 'SUBMITTED' ||
+                                order.status === 'PENDING' ||
+                                order.status === 'CONFIRMED'
+                              ? 'учёта нет'
+                              : 'не отправлен'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
+                      <span>Ордер {order.id.slice(0, 8)}</span>
+                      <span>{formatDateTime(order.createdAt)}</span>
+                      {order.txHash ? (
+                        <a
+                          className="break-all text-emerald-700 underline"
+                          href={`${explorerForChain(order.chain)}/tx/${order.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {order.txHash.slice(0, 18)}…
+                        </a>
+                      ) : null}
+                      {order.confirmations > 0 ? <span>{order.confirmations} подтв.</span> : null}
+                    </div>
+                    {!order.accountingTransactionId && order.errors.length > 0 ? (
+                      <div className="mt-1 break-all text-xs text-red-700">
+                        Ошибки: {order.errors.join(', ')}
+                      </div>
+                    ) : null}
                   </div>
-                </div>
-                <div className="mt-1 flex flex-wrap gap-2 text-xs text-zinc-500">
-                  <span>Ордер {order.id.slice(0, 8)}</span>
-                  <span>{formatDateTime(order.createdAt)}</span>
-                  {order.txHash ? (
-                    <a
-                      className="break-all text-emerald-700 underline"
-                      href={`${explorerForChain(order.chain)}/tx/${order.txHash}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {order.txHash.slice(0, 18)}…
-                    </a>
-                  ) : null}
-                  {order.confirmations > 0 ? <span>{order.confirmations} подтв.</span> : null}
-                </div>
-                {!order.accountingTransactionId && order.errors.length > 0 ? (
-                  <div className="mt-1 break-all text-xs text-red-700">
-                    Ошибки: {order.errors.join(', ')}
-                  </div>
-                ) : null}
+                ))}
               </div>
-            ))}
-          </div>
-        ) : null}
-      </Card>
+            ) : null}
+          </Card>
 
-      <Card>
-        <CardTitle>Ограничения Phase 9</CardTitle>
-        <CardDescription>
-          BSC и Ethereum и подключение Tangem через WalletConnect доступны. Tracking и учёт
-          подтверждённых свопов работают; BSC-подпись включается через `SWAP_EXECUTION_ENABLED`,
-          Ethereum дополнительно требует `SWAP_ETHEREUM_EXECUTION_ENABLED` после live acceptance.
-          Kill switch отключает новые котировки, чтение существующих ордеров остаётся доступным.
-        </CardDescription>
-      </Card>
+          <Card>
+            <CardTitle>Ограничения Phase 9</CardTitle>
+            <CardDescription>
+              BSC и Ethereum и подключение Tangem через WalletConnect доступны. Tracking и учёт
+              подтверждённых свопов работают; BSC-подпись включается через `SWAP_EXECUTION_ENABLED`,
+              Ethereum дополнительно требует `SWAP_ETHEREUM_EXECUTION_ENABLED` после live
+              acceptance. Kill switch отключает новые котировки, чтение существующих ордеров
+              остаётся доступным.
+            </CardDescription>
+          </Card>
+        </>
+      )}
 
       {stepUpOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
