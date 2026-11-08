@@ -12,7 +12,22 @@ Do **not** create a separate `@nexter/web` service. The API serves the built SPA
 
 Set **Root Directory** to the repository root for both `api` and `worker`. If Railway created services with root directories `apps/api`, `apps/worker`, or `apps/web`, delete/recreate them or change the root to `/`; otherwise the root `Dockerfile` and `railway.json` are ignored and Railway falls back to Nixpacks.
 
-The API image also serves the built SPA (`apps/web/dist` → `/app/apps/api/public`). Its `watchPatterns` in `railway.json` must include `apps/web/**` and `packages/**`; otherwise a frontend-only merge reports “No deployment needed” and production keeps the old bundle. The worker service stays narrower and does not watch the web app.
+The API image also serves the built SPA (`apps/web/dist` → `/app/apps/api/public`). Its `watchPatterns` in `railway.json` should include `apps/web/**` and `packages/**`; otherwise a frontend-only merge reports “No deployment needed” and production keeps the old bundle. The worker service stays narrower and does not watch the web app.
+
+Railway dashboard watch paths can override config-as-code. If a UI-only merge reports “No deployment needed”, open the API service in Railway → Settings → Source → Watch Paths and add:
+
+```text
+apps/api/**
+apps/web/**
+packages/**
+Dockerfile
+package.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+tsconfig.base.json
+```
+
+Then redeploy the API once. Until this is set, frontend-only merges require an API-path change to trigger the image build.
 
 ## Railway service settings
 
