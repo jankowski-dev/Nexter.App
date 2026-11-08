@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 implemented; UI-1..UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
+Status: **UI-0 and UI-1 implemented; UI-2..UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
 
 ## Goals
 
@@ -98,7 +98,7 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 ## Delivery order
 
 - **UI-0** — shell, navigation, Portfolio + trade journal merge, asset drawer, Operations/Reports pages, Import legacy link. No backend changes. Implemented.
-- **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend.
+- **UI-1** — unified trade/exchange modal, transactions, `closeGroupIds` backend. Implemented: the Portfolio “Новая сделка” modal supports trade entry/exit, exchange, deposit, withdrawal, manual recording, embedded on-chain execution, and one/several/all open-group selection.
 - **UI-2** — dashboard metrics and interactive charts, daily snapshots.
 - **UI-3** — watchlist groups, contract-address search, market data.
 - **UI-4** — reports/statistics.

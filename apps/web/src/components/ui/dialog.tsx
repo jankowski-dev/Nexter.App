@@ -9,6 +9,7 @@ export function Dialog({
   children,
   footer,
   wide = false,
+  size,
 }: {
   open: boolean;
   onClose: () => void;
@@ -17,7 +18,9 @@ export function Dialog({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  size?: 'md' | 'lg' | 'xl';
 }) {
+  const resolvedSize = size ?? (wide ? 'lg' : 'md');
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -55,7 +58,9 @@ export function Dialog({
         tabIndex={-1}
         className={cn(
           'max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
-          wide ? 'sm:max-w-3xl' : 'sm:max-w-xl',
+          resolvedSize === 'md' && 'sm:max-w-xl',
+          resolvedSize === 'lg' && 'sm:max-w-3xl',
+          resolvedSize === 'xl' && 'sm:max-w-5xl',
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-4">
