@@ -13,11 +13,13 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
+import { Decimal } from 'decimal.js';
 import { useState } from 'react';
 import type { TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
 import { TradeDialog } from '../trade/trade-dialog';
 import { AssetDrawer } from './asset-drawer';
+import { CloseTradesDialog } from './close-trades-dialog';
 import { MassCloseDrawer } from './mass-close-drawer';
 import { TradeDrawer } from './trade-drawer';
 
@@ -26,7 +28,6 @@ type PortfolioTab = 'portfolio' | 'trades';
 interface TradeInitial {
   side: 'entry' | 'exit';
   assetId: string;
-  closeGroupIds?: string[];
 }
 
 export function PortfolioPage() {
@@ -37,6 +38,8 @@ export function PortfolioPage() {
   const [selectedGroups, setSelectedGroups] = useState<TradeGroupSummary[]>([]);
   const [tradeDrawerId, setTradeDrawerId] = useState<string | null>(null);
   const [massDrawerOpen, setMassDrawerOpen] = useState(false);
+  const [closeGroups, setCloseGroups] = useState<TradeGroupSummary[]>([]);
+  const [closeOpen, setCloseOpen] = useState(false);
   const [tradeOpen, setTradeOpen] = useState(false);
   const [tradeInitial, setTradeInitial] = useState<TradeInitial>({
     side: 'entry',
@@ -66,8 +69,8 @@ export function PortfolioPage() {
   }
 
   const data = positions.data;
-  const sortedPositions = [...data.positions].sort(
-    (a, b) => Number(b.costBasisUsd) - Number(a.costBasisUsd),
+  const sortedPositions = [...data.positions].sort((a, b) =>
+    new Decimal(b.costBasisUsd).comparedTo(a.costBasisUsd),
   );
 
   function changeTab(next: PortfolioTab): void {
@@ -275,27 +278,28 @@ export function PortfolioPage() {
       <TradeDrawer
         tradeId={tradeDrawerId}
         onClose={() => setTradeDrawerId(null)}
-        onCloseTrade={(input) => {
-          setTradeInitial({
-            side: 'exit',
-            assetId: input.assetId,
-            closeGroupIds: [input.groupId],
-          });
-          setTradeOpen(true);
+        onCloseTrade={(group) => {
+          setCloseGroups([group]);
+          setCloseOpen(true);
         }}
       />
       <MassCloseDrawer
         open={massDrawerOpen}
         onClose={() => setMassDrawerOpen(false)}
         groups={selectedGroups}
-        onCloseTrades={(input) => {
-          setTradeInitial({
-            side: 'exit',
-            assetId: input.assetId,
-            closeGroupIds: input.groupIds,
-          });
-          setTradeOpen(true);
+        onCloseTrades={(groups) => {
+          setCloseGroups(groups);
+          setCloseOpen(true);
         }}
+      />
+      <CloseTradesDialog
+        open={closeOpen}
+        onClose={() => {
+          setCloseOpen(false);
+          setCloseGroups([]);
+        }}
+        groups={closeGroups}
+        onCompleted={() => setSelectedGroups([])}
       />
       <TradeDialog
         open={tradeOpen}
@@ -303,7 +307,6 @@ export function PortfolioPage() {
         initialMode="trade"
         initialSide={tradeInitial.side}
         initialAssetId={tradeInitial.assetId}
-        initialCloseGroupIds={tradeInitial.closeGroupIds}
       />
     </div>
   );

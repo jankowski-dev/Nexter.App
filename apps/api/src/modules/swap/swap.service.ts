@@ -8,7 +8,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { and, desc, eq, gt, inArray, lt, lte, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import {
   lots,
   swapEvents,
@@ -1534,6 +1534,7 @@ export class SwapService {
     amountIn: string,
     executor: DbExecutor = this.db,
     enforceTotal = true,
+    excludeOrderId?: string,
   ): Promise<{ assetId: string; rows: Array<{ id: string; remaining: string }> }> {
     if (!isCashEquivalentSymbol(tokenOut.symbol)) {
       throw new BadRequestException({
@@ -1568,6 +1569,44 @@ export class SwapService {
         code: 'SWAP_CLOSE_GROUP_NOT_FOUND',
         message: 'One or more close groups were not found',
         details: { closeGroupIds },
+      });
+    }
+
+    const now = new Date();
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const activeStatusCondition = or(
+      eq(swapOrders.status, 'SUBMITTED'),
+      eq(swapOrders.status, 'PENDING'),
+      and(eq(swapOrders.status, 'CONFIRMED'), isNull(swapOrders.accountingTransactionId)),
+      and(eq(swapOrders.status, 'QUOTED'), gt(swapOrders.quoteExpiresAt, now)),
+      and(
+        inArray(swapOrders.status, ['BUILT', 'APPROVAL_REQUIRED', 'READY', 'AWAITING_SIGNATURE']),
+        gt(swapOrders.deadline, nowSeconds),
+      ),
+    );
+    const activeConditions = [
+      eq(swapOrders.userId, userId),
+      inArray(swapOrderCloseGroups.tradeGroupId, closeGroupIds),
+    ];
+
+    if (activeStatusCondition) activeConditions.push(activeStatusCondition);
+
+    if (excludeOrderId) activeConditions.push(ne(swapOrders.id, excludeOrderId));
+
+    const activeCloses = await executor
+      .select({
+        orderId: swapOrders.id,
+        tradeGroupId: swapOrderCloseGroups.tradeGroupId,
+      })
+      .from(swapOrderCloseGroups)
+      .innerJoin(swapOrders, eq(swapOrderCloseGroups.orderId, swapOrders.id))
+      .where(and(...activeConditions));
+
+    if (activeCloses.length > 0) {
+      throw new ConflictException({
+        code: 'SWAP_CLOSE_GROUP_BUSY',
+        message: 'One or more close groups already have an active close order',
+        details: { orderIds: [...new Set(activeCloses.map((row) => row.orderId))] },
       });
     }
 
@@ -1655,6 +1694,7 @@ export class SwapService {
       order.amountIn,
       this.db,
       false,
+      order.id,
     );
     const remainingById = new Map(current.rows.map((row) => [row.id, row.remaining]));
 
