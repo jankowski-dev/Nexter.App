@@ -157,9 +157,10 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Транзакции').first()).toBeVisible();
 
   await page.goto('/portfolio');
+  await page.getByRole('tab', { name: 'Сделки' }).click();
   await expect(page.getByRole('heading', { name: 'Сделки' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Торговые группы' })).toBeVisible();
-  await page.getByRole('link', { name: 'BASED' }).first().click();
+  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
   await expect(page.getByText('Ноги сделки')).toBeVisible();
   await expect(page.getByText('Лоты').first()).toBeVisible();
@@ -252,6 +253,5 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Активность' }).click();
-  await expect(page.getByText('deposit / deposit').first()).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
 });

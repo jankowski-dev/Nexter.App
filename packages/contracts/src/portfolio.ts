@@ -54,6 +54,7 @@ export const tradeGroupSummarySchema = z.object({
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string().nullable(),
   totalPnlUsd: z.string().nullable(),
+  gasUsd: z.string(),
   remainingAmount: z.string(),
   costBasisUsd: z.string(),
   remainingCostBasisUsd: z.string(),

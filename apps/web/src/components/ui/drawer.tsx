@@ -19,12 +19,17 @@ export function Drawer({
   wide?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     }
 
     document.addEventListener('keydown', onKeyDown);
@@ -35,7 +40,7 @@ export function Drawer({
       document.removeEventListener('keydown', onKeyDown);
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
