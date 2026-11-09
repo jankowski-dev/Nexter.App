@@ -510,6 +510,7 @@ export async function quoteSwap(body: {
   amountIn: string;
   slippageBps?: number;
   walletAddress?: string;
+  closeGroupIds?: string[];
 }): Promise<SwapOrderDetail> {
   return apiPost('/api/v1/swap/quote', body, swapOrderDetailSchema);
 }
@@ -531,6 +532,10 @@ export async function markSwapSigning(orderId: string): Promise<SwapOrderDetail>
 
 export async function cancelSwapSigning(orderId: string): Promise<SwapOrderDetail> {
   return apiPost(`/api/v1/swap/orders/${orderId}/signing/cancel`, {}, swapOrderDetailSchema);
+}
+
+export async function cancelSwap(orderId: string): Promise<SwapOrderDetail> {
+  return apiPost(`/api/v1/swap/orders/${orderId}/cancel`, {}, swapOrderDetailSchema);
 }
 
 export async function submitSwap(orderId: string, txHash: string): Promise<SwapOrderDetail> {

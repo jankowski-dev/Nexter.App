@@ -162,6 +162,14 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.getByRole('tab', { name: 'Сделки' }).click();
   await expect(page.getByRole('heading', { name: 'Сделки' })).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  const tradeDrawer = page.getByRole('dialog');
+  await expect(tradeDrawer.getByRole('heading', { name: /BASED/ })).toBeVisible();
+  await tradeDrawer.getByRole('button', { name: 'Выйти из сделки' }).click();
+  const closeTradesDialog = page.getByRole('dialog');
+  await expect(closeTradesDialog.getByRole('heading', { name: 'Закрытие сделок' })).toBeVisible();
+  await expect(closeTradesDialog.getByText('Очередь закрытия')).toBeVisible();
+  await closeTradesDialog.getByLabel('Закрыть').click();
+  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   await page.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
   await expect(page.getByText('Ноги сделки')).toBeVisible();

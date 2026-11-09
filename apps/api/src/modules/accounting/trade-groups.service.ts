@@ -7,6 +7,7 @@ import {
   lotConsumptions,
   lots,
   postings,
+  swapOrderCloseGroups,
   swapOrders,
   tradeGroups,
   transactions,
@@ -362,7 +363,45 @@ export class TradeGroupsService {
     }
 
     const groupIds = baseRows.map((row) => row.group.id);
-    const [lotRows, consumptionRows, sourceRows, gasRows] = await Promise.all([
+    const closeOrderIdRows = await this.db
+      .selectDistinct({ orderId: swapOrderCloseGroups.orderId })
+      .from(swapOrderCloseGroups)
+      .innerJoin(swapOrders, eq(swapOrderCloseGroups.orderId, swapOrders.id))
+      .where(
+        and(
+          eq(swapOrders.userId, userId),
+          eq(swapOrders.status, 'CONFIRMED'),
+          inArray(swapOrderCloseGroups.tradeGroupId, groupIds),
+        ),
+      );
+    const closeOrderIds = closeOrderIdRows.map((row) => row.orderId);
+    const closingGasPromise =
+      closeOrderIds.length === 0
+        ? Promise.resolve(
+            [] as Array<{
+              groupId: string | null;
+              orderId: string;
+              expectedAmount: string;
+              networkFeeUsd: string | null;
+            }>,
+          )
+        : this.db
+            .select({
+              groupId: swapOrderCloseGroups.tradeGroupId,
+              orderId: swapOrderCloseGroups.orderId,
+              expectedAmount: swapOrderCloseGroups.expectedAmount,
+              networkFeeUsd: swapOrders.networkFeeUsd,
+            })
+            .from(swapOrderCloseGroups)
+            .innerJoin(swapOrders, eq(swapOrderCloseGroups.orderId, swapOrders.id))
+            .where(
+              and(
+                eq(swapOrders.userId, userId),
+                eq(swapOrders.status, 'CONFIRMED'),
+                inArray(swapOrderCloseGroups.orderId, closeOrderIds),
+              ),
+            );
+    const [lotRows, consumptionRows, sourceRows, gasRows, closingGasRows] = await Promise.all([
       this.db
         .select({
           groupId: lots.tradeGroupId,
@@ -411,12 +450,45 @@ export class TradeGroupsService {
           ),
         )
         .groupBy(swapOrders.tradeGroupId),
+      closingGasPromise,
     ]);
 
     const lotByGroup = new Map(lotRows.map((row) => [row.groupId, row]));
     const consumptionByGroup = new Map(consumptionRows.map((row) => [row.groupId, row]));
     const sourceByGroup = new Map(sourceRows.map((row) => [row.groupId, row.source]));
     const gasByGroup = new Map(gasRows.map((row) => [row.groupId, row.gasUsd]));
+    const closeOrderTotals = new Map<string, Decimal>();
+    const closeOrderGas = new Map<string, Decimal>();
+
+    for (const row of closingGasRows) {
+      closeOrderTotals.set(
+        row.orderId,
+        (closeOrderTotals.get(row.orderId) ?? new Decimal(0)).plus(row.expectedAmount),
+      );
+      closeOrderGas.set(
+        row.orderId,
+        (closeOrderGas.get(row.orderId) ?? new Decimal(0)).plus(row.networkFeeUsd ?? '0'),
+      );
+    }
+
+    for (const row of closingGasRows) {
+      if (!row.groupId) continue;
+      const total = closeOrderTotals.get(row.orderId) ?? new Decimal(0);
+      const gas = closeOrderGas.get(row.orderId) ?? new Decimal(0);
+
+      if (total.lte(0) || gas.lte(0)) continue;
+
+      const share = gas.mul(row.expectedAmount).div(total);
+      gasByGroup.set(
+        row.groupId,
+        (gasByGroup.get(row.groupId)
+          ? decimal(gasByGroup.get(row.groupId) as string)
+          : new Decimal(0)
+        )
+          .plus(share)
+          .toFixed(8),
+      );
+    }
 
     return baseRows.map((row) => ({
       group: row.group,
