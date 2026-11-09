@@ -70,7 +70,7 @@ export function LineChart({
         >
           <defs>
             <linearGradient id="line-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+              <stop offset="0%" stopColor={color} stopOpacity="0.24" />
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
           </defs>
@@ -81,7 +81,7 @@ export function LineChart({
               x2={width - padding}
               y1={padding + (height - padding * 2) * ratio}
               y2={padding + (height - padding * 2) * ratio}
-              stroke="#e4e4e7"
+              stroke="var(--border)"
               strokeWidth="1"
             />
           ))}
@@ -90,7 +90,7 @@ export function LineChart({
             points={path}
             fill="none"
             stroke={color}
-            strokeWidth="2.5"
+            strokeWidth="4"
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -100,7 +100,7 @@ export function LineChart({
               x2={hoveredPoint.x}
               y1={padding}
               y2={height - padding}
-              stroke="#a1a1aa"
+              stroke="var(--text-soft)"
               strokeWidth="1"
               strokeDasharray="4 4"
             />
@@ -110,7 +110,7 @@ export function LineChart({
               key={points[index]?.label ?? index}
               cx={point.x}
               cy={point.y}
-              r={hovered === index ? 5 : 3}
+              r={hovered === index ? 5 : 2.5}
               fill={color}
             >
               <title>

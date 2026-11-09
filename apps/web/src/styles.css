@@ -7,6 +7,30 @@
 
 :root {
   color-scheme: light;
+  --app-bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-muted: #f4f5f7;
+  --surface-hover: #eceef2;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --text-soft: #a1a1aa;
+  --accent: #059669;
+  --accent-soft: #ecfdf5;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #202329;
+  --surface: #2a2d33;
+  --surface-muted: #31353c;
+  --surface-hover: #3a3f47;
+  --border: #444a53;
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-soft: #9ca3af;
+  --accent: #34d399;
+  --accent-soft: rgba(16, 185, 129, 0.12);
 }
 
 html,
@@ -16,7 +40,15 @@ body,
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased;
+  @apply antialiased;
+  background: var(--app-bg);
+  color: var(--text);
+}
+
+.hero-glow {
+  background:
+    radial-gradient(circle at 12% 15%, rgba(16, 185, 129, 0.12), transparent 42%),
+    radial-gradient(circle at 88% 0%, rgba(99, 102, 241, 0.08), transparent 38%), var(--surface);
 }
 
 ::selection {
@@ -27,4 +59,144 @@ a:focus-visible,
 button:focus-visible,
 [role='button']:focus-visible {
   @apply outline-2 outline-offset-2 outline-emerald-500;
+}
+
+/*
+ * Dark theme bridge for the existing utility classes.
+ * Keeps the light theme untouched and gives every page a consistent dark surface
+ * without duplicating dark: variants across the whole application.
+ */
+[data-theme='dark'] .bg-white {
+  background-color: var(--surface) !important;
+}
+
+[data-theme='dark'] .bg-zinc-50,
+[data-theme='dark'] .bg-zinc-50\/60,
+[data-theme='dark'] .bg-zinc-50\/80 {
+  background-color: var(--surface-muted) !important;
+}
+
+[data-theme='dark'] .bg-zinc-100 {
+  background-color: var(--surface-hover) !important;
+}
+
+[data-theme='dark'] .bg-zinc-200 {
+  background-color: #3c4048 !important;
+}
+
+[data-theme='dark'] .text-zinc-900,
+[data-theme='dark'] .text-zinc-800 {
+  color: var(--text) !important;
+}
+
+[data-theme='dark'] .text-zinc-700 {
+  color: #d4d4d8 !important;
+}
+
+[data-theme='dark'] .text-zinc-600 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme='dark'] .text-zinc-500,
+[data-theme='dark'] .text-zinc-400 {
+  color: var(--text-soft) !important;
+}
+
+[data-theme='dark'] .border-zinc-200,
+[data-theme='dark'] .border-zinc-300,
+[data-theme='dark'] .border-zinc-200\/80 {
+  border-color: var(--border) !important;
+}
+
+[data-theme='dark'] .divide-zinc-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border) !important;
+}
+
+[data-theme='dark'] .bg-emerald-50,
+[data-theme='dark'] .bg-emerald-50\/40,
+[data-theme='dark'] .bg-emerald-50\/70 {
+  background-color: rgba(16, 185, 129, 0.12) !important;
+}
+
+[data-theme='dark'] .text-emerald-700,
+[data-theme='dark'] .text-emerald-800,
+[data-theme='dark'] .text-emerald-900 {
+  color: #6ee7b7 !important;
+}
+
+[data-theme='dark'] .border-emerald-200,
+[data-theme='dark'] .border-emerald-300 {
+  border-color: rgba(16, 185, 129, 0.35) !important;
+}
+
+[data-theme='dark'] .bg-red-50,
+[data-theme='dark'] .bg-red-50\/40,
+[data-theme='dark'] .bg-red-50\/70 {
+  background-color: rgba(239, 68, 68, 0.12) !important;
+}
+
+[data-theme='dark'] .text-red-700,
+[data-theme='dark'] .text-red-800 {
+  color: #fca5a5 !important;
+}
+
+[data-theme='dark'] .border-red-200 {
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+[data-theme='dark'] .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.12) !important;
+}
+
+[data-theme='dark'] .text-amber-700,
+[data-theme='dark'] .text-amber-800 {
+  color: #fcd34d !important;
+}
+
+[data-theme='dark'] .border-amber-200 {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+}
+
+[data-theme='dark'] .bg-sky-50 {
+  background-color: rgba(14, 165, 233, 0.12) !important;
+}
+
+[data-theme='dark'] .text-sky-700,
+[data-theme='dark'] .text-sky-800 {
+  color: #7dd3fc !important;
+}
+
+[data-theme='dark'] .border-sky-200 {
+  border-color: rgba(14, 165, 233, 0.35) !important;
+}
+
+[data-theme='dark'] .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.14) !important;
+}
+
+[data-theme='dark'] .text-indigo-700,
+[data-theme='dark'] .text-indigo-800 {
+  color: #a5b4fc !important;
+}
+
+[data-theme='dark'] input,
+[data-theme='dark'] select,
+[data-theme='dark'] textarea {
+  color-scheme: dark;
+}
+
+[data-theme='dark'] input::placeholder,
+[data-theme='dark'] textarea::placeholder {
+  color: var(--text-soft);
+}
+
+[data-theme='dark'] .shadow-sm,
+[data-theme='dark'] .shadow-2xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.45);
+}
+
+[data-theme='dark'] .hero-glow {
+  background:
+    radial-gradient(circle at 12% 15%, rgba(16, 185, 129, 0.18), transparent 42%),
+    radial-gradient(circle at 88% 0%, rgba(99, 102, 241, 0.12), transparent 38%), var(--surface);
 }
