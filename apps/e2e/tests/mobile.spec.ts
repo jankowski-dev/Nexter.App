@@ -69,9 +69,9 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await dialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await mobileNav.getByRole('link', { name: 'Наблюдение' }).click();
+  await mobileNav.getByRole('link', { name: 'База токенов' }).click();
   await expect(page).toHaveURL(/\/watchlist$/);
-  await expect(page.getByRole('heading', { name: 'Наблюдение' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
 
   await page.goto('/swap');
   await expect(page).toHaveURL(/\/portfolio$/);

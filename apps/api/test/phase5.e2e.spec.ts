@@ -367,12 +367,18 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
         assetId: based.id,
         thesis: 'Test thesis',
         tags: ['test', 'bsc'],
+        twitterUrl: 'https://x.com/based',
+        websiteUrl: 'https://based.example',
+        investors: ['Alpha Capital', 'Beta Ventures'],
         priority: 10,
       })
       .expect(201);
     expect(watchlistCreated.body).toMatchObject({
       thesis: 'Test thesis',
       tags: ['test', 'bsc'],
+      twitterUrl: 'https://x.com/based',
+      websiteUrl: 'https://based.example',
+      investors: ['Alpha Capital', 'Beta Ventures'],
       priority: 10,
       priceUsd: '2.00000000',
       change24hPct: null,
@@ -463,12 +469,25 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     const watchlistUpdated = await agent
       .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
       .set('x-csrf-token', owner.csrf)
-      .send({ thesis: 'Updated thesis', priority: 20 })
+      .send({
+        thesis: 'Updated thesis',
+        websiteUrl: 'https://updated.example',
+        investors: ['Gamma Fund'],
+        priority: 20,
+      })
       .expect(200);
     expect(watchlistUpdated.body).toMatchObject({
       thesis: 'Updated thesis',
+      websiteUrl: 'https://updated.example',
+      investors: ['Gamma Fund'],
       priority: 20,
     });
+
+    await agent
+      .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ websiteUrl: 'javascript:alert(1)' })
+      .expect(400);
 
     await agent
       .delete(`/api/v1/watchlist/${watchlistCreated.body.id}`)

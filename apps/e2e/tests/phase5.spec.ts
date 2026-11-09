@@ -50,7 +50,9 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const csrf = cookies.find((cookie) => cookie.name === 'nexter_csrf')?.value ?? '';
   const assetsResponse = await page.request.get('/api/v1/assets');
   const assets = (
-    (await assetsResponse.json()) as { assets: Array<{ id: string; symbol: string }> }
+    (await assetsResponse.json()) as {
+      assets: Array<{ id: string; symbol: string; contractAddress: string | null }>;
+    }
   ).assets;
   const accountsResponse = await page.request.get('/api/v1/accounts');
   const accounts = (
@@ -200,32 +202,52 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/watchlist');
-  await expect(page.getByRole('heading', { name: 'Наблюдение' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
   await page.getByRole('button', { name: 'Добавить актив' }).first().click();
   const watchDialog = page.getByRole('dialog');
   await watchDialog.getByLabel('Актив').selectOption(based?.id ?? '');
-  await watchDialog.getByLabel('Тезис').fill('Playwright thesis');
+  await watchDialog.getByLabel('Описание').fill('Playwright thesis');
   await watchDialog.getByLabel('Теги (через запятую)').fill('Топ, тест');
+  await watchDialog.getByLabel('Twitter / X').fill('https://x.com/based');
+  await watchDialog.getByLabel('Сайт').fill('https://based.example');
+  await watchDialog.getByLabel('Инвесторы (через запятую)').fill('Alpha Capital, Beta Ventures');
   await watchDialog.getByLabel('Приоритет').fill('10');
   await watchDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Playwright thesis')).toBeVisible();
   await expect(page.getByText('тест')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Изменить' }).click();
+  await page.getByRole('button', { name: /BASED/ }).click();
+  const tokenDrawer = page.getByRole('dialog');
+  await expect(tokenDrawer.getByRole('heading', { name: 'BASED' })).toBeVisible();
+  await expect(tokenDrawer.getByText('Playwright thesis')).toBeVisible();
+  await expect(tokenDrawer.getByText('Alpha Capital')).toBeVisible();
+  await expect(tokenDrawer.getByText('Beta Ventures')).toBeVisible();
+  await expect(tokenDrawer.getByText(based?.contractAddress ?? '')).toBeVisible();
+  await expect(tokenDrawer.getByRole('link', { name: 'Twitter / X' })).toHaveAttribute(
+    'href',
+    'https://x.com/based',
+  );
+
+  await tokenDrawer.getByRole('button', { name: 'Изменить' }).click();
   const editDialog = page.getByRole('dialog');
-  await editDialog.getByLabel('Тезис').fill('Updated Playwright thesis');
+  await editDialog.getByLabel('Описание').fill('Updated Playwright thesis');
   await editDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
 
   page.on('dialog', (dialog) => {
     void dialog.accept();
   });
-  await page.getByRole('button', { name: 'В архив' }).click();
+  await page.getByRole('button', { name: /BASED/ }).click();
+  const drawerToArchive = page.getByRole('dialog');
+  await expect(drawerToArchive.getByText('Updated Playwright thesis')).toBeVisible();
+  await drawerToArchive.getByRole('button', { name: 'В архив' }).click();
   await expect(page.getByText('Updated Playwright thesis')).toHaveCount(0);
 
   await page.getByLabel('Архив').check();
-  await expect(page.getByRole('button', { name: 'Вернуть' })).toBeVisible();
-  await page.getByRole('button', { name: 'Вернуть' }).click();
+  await page.getByRole('button', { name: /BASED/ }).click();
+  const archivedDrawer = page.getByRole('dialog');
+  await archivedDrawer.getByRole('button', { name: 'Вернуть' }).click();
+  await archivedDrawer.getByLabel('Закрыть').click();
   await page.getByLabel('Архив').uncheck();
   await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
 

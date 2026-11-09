@@ -331,6 +331,12 @@ export const watchlist = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::text[]`),
+    twitterUrl: text('twitter_url'),
+    websiteUrl: text('website_url'),
+    investors: text('investors')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     priority: integer('priority').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

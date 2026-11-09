@@ -10,7 +10,7 @@ export const messages = {
     dashboard: 'Дашборд',
     portfolio: 'Портфель',
     operations: 'Операции',
-    watchlist: 'Наблюдение',
+    watchlist: 'База токенов',
     reports: 'Отчёты',
     vault: 'Хранилище',
     tasks: 'Задачи',
