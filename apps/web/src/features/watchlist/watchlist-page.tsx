@@ -22,9 +22,9 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatUsd, pnlTone } from '@/lib/format';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import type { WatchlistEntry, WatchlistTokenSearchResult } from '@nexter/contracts';
+import { TokenDrawer } from './token-drawer';
 
 function tagsFromInput(value: string): string[] {
   return value
@@ -32,6 +32,35 @@ function tagsFromInput(value: string): string[] {
     .map((tag) => tag.trim())
     .filter(Boolean)
     .slice(0, 20);
+}
+
+function investorsFromInput(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((investor) => investor.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function urlOrNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function isValidExternalUrl(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+
+  try {
+    new URL(trimmed);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function iconSrc(logoUrl: string | null): string | null {
@@ -48,7 +77,11 @@ export function WatchlistPage() {
   const [assetId, setAssetId] = useState('');
   const [thesis, setThesis] = useState('');
   const [tags, setTags] = useState('');
+  const [twitterUrl, setTwitterUrl] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [investors, setInvestors] = useState('');
   const [priority, setPriority] = useState('0');
+  const [drawerEntryId, setDrawerEntryId] = useState<string | null>(null);
   const [editGroupId, setEditGroupId] = useState('');
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -88,6 +121,9 @@ export function WatchlistPage() {
       const payload = {
         thesis: thesis || null,
         tags: tagsFromInput(tags),
+        twitterUrl: urlOrNull(twitterUrl),
+        websiteUrl: urlOrNull(websiteUrl),
+        investors: investorsFromInput(investors),
         priority: Number.parseInt(priority, 10) || 0,
         ...(editGroupId ? { groupId: editGroupId } : {}),
       };
@@ -105,6 +141,9 @@ export function WatchlistPage() {
       setAssetId('');
       setThesis('');
       setTags('');
+      setTwitterUrl('');
+      setWebsiteUrl('');
+      setInvestors('');
       setPriority('0');
       setEditGroupId('');
       setError(null);
@@ -169,6 +208,7 @@ export function WatchlistPage() {
   const archiveMutation = useMutation({
     mutationFn: (id: string) => archiveWatchlist(id),
     onSuccess: () => {
+      setDrawerEntryId(null);
       setError(null);
       invalidate();
     },
@@ -189,6 +229,9 @@ export function WatchlistPage() {
     setAssetId('');
     setThesis('');
     setTags('');
+    setTwitterUrl('');
+    setWebsiteUrl('');
+    setInvestors('');
     setPriority('0');
     setEditGroupId(defaultGroup?.id ?? '');
     setError(null);
@@ -196,10 +239,14 @@ export function WatchlistPage() {
   }
 
   function openEdit(entry: WatchlistEntry) {
+    setDrawerEntryId(null);
     setEditing(entry);
     setAssetId(entry.asset.id);
     setThesis(entry.thesis ?? '');
     setTags(entry.tags.join(', '));
+    setTwitterUrl(entry.twitterUrl ?? '');
+    setWebsiteUrl(entry.websiteUrl ?? '');
+    setInvestors(entry.investors.join(', '));
     setPriority(String(entry.priority));
     setEditGroupId(entry.groupId ?? defaultGroup?.id ?? '');
     setError(null);
@@ -209,12 +256,20 @@ export function WatchlistPage() {
   const groupsToRender = groups.data?.groups ?? [];
   const groupById = new Map(groupsToRender.map((group) => [group.id, group]));
   const canSearch = /^0x[0-9a-fA-F]{40}$/.test(searchAddress.trim()) && !searchMutation.isPending;
+  const drawerEntry = drawerEntryId
+    ? (entries.find((entry) => entry.id === drawerEntryId) ?? null)
+    : null;
+  const drawerGroup = drawerEntry?.groupId ? groupById.get(drawerEntry.groupId) : null;
+  const investorValues = investorsFromInput(investors);
+  const twitterInvalid = !isValidExternalUrl(twitterUrl);
+  const websiteInvalid = !isValidExternalUrl(websiteUrl);
+  const metadataInvalid = investorValues.length > 30 || twitterInvalid || websiteInvalid;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Наблюдение"
-        subtitle="Группы, идеи и токены, найденные по контракту."
+        title="База токенов"
+        subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
         actions={
           <>
             <label className="flex items-center gap-2 text-sm text-zinc-600">
@@ -429,96 +484,80 @@ export function WatchlistPage() {
             </Button>
           </Card>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {entries.map((entry) => {
               const group = entry.groupId ? groupById.get(entry.groupId) : null;
               return (
-                <Card key={entry.id} className={entry.archivedAt ? 'opacity-60' : undefined}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      {iconSrc(entry.logoUrl) ? (
-                        <img
-                          src={iconSrc(entry.logoUrl) ?? undefined}
-                          alt=""
-                          className="h-9 w-9 rounded-full"
-                        />
-                      ) : (
-                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-600">
-                          {entry.asset.symbol.slice(0, 2)}
+                <Card
+                  key={entry.id}
+                  className={`relative p-0 transition-colors hover:border-emerald-300 ${
+                    entry.archivedAt ? 'opacity-60' : ''
+                  }`}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Открыть ${entry.asset.symbol}`}
+                    className="absolute inset-0 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+                    onClick={() => setDrawerEntryId(entry.id)}
+                  />
+                  <div className="pointer-events-none p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {iconSrc(entry.logoUrl) ? (
+                          <img
+                            src={iconSrc(entry.logoUrl) ?? undefined}
+                            alt=""
+                            className="h-9 w-9 shrink-0 rounded-full"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-600">
+                            {entry.asset.symbol.slice(0, 2)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-lg font-semibold text-zinc-900">
+                              {entry.asset.symbol}
+                            </span>
+                            {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
+                            {group ? <Badge tone="info">{group.name}</Badge> : null}
+                          </div>
+                          <div className="truncate text-xs text-zinc-500">
+                            {entry.asset.name} · {entry.asset.chainCode}
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Link
-                            to="/portfolio/assets/$assetId"
-                            params={{ assetId: entry.asset.id }}
-                            className="text-lg font-semibold text-zinc-900 hover:text-emerald-800"
-                          >
-                            {entry.asset.symbol}
-                          </Link>
-                          {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                          {group ? <Badge tone="info">{group.name}</Badge> : null}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-mono text-lg font-semibold text-zinc-900">
+                          {formatUsd(entry.priceUsd)}
                         </div>
-                        <div className="text-xs text-zinc-500">
-                          {entry.asset.name} · {entry.asset.chainCode} · приоритет {entry.priority}
+                        <div className={`text-xs ${pnlTone(entry.change24hPct)}`}>
+                          {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono text-lg font-semibold text-zinc-900">
-                        {formatUsd(entry.priceUsd)}
+
+                    <p className="mt-3 line-clamp-3 text-sm text-zinc-600">
+                      {entry.thesis ?? 'Описание не заполнено.'}
+                    </p>
+
+                    {entry.tags.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {entry.tags.slice(0, 4).map((tag) => (
+                          <Badge key={tag} tone="info">
+                            {tag}
+                          </Badge>
+                        ))}
                       </div>
-                      <div className={`text-xs ${pnlTone(entry.change24hPct)}`}>
-                        {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
-                      </div>
+                    ) : null}
+
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+                      <span>Инвесторов: {entry.investors.length}</span>
+                      <span className="flex gap-2">
+                        {entry.twitterUrl ? <span>Twitter / X</span> : null}
+                        {entry.websiteUrl ? <span>Сайт</span> : null}
+                      </span>
                     </div>
-                  </div>
-
-                  {entry.tags.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {entry.tags.map((tag) => (
-                        <Badge key={tag} tone="info">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <p className="mt-3 line-clamp-4 text-sm text-zinc-600">
-                    {entry.thesis ?? 'Тезис не заполнен.'}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => openEdit(entry)}
-                    >
-                      Изменить
-                    </Button>
-                    {!entry.archivedAt ? (
-                      <Button
-                        variant="ghost"
-                        className="h-8 px-3 text-xs"
-                        onClick={() => {
-                          if (window.confirm(`Архивировать ${entry.asset.symbol}?`)) {
-                            archiveMutation.mutate(entry.id);
-                          }
-                        }}
-                        disabled={archiveMutation.isPending}
-                      >
-                        В архив
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="secondary"
-                        className="h-8 px-3 text-xs"
-                        onClick={() => restoreMutation.mutate(entry.id)}
-                        disabled={restoreMutation.isPending}
-                      >
-                        Вернуть
-                      </Button>
-                    )}
                   </div>
                 </Card>
               );
@@ -538,6 +577,21 @@ export function WatchlistPage() {
           </Button>
         </div>
       ) : null}
+
+      <TokenDrawer
+        entry={drawerEntry}
+        groupName={drawerGroup?.name ?? null}
+        onClose={() => setDrawerEntryId(null)}
+        onEdit={openEdit}
+        onArchive={(entry) => {
+          if (window.confirm(`Архивировать ${entry.asset.symbol}?`)) {
+            archiveMutation.mutate(entry.id);
+          }
+        }}
+        onRestore={(entry) => restoreMutation.mutate(entry.id)}
+        busy={archiveMutation.isPending || restoreMutation.isPending}
+        error={error}
+      />
 
       <Dialog
         open={groupDialogOpen}
@@ -573,8 +627,8 @@ export function WatchlistPage() {
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        title={editing ? 'Изменить наблюдение' : 'Добавить в наблюдение'}
-        description="Тезис и теги — продуктовые заметки, не влияют на учёт."
+        title={editing ? 'Изменить токен' : 'Добавить токен'}
+        description="Описание, ссылки и инвесторы — заметки в базе токенов, не влияют на учёт."
         footer={
           <>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
@@ -582,7 +636,7 @@ export function WatchlistPage() {
             </Button>
             <Button
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || (!editing && !assetId)}
+              disabled={saveMutation.isPending || (!editing && !assetId) || metadataInvalid}
             >
               {saveMutation.isPending ? 'Сохраняю…' : 'Сохранить'}
             </Button>
@@ -626,12 +680,12 @@ export function WatchlistPage() {
             </Select>
           </label>
           <label className="block text-sm text-zinc-600">
-            Тезис
+            Описание
             <Textarea
               className="mt-1"
               value={thesis}
               onChange={(event) => setThesis(event.target.value)}
-              placeholder="Почему этот актив интересен"
+              placeholder="Что это за токен и почему он интересен"
             />
           </label>
           <label className="block text-sm text-zinc-600">
@@ -642,6 +696,48 @@ export function WatchlistPage() {
               onChange={(event) => setTags(event.target.value)}
               placeholder="Топ, Дашборд"
             />
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Twitter / X
+            <Input
+              className="mt-1"
+              type="url"
+              value={twitterUrl}
+              onChange={(event) => setTwitterUrl(event.target.value)}
+              placeholder="https://x.com/…"
+            />
+            {twitterInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Ссылка должна начинаться с http:// или https://
+              </span>
+            ) : null}
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Сайт
+            <Input
+              className="mt-1"
+              type="url"
+              value={websiteUrl}
+              onChange={(event) => setWebsiteUrl(event.target.value)}
+              placeholder="https://…"
+            />
+            {websiteInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Ссылка должна начинаться с http:// или https://
+              </span>
+            ) : null}
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Инвесторы (через запятую)
+            <Input
+              className="mt-1"
+              value={investors}
+              onChange={(event) => setInvestors(event.target.value)}
+              placeholder="Alpha Capital, Beta Ventures"
+            />
+            {investorValues.length > 30 ? (
+              <span className="mt-1 block text-xs text-red-700">Не больше 30 инвесторов.</span>
+            ) : null}
           </label>
           <label className="block text-sm text-zinc-600">
             Приоритет

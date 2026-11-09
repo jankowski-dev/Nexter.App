@@ -2,6 +2,29 @@ import { z } from 'zod';
 import { assetSchema } from './accounting';
 import { pageMetaSchema } from './pagination';
 
+const externalUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .refine(
+    (value) =>
+      !Array.from(value).some((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code <= 31 || code === 127;
+      }),
+    'URL содержит недопустимые символы',
+  )
+  .refine((value) => /^https?:\/\//i.test(value), 'URL должен начинаться с http:// или https://')
+  .refine((value) => {
+    try {
+      new URL(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'Некорректный URL')
+  .nullable();
+
 export const watchlistGroupSchema = z.object({
   id: z.uuid(),
   name: z.string(),
@@ -33,6 +56,9 @@ export const watchlistEntrySchema = z.object({
   logoUrl: z.string().nullable(),
   thesis: z.string().nullable(),
   tags: z.array(z.string()),
+  twitterUrl: z.string().nullable(),
+  websiteUrl: z.string().nullable(),
+  investors: z.array(z.string()),
   priority: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
@@ -52,6 +78,9 @@ export const watchlistCreateRequestSchema = z.object({
   groupId: z.uuid().optional(),
   thesis: z.string().max(2000).nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+  twitterUrl: externalUrlSchema.optional(),
+  websiteUrl: externalUrlSchema.optional(),
+  investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
 });
 
@@ -59,6 +88,9 @@ export const watchlistUpdateRequestSchema = z.object({
   groupId: z.uuid().nullable().optional(),
   thesis: z.string().max(2000).nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+  twitterUrl: externalUrlSchema.optional(),
+  websiteUrl: externalUrlSchema.optional(),
+  investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
   archived: z.boolean().optional(),
 });
@@ -90,6 +122,9 @@ export const watchlistFromContractRequestSchema = z.object({
   groupId: z.uuid().optional(),
   thesis: z.string().max(2000).nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
+  twitterUrl: externalUrlSchema.optional(),
+  websiteUrl: externalUrlSchema.optional(),
+  investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
 });
 
