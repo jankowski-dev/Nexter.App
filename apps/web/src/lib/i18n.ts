@@ -12,6 +12,9 @@ export const messages = {
     operations: 'Операции',
     watchlist: 'Наблюдение',
     reports: 'Отчёты',
+    vault: 'Хранилище',
+    tasks: 'Задачи',
+    notes: 'Заметки',
     settings: 'Настройки',
   },
   dashboard: {

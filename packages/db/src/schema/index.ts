@@ -118,6 +118,7 @@ export type TransactionSubtype =
   'buy' | 'sell' | 'swap' | 'transfer' | 'deposit' | 'withdrawal' | 'fee' | 'income' | 'adjustment';
 export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system';
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
+export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type ReconciliationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type ReconciliationItemStatus =
   'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER' | 'UNSUPPORTED';
@@ -713,6 +714,96 @@ export const tokenApprovals = pgTable(
   ],
 );
 
+export const vaultConfigs = pgTable(
+  'vault_configs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    salt: text('salt').notNull(),
+    iterations: integer('iterations').notNull().default(600_000),
+    wrappedKey: text('wrapped_key').notNull(),
+    wrappedKeyIv: text('wrapped_key_iv').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('vault_configs_user_unique').on(table.userId)],
+);
+
+export const vaultItems = pgTable(
+  'vault_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ciphertext: text('ciphertext').notNull(),
+    iv: text('iv').notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('vault_items_user_updated_idx').on(table.userId, table.updatedAt),
+    index('vault_items_user_archived_idx').on(table.userId, table.archivedAt),
+  ],
+);
+
+export const tasks = pgTable(
+  'tasks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    description: text('description'),
+    status: text('status').$type<TaskStatus>().notNull().default('open'),
+    priority: integer('priority').notNull().default(0),
+    dueAt: timestamp('due_at', { withTimezone: true }),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    relatedAssetId: uuid('related_asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('tasks_user_status_idx').on(table.userId, table.status),
+    index('tasks_user_due_idx').on(table.userId, table.dueAt),
+    index('tasks_user_archived_idx').on(table.userId, table.archivedAt),
+  ],
+);
+
+export const notes = pgTable(
+  'notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    pinned: boolean('pinned').notNull().default(false),
+    relatedAssetId: uuid('related_asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    relatedTradeGroupId: uuid('related_trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('notes_user_updated_idx').on(table.userId, table.updatedAt),
+    index('notes_user_archived_idx').on(table.userId, table.archivedAt),
+    index('notes_user_pinned_idx').on(table.userId, table.pinned),
+  ],
+);
+
 export const externalApiCalls = pgTable(
   'external_api_calls',
   {
@@ -745,3 +836,7 @@ export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
 export type TokenApproval = typeof tokenApprovals.$inferSelect;
+export type VaultConfig = typeof vaultConfigs.$inferSelect;
+export type VaultItem = typeof vaultItems.$inferSelect;
+export type TaskRecord = typeof tasks.$inferSelect;
+export type NoteRecord = typeof notes.$inferSelect;

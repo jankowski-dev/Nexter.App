@@ -15,12 +15,16 @@ import {
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
+  noteSchema,
+  notesResponseSchema,
   portfolioAssetDetailSchema,
   portfolioSnapshotSchema,
   positionsResponseSchema,
   reportsResponseSchema,
   settingsSchema,
   stepUpResponseSchema,
+  taskSchema,
+  tasksResponseSchema,
   swapBuildResponseSchema,
   swapConfigResponseSchema,
   swapOrderDetailSchema,
@@ -28,6 +32,9 @@ import {
   tradeGroupDetailSchema,
   tradeGroupsResponseSchema,
   transactionsPageResponseSchema,
+  vaultConfigSchema,
+  vaultItemSchema,
+  vaultResponseSchema,
   watchlistEntrySchema,
   watchlistGroupSchema,
   watchlistGroupsResponseSchema,
@@ -47,18 +54,34 @@ import {
   type HealthResponse,
   type ImportResponse,
   type ImportsResponse,
+  type Note,
+  type NoteCreateRequest,
+  type NoteListQuery,
+  type NoteUpdateRequest,
+  type NotesResponse,
   type PortfolioAssetDetail,
   type PortfolioSnapshot,
   type PositionsResponse,
   type ReportsResponse,
   type Settings,
   type StepUpResponse,
+  type Task,
+  type TaskCreateRequest,
+  type TaskListQuery,
+  type TaskUpdateRequest,
+  type TasksResponse,
   type SwapChainCode,
   type SwapBuildResponse,
   type SwapConfigResponse,
   type SwapOrderDetail,
   type TokenApproval,
   type TradeGroupDetail,
+  type VaultConfig,
+  type VaultInitializeRequest,
+  type VaultItem,
+  type VaultItemCreateRequest,
+  type VaultItemUpdateRequest,
+  type VaultResponse,
   type TradeGroupListQuery,
   type TradeGroupSellRequest,
   type TradeGroupsResponse,
@@ -561,4 +584,47 @@ export async function downloadExport(
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function fetchVault(includeArchived = false): Promise<VaultResponse> {
+  return apiFetch(`/api/v1/vault${queryString({ includeArchived })}`, {}, vaultResponseSchema);
+}
+
+export async function initializeVault(body: VaultInitializeRequest): Promise<VaultConfig> {
+  return apiPost('/api/v1/vault/initialize', body, vaultConfigSchema);
+}
+
+export async function createVaultItem(body: VaultItemCreateRequest): Promise<VaultItem> {
+  return apiPost('/api/v1/vault/items', body, vaultItemSchema);
+}
+
+export async function updateVaultItem(
+  id: string,
+  body: VaultItemUpdateRequest,
+): Promise<VaultItem> {
+  return apiPatch(`/api/v1/vault/items/${id}`, body, vaultItemSchema);
+}
+
+export async function fetchTasks(params: Partial<TaskListQuery> = {}): Promise<TasksResponse> {
+  return apiFetch(`/api/v1/tasks${queryString(params)}`, {}, tasksResponseSchema);
+}
+
+export async function createTask(body: TaskCreateRequest): Promise<Task> {
+  return apiPost('/api/v1/tasks', body, taskSchema);
+}
+
+export async function updateTask(id: string, body: TaskUpdateRequest): Promise<Task> {
+  return apiPatch(`/api/v1/tasks/${id}`, body, taskSchema);
+}
+
+export async function fetchNotes(params: Partial<NoteListQuery> = {}): Promise<NotesResponse> {
+  return apiFetch(`/api/v1/notes${queryString(params)}`, {}, notesResponseSchema);
+}
+
+export async function createNote(body: NoteCreateRequest): Promise<Note> {
+  return apiPost('/api/v1/notes', body, noteSchema);
+}
+
+export async function updateNote(id: string, body: NoteUpdateRequest): Promise<Note> {
+  return apiPatch(`/api/v1/notes/${id}`, body, noteSchema);
 }

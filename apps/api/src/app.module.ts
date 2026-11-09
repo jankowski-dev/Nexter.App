@@ -6,6 +6,9 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { HealthModule } from './modules/health/health.module';
 import { ImportsModule } from './modules/imports/imports.module';
+import { NotesModule } from './modules/notes/notes.module';
+import { TasksModule } from './modules/tasks/tasks.module';
+import { VaultModule } from './modules/vault/vault.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { SwapModule } from './modules/swap/swap.module';
@@ -27,6 +30,9 @@ import { loggerModule } from './shared/logging/logger.module';
     AccountingModule,
     ImportsModule,
     WatchlistModule,
+    NotesModule,
+    TasksModule,
+    VaultModule,
     SettingsModule,
     AuditLogModule,
     SwapModule,

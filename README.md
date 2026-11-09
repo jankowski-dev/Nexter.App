@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 10 — On-chain reconciliation (implementation and live execution accepted 2026-11-08; data reconciliation deferred to the go-live clean cutover per ADR 0014)**. UI redesign UI-0 through UI-5 are implemented: new navigation, Portfolio + trade journal, asset drawer, Operations and Reports pages, the unified trade/exchange modal with position-close linkage, dashboard analytics, daily snapshots, interactive charts, watchlist groups with contract-address token discovery, period reports with trade statistics and exports, embedded-only swap, and mobile navigation. Phase 9 — Ethereum execution is accepted (2026-11-05). Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC and Ethereum swaps completed; chain config, per-chain RPC/confirmations, chain-aware UI, tracking, and accounting are in place. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
+Current phase: **Phase 11 — Other modules implemented (2026-11-09)**. Phase 10 — On-chain reconciliation is implemented and live execution is accepted; data reconciliation is deferred to the go-live clean cutover per ADR 0014. UI redesign UI-0 through UI-5 are implemented: new navigation, Portfolio + trade journal, asset drawer, Operations and Reports pages, the unified trade/exchange modal with position-close linkage, dashboard analytics, daily snapshots, interactive charts, watchlist groups with contract-address token discovery, period reports with trade statistics and exports, embedded-only swap, and mobile navigation. Phase 11 adds an end-to-end encrypted password vault, tasks, and notes. Phase 9 — Ethereum execution is accepted (2026-11-05). Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC and Ethereum swaps completed; chain config, per-chain RPC/confirmations, chain-aware UI, tracking, and accounting are in place. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -153,9 +153,9 @@ npx pnpm@10.20.0 test:e2e
 - [x] Phase 6 — MVP-1 hardening
 - [x] Phase 7 — Swap foundation
 - [x] Phase 8 — Swap execution (BSC)
-- [ ] Phase 9 — Ethereum
-- [ ] Phase 10 — On-chain reconciliation
-- [ ] Phase 11 — Other modules
+- [x] Phase 9 — Ethereum (accepted)
+- [x] Phase 10 — On-chain reconciliation (implementation accepted; data reconciliation deferred to the clean cutover)
+- [x] Phase 11 — Other modules (vault, tasks, notes)
 
 ## Production environment
 

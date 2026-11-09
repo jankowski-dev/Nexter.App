@@ -12,6 +12,9 @@ import { TradeDetailPage } from '@/features/trades/trade-detail-page';
 import { WatchlistPage } from '@/features/watchlist/watchlist-page';
 import { OperationsPage } from '@/features/operations/operations-page';
 import { ReportsPage } from '@/features/reports/reports-page';
+import { NotesPage } from '@/features/notes/notes-page';
+import { TasksPage } from '@/features/tasks/tasks-page';
+import { VaultPage } from '@/features/vault/vault-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
@@ -157,6 +160,24 @@ const reportsRoute = createRoute({
   component: ReportsPage,
 });
 
+const vaultRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/vault',
+  component: VaultPage,
+});
+
+const tasksRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/tasks',
+  component: TasksPage,
+});
+
+const notesRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/notes',
+  component: NotesPage,
+});
+
 const importRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/import',
@@ -225,6 +246,9 @@ const routeTree = rootRoute.addChildren([
     tradeDetailRoute,
     operationsRoute,
     reportsRoute,
+    vaultRoute,
+    tasksRoute,
+    notesRoute,
     importRoute,
     watchlistRoute,
     swapRoute,

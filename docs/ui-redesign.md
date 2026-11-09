@@ -19,10 +19,14 @@ Status: **UI-0 through UI-5 implemented.** Owner-approved direction on 2026-11-0
 | Operations | Deposits, withdrawals, exchanges; no trades                                    |
 | Watchlist  | User-created groups, contract-address token search, token cards                |
 | Reports    | P&L, trade statistics, operations, fees/gas, exports                           |
+| Vault      | E2E-encrypted passwords and access notes                                       |
+| Tasks      | Personal tasks, priorities, due dates                                          |
+| Notes      | Free-form notes, tags, pinning                                                 |
 | Settings   | Existing settings, security, accounts, audit, data quality; legacy import link |
 
 - No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
 - No separate **Swap** entry. The swap flow is embedded in the trade/exchange modal; `/swap` redirects to `/portfolio`.
+- Phase 11 adds **Vault**, **Tasks**, and **Notes** after Reports. The vault is end-to-end encrypted in the browser; tasks and notes are plaintext owner-only modules.
 - Import is legacy under Settings until the clean cutover; it is not part of the go-live path.
 
 ## Portfolio

@@ -2,7 +2,7 @@
 
 ## Assets
 
-Crypto funds, Tangem seed/keys (never on server), auth credentials, TOTP secret, recovery codes, sessions, trade history, balances, P&L, API keys, backups, Notion export, future password vault.
+Crypto funds, Tangem seed/keys (never on server), auth credentials, TOTP secret, recovery codes, sessions, trade history, balances, P&L, API keys, backups, Notion export, password-vault ciphertext, tasks, notes.
 
 ## Adversaries
 
@@ -28,6 +28,7 @@ Opportunistic attackers, credential stuffing, phishing, malware, malicious brows
 - Secrets only in env; no secrets in logs; pino allowlist serializer; Sentry scrubbing.
 - Private Postgres, least privilege, PITR, encrypted dumps to R2, restore tests.
 - Swap allowlists, calldata decoding, simulation, exact approvals, MEV protection, step-up TOTP, kill switch.
+- Vault: client-side PBKDF2/AES-256-GCM, random data key wrapped by the master key, no plaintext/master key on the server, no vault ciphertext in audit logs, no server-side recovery.
 - Dependency audit, lockfile, secret scan. Exact version pinning and base-image digest pinning remain hardening items.
 - AI agents: no prod access, read-only research, worktrees, security review.
 
@@ -37,4 +38,4 @@ Self-hosting shifts responsibility to the owner; Railway/Cloudflare/GitHub may b
 
 ## Verification
 
-Auth tests, CSRF/XSS tests, header assertions, secret scanning, dependency audit, backup restore, calldata tampering tests, RPC outage tests, gzip/static smoke tests, and independent phase review.
+Auth tests, CSRF/XSS tests, header assertions, secret scanning, dependency audit, backup restore, calldata tampering tests, RPC outage tests, gzip/static smoke tests, vault crypto/unit/E2E tests, and independent phase review.

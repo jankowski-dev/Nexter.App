@@ -13,6 +13,9 @@ const navigation = [
   { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
   { to: '/reports', label: messages.nav.reports },
+  { to: '/vault', label: messages.nav.vault },
+  { to: '/tasks', label: messages.nav.tasks },
+  { to: '/notes', label: messages.nav.notes },
   { to: '/settings', label: messages.nav.settings },
 ] as const;
 
