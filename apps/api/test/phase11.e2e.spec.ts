@@ -285,4 +285,96 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     );
     expect(JSON.stringify(vaultAudits)).not.toContain('AAAAAAAAAAAAAAAAAAAAAAAA');
   }, 60_000);
+
+  it('generates recurring task occurrences and supports due-date ranges', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const invalid = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({ title: 'No due date', recurrence: 'daily' })
+      .expect(400);
+    expect(invalid.body.error.code).toBe('VALIDATION_ERROR');
+
+    const created = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        title: 'Daily check',
+        dueAt: '2026-12-01T12:00:00.000Z',
+        recurrence: 'daily',
+        recurrenceEndsAt: '2026-12-05T12:00:00.000Z',
+      })
+      .expect(201);
+    expect(created.body).toMatchObject({
+      title: 'Daily check',
+      recurrence: 'daily',
+      occurrenceIndex: 0,
+    });
+    expect(created.body.seriesId).toBeTruthy();
+
+    const all = await agent.get('/api/v1/tasks?limit=50').expect(200);
+    const daily = (all.body.data as Array<{ seriesId: string; dueAt: string }>).filter(
+      (task) => task.seriesId === created.body.seriesId,
+    );
+    expect(daily).toHaveLength(5);
+    expect(daily.map((task) => task.dueAt)).toEqual([
+      '2026-12-01T12:00:00.000Z',
+      '2026-12-02T12:00:00.000Z',
+      '2026-12-03T12:00:00.000Z',
+      '2026-12-04T12:00:00.000Z',
+      '2026-12-05T12:00:00.000Z',
+    ]);
+
+    const range = await agent
+      .get('/api/v1/tasks?from=2026-12-02T00:00:00.000Z&to=2026-12-03T23:59:59.999Z')
+      .expect(200);
+    expect(range.body.data).toHaveLength(2);
+
+    const moved = await agent
+      .patch(
+        `/api/v1/tasks/${daily[1]?.seriesId === undefined ? created.body.id : created.body.id}`,
+      )
+      .set('x-csrf-token', owner.csrf)
+      .send({ dueAt: '2026-12-10T12:00:00.000Z' })
+      .expect(200);
+    expect(moved.body.dueAt).toBe('2026-12-10T12:00:00.000Z');
+
+    const afterMove = await agent.get('/api/v1/tasks?limit=50').expect(200);
+    const movedSeries = (afterMove.body.data as Array<{ seriesId: string; dueAt: string }>).filter(
+      (task) => task.seriesId === created.body.seriesId,
+    );
+    expect(movedSeries.some((task) => task.dueAt === '2026-12-10T12:00:00.000Z')).toBe(true);
+
+    const monthly = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        title: 'Monthly check',
+        dueAt: '2026-01-31T12:00:00.000Z',
+        recurrence: 'monthly',
+        recurrenceEndsAt: '2026-03-31T12:00:00.000Z',
+      })
+      .expect(201);
+    const monthlyRows = (await agent.get('/api/v1/tasks?limit=50').expect(200)).body.data as Array<{
+      seriesId: string;
+      dueAt: string;
+    }>;
+    expect(
+      monthlyRows
+        .filter((task) => task.seriesId === monthly.body.seriesId)
+        .map((task) => task.dueAt),
+    ).toEqual(['2026-01-31T12:00:00.000Z', '2026-02-28T12:00:00.000Z', '2026-03-31T12:00:00.000Z']);
+
+    await agent
+      .patch(`/api/v1/tasks/${monthly.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: true })
+      .expect(200);
+    const remaining = (await agent.get('/api/v1/tasks?limit=50').expect(200)).body.data as Array<{
+      seriesId: string;
+    }>;
+    expect(remaining.filter((task) => task.seriesId === monthly.body.seriesId)).toHaveLength(2);
+  }, 60_000);
 });

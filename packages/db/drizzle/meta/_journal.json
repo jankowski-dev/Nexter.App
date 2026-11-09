@@ -148,6 +148,13 @@
       "when": 1794251006662,
       "tag": "0020_good_titanium_man",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794256009703,
+      "tag": "0021_vengeful_nextwave",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, ilike, isNull, or, sql } from 'drizzle-orm';
-import { assets, tasks, type Database, type TaskRecord } from '@nexter/db';
+import { and, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm';
+import { assets, tasks, type Database, type TaskRecord, type TaskRecurrence } from '@nexter/db';
 import type {
   Task,
   TaskCreateRequest,
@@ -26,10 +27,47 @@ function toContract(row: TaskRecord): Task {
     dueAt: row.dueAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     relatedAssetId: row.relatedAssetId,
+    seriesId: row.seriesId,
+    recurrence: row.recurrence,
+    recurrenceEndsAt: row.recurrenceEndsAt?.toISOString() ?? null,
+    occurrenceIndex: row.occurrenceIndex,
     archivedAt: row.archivedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+const MAX_OCCURRENCES = 366;
+
+function addMonthsUtc(date: Date, months: number): Date {
+  const day = date.getUTCDate();
+  const result = new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth() + months,
+      1,
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      date.getUTCSeconds(),
+      date.getUTCMilliseconds(),
+    ),
+  );
+  const lastDay = new Date(
+    Date.UTC(result.getUTCFullYear(), result.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  result.setUTCDate(Math.min(day, lastDay));
+
+  return result;
+}
+
+function occurrenceAt(anchor: Date, recurrence: TaskRecurrence, index: number): Date {
+  if (recurrence === 'daily') return new Date(anchor.getTime() + index * 86_400_000);
+  if (recurrence === 'weekly') return new Date(anchor.getTime() + index * 7 * 86_400_000);
+  return addMonthsUtc(anchor, index);
+}
+
+function recurrenceHorizon(anchor: Date, endsAt: Date | null): Date {
+  return endsAt ?? addMonthsUtc(anchor, 12);
 }
 
 @Injectable()
@@ -44,6 +82,8 @@ export class TasksService {
 
     if (!query.includeArchived) conditions.push(isNull(tasks.archivedAt));
     if (query.status) conditions.push(eq(tasks.status, query.status));
+    if (query.from) conditions.push(gte(tasks.dueAt, new Date(query.from)));
+    if (query.to) conditions.push(lte(tasks.dueAt, new Date(query.to)));
     if (query.search) {
       const pattern = `%${query.search}%`;
       conditions.push(or(ilike(tasks.title, pattern), ilike(tasks.description, pattern))!);
@@ -66,40 +106,86 @@ export class TasksService {
 
   async create(userId: string, input: TaskCreateRequest, meta: TaskMeta): Promise<Task> {
     await this.requireAsset(input.relatedAssetId);
-    const [created] = await this.db
-      .insert(tasks)
-      .values({
-        userId,
-        title: input.title,
-        description: input.description ?? null,
-        priority: input.priority ?? 0,
-        dueAt: input.dueAt ? new Date(input.dueAt) : null,
-        relatedAssetId: input.relatedAssetId ?? null,
-      })
-      .returning();
 
-    if (!created) throw new Error('Failed to create task');
+    const dueAt = input.dueAt ? new Date(input.dueAt) : null;
+    const recurrence = input.recurrence ?? null;
+    const recurrenceEndsAt = input.recurrenceEndsAt ? new Date(input.recurrenceEndsAt) : null;
 
-    await this.audit.log(
-      {
-        userId,
-        action: 'task.created',
-        entityType: 'task',
-        entityId: created.id,
-        after: {
-          title: created.title,
-          status: created.status,
-          priority: created.priority,
-          dueAt: created.dueAt?.toISOString() ?? null,
-          relatedAssetId: created.relatedAssetId,
+    if (recurrence && !dueAt) {
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'A recurring task requires a due date',
+      });
+    }
+
+    const seriesId = recurrence ? randomUUID() : null;
+    const occurrences =
+      recurrence && dueAt
+        ? Array.from({ length: MAX_OCCURRENCES }, (_, index) => ({
+            index,
+            dueAt: occurrenceAt(dueAt, recurrence, index),
+          })).filter(
+            (occurrence) =>
+              occurrence.dueAt.getTime() <= recurrenceHorizon(dueAt, recurrenceEndsAt).getTime(),
+          )
+        : [{ index: 0, dueAt }];
+
+    if (occurrences.length === 0) {
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'recurrenceEndsAt must be on or after dueAt',
+      });
+    }
+
+    const createdRows = await this.db.transaction(async (tx) => {
+      const created = await tx
+        .insert(tasks)
+        .values(
+          occurrences.map((occurrence) => ({
+            userId,
+            title: input.title,
+            description: input.description ?? null,
+            priority: input.priority ?? 0,
+            dueAt: occurrence.dueAt,
+            relatedAssetId: input.relatedAssetId ?? null,
+            seriesId,
+            recurrence,
+            recurrenceEndsAt,
+            occurrenceIndex: occurrence.index,
+          })),
+        )
+        .returning();
+
+      const first = created[0];
+      if (!first) throw new Error('Failed to create task');
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'task.created',
+          entityType: 'task',
+          entityId: first.id,
+          after: {
+            title: first.title,
+            status: first.status,
+            priority: first.priority,
+            dueAt: first.dueAt?.toISOString() ?? null,
+            relatedAssetId: first.relatedAssetId,
+            seriesId,
+            recurrence,
+            recurrenceEndsAt: recurrenceEndsAt?.toISOString() ?? null,
+            occurrenceCount: created.length,
+          },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
         },
-        ip: meta.ip,
-        userAgent: meta.userAgent,
-      },
-      { strict: true },
-    );
+        { executor: tx, strict: true },
+      );
 
-    return toContract(created);
+      return created;
+    });
+
+    return toContract(createdRows[0] as TaskRecord);
   }
 
   async update(

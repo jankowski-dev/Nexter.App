@@ -122,6 +122,37 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByRole('button', { name: 'Завершить' }).click();
   await expect(page.getByText('Выполнена', { exact: true })).toBeVisible();
 
+  const today = new Date();
+  const monthValue = String(today.getMonth() + 1).padStart(2, '0');
+  const firstDate = `${today.getFullYear()}-${monthValue}-10`;
+  const secondDate = `${today.getFullYear()}-${monthValue}-11`;
+  const lastDate = `${today.getFullYear()}-${monthValue}-24`;
+
+  await page.getByRole('button', { name: 'Новая задача' }).first().click();
+  const recurringDialog = page.getByRole('dialog');
+  await recurringDialog.getByLabel('Название').fill('Календарная задача');
+  await recurringDialog.getByLabel('Срок').fill(firstDate);
+  await recurringDialog.getByRole('combobox', { name: 'Повтор' }).selectOption('weekly');
+  await recurringDialog.getByLabel('Повторять до (необязательно)').fill(lastDate);
+  await recurringDialog.getByRole('button', { name: 'Сохранить' }).click();
+
+  await page.getByRole('tab', { name: 'Календарь' }).click();
+  const firstCell = page.locator(`[data-date="${firstDate}"]`);
+  const secondCell = page.locator(`[data-date="${secondDate}"]`);
+  const chip = firstCell.getByRole('button', { name: /Календарная задача/ });
+  await expect(chip).toBeVisible();
+  await chip.dragTo(secondCell);
+
+  await expect(secondCell.getByRole('button', { name: /Календарная задача/ })).toBeVisible();
+  await expect(firstCell.getByRole('button', { name: /Календарная задача/ })).toHaveCount(0);
+  await secondCell.getByRole('button', { name: /Календарная задача/ }).click();
+  const movedDialog = page.getByRole('dialog');
+  await expect(movedDialog.getByLabel('Срок')).toHaveValue(secondDate);
+  await movedDialog.getByRole('button', { name: 'Отмена' }).click();
+
+  await page.getByRole('tab', { name: 'Список' }).click();
+  await expect(page.getByText('↻ Еженедельно').first()).toBeVisible();
+
   await nav.getByRole('link', { name: 'Хранилище' }).click();
   await expect(page.getByText('Хранилище заблокировано', { exact: true })).toBeVisible();
 

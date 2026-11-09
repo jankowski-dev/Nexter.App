@@ -12,7 +12,8 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { Task, TaskStatus } from '@nexter/contracts';
+import type { Task, TaskCreateRequest, TaskRecurrence, TaskStatus } from '@nexter/contracts';
+import { TaskCalendar } from './task-calendar';
 
 type TaskFilter = 'all' | 'open' | 'done';
 
@@ -29,6 +30,14 @@ const priorityLabels: Record<number, string> = {
   3: 'Критичный',
 };
 
+const recurrenceLabels: Record<TaskRecurrence, string> = {
+  daily: 'Ежедневно',
+  weekly: 'Еженедельно',
+  monthly: 'Ежемесячно',
+};
+
+type TaskView = 'list' | 'calendar';
+
 function dueDate(value: string | null): string {
   return value ? value.slice(0, 10) : '';
 }
@@ -37,8 +46,26 @@ function toIsoDate(value: string): string | null {
   return value ? new Date(`${value}T12:00:00`).toISOString() : null;
 }
 
+function dateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function monthRange(month: Date): { from: string; to: string } {
+  const start = new Date(month.getFullYear(), month.getMonth(), 1);
+  const end = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  return { from: start.toISOString(), to: end.toISOString() };
+}
+
 export function TasksPage() {
   const queryClient = useQueryClient();
+  const [view, setView] = useState<TaskView>('list');
+  const [month, setMonth] = useState(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+  );
   const [filter, setFilter] = useState<TaskFilter>('all');
   const [search, setSearch] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -48,15 +75,28 @@ export function TasksPage() {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('1');
   const [due, setDue] = useState('');
+  const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>('none');
+  const [recurrenceEnds, setRecurrenceEnds] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const range = view === 'calendar' ? monthRange(month) : null;
   const tasks = useQuery({
-    queryKey: ['tasks', filter, search, includeArchived],
+    queryKey: [
+      'tasks',
+      view,
+      filter,
+      search,
+      includeArchived,
+      range?.from ?? null,
+      range?.to ?? null,
+    ],
     queryFn: () =>
       fetchTasks({
         status: filter === 'all' ? undefined : filter,
         search: search || undefined,
         includeArchived,
+        ...(range ?? {}),
+        limit: view === 'calendar' ? 500 : 200,
       }),
   });
 
@@ -66,12 +106,17 @@ export function TasksPage() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
-      const payload = {
+      const payload: TaskCreateRequest = {
         title: title.trim(),
         description: description.trim() || null,
         priority: Number.parseInt(priority, 10) || 0,
         dueAt: toIsoDate(due),
       };
+
+      if (!editing && recurrence !== 'none') {
+        payload.recurrence = recurrence;
+        if (recurrenceEnds) payload.recurrenceEndsAt = toIsoDate(recurrenceEnds);
+      }
 
       return editing ? updateTask(editing.id, payload) : createTask(payload);
     },
@@ -112,12 +157,24 @@ export function TasksPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось вернуть задачу')),
   });
 
-  function openCreate() {
+  const moveMutation = useMutation({
+    mutationFn: ({ task, date }: { task: Task; date: string }) =>
+      updateTask(task.id, { dueAt: toIsoDate(date) }),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось перенести задачу')),
+  });
+
+  function openCreate(date?: string) {
     setEditing(null);
     setTitle('');
     setDescription('');
     setPriority('1');
-    setDue('');
+    setDue(date ?? '');
+    setRecurrence('none');
+    setRecurrenceEnds('');
     setError(null);
     setDialogOpen(true);
   }
@@ -128,6 +185,8 @@ export function TasksPage() {
     setDescription(task.description ?? '');
     setPriority(String(task.priority));
     setDue(dueDate(task.dueAt));
+    setRecurrence('none');
+    setRecurrenceEnds('');
     setError(null);
     setDialogOpen(true);
   }
@@ -142,6 +201,33 @@ export function TasksPage() {
         subtitle="Личные задачи и напоминания. Не связаны с бухгалтерским учётом."
         actions={
           <>
+            <div
+              className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+              role="tablist"
+              aria-label="Вид задач"
+            >
+              {(
+                [
+                  ['list', 'Список'],
+                  ['calendar', 'Календарь'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === value}
+                  onClick={() => setView(value)}
+                  className={`rounded-md px-3 py-1.5 text-sm ${
+                    view === value
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-2 text-sm text-zinc-600">
               <input
                 type="checkbox"
@@ -151,7 +237,13 @@ export function TasksPage() {
               />
               Архив
             </label>
-            <Button onClick={openCreate}>Новая задача</Button>
+            <Button
+              onClick={() =>
+                openCreate(view === 'calendar' ? dateInputValue(new Date()) : undefined)
+              }
+            >
+              Новая задача
+            </Button>
           </>
         }
       />
@@ -199,11 +291,23 @@ export function TasksPage() {
       ) : null}
 
       {!tasks.isPending && !tasks.isError ? (
-        rows.length === 0 ? (
+        view === 'calendar' ? (
+          <TaskCalendar
+            month={month}
+            tasks={rows}
+            onPrev={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+            onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+            onToday={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
+            onEdit={openEdit}
+            onCreate={(date) => openCreate(date)}
+            onMove={(task, date) => moveMutation.mutate({ task, date })}
+            busy={moveMutation.isPending}
+          />
+        ) : rows.length === 0 ? (
           <Card>
             <CardTitle>Задач нет</CardTitle>
             <CardDescription>Создайте задачу, чтобы не забыть важное действие.</CardDescription>
-            <Button className="mt-4" onClick={openCreate}>
+            <Button className="mt-4" onClick={() => openCreate()}>
               Новая задача
             </Button>
           </Card>
@@ -238,6 +342,9 @@ export function TasksPage() {
                         <Badge tone={task.priority >= 2 ? 'warning' : 'neutral'}>
                           {priorityLabels[task.priority] ?? 'Обычный'}
                         </Badge>
+                        {task.recurrence ? (
+                          <Badge tone="info">↻ {recurrenceLabels[task.recurrence]}</Badge>
+                        ) : null}
                         {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                         {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
                       </div>
@@ -319,7 +426,11 @@ export function TasksPage() {
             </Button>
             <Button
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || !title.trim()}
+              disabled={
+                saveMutation.isPending ||
+                !title.trim() ||
+                (!editing && recurrence !== 'none' && !due)
+              }
             >
               {saveMutation.isPending ? 'Сохраняю…' : 'Сохранить'}
             </Button>
@@ -370,6 +481,49 @@ export function TasksPage() {
               />
             </label>
           </div>
+          {editing ? (
+            editing.recurrence ? (
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
+                Повтор: {recurrenceLabels[editing.recurrence]}. Изменяется только это вхождение;
+                остальные остаются как есть.
+              </div>
+            ) : null
+          ) : (
+            <>
+              <label className="block text-sm text-zinc-600">
+                Повтор
+                <Select
+                  className="mt-1"
+                  value={recurrence}
+                  onChange={(event) => setRecurrence(event.target.value as TaskRecurrence | 'none')}
+                >
+                  <option value="none">Не повторять</option>
+                  {(Object.keys(recurrenceLabels) as TaskRecurrence[]).map((value) => (
+                    <option key={value} value={value}>
+                      {recurrenceLabels[value]}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              {recurrence !== 'none' ? (
+                <label className="block text-sm text-zinc-600">
+                  Повторять до (необязательно)
+                  <Input
+                    className="mt-1"
+                    type="date"
+                    value={recurrenceEnds}
+                    min={due || undefined}
+                    onChange={(event) => setRecurrenceEnds(event.target.value)}
+                  />
+                </label>
+              ) : null}
+              {recurrence !== 'none' && !due ? (
+                <p className="text-sm text-amber-700">
+                  Для повторяющейся задачи укажите первый срок.
+                </p>
+              ) : null}
+            </>
+          )}
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
         </div>
       </Dialog>
