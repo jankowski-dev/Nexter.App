@@ -121,8 +121,10 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // The buy+sell create one partial trade group with FIFO consumption.
   await page.goto('/portfolio');
+  await page.getByRole('tab', { name: 'Сделки' }).click();
   await expect(page.getByRole('heading', { name: 'Сделки' })).toBeVisible();
-  await page.getByRole('link', { name: 'BASED' }).first().click();
+  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
   await expect(page.getByText('Ноги сделки')).toBeVisible();
   await expect(page.getByText('Списания').first()).toBeVisible();

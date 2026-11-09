@@ -7,6 +7,7 @@ import {
   lotConsumptions,
   lots,
   postings,
+  swapOrders,
   tradeGroups,
   transactions,
   type Database,
@@ -40,6 +41,7 @@ interface GroupRow {
   remainingCost: string | null;
   sellUsd: string | null;
   realized: string | null;
+  gasUsd: string | null;
   source: string | null;
 }
 
@@ -360,7 +362,7 @@ export class TradeGroupsService {
     }
 
     const groupIds = baseRows.map((row) => row.group.id);
-    const [lotRows, consumptionRows, sourceRows] = await Promise.all([
+    const [lotRows, consumptionRows, sourceRows, gasRows] = await Promise.all([
       this.db
         .select({
           groupId: lots.tradeGroupId,
@@ -395,11 +397,26 @@ export class TradeGroupsService {
           ),
         )
         .groupBy(transactions.tradeGroupId),
+      this.db
+        .select({
+          groupId: swapOrders.tradeGroupId,
+          gasUsd: sql<string>`coalesce(sum(${swapOrders.networkFeeUsd}), 0)::text`,
+        })
+        .from(swapOrders)
+        .where(
+          and(
+            eq(swapOrders.userId, userId),
+            eq(swapOrders.status, 'CONFIRMED'),
+            inArray(swapOrders.tradeGroupId, groupIds),
+          ),
+        )
+        .groupBy(swapOrders.tradeGroupId),
     ]);
 
     const lotByGroup = new Map(lotRows.map((row) => [row.groupId, row]));
     const consumptionByGroup = new Map(consumptionRows.map((row) => [row.groupId, row]));
     const sourceByGroup = new Map(sourceRows.map((row) => [row.groupId, row.source]));
+    const gasByGroup = new Map(gasRows.map((row) => [row.groupId, row.gasUsd]));
 
     return baseRows.map((row) => ({
       group: row.group,
@@ -410,6 +427,7 @@ export class TradeGroupsService {
       remainingCost: lotByGroup.get(row.group.id)?.remainingCost ?? '0',
       sellUsd: consumptionByGroup.get(row.group.id)?.sellUsd ?? '0',
       realized: consumptionByGroup.get(row.group.id)?.realized ?? '0',
+      gasUsd: gasByGroup.get(row.group.id) ?? '0',
       source: sourceByGroup.get(row.group.id) ?? null,
     }));
   }
@@ -466,6 +484,7 @@ export class TradeGroupsService {
       realizedPnlUsd: usdString(realized),
       unrealizedPnlUsd: unrealized === null ? null : usdString(unrealized),
       totalPnlUsd: totalPnl === null ? null : usdString(totalPnl),
+      gasUsd: usdString(decimal(row.gasUsd ?? '0')),
       remainingAmount: remainingAmount.toFixed(18),
       costBasisUsd: usdString(buyUsd),
       remainingCostBasisUsd: usdString(remainingCost),

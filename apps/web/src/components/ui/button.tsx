@@ -11,6 +11,7 @@ const buttonVariants = cva(
         primary: 'bg-emerald-600 text-white hover:bg-emerald-700',
         secondary: 'border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100',
         ghost: 'bg-transparent text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+        danger: 'bg-red-600 text-white hover:bg-red-700',
       },
     },
     defaultVariants: {
