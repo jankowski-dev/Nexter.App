@@ -686,7 +686,6 @@ export function TradeDialog({
                 ) : null}
               </div>
               <SwapPage
-                embedded
                 autoQuote
                 initialChain={swapReady.chain}
                 initialTokenIn={swapReady.tokenIn}

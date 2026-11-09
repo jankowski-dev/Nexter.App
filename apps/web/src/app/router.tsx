@@ -10,7 +10,6 @@ import { SetupPage } from '@/features/auth/setup-page';
 import { TwoFactorPage } from '@/features/auth/two-factor-page';
 import { TradeDetailPage } from '@/features/trades/trade-detail-page';
 import { WatchlistPage } from '@/features/watchlist/watchlist-page';
-import { SwapPage } from '@/features/swap/swap-page';
 import { OperationsPage } from '@/features/operations/operations-page';
 import { ReportsPage } from '@/features/reports/reports-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
@@ -173,7 +172,9 @@ const watchlistRoute = createRoute({
 const swapRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/swap',
-  component: SwapPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/portfolio' });
+  },
 });
 
 const settingsRoute = createRoute({

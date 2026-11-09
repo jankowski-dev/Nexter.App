@@ -75,7 +75,16 @@ async function bootstrap(): Promise<void> {
       url === '/api/v1/auth/login' ||
       url.startsWith('/api/v1/auth/2fa/') ||
       url.startsWith('/api/v1/auth/recovery/');
-    const max = isAuthAttempt ? (env.NODE_ENV === 'test' ? 100 : 10) : isMutation ? 60 : 300;
+    const max =
+      env.NODE_ENV === 'test'
+        ? isAuthAttempt
+          ? 100
+          : 3_000
+        : isAuthAttempt
+          ? 10
+          : isMutation
+            ? 60
+            : 300;
     const bucketKey = `${request.ip}:${isAuthAttempt ? 'auth' : isMutation ? 'mutation' : 'read'}`;
     let bucket = rateBuckets.get(bucketKey);
 

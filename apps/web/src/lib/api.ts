@@ -23,7 +23,6 @@ import {
   stepUpResponseSchema,
   swapBuildResponseSchema,
   swapConfigResponseSchema,
-  swapOrdersResponseSchema,
   swapOrderDetailSchema,
   tokenApprovalSchema,
   tradeGroupDetailSchema,
@@ -57,7 +56,6 @@ import {
   type SwapChainCode,
   type SwapBuildResponse,
   type SwapConfigResponse,
-  type SwapOrdersResponse,
   type SwapOrderDetail,
   type TokenApproval,
   type TradeGroupDetail,
@@ -103,7 +101,6 @@ export type {
   StepUpResponse,
   SwapBuildResponse,
   SwapConfigResponse,
-  SwapOrdersResponse,
   TokenApproval,
   SwapOrderDetail,
   TradeGroupDetail,
@@ -519,12 +516,6 @@ export async function submitSwap(orderId: string, txHash: string): Promise<SwapO
 
 export async function fetchSwapOrder(orderId: string): Promise<SwapOrderDetail> {
   return apiFetch(`/api/v1/swap/orders/${orderId}`, {}, swapOrderDetailSchema);
-}
-
-export async function fetchSwapOrders(
-  params: { limit?: number; cursor?: string; status?: string } = {},
-): Promise<SwapOrdersResponse> {
-  return apiFetch(`/api/v1/swap/orders${queryString(params)}`, {}, swapOrdersResponseSchema);
 }
 
 export async function buildSwapApproval(orderId: string): Promise<ApprovalBuildResponse> {

@@ -179,38 +179,65 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
     });
   });
 
-  await page.goto('/swap');
-  await expect(page.getByRole('heading', { name: 'Своп', exact: true })).toBeVisible();
+  const assets = (
+    (await (await page.request.get('/api/v1/assets')).json()) as {
+      assets: Array<{ id: string; symbol: string; chainCode: string }>;
+    }
+  ).assets;
+  const basedAssetId = assets.find(
+    (asset) => asset.symbol === 'BASED' && asset.chainCode === 'bsc',
+  )?.id;
+  const usdcAssetId = assets.find(
+    (asset) => asset.symbol === 'USDC' && asset.chainCode === 'bsc',
+  )?.id;
+  expect(basedAssetId).toBeDefined();
+  expect(usdcAssetId).toBeDefined();
+
+  async function openEmbeddedSwap() {
+    await page.getByRole('button', { name: '+ Операция' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
+    await dialog.getByLabel('Актив', { exact: true }).selectOption(basedAssetId ?? '');
+    await dialog.getByLabel('Количество BASED').fill('1');
+    await dialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdcAssetId ?? '');
+    await dialog.getByLabel('Сумма USDC').fill('1');
+    const onchain = dialog.getByRole('button', { name: 'Выполнить on-chain' });
+    await expect(onchain).toBeEnabled();
+    await onchain.click();
+    await expect(dialog.getByText('Кошелёк Tangem')).toBeVisible();
+    return dialog;
+  }
+
+  await page.goto('/dashboard');
+  const dialog = await openEmbeddedSwap();
+  await expect(dialog.getByRole('button', { name: 'Подключить Tangem' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Проверить сборку' })).toBeVisible();
   await expect(
-    page.getByText(
-      'Phase 9: котировки KyberSwap, проверка сборки, точный approval и подпись Tangem на BSC и Ethereum.',
-    ),
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Подключить Tangem' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Проверить сборку' })).toBeVisible();
-  await expect(
-    page.getByText('Исполнение для сети BNB Smart Chain выключено.', { exact: false }),
+    dialog.getByText('Исполнение для сети BNB Smart Chain выключено.', { exact: false }),
   ).toBeVisible();
 
-  await page.getByLabel('Сеть свопа').selectOption('ethereum');
-  await expect(page.getByLabel('Токен отдачи')).toHaveValue(ethereumUsdc);
-  await expect(page.getByLabel('Токен получения')).toHaveValue(ethereumLink);
-  await page.getByLabel('Сеть свопа').selectOption('bsc');
+  await dialog.getByLabel('Сеть свопа').selectOption('ethereum');
+  await expect(dialog.getByLabel('Токен отдачи')).toHaveValue(ethereumUsdc);
+  await expect(dialog.getByLabel('Токен получения')).toHaveValue(ethereumLink);
+  await dialog.getByLabel('Сеть свопа').selectOption('bsc');
 
-  await page.getByLabel('Адрес кошелька').fill(wallet);
-  await page.getByLabel('Количество токена отдачи').fill('1');
-  await page.getByRole('button', { name: 'Получить котировку' }).click();
+  await dialog.getByLabel('Адрес кошелька').fill(wallet);
+  await dialog.getByLabel('Количество токена отдачи').fill('1');
+  await dialog.getByRole('button', { name: 'Получить котировку' }).click();
 
-  await expect(page.getByText('2 BASED').first()).toBeVisible();
-  await expect(page.getByText('1 USDC = 2 BASED')).toBeVisible();
-  await expect(page.getByText(/1 BASED =/)).toBeVisible();
-  await expect(page.getByText('1,99 BASED')).toBeVisible();
-  await expect(page.getByText('route-ui')).toBeVisible();
-  await expect(page.getByText('+0,10%')).toBeVisible();
+  await expect(dialog.getByText('2 BASED').first()).toBeVisible();
+  await expect(dialog.getByText('1 USDC = 2 BASED')).toBeVisible();
+  await expect(dialog.getByText(/1 BASED =/)).toBeVisible();
+  await expect(dialog.getByText('1,99 BASED')).toBeVisible();
+  await expect(dialog.getByText('route-ui')).toBeVisible();
+  await expect(dialog.getByText('+0,10%')).toBeVisible();
 
   swapsEnabled = false;
   await page.reload();
-  await expect(page.getByText('Свопы отключены')).toBeVisible();
-  await expect(page.getByText('Kill switch', { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Получить котировку' })).toBeDisabled();
+  const disabledDialog = await openEmbeddedSwap();
+  await expect(disabledDialog.getByText('Свопы отключены')).toBeVisible();
+  await expect(disabledDialog.getByRole('button', { name: 'Получить котировку' })).toBeDisabled();
+
+  await page.goto('/swap');
+  await expect(page).toHaveURL(/\/portfolio$/);
 });
