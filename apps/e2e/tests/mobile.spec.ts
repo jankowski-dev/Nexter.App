@@ -60,7 +60,7 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await mobileNav.getByRole('link', { name: 'Отчёты' }).click();
   await expect(page).toHaveURL(/\/reports$/);
   await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
-  await expect(page.getByLabel('Период отчёта')).toBeVisible();
+  await expect(page.getByRole('button', { name: '30 дней' })).toBeVisible();
 
   await page.getByRole('button', { name: '+ Операция' }).click();
   const dialog = page.getByRole('dialog');

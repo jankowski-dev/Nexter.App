@@ -117,10 +117,9 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
   await expect(page.getByText('Капитал').first()).toBeVisible();
   await expect(page.getByText('Итого P&L').first()).toBeVisible();
+  await expect(page.getByText('Качество торговли')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Доходность по месяцам' })).toBeVisible();
   await expect(page.getByText('Кривая капитала')).toBeVisible();
-  await expect(page.getByText('Аллокация')).toBeVisible();
-  await expect(page.getByText('Активные позиции').first()).toBeVisible();
-  await expect(page.getByText('Последние сделки')).toBeVisible();
   await expect(page.getByText(/135,00/).first()).toBeVisible();
 
   await page.goto('/operations');
@@ -132,14 +131,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.goto('/reports');
   await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
   await expect(page.getByText('Итоги за период')).toBeVisible();
-  await expect(page.getByLabel('Период отчёта')).toBeVisible();
+  await expect(page.getByRole('button', { name: '12 месяцев' })).toBeVisible();
   await expect(page.getByText('Разбивка по активам')).toBeVisible();
-  await expect(page.getByText('Операции за период')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Транзакции за период' })).toBeVisible();
-  await page.getByLabel('Период отчёта').selectOption('30d');
+  await page.getByRole('button', { name: '30 дней' }).click();
   await expect(page.getByText('Net P&L за период')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'P&L по месяцам' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Активные позиции' }).first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Реализованный P&L по месяцам' })).toBeVisible();
 
   await page.goto('/trades');
   await expect(page).toHaveURL(/\/portfolio$/);
