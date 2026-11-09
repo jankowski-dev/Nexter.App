@@ -234,6 +234,7 @@ export class SwapService {
         tokenOut,
         input.closeGroupIds,
         input.amountIn,
+        { supersede: meta },
       );
     }
 
@@ -404,7 +405,7 @@ export class SwapService {
           tokenOut,
           input.closeGroupIds,
           input.amountIn,
-          tx,
+          { executor: tx },
         );
 
         await tx.insert(swapOrderCloseGroups).values(
@@ -1525,6 +1526,71 @@ export class SwapService {
     return this.detail(userId, orderId, []);
   }
 
+  private async cancelUnsignedCloseOrders(
+    executor: DbExecutor,
+    userId: string,
+    activeCloses: Array<{ orderId: string; tradeGroupId: string | null }>,
+    meta: SwapMeta,
+  ): Promise<void> {
+    const staleBefore = new Date(Date.now() - 5_000);
+    const unsignedStatuses = ['QUOTED', 'BUILT', 'APPROVAL_REQUIRED', 'READY'] as const;
+    const orderIds = [...new Set(activeCloses.map((row) => row.orderId))];
+
+    for (const orderId of orderIds) {
+      const [order] = await executor
+        .select({ id: swapOrders.id, status: swapOrders.status })
+        .from(swapOrders)
+        .where(
+          and(
+            eq(swapOrders.id, orderId),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, [...unsignedStatuses]),
+            isNull(swapOrders.txHash),
+            lt(swapOrders.updatedAt, staleBefore),
+          ),
+        )
+        .limit(1);
+
+      if (!order) continue;
+
+      const [cancelled] = await executor
+        .update(swapOrders)
+        .set({ status: 'CANCELLED', cancelledAt: new Date(), updatedAt: new Date() })
+        .where(
+          and(
+            eq(swapOrders.id, order.id),
+            eq(swapOrders.userId, userId),
+            inArray(swapOrders.status, [...unsignedStatuses]),
+            isNull(swapOrders.txHash),
+            lt(swapOrders.updatedAt, staleBefore),
+          ),
+        )
+        .returning({ id: swapOrders.id });
+
+      if (!cancelled) continue;
+
+      await executor.insert(swapEvents).values({
+        orderId: order.id,
+        type: 'cancelled',
+        payload: { reason: 'superseded', previousStatus: order.status },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'swap.order_superseded',
+          entityType: 'swap_order',
+          entityId: order.id,
+          before: { status: order.status },
+          after: { status: 'CANCELLED', reason: 'superseded' },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor, strict: true },
+      );
+    }
+  }
+
   private async validateCloseGroups(
     userId: string,
     chain: SwapChainCode,
@@ -1532,10 +1598,16 @@ export class SwapService {
     tokenOut: SwapToken,
     closeGroupIds: string[],
     amountIn: string,
-    executor: DbExecutor = this.db,
-    enforceTotal = true,
-    excludeOrderId?: string,
+    options: {
+      executor?: DbExecutor;
+      enforceTotal?: boolean;
+      excludeOrderId?: string;
+      supersede?: SwapMeta;
+    } = {},
   ): Promise<{ assetId: string; rows: Array<{ id: string; remaining: string }> }> {
+    const executor = options.executor ?? this.db;
+    const enforceTotal = options.enforceTotal ?? true;
+
     if (!isCashEquivalentSymbol(tokenOut.symbol)) {
       throw new BadRequestException({
         code: 'SWAP_CLOSE_OUTPUT_NOT_CASH',
@@ -1591,9 +1663,9 @@ export class SwapService {
 
     if (activeStatusCondition) activeConditions.push(activeStatusCondition);
 
-    if (excludeOrderId) activeConditions.push(ne(swapOrders.id, excludeOrderId));
+    if (options.excludeOrderId) activeConditions.push(ne(swapOrders.id, options.excludeOrderId));
 
-    const activeCloses = await executor
+    let activeCloses = await executor
       .select({
         orderId: swapOrders.id,
         tradeGroupId: swapOrderCloseGroups.tradeGroupId,
@@ -1601,14 +1673,6 @@ export class SwapService {
       .from(swapOrderCloseGroups)
       .innerJoin(swapOrders, eq(swapOrderCloseGroups.orderId, swapOrders.id))
       .where(and(...activeConditions));
-
-    if (activeCloses.length > 0) {
-      throw new ConflictException({
-        code: 'SWAP_CLOSE_GROUP_BUSY',
-        message: 'One or more close groups already have an active close order',
-        details: { orderIds: [...new Set(activeCloses.map((row) => row.orderId))] },
-      });
-    }
 
     let total = new Decimal(0);
 
@@ -1654,6 +1718,26 @@ export class SwapService {
       });
     }
 
+    if (activeCloses.length > 0 && options.supersede) {
+      await this.cancelUnsignedCloseOrders(executor, userId, activeCloses, options.supersede);
+      activeCloses = await executor
+        .select({
+          orderId: swapOrders.id,
+          tradeGroupId: swapOrderCloseGroups.tradeGroupId,
+        })
+        .from(swapOrderCloseGroups)
+        .innerJoin(swapOrders, eq(swapOrderCloseGroups.orderId, swapOrders.id))
+        .where(and(...activeConditions));
+    }
+
+    if (activeCloses.length > 0) {
+      throw new ConflictException({
+        code: 'SWAP_CLOSE_GROUP_BUSY',
+        message: 'One or more close groups already have an active close order',
+        details: { orderIds: [...new Set(activeCloses.map((row) => row.orderId))] },
+      });
+    }
+
     return {
       assetId: asset.id,
       rows: rows.map((row) => ({ id: row.id, remaining: row.remaining })),
@@ -1692,9 +1776,7 @@ export class SwapService {
       tokenOut,
       stored.map((row) => row.tradeGroupId as string),
       order.amountIn,
-      this.db,
-      false,
-      order.id,
+      { executor: this.db, enforceTotal: false, excludeOrderId: order.id },
     );
     const remainingById = new Map(current.rows.map((row) => [row.id, row.remaining]));
 
