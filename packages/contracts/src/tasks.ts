@@ -2,6 +2,16 @@ import { z } from 'zod';
 
 export const taskStatusSchema = z.enum(['open', 'done', 'cancelled']);
 export const taskRecurrenceSchema = z.enum(['daily', 'weekly', 'monthly']);
+export const taskImageMimeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+
+export const taskImageSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  mimeType: taskImageMimeSchema,
+  dataUrl: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+});
 
 export const taskSchema = z.object({
   id: z.uuid(),
@@ -9,6 +19,8 @@ export const taskSchema = z.object({
   description: z.string().nullable(),
   status: taskStatusSchema,
   priority: z.number().int().min(0).max(3),
+  tags: z.array(z.string()),
+  images: z.array(taskImageSchema),
   dueAt: z.iso.datetime().nullable(),
   completedAt: z.iso.datetime().nullable(),
   relatedAssetId: z.uuid().nullable(),
@@ -44,6 +56,7 @@ export const taskCreateRequestSchema = z
     title: z.string().trim().min(1).max(200),
     description: z.string().max(5000).nullable().optional(),
     priority: z.number().int().min(0).max(3).optional(),
+    tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
     dueAt: z.iso.datetime().nullable().optional(),
     relatedAssetId: z.uuid().nullable().optional(),
     recurrence: taskRecurrenceSchema.optional(),
@@ -71,6 +84,7 @@ export const taskUpdateRequestSchema = z
     description: z.string().max(5000).nullable().optional(),
     status: taskStatusSchema.optional(),
     priority: z.number().int().min(0).max(3).optional(),
+    tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
     dueAt: z.iso.datetime().nullable().optional(),
     relatedAssetId: z.uuid().nullable().optional(),
     archived: z.boolean().optional(),
@@ -81,16 +95,28 @@ export const taskUpdateRequestSchema = z
       value.description !== undefined ||
       value.status !== undefined ||
       value.priority !== undefined ||
+      value.tags !== undefined ||
       value.dueAt !== undefined ||
       value.relatedAssetId !== undefined ||
       value.archived !== undefined,
     'At least one field must be provided',
   );
 
+export const taskImageCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  mimeType: taskImageMimeSchema,
+  dataUrl: z
+    .string()
+    .max(2_000_000)
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
+});
+
 export const tasksResponseSchema = z.object({ data: z.array(taskSchema) });
 
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type TaskRecurrence = z.infer<typeof taskRecurrenceSchema>;
+export type TaskImage = z.infer<typeof taskImageSchema>;
+export type TaskImageCreateRequest = z.infer<typeof taskImageCreateRequestSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 export type TaskCreateRequest = z.infer<typeof taskCreateRequestSchema>;

@@ -23,6 +23,7 @@ import {
   reportsResponseSchema,
   settingsSchema,
   stepUpResponseSchema,
+  taskImageSchema,
   taskSchema,
   tasksResponseSchema,
   swapBuildResponseSchema,
@@ -67,6 +68,8 @@ import {
   type StepUpResponse,
   type Task,
   type TaskCreateRequest,
+  type TaskImage,
+  type TaskImageCreateRequest,
   type TaskListQuery,
   type TaskUpdateRequest,
   type TasksResponse,
@@ -620,6 +623,17 @@ export async function createTask(body: TaskCreateRequest): Promise<Task> {
 
 export async function updateTask(id: string, body: TaskUpdateRequest): Promise<Task> {
   return apiPatch(`/api/v1/tasks/${id}`, body, taskSchema);
+}
+
+export async function addTaskImage(
+  taskId: string,
+  body: TaskImageCreateRequest,
+): Promise<TaskImage> {
+  return apiPost(`/api/v1/tasks/${taskId}/images`, body, taskImageSchema);
+}
+
+export async function removeTaskImage(taskId: string, imageId: string): Promise<void> {
+  await apiDelete(`/api/v1/tasks/${taskId}/images/${imageId}`);
 }
 
 export async function fetchNotes(params: Partial<NoteListQuery> = {}): Promise<NotesResponse> {

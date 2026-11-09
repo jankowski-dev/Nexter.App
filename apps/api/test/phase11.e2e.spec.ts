@@ -178,6 +178,7 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
         title: 'Проверить BASED',
         description: 'Пересмотреть тезис',
         priority: 2,
+        tags: ['риск', 'портфель'],
         dueAt: '2026-12-01T12:00:00.000Z',
       })
       .expect(201);
@@ -185,8 +186,37 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
       title: 'Проверить BASED',
       status: 'open',
       priority: 2,
+      tags: ['риск', 'портфель'],
+      images: [],
       completedAt: null,
     });
+
+    const dataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Z0ZkAAAAASUVORK5CYII=';
+    const image = await agent
+      .post(`/api/v1/tasks/${task.body.id}/images`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'chart.png', mimeType: 'image/png', dataUrl })
+      .expect(201);
+    expect(image.body).toMatchObject({ name: 'chart.png', mimeType: 'image/png' });
+    expect(image.body.sizeBytes).toBeGreaterThan(0);
+
+    await agent
+      .post(`/api/v1/tasks/${task.body.id}/images`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'bad.png', mimeType: 'image/jpeg', dataUrl })
+      .expect(400);
+
+    const withImage = (await agent.get('/api/v1/tasks').expect(200)).body.data as Array<{
+      id: string;
+      images: Array<{ id: string }>;
+    }>;
+    expect(withImage.find((item) => item.id === task.body.id)?.images).toHaveLength(1);
+
+    await agent
+      .delete(`/api/v1/tasks/${task.body.id}/images/${image.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
 
     const completed = await agent
       .patch(`/api/v1/tasks/${task.body.id}`)

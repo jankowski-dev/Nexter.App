@@ -68,6 +68,28 @@ function iconSrc(logoUrl: string | null): string | null {
   return `/api/v1/watchlist/icon?url=${encodeURIComponent(logoUrl)}`;
 }
 
+function ChainIcon({ chain }: { chain: 'bsc' | 'ethereum' }) {
+  if (chain === 'bsc') {
+    return (
+      <svg viewBox="0 0 32 32" aria-hidden="true" className="h-7 w-7">
+        <path d="M16 4.5 20.5 9 16 13.5 11.5 9Z" fill="#1f2329" />
+        <path d="M7.5 13 12 17.5 7.5 22 3 17.5Z" fill="#1f2329" />
+        <path d="M24.5 13 29 17.5 24.5 22 20 17.5Z" fill="#1f2329" />
+        <path d="M16 15.5 20.5 20 16 24.5 11.5 20Z" fill="#1f2329" />
+        <path d="M16 27.5 20.5 23 16 25.8 11.5 23Z" fill="#1f2329" opacity=".55" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-7 w-7">
+      <path d="M16 4.5 23 16l-7 4.2L9 16Z" fill="#ffffff" opacity=".95" />
+      <path d="M16 22.2 23 18l-7 9.5L9 18Z" fill="#ffffff" opacity=".7" />
+      <path d="M16 4.5 16 20.2 9 16Z" fill="#dfe3ff" opacity=".8" />
+    </svg>
+  );
+}
+
 export function WatchlistPage() {
   const queryClient = useQueryClient();
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -350,19 +372,34 @@ export function WatchlistPage() {
           Введите адрес ERC-20/BEP-20 контракта. Метаданные читаются on-chain, цена и иконка — через
           серверный CoinGecko.
         </CardDescription>
-        <div className="mt-4 grid gap-3 md:grid-cols-[150px_1fr_auto]">
-          <label className="block text-sm text-zinc-600">
-            Сеть
-            <Select
-              className="mt-1"
-              aria-label="Сеть токена"
-              value={searchChain}
-              onChange={(event) => setSearchChain(event.target.value as 'bsc' | 'ethereum')}
-            >
-              <option value="bsc">BNB Smart Chain</option>
-              <option value="ethereum">Ethereum</option>
-            </Select>
-          </label>
+        <div className="mt-4 grid gap-3 md:grid-cols-[auto_1fr_auto]">
+          <div>
+            <span className="block text-sm text-zinc-600">Сеть</span>
+            <div className="mt-1 flex gap-2" role="group" aria-label="Сеть токена">
+              {(
+                [
+                  ['bsc', 'BNB Smart Chain', 'bg-[#f3ba2f]'],
+                  ['ethereum', 'Ethereum', 'bg-indigo-500'],
+                ] as const
+              ).map(([chain, label, tone]) => (
+                <button
+                  key={chain}
+                  type="button"
+                  aria-label={label}
+                  aria-pressed={searchChain === chain}
+                  title={label}
+                  onClick={() => setSearchChain(chain)}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 transition ${
+                    searchChain === chain
+                      ? 'border-emerald-500 ring-2 ring-emerald-500/20'
+                      : 'border-zinc-200 hover:border-zinc-300'
+                  } ${tone}`}
+                >
+                  <ChainIcon chain={chain} />
+                </button>
+              ))}
+            </div>
+          </div>
           <label className="block text-sm text-zinc-600">
             Адрес контракта
             <Input

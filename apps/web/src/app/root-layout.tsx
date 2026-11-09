@@ -64,7 +64,7 @@ export function RootLayout() {
         Перейти к содержимому
       </a>
 
-      <div className="mx-auto flex min-h-dvh w-full max-w-[1600px]">
+      <div className="flex min-h-dvh w-full">
         <aside className="hidden w-56 shrink-0 border-r border-zinc-200 bg-white p-4 md:flex md:flex-col">
           <Link to="/dashboard" className="mb-8 block px-2">
             <div className="text-lg font-semibold tracking-tight text-zinc-900">
