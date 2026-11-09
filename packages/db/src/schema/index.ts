@@ -768,6 +768,10 @@ export const tasks = pgTable(
     description: text('description'),
     status: text('status').$type<TaskStatus>().notNull().default('open'),
     priority: integer('priority').notNull().default(0),
+    tags: text('tags')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     dueAt: timestamp('due_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     relatedAssetId: uuid('related_asset_id').references(() => assets.id, { onDelete: 'set null' }),
@@ -785,6 +789,25 @@ export const tasks = pgTable(
     index('tasks_user_archived_idx').on(table.userId, table.archivedAt),
     index('tasks_user_series_idx').on(table.userId, table.seriesId),
   ],
+);
+
+export const taskImages = pgTable(
+  'task_images',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => tasks.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    dataUrl: text('data_url').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('task_images_user_task_idx').on(table.userId, table.taskId, table.createdAt)],
 );
 
 export const notes = pgTable(

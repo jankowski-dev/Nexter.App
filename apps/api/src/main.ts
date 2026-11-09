@@ -40,7 +40,7 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ trustProxy }),
+    new FastifyAdapter({ trustProxy, bodyLimit: 4 * 1024 * 1024 }),
     { bufferLogs: true },
   );
 

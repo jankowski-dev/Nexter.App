@@ -1,10 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, gte, ilike, isNull, lte, or, sql } from 'drizzle-orm';
-import { assets, tasks, type Database, type TaskRecord, type TaskRecurrence } from '@nexter/db';
+import { and, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import {
+  assets,
+  taskImages,
+  tasks,
+  type Database,
+  type DbExecutor,
+  type TaskRecord,
+  type TaskRecurrence,
+} from '@nexter/db';
 import type {
   Task,
   TaskCreateRequest,
+  TaskImage,
+  TaskImageCreateRequest,
   TaskListQuery,
   TaskUpdateRequest,
   TasksResponse,
@@ -17,13 +27,56 @@ interface TaskMeta {
   userAgent?: string;
 }
 
-function toContract(row: TaskRecord): Task {
+function toImage(row: {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  sizeBytes: number;
+  createdAt: Date;
+}): TaskImage {
+  return {
+    id: row.id,
+    name: row.name,
+    mimeType: row.mimeType as TaskImage['mimeType'],
+    dataUrl: row.dataUrl,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function loadImages(
+  executor: DbExecutor,
+  userId: string,
+  taskIds: string[],
+): Promise<Map<string, TaskImage[]>> {
+  const byTask = new Map<string, TaskImage[]>();
+  if (taskIds.length === 0) return byTask;
+
+  const rows = await executor
+    .select()
+    .from(taskImages)
+    .where(and(eq(taskImages.userId, userId), inArray(taskImages.taskId, taskIds)))
+    .orderBy(taskImages.createdAt);
+
+  for (const row of rows) {
+    const list = byTask.get(row.taskId) ?? [];
+    list.push(toImage(row));
+    byTask.set(row.taskId, list);
+  }
+
+  return byTask;
+}
+
+function toContract(row: TaskRecord, images: TaskImage[] = []): Task {
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     status: row.status,
     priority: row.priority,
+    tags: row.tags,
+    images,
     dueAt: row.dueAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     relatedAssetId: row.relatedAssetId,
@@ -101,7 +154,13 @@ export class TasksService {
       )
       .limit(query.limit);
 
-    return { data: rows.map(toContract) };
+    const images = await loadImages(
+      this.db,
+      userId,
+      rows.map((row) => row.id),
+    );
+
+    return { data: rows.map((row) => toContract(row, images.get(row.id) ?? [])) };
   }
 
   async create(userId: string, input: TaskCreateRequest, meta: TaskMeta): Promise<Task> {
@@ -146,6 +205,7 @@ export class TasksService {
             title: input.title,
             description: input.description ?? null,
             priority: input.priority ?? 0,
+            tags: input.tags ?? [],
             dueAt: occurrence.dueAt,
             relatedAssetId: input.relatedAssetId ?? null,
             seriesId,
@@ -185,7 +245,7 @@ export class TasksService {
       return created;
     });
 
-    return toContract(createdRows[0] as TaskRecord);
+    return toContract(createdRows[0] as TaskRecord, []);
   }
 
   async update(
@@ -222,6 +282,7 @@ export class TasksService {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.priority !== undefined ? { priority: input.priority } : {}),
+        ...(input.tags !== undefined ? { tags: input.tags } : {}),
         ...(input.dueAt !== undefined ? { dueAt: input.dueAt ? new Date(input.dueAt) : null } : {}),
         ...(input.relatedAssetId !== undefined ? { relatedAssetId: input.relatedAssetId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
@@ -258,7 +319,122 @@ export class TasksService {
       { strict: true },
     );
 
-    return toContract(updated);
+    const images = await loadImages(this.db, userId, [updated.id]);
+
+    return toContract(updated, images.get(updated.id) ?? []);
+  }
+
+  async addImage(
+    userId: string,
+    taskId: string,
+    input: TaskImageCreateRequest,
+    meta: TaskMeta,
+  ): Promise<TaskImage> {
+    const [task] = await this.db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, userId)))
+      .limit(1);
+
+    if (!task) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Task not found' });
+    }
+
+    const existing = await this.db
+      .select({ id: taskImages.id })
+      .from(taskImages)
+      .where(and(eq(taskImages.userId, userId), eq(taskImages.taskId, taskId)));
+
+    if (existing.length >= 5) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'A task can have at most 5 images',
+      });
+    }
+
+    const base64 = input.dataUrl.slice(input.dataUrl.indexOf(',') + 1);
+    const sizeBytes = Buffer.byteLength(base64, 'base64');
+
+    if (sizeBytes <= 0 || sizeBytes > 1_500_000) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Image must be between 1 byte and 1.5 MB',
+      });
+    }
+
+    if (!input.dataUrl.startsWith(`data:${input.mimeType};base64,`)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Image MIME type does not match the data URL',
+      });
+    }
+
+    const [created] = await this.db
+      .insert(taskImages)
+      .values({
+        userId,
+        taskId,
+        name: input.name,
+        mimeType: input.mimeType,
+        dataUrl: input.dataUrl,
+        sizeBytes,
+      })
+      .returning();
+
+    if (!created) throw new Error('Failed to add task image');
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'task.image_added',
+        entityType: 'task',
+        entityId: taskId,
+        after: { imageId: created.id, name: created.name, sizeBytes: created.sizeBytes },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
+
+    return toImage(created);
+  }
+
+  async removeImage(
+    userId: string,
+    taskId: string,
+    imageId: string,
+    meta: TaskMeta,
+  ): Promise<void> {
+    const [image] = await this.db
+      .select()
+      .from(taskImages)
+      .where(
+        and(
+          eq(taskImages.id, imageId),
+          eq(taskImages.userId, userId),
+          eq(taskImages.taskId, taskId),
+        ),
+      )
+      .limit(1);
+
+    if (!image) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Task image not found' });
+    }
+
+    await this.db.delete(taskImages).where(eq(taskImages.id, image.id));
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'task.image_removed',
+        entityType: 'task',
+        entityId: taskId,
+        before: { imageId: image.id, name: image.name, sizeBytes: image.sizeBytes },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
   }
 
   private async requireAsset(assetId: string | null | undefined): Promise<void> {

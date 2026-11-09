@@ -1,21 +1,20 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { Textarea } from '@/components/ui/textarea';
-import { createTask, fetchTasks, updateTask } from '@/lib/api';
+import { fetchTasks, updateTask } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { Task, TaskCreateRequest, TaskRecurrence, TaskStatus } from '@nexter/contracts';
+import type { Task, TaskStatus } from '@nexter/contracts';
 import { TaskCalendar } from './task-calendar';
+import { TaskDialog } from './task-dialog';
 
 type TaskFilter = 'all' | 'open' | 'done';
+type TaskView = 'list' | 'calendar';
 
 const filterLabels: Record<TaskFilter, string> = {
   all: 'Все',
@@ -29,22 +28,6 @@ const priorityLabels: Record<number, string> = {
   2: 'Высокий',
   3: 'Критичный',
 };
-
-const recurrenceLabels: Record<TaskRecurrence, string> = {
-  daily: 'Ежедневно',
-  weekly: 'Еженедельно',
-  monthly: 'Ежемесячно',
-};
-
-type TaskView = 'list' | 'calendar';
-
-function dueDate(value: string | null): string {
-  return value ? value.slice(0, 10) : '';
-}
-
-function toIsoDate(value: string): string | null {
-  return value ? new Date(`${value}T12:00:00`).toISOString() : null;
-}
 
 function dateInputValue(date: Date): string {
   const year = date.getFullYear();
@@ -66,17 +49,12 @@ export function TasksPage() {
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
-  const [filter, setFilter] = useState<TaskFilter>('all');
+  const [filter, setFilter] = useState<TaskFilter>('open');
   const [search, setSearch] = useState('');
   const [includeArchived, setIncludeArchived] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('1');
-  const [due, setDue] = useState('');
-  const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>('none');
-  const [recurrenceEnds, setRecurrenceEnds] = useState('');
+  const [initialDue, setInitialDue] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   const range = view === 'calendar' ? monthRange(month) : null;
@@ -103,31 +81,6 @@ export function TasksPage() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['tasks'] });
   };
-
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload: TaskCreateRequest = {
-        title: title.trim(),
-        description: description.trim() || null,
-        priority: Number.parseInt(priority, 10) || 0,
-        dueAt: toIsoDate(due),
-      };
-
-      if (!editing && recurrence !== 'none') {
-        payload.recurrence = recurrence;
-        if (recurrenceEnds) payload.recurrenceEndsAt = toIsoDate(recurrenceEnds);
-      }
-
-      return editing ? updateTask(editing.id, payload) : createTask(payload);
-    },
-    onSuccess: () => {
-      setDialogOpen(false);
-      setEditing(null);
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось сохранить задачу')),
-  });
 
   const statusMutation = useMutation({
     mutationFn: ({ task, status }: { task: Task; status: TaskStatus }) =>
@@ -159,7 +112,7 @@ export function TasksPage() {
 
   const moveMutation = useMutation({
     mutationFn: ({ task, date }: { task: Task; date: string }) =>
-      updateTask(task.id, { dueAt: toIsoDate(date) }),
+      updateTask(task.id, { dueAt: new Date(`${date}T12:00:00`).toISOString() }),
     onSuccess: () => {
       setError(null);
       invalidate();
@@ -169,26 +122,20 @@ export function TasksPage() {
 
   function openCreate(date?: string) {
     setEditing(null);
-    setTitle('');
-    setDescription('');
-    setPriority('1');
-    setDue(date ?? '');
-    setRecurrence('none');
-    setRecurrenceEnds('');
-    setError(null);
+    setInitialDue(date);
     setDialogOpen(true);
   }
 
   function openEdit(task: Task) {
     setEditing(task);
-    setTitle(task.title);
-    setDescription(task.description ?? '');
-    setPriority(String(task.priority));
-    setDue(dueDate(task.dueAt));
-    setRecurrence('none');
-    setRecurrenceEnds('');
-    setError(null);
+    setInitialDue(undefined);
     setDialogOpen(true);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setEditing(null);
+    setInitialDue(undefined);
   }
 
   const rows = tasks.data?.data ?? [];
@@ -276,7 +223,7 @@ export function TasksPage() {
         />
       </div>
 
-      {error && !dialogOpen ? (
+      {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
@@ -319,47 +266,65 @@ export function TasksPage() {
                 Boolean(task.dueAt) &&
                 new Date(task.dueAt as string).getTime() < now;
               return (
-                <Card key={task.id} className={task.archivedAt ? 'opacity-60' : undefined}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-base font-semibold text-zinc-900">{task.title}</span>
-                        <Badge
-                          tone={
-                            task.status === 'done'
-                              ? 'success'
-                              : task.status === 'cancelled'
-                                ? 'neutral'
-                                : 'info'
-                          }
-                        >
-                          {task.status === 'done'
-                            ? 'Выполнена'
-                            : task.status === 'cancelled'
-                              ? 'Отменена'
-                              : 'Открыта'}
-                        </Badge>
-                        <Badge tone={task.priority >= 2 ? 'warning' : 'neutral'}>
-                          {priorityLabels[task.priority] ?? 'Обычный'}
-                        </Badge>
-                        {task.recurrence ? (
-                          <Badge tone="info">↻ {recurrenceLabels[task.recurrence]}</Badge>
-                        ) : null}
-                        {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                        {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
-                      </div>
-                      {task.description ? (
-                        <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">
-                          {task.description}
-                        </p>
+                <Card
+                  key={task.id}
+                  className={`flex min-h-[150px] flex-col ${task.archivedAt ? 'opacity-60' : ''}`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      tone={
+                        task.status === 'done'
+                          ? 'success'
+                          : task.status === 'cancelled'
+                            ? 'neutral'
+                            : 'info'
+                      }
+                    >
+                      {task.status === 'done'
+                        ? 'Выполнена'
+                        : task.status === 'cancelled'
+                          ? 'Отменена'
+                          : 'Открыта'}
+                    </Badge>
+                    <Badge tone={task.priority >= 2 ? 'warning' : 'neutral'}>
+                      {priorityLabels[task.priority] ?? 'Обычный'}
+                    </Badge>
+                    {task.recurrence ? <Badge tone="info">↻</Badge> : null}
+                    {task.tags.slice(0, 3).map((tag) => (
+                      <Badge key={tag} tone="neutral">
+                        {tag}
+                      </Badge>
+                    ))}
+                    {task.tags.length > 3 ? (
+                      <span className="text-xs text-zinc-500">+{task.tags.length - 3}</span>
+                    ) : null}
+                    {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
+                    {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
+                  </div>
+
+                  <h3 className="mt-2 line-clamp-2 min-h-12 text-base font-semibold text-zinc-900">
+                    {task.title}
+                  </h3>
+                  <p className="mt-1 line-clamp-1 min-h-5 text-sm text-zinc-600">
+                    {task.description ?? ' '}
+                  </p>
+
+                  <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-3">
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
+                      <span>Создана {formatDate(task.createdAt)}</span>
+                      {task.dueAt ? <span>Срок {formatDate(task.dueAt)}</span> : null}
+                      {task.completedAt ? (
+                        <span>Выполнена {formatDate(task.completedAt)}</span>
                       ) : null}
-                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-500">
-                        <span>Создана {formatDate(task.createdAt)}</span>
-                        {task.dueAt ? <span>Срок {formatDate(task.dueAt)}</span> : null}
-                        {task.completedAt ? (
-                          <span>Выполнена {formatDate(task.completedAt)}</span>
-                        ) : null}
-                      </div>
+                      {task.images.slice(0, 3).map((image) => (
+                        <img
+                          key={image.id}
+                          src={image.dataUrl}
+                          alt={image.name}
+                          className="h-6 w-6 rounded border border-zinc-200 object-cover"
+                        />
+                      ))}
+                      {task.images.length > 3 ? <span>+{task.images.length - 3}</span> : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
@@ -414,119 +379,14 @@ export function TasksPage() {
         )
       ) : null}
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        title={editing ? 'Изменить задачу' : 'Новая задача'}
-        description="Задачи хранятся на сервере и доступны только владельцу."
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Отмена
-            </Button>
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={
-                saveMutation.isPending ||
-                !title.trim() ||
-                (!editing && recurrence !== 'none' && !due)
-              }
-            >
-              {saveMutation.isPending ? 'Сохраняю…' : 'Сохранить'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <label className="block text-sm text-zinc-600">
-            Название
-            <Input
-              className="mt-1"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Проверить позицию BASED"
-            />
-          </label>
-          <label className="block text-sm text-zinc-600">
-            Описание
-            <Textarea
-              className="mt-1"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Детали, ссылки, следующий шаг"
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-zinc-600">
-              Приоритет
-              <Select
-                className="mt-1"
-                value={priority}
-                onChange={(event) => setPriority(event.target.value)}
-              >
-                {Object.entries(priorityLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="block text-sm text-zinc-600">
-              Срок
-              <Input
-                className="mt-1"
-                type="date"
-                value={due}
-                onChange={(event) => setDue(event.target.value)}
-              />
-            </label>
-          </div>
-          {editing ? (
-            editing.recurrence ? (
-              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
-                Повтор: {recurrenceLabels[editing.recurrence]}. Изменяется только это вхождение;
-                остальные остаются как есть.
-              </div>
-            ) : null
-          ) : (
-            <>
-              <label className="block text-sm text-zinc-600">
-                Повтор
-                <Select
-                  className="mt-1"
-                  value={recurrence}
-                  onChange={(event) => setRecurrence(event.target.value as TaskRecurrence | 'none')}
-                >
-                  <option value="none">Не повторять</option>
-                  {(Object.keys(recurrenceLabels) as TaskRecurrence[]).map((value) => (
-                    <option key={value} value={value}>
-                      {recurrenceLabels[value]}
-                    </option>
-                  ))}
-                </Select>
-              </label>
-              {recurrence !== 'none' ? (
-                <label className="block text-sm text-zinc-600">
-                  Повторять до (необязательно)
-                  <Input
-                    className="mt-1"
-                    type="date"
-                    value={recurrenceEnds}
-                    min={due || undefined}
-                    onChange={(event) => setRecurrenceEnds(event.target.value)}
-                  />
-                </label>
-              ) : null}
-              {recurrence !== 'none' && !due ? (
-                <p className="text-sm text-amber-700">
-                  Для повторяющейся задачи укажите первый срок.
-                </p>
-              ) : null}
-            </>
-          )}
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
-        </div>
-      </Dialog>
+      {dialogOpen ? (
+        <TaskDialog
+          task={editing}
+          initialDue={initialDue}
+          onClose={closeDialog}
+          onSaved={invalidate}
+        />
+      ) : null}
     </div>
   );
 }
