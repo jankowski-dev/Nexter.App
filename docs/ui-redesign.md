@@ -27,6 +27,7 @@ Status: **UI-0 through UI-5 implemented.** Owner-approved direction on 2026-11-0
 - No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
 - No separate **Swap** entry. The swap flow is embedded in the trade/exchange modal; `/swap` redirects to `/portfolio`.
 - Phase 11 adds **Vault**, **Tasks**, and **Notes** after Reports. The vault is end-to-end encrypted in the browser; tasks and notes are plaintext owner-only modules.
+- UI-6 groups Dashboard, Portfolio, Operations, Watchlist, Reports, and Vault under a top-level **Crypto** accordion. Tasks, Notes, and Settings are top-level items; Crypto opens on click/expand and stays highlighted when collapsed.
 - Import is legacy under Settings until the clean cutover; it is not part of the go-live path.
 
 ## Portfolio

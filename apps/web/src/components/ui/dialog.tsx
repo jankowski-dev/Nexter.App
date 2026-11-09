@@ -22,12 +22,17 @@ export function Dialog({
 }) {
   const resolvedSize = size ?? (wide ? 'lg' : 'md');
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     }
 
     document.addEventListener('keydown', onKeyDown);
@@ -38,7 +43,7 @@ export function Dialog({
       document.removeEventListener('keydown', onKeyDown);
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

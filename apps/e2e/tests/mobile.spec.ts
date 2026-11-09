@@ -45,6 +45,14 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await expect(mobileNav).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
 
+  const cryptoButton = mobileNav.getByRole('button', { name: /Crypto/ });
+  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
+  await cryptoButton.click();
+  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(mobileNav.getByRole('link', { name: 'Портфель' })).toHaveCount(0);
+  await cryptoButton.click();
+  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
+
   await mobileNav.getByRole('link', { name: 'Портфель' }).click();
   await expect(page).toHaveURL(/\/portfolio$/);
   await expect(page.getByRole('heading', { name: 'Портфель' })).toBeVisible();
