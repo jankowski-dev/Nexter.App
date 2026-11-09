@@ -518,6 +518,14 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(closeRows[0]?.tradeGroupId).toBe(group?.id);
     expect(closeRows[0]?.expectedAmount).toBe('10.000000000000000000');
 
+    await db
+      .update(swapOrders)
+      .set({
+        status: 'AWAITING_SIGNATURE',
+        deadline: Math.floor(Date.now() / 1000) + 300,
+      })
+      .where(eq(swapOrders.id, quote.body.id));
+
     const busy = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
@@ -534,10 +542,10 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
 
     await db
       .update(swapOrders)
-      .set({ quoteExpiresAt: new Date(Date.now() - 1_000) })
+      .set({ deadline: Math.floor(Date.now() / 1000) - 1 })
       .where(eq(swapOrders.id, quote.body.id));
 
-    const afterExpiry = await agent
+    const afterDeadline = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
       .send({
@@ -549,15 +557,10 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         closeGroupIds: [group?.id],
       })
       .expect(201);
-    expect(afterExpiry.body.closeGroupIds).toEqual([group?.id]);
+    expect(afterDeadline.body.closeGroupIds).toEqual([group?.id]);
 
     await agent
-      .post(`/api/v1/swap/orders/${afterExpiry.body.id}/cancel`)
-      .set('x-csrf-token', owner.csrf)
-      .expect(200);
-
-    await agent
-      .post(`/api/v1/swap/orders/${quote.body.id}/cancel`)
+      .post(`/api/v1/swap/orders/${afterDeadline.body.id}/cancel`)
       .set('x-csrf-token', owner.csrf)
       .expect(200);
 
@@ -608,6 +611,106 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .send({ orderId: changedQuote.body.id, walletAddress: wallet })
       .expect(400);
     expect(changed.body.error.code).toBe('SWAP_CLOSE_GROUP_CHANGED');
+  }, 60_000);
+
+  it('supersedes a stale unsigned close order for the same groups', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const allAssets = assetsResponse.body.assets as Array<{
+      id: string;
+      symbol: string;
+      chainCode: string;
+      contractAddress: string | null;
+    }>;
+    const accountsResponse = await agent.get('/api/v1/accounts').expect(200);
+    const allAccounts = accountsResponse.body.accounts as Array<{
+      id: string;
+      name: string;
+      type: string;
+    }>;
+    const usdc = allAssets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const based = allAssets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'BASED');
+    const ledger = allAccounts.find(
+      (account) => account.name === 'Tangem BSC' && account.type === 'wallet',
+    );
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'deposit',
+        accountId: ledger?.id,
+        assetId: usdc?.id,
+        amount: '1000',
+        usdValue: '1000',
+      })
+      .expect(201);
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: ledger?.id,
+        assetId: based?.id,
+        amount: '10',
+        quoteAssetId: usdc?.id,
+        quoteAmount: '20',
+      })
+      .expect(201);
+
+    const group = (
+      (await agent.get(`/api/v1/trade-groups?assetId=${based?.id}`).expect(200)).body
+        .data as Array<{ id: string; remainingAmount: string }>
+    ).find((item) => item.remainingAmount.startsWith('10.'));
+    expect(group).toBeDefined();
+
+    const first = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(201);
+
+    await db
+      .update(swapOrders)
+      .set({
+        status: 'READY',
+        deadline: Math.floor(Date.now() / 1000) + 300,
+        updatedAt: new Date(Date.now() - 10_000),
+      })
+      .where(eq(swapOrders.id, first.body.id));
+
+    const second = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(201);
+    expect(second.body.closeGroupIds).toEqual([group?.id]);
+
+    const [superseded] = await db.select().from(swapOrders).where(eq(swapOrders.id, first.body.id));
+    expect(superseded?.status).toBe('CANCELLED');
+
+    const events = await db.select().from(swapEvents).where(eq(swapEvents.orderId, first.body.id));
+    expect(events.some((event) => event.type === 'cancelled')).toBe(true);
+
+    await agent
+      .post(`/api/v1/swap/orders/${second.body.id}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
   }, 60_000);
 
   it('rejects calldata with a different recipient or a lower minimum output', async () => {
