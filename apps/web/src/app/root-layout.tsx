@@ -4,16 +4,19 @@ import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, Outlet, useNavigate } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
 import { useState } from 'react';
 
-const navigation = [
+const cryptoNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
   { to: '/portfolio', label: messages.nav.portfolio },
   { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
   { to: '/reports', label: messages.nav.reports },
   { to: '/vault', label: messages.nav.vault },
+] as const;
+
+const primaryNavigation = [
   { to: '/tasks', label: messages.nav.tasks },
   { to: '/notes', label: messages.nav.notes },
   { to: '/settings', label: messages.nav.settings },
@@ -31,7 +34,12 @@ const inactiveLinkProps = {
 export function RootLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const cryptoActive = cryptoNavigation.some(
+    (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
+  );
   const [manualOpen, setManualOpen] = useState(false);
+  const [cryptoOpen, setCryptoOpen] = useState(cryptoActive);
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
@@ -66,7 +74,35 @@ export function RootLayout() {
           </Link>
 
           <nav aria-label="Основная навигация" className="flex flex-col gap-1">
-            {navigation.map((item) => (
+            <button
+              type="button"
+              onClick={() => setCryptoOpen((value) => !value)}
+              aria-expanded={cryptoOpen}
+              className={`flex items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                cryptoActive
+                  ? 'bg-emerald-50 font-medium text-emerald-700'
+                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+              }`}
+            >
+              <span>Crypto</span>
+              <span aria-hidden="true">{cryptoOpen ? '▾' : '▸'}</span>
+            </button>
+            {cryptoOpen ? (
+              <div className="ml-2 flex flex-col gap-1 border-l border-zinc-200 pl-2">
+                {cryptoNavigation.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    activeProps={activeLinkProps}
+                    inactiveProps={inactiveLinkProps}
+                    className="rounded-md px-3 py-2 text-sm transition-colors"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+            {primaryNavigation.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -109,19 +145,46 @@ export function RootLayout() {
 
           <nav
             aria-label="Мобильная навигация"
-            className="flex gap-1 overflow-x-auto border-b border-zinc-200 bg-white px-2 py-2 md:hidden"
+            className="flex flex-col gap-1 border-b border-zinc-200 bg-white px-2 py-2 md:hidden"
           >
-            {navigation.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                activeProps={activeLinkProps}
-                inactiveProps={{ className: 'text-zinc-600' }}
-                className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+            <div className="flex gap-1 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setCryptoOpen((value) => !value)}
+                aria-expanded={cryptoOpen}
+                className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
+                  cryptoActive ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-zinc-600'
+                }`}
               >
-                {item.label}
-              </Link>
-            ))}
+                Crypto {cryptoOpen ? '▾' : '▸'}
+              </button>
+              {primaryNavigation.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  activeProps={activeLinkProps}
+                  inactiveProps={{ className: 'text-zinc-600' }}
+                  className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+            {cryptoOpen ? (
+              <div className="flex gap-1 overflow-x-auto border-t border-zinc-100 pt-1">
+                {cryptoNavigation.map((item) => (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    activeProps={activeLinkProps}
+                    inactiveProps={{ className: 'text-zinc-600' }}
+                    className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
           </nav>
 
           <main id="main" className="min-w-0 flex-1 p-4 md:p-6">

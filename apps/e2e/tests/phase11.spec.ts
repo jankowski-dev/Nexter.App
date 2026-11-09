@@ -52,7 +52,9 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Добавить запись' }).first().click();
   const vaultDialog = page.getByRole('dialog');
-  await vaultDialog.getByLabel('Название').fill('Test Login');
+  await vaultDialog.getByLabel('Название').click();
+  await vaultDialog.getByLabel('Название').pressSequentially('Test Login', { delay: 20 });
+  await expect(vaultDialog.getByLabel('Название')).toHaveValue('Test Login');
   await vaultDialog.getByLabel('Логин').fill('user@example.com');
   await vaultDialog.getByRole('button', { name: 'Сгенерировать' }).click();
   await expect(vaultDialog.getByLabel('Пароль', { exact: true })).not.toHaveValue('');
@@ -111,7 +113,9 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Задачи', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const taskDialog = page.getByRole('dialog');
-  await taskDialog.getByLabel('Название').fill('Проверить BASED');
+  await taskDialog.getByLabel('Название').click();
+  await taskDialog.getByLabel('Название').pressSequentially('Проверить BASED', { delay: 20 });
+  await expect(taskDialog.getByLabel('Название')).toHaveValue('Проверить BASED');
   await taskDialog.getByLabel('Описание').fill('Пересмотреть тезис');
   await taskDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Проверить BASED')).toBeVisible();
@@ -125,8 +129,14 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Заметки', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Новая заметка' }).first().click();
   const noteDialog = page.getByRole('dialog');
-  await noteDialog.getByLabel('Заголовок').fill('Идея по портфелю');
-  await noteDialog.getByLabel('Текст').fill('Проверить корреляцию BASED и LINK');
+  await noteDialog.getByLabel('Заголовок').click();
+  await noteDialog.getByLabel('Заголовок').pressSequentially('Идея по портфелю', { delay: 20 });
+  await expect(noteDialog.getByLabel('Заголовок')).toHaveValue('Идея по портфелю');
+  await noteDialog.getByLabel('Текст').click();
+  await noteDialog
+    .getByLabel('Текст')
+    .pressSequentially('Проверить корреляцию BASED и LINK', { delay: 20 });
+  await expect(noteDialog.getByLabel('Текст')).toHaveValue('Проверить корреляцию BASED и LINK');
   await noteDialog.getByLabel('Теги (через запятую)').fill('идея, риск');
   await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Идея по портфелю')).toBeVisible();
