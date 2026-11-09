@@ -117,6 +117,14 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
+  await expect(page.getByText('Кривая капитала')).toBeVisible();
+  await page.getByRole('button', { name: 'Тёмная тема' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', { name: 'Светлая тема' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.getByText('Капитал').first()).toBeVisible();
   await expect(page.getByText('Итого P&L').first()).toBeVisible();
   await expect(page.getByText('Качество торговли')).toBeVisible();

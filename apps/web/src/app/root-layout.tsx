@@ -5,7 +5,7 @@ import { messages } from '@/lib/i18n';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const cryptoNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
@@ -31,6 +31,33 @@ const inactiveLinkProps = {
   className: 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
 };
 
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="M20 14.2A8.2 8.2 0 0 1 9.8 4a8.5 8.5 0 1 0 10.2 10.2Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function RootLayout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -40,11 +67,31 @@ export function RootLayout() {
   );
   const [manualOpen, setManualOpen] = useState(false);
   const [cryptoOpen, setCryptoOpen] = useState(cryptoActive);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (document.documentElement.dataset.theme === 'dark') return 'dark';
+    try {
+      return localStorage.getItem('nexter-theme') === 'dark' ? 'dark' : 'light';
+    } catch {
+      return 'light';
+    }
+  });
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
     retry: false,
   });
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem('nexter-theme', theme);
+    } catch {
+      // Storage may be unavailable; the current session still uses the theme.
+    }
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#202329' : '#f6f7f9');
+  }, [theme]);
 
   async function logout() {
     try {
@@ -95,7 +142,7 @@ export function RootLayout() {
                     to={item.to}
                     activeProps={activeLinkProps}
                     inactiveProps={inactiveLinkProps}
-                    className="rounded-md px-3 py-2 text-sm transition-colors"
+                    className="rounded-xl px-3 py-2 text-sm transition-colors"
                   >
                     {item.label}
                   </Link>
@@ -108,7 +155,7 @@ export function RootLayout() {
                 to={item.to}
                 activeProps={activeLinkProps}
                 inactiveProps={inactiveLinkProps}
-                className="rounded-md px-3 py-2 text-sm transition-colors"
+                className="rounded-xl px-3 py-2 text-sm transition-colors"
               >
                 {item.label}
               </Link>
@@ -134,6 +181,38 @@ export function RootLayout() {
                 <span className="h-2 w-2 rounded-full bg-emerald-500" />
                 {messages.app.status}
               </div>
+              <div
+                className="flex items-center gap-0.5 rounded-full border border-zinc-200 bg-zinc-50 p-1"
+                role="group"
+                aria-label="Тема оформления"
+              >
+                <button
+                  type="button"
+                  aria-label="Светлая тема"
+                  aria-pressed={theme === 'light'}
+                  onClick={() => setTheme('light')}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                    theme === 'light'
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <SunIcon />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Тёмная тема"
+                  aria-pressed={theme === 'dark'}
+                  onClick={() => setTheme('dark')}
+                  className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                    theme === 'dark'
+                      ? 'bg-zinc-800 text-white shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-800'
+                  }`}
+                >
+                  <MoonIcon />
+                </button>
+              </div>
               <Button className="h-8 px-3 text-xs" onClick={() => setManualOpen(true)}>
                 + Операция
               </Button>
@@ -152,7 +231,7 @@ export function RootLayout() {
                 type="button"
                 onClick={() => setCryptoOpen((value) => !value)}
                 aria-expanded={cryptoOpen}
-                className={`shrink-0 rounded-md px-3 py-1.5 text-xs ${
+                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs ${
                   cryptoActive ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-zinc-600'
                 }`}
               >
@@ -164,7 +243,7 @@ export function RootLayout() {
                   to={item.to}
                   activeProps={activeLinkProps}
                   inactiveProps={{ className: 'text-zinc-600' }}
-                  className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
                 >
                   {item.label}
                 </Link>
@@ -178,7 +257,7 @@ export function RootLayout() {
                     to={item.to}
                     activeProps={activeLinkProps}
                     inactiveProps={{ className: 'text-zinc-600' }}
-                    className="shrink-0 rounded-md px-3 py-1.5 text-xs"
+                    className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
                   >
                     {item.label}
                   </Link>
