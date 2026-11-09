@@ -119,6 +119,7 @@ export type TransactionSubtype =
 export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 'system';
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
 export type TaskStatus = 'open' | 'done' | 'cancelled';
+export type TaskRecurrence = 'daily' | 'weekly' | 'monthly';
 export type ReconciliationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type ReconciliationItemStatus =
   'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER' | 'UNSUPPORTED';
@@ -770,6 +771,10 @@ export const tasks = pgTable(
     dueAt: timestamp('due_at', { withTimezone: true }),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     relatedAssetId: uuid('related_asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    seriesId: uuid('series_id'),
+    recurrence: text('recurrence').$type<TaskRecurrence>(),
+    recurrenceEndsAt: timestamp('recurrence_ends_at', { withTimezone: true }),
+    occurrenceIndex: integer('occurrence_index').notNull().default(0),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -778,6 +783,7 @@ export const tasks = pgTable(
     index('tasks_user_status_idx').on(table.userId, table.status),
     index('tasks_user_due_idx').on(table.userId, table.dueAt),
     index('tasks_user_archived_idx').on(table.userId, table.archivedAt),
+    index('tasks_user_series_idx').on(table.userId, table.seriesId),
   ],
 );
 

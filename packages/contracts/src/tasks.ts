@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const taskStatusSchema = z.enum(['open', 'done', 'cancelled']);
+export const taskRecurrenceSchema = z.enum(['daily', 'weekly', 'monthly']);
 
 export const taskSchema = z.object({
   id: z.uuid(),
@@ -11,28 +12,58 @@ export const taskSchema = z.object({
   dueAt: z.iso.datetime().nullable(),
   completedAt: z.iso.datetime().nullable(),
   relatedAssetId: z.uuid().nullable(),
+  seriesId: z.uuid().nullable(),
+  recurrence: taskRecurrenceSchema.nullable(),
+  recurrenceEndsAt: z.iso.datetime().nullable(),
+  occurrenceIndex: z.number().int().nonnegative(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 });
 
-export const taskListQuerySchema = z.object({
-  status: taskStatusSchema.optional(),
-  search: z.string().max(100).optional(),
-  includeArchived: z
-    .union([z.boolean(), z.enum(['true', 'false'])])
-    .transform((value) => value === true || value === 'true')
-    .default(false),
-  limit: z.coerce.number().int().min(1).max(500).default(200),
-});
+export const taskListQuerySchema = z
+  .object({
+    status: taskStatusSchema.optional(),
+    search: z.string().max(100).optional(),
+    includeArchived: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .transform((value) => value === true || value === 'true')
+      .default(false),
+    from: z.iso.datetime().optional(),
+    to: z.iso.datetime().optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(200),
+  })
+  .refine(
+    (value) =>
+      !value.from || !value.to || new Date(value.from).getTime() <= new Date(value.to).getTime(),
+    'from must be before or equal to to',
+  );
 
-export const taskCreateRequestSchema = z.object({
-  title: z.string().trim().min(1).max(200),
-  description: z.string().max(5000).nullable().optional(),
-  priority: z.number().int().min(0).max(3).optional(),
-  dueAt: z.iso.datetime().nullable().optional(),
-  relatedAssetId: z.uuid().nullable().optional(),
-});
+export const taskCreateRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().max(5000).nullable().optional(),
+    priority: z.number().int().min(0).max(3).optional(),
+    dueAt: z.iso.datetime().nullable().optional(),
+    relatedAssetId: z.uuid().nullable().optional(),
+    recurrence: taskRecurrenceSchema.optional(),
+    recurrenceEndsAt: z.iso.datetime().nullable().optional(),
+  })
+  .refine((value) => !value.recurrence || value.dueAt, {
+    message: 'A recurring task requires a due date',
+    path: ['dueAt'],
+  })
+  .refine(
+    (value) =>
+      !value.recurrenceEndsAt ||
+      (value.recurrence !== undefined &&
+        value.dueAt &&
+        new Date(value.recurrenceEndsAt).getTime() >= new Date(value.dueAt).getTime()),
+    {
+      message: 'recurrenceEndsAt must be on or after dueAt and requires recurrence',
+      path: ['recurrenceEndsAt'],
+    },
+  );
 
 export const taskUpdateRequestSchema = z
   .object({
@@ -59,6 +90,7 @@ export const taskUpdateRequestSchema = z
 export const tasksResponseSchema = z.object({ data: z.array(taskSchema) });
 
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type TaskRecurrence = z.infer<typeof taskRecurrenceSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 export type TaskCreateRequest = z.infer<typeof taskCreateRequestSchema>;
