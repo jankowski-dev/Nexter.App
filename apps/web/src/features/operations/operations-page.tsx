@@ -158,7 +158,7 @@ export function OperationsPage() {
                     return (
                       <tr
                         key={transaction.id}
-                        className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
+                        className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
                       >
                         <td className="py-2 pr-3 text-zinc-600">
                           {formatDateTime(transaction.occurredAt)}
