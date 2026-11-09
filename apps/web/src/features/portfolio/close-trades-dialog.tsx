@@ -656,6 +656,17 @@ export function CloseTradesDialog({
       ) {
         throw new Error('Готовая сборка не совпала с кошельком или сетью. Обновите котировку.');
       }
+    } else if (build.status !== 'READY') {
+      // A non-approval build is BUILT, not READY. Signing is only allowed from READY.
+      build = await runWithStepUp(() => readySwap(quote.id));
+      if (
+        build.id !== quote.id ||
+        build.chain !== item.chain ||
+        !build.walletAddress ||
+        build.walletAddress.toLowerCase() !== wallet.address.toLowerCase()
+      ) {
+        throw new Error('Готовая сборка не совпала с кошельком или сетью. Обновите котировку.');
+      }
     }
 
     if (!build.routerAddress || !build.calldata) {
