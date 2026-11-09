@@ -53,7 +53,7 @@ export function MassCloseDrawer({
   open: boolean;
   onClose: () => void;
   groups: TradeGroupSummary[];
-  onCloseTrades?: (input: { assetId: string; groupIds: string[] }) => void;
+  onCloseTrades?: (groups: TradeGroupSummary[]) => void;
 }) {
   const invested = sum(groups.map((group) => group.buyUsd));
   const pnl = sum(groups.map((group) => group.totalPnlUsd));
@@ -97,8 +97,7 @@ export function MassCloseDrawer({
   }
 
   const assetRows = [...assets.values()].sort((a, b) => b.invested.comparedTo(a.invested));
-  const sameAsset = assetRows.length === 1;
-  const canClose = sameAsset && groups.some((group) => group.status !== 'closed');
+  const canClose = groups.some((group) => group.status !== 'closed');
 
   return (
     <Drawer
@@ -126,12 +125,9 @@ export function MassCloseDrawer({
             variant="danger"
             disabled={!canClose || !onCloseTrades}
             onClick={() => {
-              if (!sameAsset || !onCloseTrades) return;
+              if (!onCloseTrades) return;
               onClose();
-              onCloseTrades({
-                assetId: assetRows[0].assetId,
-                groupIds: groups.map((group) => group.id),
-              });
+              onCloseTrades(groups);
             }}
           >
             Выйти из сделок
@@ -156,7 +152,7 @@ export function MassCloseDrawer({
             }
             tone={pnlTone(pnl.value.toFixed(8))}
           />
-          <Metric label="Газ" value={formatUsd(gas.value.toFixed(8))} hint="Confirmed swaps" />
+          <Metric label="Газ" value={formatUsd(gas.value.toFixed(8))} hint="Подтверждённые свопы" />
         </div>
 
         <Card>
@@ -232,13 +228,13 @@ export function MassCloseDrawer({
           </div>
         </Card>
 
-        {!sameAsset ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Выбраны разные токены. В этой версии массовое закрытие доступно для одного токена;
-            закрытие нескольких токенов последовательными подписями появится на следующем этапе.
+        {assetRows.length > 1 ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            Будет {assetRows.length} отдельных swap-ордеров и подписей — по одной на токен.
+            Approval-транзакции, если нужны, добавят ещё подписи.
           </div>
         ) : null}
-        {sameAsset && !canClose ? (
+        {!canClose ? (
           <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
             Все выбранные сделки уже закрыты.
           </div>

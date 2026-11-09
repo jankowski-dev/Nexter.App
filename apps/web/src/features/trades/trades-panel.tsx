@@ -9,6 +9,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDate, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { Decimal } from 'decimal.js';
 import type { TradeGroupSummary } from '@nexter/contracts';
 
 const statusLabels: Record<string, string> = {
@@ -72,7 +73,7 @@ export function TradesPanel({
 
   const groupRows = groups.data?.pages.flatMap((page) => page.data) ?? [];
   const selectable = groupRows.filter(
-    (group) => group.status !== 'closed' && Number(group.remainingAmount) > 0,
+    (group) => group.status !== 'closed' && new Decimal(group.remainingAmount).gt(0),
   );
   const selectedSet = new Set(selectedIds);
   const allSelected =
@@ -215,14 +216,15 @@ export function TradesPanel({
                 <tbody>
                   {groupRows.map((group) => {
                     const selectableRow =
-                      group.status !== 'closed' && Number(group.remainingAmount) > 0;
-                    const pnlValue = group.totalPnlUsd === null ? null : Number(group.totalPnlUsd);
+                      group.status !== 'closed' && new Decimal(group.remainingAmount).gt(0);
+                    const pnlValue =
+                      group.totalPnlUsd === null ? null : new Decimal(group.totalPnlUsd);
                     const rowTone =
                       pnlValue === null
                         ? ''
-                        : pnlValue > 0
+                        : pnlValue.gt(0)
                           ? 'bg-emerald-50/40 hover:bg-emerald-50/70'
-                          : pnlValue < 0
+                          : pnlValue.lt(0)
                             ? 'bg-red-50/40 hover:bg-red-50/70'
                             : 'hover:bg-zinc-50';
 

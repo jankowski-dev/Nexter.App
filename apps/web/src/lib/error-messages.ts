@@ -28,6 +28,19 @@ const messages: Record<string, string> = {
   SWAP_RATE_LIMITED: 'Слишком много запросов к провайдеру. Попробуйте позже.',
   SWAP_DISABLED: 'Свопы временно отключены.',
   SWAP_STATE_INVALID: 'Состояние ордера изменилось. Запросите новую котировку.',
+  SWAP_CLOSE_GROUP_NOT_FOUND: 'Одна или несколько выбранных сделок не найдены. Обновите список.',
+  SWAP_CLOSE_GROUP_CLOSED: 'Одна из выбранных сделок уже закрыта. Обновите список.',
+  SWAP_CLOSE_GROUP_ASSET_MISMATCH:
+    'Выбранные сделки относятся к разным токенам. Закрывайте их отдельными группами.',
+  SWAP_CLOSE_AMOUNT_MISMATCH: 'Сумма закрытия изменилась. Обновите список сделок и повторите.',
+  SWAP_CLOSE_GROUP_CHANGED: 'Остаток по сделке изменился. Обновите список и повторите.',
+  SWAP_CLOSE_GROUP_BUSY:
+    'По одной из сделок уже есть активный ордер закрытия. Дождитесь его завершения.',
+  SWAP_CLOSE_OUTPUT_NOT_CASH: 'Закрытие возможно только в USDC/USDT.',
+  SWAP_CLOSE_ASSET_INVALID: 'Этот актив нельзя закрыть через swap.',
+  SWAP_APPROVAL_NOT_REQUIRED: 'Разрешение уже не требуется. Продолжайте подпись.',
+  SWAP_TOKEN_NOT_ALLOWED: 'Токен не входит в swap allowlist.',
+  SWAP_WALLET_NOT_ALLOWED: 'Адрес кошелька не входит в allowlist.',
   SWAP_BUILD_FAILED:
     'Провайдер не смог собрать транзакцию для этого маршрута. Попробуйте другую пару или сумму.',
   SWAP_VALIDATION_FAILED:

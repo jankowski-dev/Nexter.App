@@ -6,6 +6,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchAssets, fetchTradeGroup } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate, formatSignedUsd, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
+import type { TradeGroupSummary } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Decimal } from 'decimal.js';
@@ -61,7 +62,7 @@ export function TradeDrawer({
 }: {
   tradeId: string | null;
   onClose: () => void;
-  onCloseTrade?: (input: { assetId: string; groupId: string }) => void;
+  onCloseTrade?: (group: TradeGroupSummary) => void;
 }) {
   const detail = useQuery({
     queryKey: ['trade-group', tradeId],
@@ -107,7 +108,7 @@ export function TradeDrawer({
               <Button
                 onClick={() => {
                   onClose();
-                  onCloseTrade({ assetId: group.asset.id, groupId: group.id });
+                  onCloseTrade(group);
                 }}
               >
                 Выйти из сделки

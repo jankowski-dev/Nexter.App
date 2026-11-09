@@ -518,6 +518,49 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     expect(closeRows[0]?.tradeGroupId).toBe(group?.id);
     expect(closeRows[0]?.expectedAmount).toBe('10.000000000000000000');
 
+    const busy = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(409);
+    expect(busy.body.error.code).toBe('SWAP_CLOSE_GROUP_BUSY');
+
+    await db
+      .update(swapOrders)
+      .set({ quoteExpiresAt: new Date(Date.now() - 1_000) })
+      .where(eq(swapOrders.id, quote.body.id));
+
+    const afterExpiry = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(201);
+    expect(afterExpiry.body.closeGroupIds).toEqual([group?.id]);
+
+    await agent
+      .post(`/api/v1/swap/orders/${afterExpiry.body.id}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
+    await agent
+      .post(`/api/v1/swap/orders/${quote.body.id}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
     const mismatch = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
@@ -531,6 +574,19 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       })
       .expect(400);
     expect(mismatch.body.error.code).toBe('SWAP_CLOSE_AMOUNT_MISMATCH');
+
+    const changedQuote = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '10',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
+      .expect(201);
 
     await agent
       .post('/api/v1/transactions')
@@ -549,7 +605,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     const changed = await agent
       .post('/api/v1/swap/build')
       .set('x-csrf-token', owner.csrf)
-      .send({ orderId: quote.body.id, walletAddress: wallet })
+      .send({ orderId: changedQuote.body.id, walletAddress: wallet })
       .expect(400);
     expect(changed.body.error.code).toBe('SWAP_CLOSE_GROUP_CHANGED');
   }, 60_000);

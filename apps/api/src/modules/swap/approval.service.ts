@@ -18,7 +18,7 @@ import type {
 } from '@nexter/contracts';
 import type { AuthContext } from '../auth/auth.types';
 import { AuditService } from '../../shared/audit/audit.service';
-import { env } from '../../shared/config/env';
+import { env, executionEnabledForChain } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { EvmRpcService, padUint } from './evm-rpc.service';
@@ -95,6 +95,13 @@ export class ApprovalService {
     this.assertEnabled();
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
+
+    if (!executionEnabledForChain(order.chain)) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_EXECUTION_DISABLED',
+        message: 'Execution is disabled for this chain',
+      });
+    }
 
     if (order.status !== 'BUILT' && order.status !== 'APPROVAL_REQUIRED') {
       throw new ConflictException({
@@ -283,6 +290,13 @@ export class ApprovalService {
       throw new NotFoundException({
         code: 'NOT_FOUND',
         message: 'Token approval not found',
+      });
+    }
+
+    if (!executionEnabledForChain(approval.chain)) {
+      throw new ServiceUnavailableException({
+        code: 'SWAP_EXECUTION_DISABLED',
+        message: 'Execution is disabled for this chain',
       });
     }
 
