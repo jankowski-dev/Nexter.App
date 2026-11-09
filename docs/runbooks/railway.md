@@ -233,3 +233,11 @@ Phase 6 is code/ops hardening with no schema migration. Before deploying:
 4. Enable `RECONCILIATION_ENABLED=true`, add watch-only addresses via `POST /api/v1/reconciliation/addresses`, and run `POST /api/v1/reconciliation/run` for BSC/Ethereum.
 5. Inspect `GET /api/v1/reconciliation/runs/:id`; all non-zero assets must be `MATCH` or a documented owner-approved exception.
 6. Rollback: set `RECONCILIATION_ENABLED=false`; do not delete reconciliation rows.
+
+## Phase 11 — vault, tasks, notes rollout
+
+1. Take a backup and run `node packages/db/dist/migrate.js`; migration `0019` is additive (`vault_configs`, `vault_items`, `tasks`, `notes`).
+2. Re-run `provision-app-role` (or verify default privileges) so the app role has DML on the new tables, no `DELETE` on vault/task/note rows, and no `UPDATE` on `vault_configs`.
+3. Deploy and verify `/ready` and the new `/vault`, `/tasks`, `/notes` routes.
+4. Vault encryption is entirely client-side. Do not add server-side key material, recovery keys, or plaintext storage.
+5. Rollback: remove the routes or deploy the previous image. The database tables are additive; do not drop them.

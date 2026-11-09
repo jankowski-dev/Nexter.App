@@ -5,12 +5,15 @@ export * from './auth';
 export * from './accounting';
 export * from './audit';
 export * from './imports';
+export * from './notes';
 export * from './pagination';
 export * from './portfolio';
 export * from './reconciliation';
 export * from './reports';
 export * from './settings';
 export * from './swap';
+export * from './tasks';
+export * from './vault';
 export * from './watchlist';
 
 export const uuidSchema = z.uuid();
