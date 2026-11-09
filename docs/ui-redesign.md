@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0, UI-1, UI-2, UI-3, and UI-4 implemented; UI-5 planned.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
+Status: **UI-0 through UI-5 implemented.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
 
 ## Goals
 
@@ -22,7 +22,7 @@ Status: **UI-0, UI-1, UI-2, UI-3, and UI-4 implemented; UI-5 planned.** Owner-ap
 | Settings   | Existing settings, security, accounts, audit, data quality; legacy import link |
 
 - No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
-- No separate **Swap** entry. `/swap` stays a hidden legacy route until UI-1 embeds the swap flow in the trade/exchange modal.
+- No separate **Swap** entry. The swap flow is embedded in the trade/exchange modal; `/swap` redirects to `/portfolio`.
 - Import is legacy under Settings until the clean cutover; it is not part of the go-live path.
 
 ## Portfolio
@@ -102,5 +102,5 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 - **UI-2** — dashboard metrics and interactive charts, daily snapshots. Implemented: profit factor, gross profit/loss, win rate, positive/negative unrealized, cash by asset, gas paid, daily snapshot capture, snapshot-backed equity curve, and hover tooltips on line/bar charts.
 - **UI-3** — watchlist groups, contract-address search, market data. Implemented: user-created groups with a default group, group moves, contract-address search with on-chain metadata, CoinGecko price/icon enrichment, server-side icon proxy, and watchlist cards with prices.
 - **UI-4** — reports/statistics. Implemented: period presets and custom dates, realized P&L and trade statistics, fees/gas, cash-flow summary, monthly detail, per-asset realized results, operation counts, period-scoped transaction export, and current portfolio/allocation/equity charts. No tax calculations.
-- **UI-5** — remove hidden legacy swap/import from the go-live path, E2E, responsive polish.
+- **UI-5** — remove the hidden legacy swap route from the go-live path, E2E, responsive polish. Implemented: `/swap` redirects to `/portfolio`; the swap panel is embedded-only inside the trade/exchange modal; unused standalone swap history was removed; mobile navigation and dialogs are covered by E2E. The legacy Notion import remains under Settings until the clean cutover.
 - Then the ADR 0014 clean cutover.
