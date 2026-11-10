@@ -41,10 +41,12 @@ export function TradesPanel({
   selectedIds,
   onSelectionChange,
   onOpenTrade,
+  logos,
 }: {
   selectedIds: string[];
   onSelectionChange: (groups: TradeGroupSummary[]) => void;
   onOpenTrade: (id: string) => void;
+  logos: Map<string, string | null>;
 }) {
   const [status, setStatus] = useState('');
   const [source, setSource] = useState('');
@@ -259,7 +261,10 @@ export function TradesPanel({
                         </td>
                         <td className="py-2 pr-3">
                           <div className="flex items-center gap-2">
-                            <TokenIcon logoUrl={group.asset.logoUrl} symbol={group.asset.symbol} />
+                            <TokenIcon
+                              logoUrl={group.asset.logoUrl ?? logos.get(group.asset.id) ?? null}
+                              symbol={group.asset.symbol}
+                            />
                             <div className="min-w-0">
                               <div className="font-medium text-zinc-800">{group.asset.symbol}</div>
                               <div className="text-xs text-zinc-500">{group.asset.chainCode}</div>

@@ -23,6 +23,7 @@ import { AssetDrawer } from './asset-drawer';
 import { CloseTradesDialog } from './close-trades-dialog';
 import { MassCloseDrawer } from './mass-close-drawer';
 import { TradeDrawer } from './trade-drawer';
+import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 
 type PortfolioTab = 'portfolio' | 'trades';
 
@@ -47,6 +48,7 @@ export function PortfolioPage() {
     assetId: '',
   });
   const positions = useQuery({ queryKey: ['positions'], queryFn: fetchPositions });
+  const watchlistLogos = useWatchlistLogos();
 
   if (positions.isPending) {
     return (
@@ -213,7 +215,11 @@ export function PortfolioPage() {
                               aria-label={`Открыть статистику ${position.asset.symbol}`}
                             >
                               <TokenIcon
-                                logoUrl={position.asset.logoUrl}
+                                logoUrl={
+                                  position.asset.logoUrl ??
+                                  watchlistLogos.get(position.asset.id) ??
+                                  null
+                                }
                                 symbol={position.asset.symbol}
                               />
                               <span className="min-w-0">
@@ -273,11 +279,13 @@ export function PortfolioPage() {
           selectedIds={selectedGroups.map((group) => group.id)}
           onSelectionChange={setSelectedGroups}
           onOpenTrade={setTradeDrawerId}
+          logos={watchlistLogos}
         />
       )}
 
       <AssetDrawer
         assetId={selectedAssetId}
+        logoFallback={selectedAssetId ? (watchlistLogos.get(selectedAssetId) ?? null) : null}
         onClose={() => setSelectedAssetId(null)}
         onTrade={(input) => {
           setTradeInitial({ side: input.side, assetId: input.assetId });
