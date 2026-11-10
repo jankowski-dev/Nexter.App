@@ -206,13 +206,24 @@ export const financeListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).default(200),
 });
 
-export const financeSummaryQuerySchema = z.object({
-  month: z
-    .string()
-    .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-    .optional(),
-  months: z.coerce.number().int().min(1).max(24).default(12),
-});
+export const financeSummaryQuerySchema = z
+  .object({
+    month: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+      .optional(),
+    months: z.coerce.number().int().min(1).max(24).default(12),
+    from: dateOnlySchema.optional(),
+    to: dateOnlySchema.optional(),
+    all: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .transform((value) => value === true || value === 'true')
+      .default(false),
+  })
+  .refine((value) => !value.from || !value.to || value.from <= value.to, {
+    message: 'from must be before or equal to to',
+    path: ['to'],
+  });
 
 export const financeAccountBalanceSchema = z.object({
   accountId: z.uuid(),

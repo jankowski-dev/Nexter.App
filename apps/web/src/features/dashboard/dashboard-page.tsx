@@ -608,7 +608,7 @@ export function DashboardPage() {
             </div>
             <div>
               <CardTitle>График доходности</CardTitle>
-              <CardDescription>Net P&L по месяцам за последние 12 месяцев.</CardDescription>
+              <CardDescription>Чистая прибыль по месяцам за последние 12 месяцев.</CardDescription>
             </div>
           </div>
           <div className="mt-4">

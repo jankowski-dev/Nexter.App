@@ -66,6 +66,7 @@ function assetContract(asset: typeof assets.$inferSelect, chainCode: string): As
     decimals: asset.decimals,
     contractAddress: asset.contractAddress,
     coingeckoId: asset.coingeckoId,
+    logoUrl: asset.logoUrl,
     isStablecoin: asset.isStablecoin,
     isCashEquivalent: asset.isCashEquivalent,
     isVerified: asset.isVerified,

@@ -46,6 +46,17 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.getByRole('button', { name: 'Включить 2FA' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 
+  const header = page.locator('header');
+  await expect(header.getByText(email, { exact: true })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'BNB' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(header.getByRole('button', { name: 'Ethereum' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await expect(header.getByRole('button', { name: 'Подключить' })).toBeVisible();
+  await expect(page.getByText('MVP-1 · BSC/Ethereum')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ Операция' })).toHaveCount(0);
+
   const cookies = await page.context().cookies();
   const csrf = cookies.find((cookie) => cookie.name === 'nexter_csrf')?.value ?? '';
   const assetsResponse = await page.request.get('/api/v1/assets');
@@ -145,7 +156,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Разбивка по активам')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Транзакции за период' })).toBeVisible();
   await page.getByRole('button', { name: '30 дней' }).click();
-  await expect(page.getByText('Net P&L за период')).toBeVisible();
+  await expect(page.getByText('Чистая прибыль за период')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Реализованный P&L по месяцам' })).toBeVisible();
 
   await page.goto('/trades');
@@ -247,8 +258,18 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await tokenDrawer.getByRole('button', { name: 'Изменить' }).click();
   const editDialog = page.getByRole('dialog');
   await editDialog.getByLabel('Описание').fill('Updated Playwright thesis');
+  await editDialog.getByLabel('Файл иконки токена').setInputFiles({
+    name: 'based-icon.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await expect(editDialog.locator('img[src^="data:image/"]')).toBeVisible();
   await editDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
+  await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
 
   page.on('dialog', (dialog) => {
     void dialog.accept();
@@ -279,7 +300,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain('transactions');
 
-  await page.getByRole('button', { name: '+ Операция' }).click();
+  await page.goto('/portfolio');
+  await page.getByRole('button', { name: 'Новая сделка' }).click();
   const manualDialog = page.getByRole('dialog');
   await expect(manualDialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
   await manualDialog.getByRole('tab', { name: 'Пополнение' }).click();
@@ -291,5 +313,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/portfolio');
+  await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
 });

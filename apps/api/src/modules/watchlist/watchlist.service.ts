@@ -43,6 +43,11 @@ interface WatchlistMeta {
   userAgent?: string;
 }
 
+function iconForAudit(value: string | null | undefined): string | null | undefined {
+  if (value === undefined || value === null) return value;
+  return value.startsWith('data:image/') ? `data:image;base64,${value.length} chars` : value;
+}
+
 interface SourceImportData {
   symbol?: unknown;
   description?: unknown;
@@ -506,6 +511,12 @@ export class WatchlistService {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist entry not found' });
     }
 
+    const [existingAsset] = await this.db
+      .select({ logoUrl: assets.logoUrl })
+      .from(assets)
+      .where(eq(assets.id, existing.assetId))
+      .limit(1);
+
     const targetGroup =
       input.groupId !== undefined
         ? input.groupId
@@ -530,14 +541,24 @@ export class WatchlistService {
         })
         .where(eq(watchlist.id, id));
 
+      if (input.logoUrl !== undefined) {
+        await tx
+          .update(assets)
+          .set({ logoUrl: input.logoUrl, updatedAt: new Date() })
+          .where(eq(assets.id, existing.assetId));
+      }
+
       await this.audit.log(
         {
           userId,
           action: 'watchlist.updated',
           entityType: 'watchlist',
           entityId: id,
-          before: existing,
-          after: input,
+          before: { ...existing, logoUrl: iconForAudit(existingAsset?.logoUrl ?? null) },
+          after: {
+            ...input,
+            ...(input.logoUrl !== undefined ? { logoUrl: iconForAudit(input.logoUrl) } : {}),
+          },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
@@ -810,6 +831,7 @@ export class WatchlistService {
         decimals: row.asset.decimals,
         contractAddress: row.asset.contractAddress,
         coingeckoId: row.asset.coingeckoId,
+        logoUrl: row.asset.logoUrl,
         isStablecoin: row.asset.isStablecoin,
         isCashEquivalent: row.asset.isCashEquivalent,
         isVerified: row.asset.isVerified,

@@ -823,7 +823,17 @@ export class FinanceService {
   }
 
   async summary(userId: string, query: FinanceSummaryQuery): Promise<FinanceSummary> {
-    const month = query.month ?? currentMonth();
+    const month = query.month ?? (query.to ? query.to.slice(0, 7) : currentMonth());
+    const inSelectedRange = (date: string): boolean => {
+      if (query.all) return true;
+      if (query.from || query.to) {
+        if (query.from && date < query.from) return false;
+        if (query.to && date > query.to) return false;
+        return true;
+      }
+      return monthOf(date) === month;
+    };
+
     const balances = await this.balances(userId);
     const transactions = await this.db
       .select()
@@ -869,7 +879,7 @@ export class FinanceService {
       );
     }
 
-    const selected = monthTotals.get(month) ?? {
+    const selected: FinanceMonthTotal = {
       month,
       incomeBase: '0.00',
       expenseBase: '0.00',
@@ -877,6 +887,19 @@ export class FinanceService {
       incomeCount: 0,
       expenseCount: 0,
     };
+    for (const transaction of transactions) {
+      if (!inSelectedRange(transaction.occurredOn)) continue;
+      if (transaction.kind === 'income') {
+        selected.incomeBase = decimal(selected.incomeBase).plus(transaction.baseAmount).toFixed(2);
+        selected.incomeCount += 1;
+      } else {
+        selected.expenseBase = decimal(selected.expenseBase)
+          .plus(transaction.baseAmount)
+          .toFixed(2);
+        selected.expenseCount += 1;
+      }
+    }
+    selected.netBase = decimal(selected.incomeBase).minus(selected.expenseBase).toFixed(2);
 
     const categoryTotals = new Map<string, FinanceCategoryTotal>();
     const categories = await this.db
@@ -885,7 +908,7 @@ export class FinanceService {
       .where(eq(financeCategories.userId, userId));
     const categoryById = new Map(categories.map((category) => [category.id, category]));
     for (const transaction of transactions) {
-      if (monthOf(transaction.occurredOn) !== month) continue;
+      if (!inSelectedRange(transaction.occurredOn)) continue;
       const category = transaction.categoryId ? categoryById.get(transaction.categoryId) : null;
       const key = category?.id ?? `uncategorized:${transaction.kind}`;
       const row =

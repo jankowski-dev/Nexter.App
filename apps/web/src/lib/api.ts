@@ -683,14 +683,15 @@ export async function updateNote(id: string, body: NoteUpdateRequest): Promise<N
 }
 
 export async function fetchFinanceSummary(
-  month?: string,
-  months?: number,
+  params: {
+    month?: string;
+    months?: number;
+    from?: string;
+    to?: string;
+    all?: boolean;
+  } = {},
 ): Promise<FinanceSummary> {
-  return apiFetch(
-    `/api/v1/finance/summary${queryString({ month, months })}`,
-    {},
-    financeSummarySchema,
-  );
+  return apiFetch(`/api/v1/finance/summary${queryString(params)}`, {}, financeSummarySchema);
 }
 
 export async function fetchFinanceAccounts(): Promise<FinanceAccountsResponse> {

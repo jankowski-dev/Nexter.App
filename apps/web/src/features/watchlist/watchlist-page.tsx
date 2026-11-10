@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { TokenIcon } from '@/components/token-icon';
 import { Textarea } from '@/components/ui/textarea';
 import {
   archiveWatchlist,
@@ -21,8 +22,9 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatUsd, pnlTone } from '@/lib/format';
+import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { WatchlistEntry, WatchlistTokenSearchResult } from '@nexter/contracts';
 import { TokenDrawer } from './token-drawer';
 
@@ -63,9 +65,20 @@ function isValidExternalUrl(value: string): boolean {
   }
 }
 
-function iconSrc(logoUrl: string | null): string | null {
-  if (!logoUrl) return null;
-  return `/api/v1/watchlist/icon?url=${encodeURIComponent(logoUrl)}`;
+function isValidIconValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(trimmed)) return true;
+
+  try {
+    const url = new URL(trimmed);
+    return (
+      url.protocol === 'https:' &&
+      (url.hostname === 'coin-images.coingecko.com' || url.hostname === 'assets.coingecko.com')
+    );
+  } catch {
+    return false;
+  }
 }
 
 function ChainIcon({ chain }: { chain: 'bsc' | 'ethereum' }) {
@@ -103,6 +116,10 @@ export function WatchlistPage() {
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [investors, setInvestors] = useState('');
   const [priority, setPriority] = useState('0');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoUrlText, setLogoUrlText] = useState('');
+  const [iconUploading, setIconUploading] = useState(false);
+  const iconFileRef = useRef<HTMLInputElement>(null);
   const [drawerEntryId, setDrawerEntryId] = useState<string | null>(null);
   const [editGroupId, setEditGroupId] = useState('');
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
@@ -134,8 +151,10 @@ export function WatchlistPage() {
   }, [defaultGroup, searchGroupId]);
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-    void queryClient.invalidateQueries({ queryKey: ['watchlist-groups'] });
+    for (const key of ['watchlist', 'watchlist-groups', 'assets', 'positions', 'portfolio-asset']) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+    void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
   };
 
   const saveMutation = useMutation({
@@ -150,7 +169,12 @@ export function WatchlistPage() {
         ...(editGroupId ? { groupId: editGroupId } : {}),
       };
 
-      if (editing) return updateWatchlist(editing.id, payload);
+      if (editing) {
+        return updateWatchlist(editing.id, {
+          ...payload,
+          logoUrl: logoUrl.trim() || null,
+        });
+      }
       return createWatchlist({
         assetId,
         groupId: editGroupId || defaultGroup?.id,
@@ -167,6 +191,8 @@ export function WatchlistPage() {
       setWebsiteUrl('');
       setInvestors('');
       setPriority('0');
+      setLogoUrl('');
+      setLogoUrlText('');
       setEditGroupId('');
       setError(null);
       invalidate();
@@ -255,6 +281,8 @@ export function WatchlistPage() {
     setWebsiteUrl('');
     setInvestors('');
     setPriority('0');
+    setLogoUrl('');
+    setLogoUrlText('');
     setEditGroupId(defaultGroup?.id ?? '');
     setError(null);
     setDialogOpen(true);
@@ -270,9 +298,26 @@ export function WatchlistPage() {
     setWebsiteUrl(entry.websiteUrl ?? '');
     setInvestors(entry.investors.join(', '));
     setPriority(String(entry.priority));
+    setLogoUrl(entry.logoUrl ?? '');
+    setLogoUrlText(entry.logoUrl?.startsWith('data:') ? '' : (entry.logoUrl ?? ''));
     setEditGroupId(entry.groupId ?? defaultGroup?.id ?? '');
     setError(null);
     setDialogOpen(true);
+  }
+
+  async function handleIconFile(file: File | undefined): Promise<void> {
+    if (!file) return;
+    setIconUploading(true);
+    setError(null);
+    try {
+      setLogoUrl(await compressTokenIcon(file));
+      setLogoUrlText('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить иконку');
+    } finally {
+      setIconUploading(false);
+      if (iconFileRef.current) iconFileRef.current.value = '';
+    }
   }
 
   const groupsToRender = groups.data?.groups ?? [];
@@ -285,7 +330,9 @@ export function WatchlistPage() {
   const investorValues = investorsFromInput(investors);
   const twitterInvalid = !isValidExternalUrl(twitterUrl);
   const websiteInvalid = !isValidExternalUrl(websiteUrl);
-  const metadataInvalid = investorValues.length > 30 || twitterInvalid || websiteInvalid;
+  const iconInvalid = !isValidIconValue(logoUrl);
+  const metadataInvalid =
+    investorValues.length > 30 || twitterInvalid || websiteInvalid || iconInvalid;
 
   return (
     <div className="space-y-6">
@@ -430,17 +477,11 @@ export function WatchlistPage() {
           <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="flex items-center gap-3">
-                {iconSrc(searchResult.logoUrl) ? (
-                  <img
-                    src={iconSrc(searchResult.logoUrl) ?? undefined}
-                    alt=""
-                    className="h-10 w-10 rounded-full"
-                  />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-600">
-                    {searchResult.symbol.slice(0, 2)}
-                  </div>
-                )}
+                <TokenIcon
+                  logoUrl={searchResult.logoUrl}
+                  symbol={searchResult.symbol}
+                  className="h-10 w-10 text-xs"
+                />
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-semibold text-zinc-900">
@@ -468,8 +509,8 @@ export function WatchlistPage() {
             </div>
 
             <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
-              <div>Market cap: {formatUsd(searchResult.marketCapUsd)}</div>
-              <div>Volume 24h: {formatUsd(searchResult.volume24hUsd)}</div>
+              <div>Капитализация: {formatUsd(searchResult.marketCapUsd)}</div>
+              <div>Объём за 24 ч: {formatUsd(searchResult.volume24hUsd)}</div>
             </div>
 
             {!searchResult.alreadyInWatchlist ? (
@@ -540,17 +581,11 @@ export function WatchlistPage() {
                   <div className="pointer-events-none p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        {iconSrc(entry.logoUrl) ? (
-                          <img
-                            src={iconSrc(entry.logoUrl) ?? undefined}
-                            alt=""
-                            className="h-9 w-9 shrink-0 rounded-full"
-                          />
-                        ) : (
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-xs font-semibold text-zinc-600">
-                            {entry.asset.symbol.slice(0, 2)}
-                          </div>
-                        )}
+                        <TokenIcon
+                          logoUrl={entry.logoUrl}
+                          symbol={entry.asset.symbol}
+                          className="h-9 w-9 text-xs"
+                        />
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="truncate text-lg font-semibold text-zinc-900">
@@ -665,7 +700,7 @@ export function WatchlistPage() {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         title={editing ? 'Изменить токен' : 'Добавить токен'}
-        description="Описание, ссылки и инвесторы — заметки в базе токенов, не влияют на учёт."
+        description="Описание, иконка, ссылки и инвесторы — карточка токена, не влияет на учёт."
         footer={
           <>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>
@@ -673,7 +708,9 @@ export function WatchlistPage() {
             </Button>
             <Button
               onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || (!editing && !assetId) || metadataInvalid}
+              disabled={
+                saveMutation.isPending || (!editing && !assetId) || metadataInvalid || iconUploading
+              }
             >
               {saveMutation.isPending ? 'Сохраняю…' : 'Сохранить'}
             </Button>
@@ -702,6 +739,73 @@ export function WatchlistPage() {
               Актив: <span className="text-zinc-800">{editing.asset.symbol}</span>
             </div>
           )}
+          {editing ? (
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <div className="flex items-center gap-3">
+                <TokenIcon
+                  logoUrl={logoUrl || null}
+                  symbol={editing.asset.symbol}
+                  className="h-12 w-12 text-sm"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-zinc-800">Иконка токена</div>
+                  <div className="text-xs text-zinc-500">
+                    Если автоматическая иконка не загрузилась, добавьте свою.
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => iconFileRef.current?.click()}
+                  disabled={iconUploading}
+                >
+                  {iconUploading ? 'Загружаю…' : 'Загрузить файл'}
+                </Button>
+                {logoUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => {
+                      setLogoUrl('');
+                      setLogoUrlText('');
+                    }}
+                  >
+                    Сбросить
+                  </Button>
+                ) : null}
+              </div>
+              <input
+                ref={iconFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                aria-label="Файл иконки токена"
+                onChange={(event) => void handleIconFile(event.target.files?.[0])}
+              />
+              <label className="mt-3 block text-xs text-zinc-500">
+                Или ссылка CoinGecko
+                <Input
+                  className="mt-1"
+                  value={logoUrlText}
+                  onChange={(event) => {
+                    setLogoUrlText(event.target.value);
+                    setLogoUrl(event.target.value.trim());
+                  }}
+                  placeholder="https://assets.coingecko.com/…"
+                  aria-label="Ссылка на иконку CoinGecko"
+                />
+              </label>
+              {iconInvalid ? (
+                <p className="mt-1 text-xs text-red-700">
+                  Загрузите PNG/JPEG/WebP или укажите ссылку CoinGecko.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <label className="block text-sm text-zinc-600">
             Группа
             <Select

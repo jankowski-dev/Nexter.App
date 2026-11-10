@@ -26,6 +26,7 @@ import type {
   FinanceTransfer,
   FinanceTransferKind,
 } from '@nexter/contracts';
+import { CategoryColorPicker } from './category-color-picker';
 
 const accountKindLabels: Record<FinanceAccountKind, string> = {
   cash: 'Наличные',
@@ -641,15 +642,7 @@ export function FinanceCategoryDialog({
           </label>
         ) : null}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm text-zinc-600">
-            Цвет
-            <Input
-              className="mt-1"
-              value={color}
-              onChange={(event) => setColor(event.target.value)}
-              placeholder="purple, green, red…"
-            />
-          </label>
+          <CategoryColorPicker value={color} onChange={setColor} />
           <label className="block text-sm text-zinc-600">
             Иконка
             <Input

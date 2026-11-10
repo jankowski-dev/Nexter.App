@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-5 implemented.** Owner-approved direction on 2026-11-08. Russian light theme, USD base currency, no third-party analytics or trackers.
+Status: **UI-0 through UI-10 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-10. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 
@@ -19,15 +19,16 @@ Status: **UI-0 through UI-5 implemented.** Owner-approved direction on 2026-11-0
 | Operations | Deposits, withdrawals, exchanges; no trades                                    |
 | Watchlist  | User-created groups, contract-address token search, token cards                |
 | Reports    | P&L, trade statistics, operations, fees/gas, exports                           |
-| Vault      | E2E-encrypted passwords and access notes                                       |
+| Finance    | Personal BYN accounts, operations, transfers and period overview               |
+| Vault      | Separate top-level service: E2E-encrypted passwords and access notes           |
 | Tasks      | Personal tasks, priorities, due dates                                          |
-| Notes      | Free-form notes, tags, pinning                                                 |
+| Notes      | Journal-style notes, tags, photos, pinning                                     |
 | Settings   | Existing settings, security, accounts, audit, data quality; legacy import link |
 
 - No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
 - No separate **Swap** entry. The swap flow is embedded in the trade/exchange modal; `/swap` redirects to `/portfolio`.
-- Phase 11 adds **Vault**, **Tasks**, and **Notes** after Reports. The vault is end-to-end encrypted in the browser; tasks and notes are plaintext owner-only modules.
-- UI-6 groups Dashboard, Portfolio, Operations, Watchlist, Reports, and Vault under a top-level **Crypto** accordion. Tasks, Notes, and Settings are top-level items; Crypto opens on click/expand and stays highlighted when collapsed.
+- Phase 11 adds **Vault**, **Tasks**, and **Notes**. The vault is end-to-end encrypted in the browser; tasks and notes are plaintext owner-only modules.
+- UI-6 groups Dashboard, Portfolio, Operations, Watchlist, and Reports under a top-level **Crypto** accordion. UI-10 moves **Vault** out of that accordion: it is a separate top-level service, together with Finance, Tasks, Notes, and Settings. Crypto opens on click/expand and stays highlighted when collapsed.
 - Import is legacy under Settings until the clean cutover; it is not part of the go-live path.
 
 ## Portfolio
@@ -108,6 +109,23 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 - **UI-3** — watchlist groups, contract-address search, market data. Implemented: user-created groups with a default group, group moves, contract-address search with on-chain metadata, CoinGecko price/icon enrichment, server-side icon proxy, and watchlist cards with prices.
 - **UI-4** — reports/statistics. Implemented: period presets and custom dates, realized P&L and trade statistics, fees/gas, cash-flow summary, monthly detail, per-asset realized results, operation counts, period-scoped transaction export, and current portfolio/allocation/equity charts. No tax calculations.
 - **UI-5** — remove the hidden legacy swap route from the go-live path, E2E, responsive polish. Implemented: `/swap` redirects to `/portfolio`; the swap panel is embedded-only inside the trade/exchange modal; unused standalone swap history was removed; mobile navigation and dialogs are covered by E2E. The legacy Notion import remains under Settings until the clean cutover.
+- **UI-10** — owner feedback: vault as a separate top-level service; finance period presets (current, previous, custom month, year, all time); Russian finance labels; visual category color markers; global header wallet/chain controls with BNB default; token icons from the token base with manual upload. Implemented. No migration. See ADR 0026.
+
+## Header and wallet
+
+- The header shows the theme switch, owner email, wallet connect/disconnect, and BNB/ETH chain toggles. The global `+ Операция` button and the old `MVP-1 · BSC/Ethereum` status text are gone.
+- Wallet state lives in `WalletProvider`; the header, embedded swap, and trade modal read the same selected chain. Connecting defaults to BNB and switching requests a wallet network change. Signing still verifies the order chain server-side.
+- The operation modal opens from Portfolio `Новая сделка` and from asset actions.
+
+## Finance
+
+- Period presets mirror reports; the summary API accepts `from`/`to` or `all=true`.
+- Category colors come from a fixed visual palette.
+
+## Token icons
+
+- `assets.logoUrl` is exposed on every asset response. Portfolio, trades, the asset drawer, and token-base cards use the shared `TokenIcon`.
+- The token-base edit dialog can upload an icon (128×128, PNG/JPEG/WebP source, compressed data URL) or use a CoinGecko URL. The mutation is audited.
 - **UI-6** — navigation grouping and dialog focus. Implemented: Crypto accordion (Dashboard, Portfolio, Operations, Watchlist, Reports, Vault), Tasks/Notes/Settings below, route-aware expansion, and a focus fix so modal inputs no longer lose focus on parent re-renders.
 - **UI-7** — owner feedback pass. Implemented: simplified dashboard with monthly P&L and gas/fees, reports period tabs and removed duplicate portfolio/operations blocks, portfolio `Портфель`/`Сделки` tabs with sorting and P&L tints, trade drawer, sequential multi-token close flow with approval/TOTP/tracking/recovery, token base with contract/links/investors, and task list/calendar with drag/drop and recurring occurrences. See ADR 0020 and ADR 0021.
 - **UI-8** — owner feedback pass. Implemented: task tags, compressed image attachments stored in Postgres, taller task dialog with autosave (10 s and on close, no Save button), status/priority above the title, one-line description clamp, square BSC/Ethereum chain icons, full-width shell, and the `Открытые` default task filter. See ADR 0022.

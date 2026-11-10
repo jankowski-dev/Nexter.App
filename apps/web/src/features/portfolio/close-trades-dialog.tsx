@@ -21,7 +21,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatCount, formatSignedUsd, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
-import { useWalletConnect } from '@/lib/walletconnect';
+import { useWallet } from '@/lib/wallet-context';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useEffect, useRef, useState } from 'react';
@@ -186,7 +186,7 @@ export function CloseTradesDialog({
     },
     enabled: open && groups.length > 0,
   });
-  const wallet = useWalletConnect(config.data?.walletConnectProjectId ?? null);
+  const wallet = useWallet();
   const [items, setItems] = useState<CloseItem[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -885,7 +885,7 @@ export function CloseTradesDialog({
             <Button
               className="mt-3"
               onClick={() => void wallet.connect()}
-              disabled={wallet.connecting || !safeConfig?.walletConnectProjectId}
+              disabled={wallet.connecting || !wallet.projectId}
             >
               {wallet.connecting ? 'Подключаю…' : 'Подключить Tangem'}
             </Button>

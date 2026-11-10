@@ -13,6 +13,12 @@ export interface SendTransactionInput {
 
 type WalletProvider = Awaited<ReturnType<typeof EthereumProvider.init>>;
 
+function walletError(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message : '';
+  if (/reject|denied|cancel/i.test(message)) return 'Запрос отклонён в кошельке.';
+  return fallback;
+}
+
 function chainIdFrom(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -77,11 +83,13 @@ export function useWalletConnect(projectId: string | null) {
       setAddress(accounts[0] ?? null);
       setChainId(chainIdFrom(currentChain));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось подключить кошелёк');
+      setError(walletError(err, 'Не удалось подключить кошелёк'));
     } finally {
       setConnecting(false);
     }
   }, [projectId]);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const disconnect = useCallback(async () => {
     try {
@@ -94,9 +102,9 @@ export function useWalletConnect(projectId: string | null) {
     }
   }, []);
 
-  const switchToChain = useCallback(async (targetChainId: number) => {
+  const switchToChain = useCallback(async (targetChainId: number): Promise<boolean> => {
     const provider = providerRef.current;
-    if (!provider) return;
+    if (!provider) return false;
 
     try {
       await provider.request({
@@ -104,8 +112,10 @@ export function useWalletConnect(projectId: string | null) {
         params: [{ chainId: `0x${targetChainId.toString(16)}` }],
       });
       setChainId(targetChainId);
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось переключить сеть в кошельке');
+      setError(walletError(err, 'Не удалось переключить сеть в кошельке'));
+      return false;
     }
   }, []);
 
@@ -190,6 +200,7 @@ export function useWalletConnect(projectId: string | null) {
     chainId,
     connecting,
     error,
+    clearError,
     connected: Boolean(address),
     onBsc: chainId === BSC_CHAIN_ID,
     onChain: (targetChainId: number) => chainId === targetChainId,

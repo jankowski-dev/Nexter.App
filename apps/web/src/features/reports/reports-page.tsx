@@ -344,7 +344,7 @@ export function ReportsPage() {
                 label="Доход"
                 value={formatUsd(report.summary.incomeUsd)}
                 tone={pnlTone(report.summary.incomeUsd)}
-                hint="Income-транзакции"
+                hint="Доходные операции"
               />
               <Metric
                 label="Корректировки"
@@ -358,7 +358,7 @@ export function ReportsPage() {
                 hint="Все записи за период"
               />
               <Metric
-                label="Net P&L за период"
+                label="Чистая прибыль за период"
                 value={formatSignedUsd(report.summary.netPnlUsd)}
                 tone={pnlTone(report.summary.netPnlUsd)}
                 hint="Реализовано + доход + корректировки − сборы"
@@ -388,7 +388,7 @@ export function ReportsPage() {
                         <th className="py-2 pr-3 text-right font-medium">P&L</th>
                         <th className="py-2 pr-3 text-right font-medium">Сборы</th>
                         <th className="py-2 pr-3 text-right font-medium">Газ</th>
-                        <th className="py-2 pr-3 text-right font-medium">Net</th>
+                        <th className="py-2 pr-3 text-right font-medium">Сальдо</th>
                         <th className="py-2 text-right font-medium">Операции</th>
                       </tr>
                     </thead>

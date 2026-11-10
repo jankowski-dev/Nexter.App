@@ -22,6 +22,7 @@ export class AssetsService {
       decimals: row.asset.decimals,
       contractAddress: row.asset.contractAddress,
       coingeckoId: row.asset.coingeckoId,
+      logoUrl: row.asset.logoUrl,
       isStablecoin: row.asset.isStablecoin,
       isCashEquivalent: row.asset.isCashEquivalent,
       isVerified: row.asset.isVerified,
@@ -117,7 +118,9 @@ export class AssetsService {
             chainCode,
             symbol: updated.symbol,
             coingeckoId: updated.coingeckoId,
-            logoUrl: updated.logoUrl,
+            logoUrl: updated.logoUrl?.startsWith('data:image/')
+              ? `data:image;base64,${updated.logoUrl.length} chars`
+              : updated.logoUrl,
           },
         },
         { executor, strict: true },

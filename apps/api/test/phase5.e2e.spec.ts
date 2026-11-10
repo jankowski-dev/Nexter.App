@@ -409,6 +409,34 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       .expect(200);
     expect(movedEntry.body.groupId).toBe(customGroup.body.id);
 
+    const manualIcon =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4nGP4z8DwH4QZYAwAR8oH+WdZbrcAAAAASUVORK5CYII=';
+    const iconUpdated = await agent
+      .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ logoUrl: manualIcon })
+      .expect(200);
+    expect(iconUpdated.body.logoUrl).toBe(manualIcon);
+    const assetsWithIcon = await agent.get('/api/v1/assets').expect(200);
+    expect(
+      (assetsWithIcon.body.assets as Array<{ id: string; logoUrl: string | null }>).find(
+        (item) => item.id === based.id,
+      )?.logoUrl,
+    ).toBe(manualIcon);
+    await agent
+      .patch(`/api/v1/watchlist/${watchlistCreated.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ logoUrl: 'https://example.com/icon.png' })
+      .expect(400);
+    const iconAudit = await agent
+      .get('/api/v1/audit-log?action=watchlist.updated&limit=10')
+      .expect(200);
+    const iconAuditEntry = (iconAudit.body.data as Array<{ after?: { logoUrl?: string } }>).find(
+      (entry) => entry.after?.logoUrl?.startsWith('data:image;base64,'),
+    );
+    expect(iconAuditEntry?.after?.logoUrl).toBe(`data:image;base64,${manualIcon.length} chars`);
+    expect(JSON.stringify(iconAuditEntry)).not.toContain('iVBOR');
+
     const filteredGroup = await agent
       .get(`/api/v1/watchlist?groupId=${customGroup.body.id}`)
       .expect(200);

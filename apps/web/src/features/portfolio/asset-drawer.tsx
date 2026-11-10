@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { TokenIcon } from '@/components/token-icon';
 import { fetchPortfolioAsset } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
@@ -76,6 +77,9 @@ export function AssetDrawer({
       open={Boolean(assetId)}
       onClose={onClose}
       title={data ? `${data.asset.symbol} · ${data.asset.name}` : 'Актив'}
+      titleIcon={
+        data ? <TokenIcon logoUrl={data.asset.logoUrl} symbol={data.asset.symbol} /> : undefined
+      }
       description={
         data
           ? `${data.asset.chainCode} · ${data.asset.isVerified ? 'проверенный актив' : 'непроверенный актив'}`
