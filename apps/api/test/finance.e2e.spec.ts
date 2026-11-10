@@ -673,4 +673,73 @@ describe.runIf(canRun)('Finance API', () => {
 
     await post(`/api/v1/finance/import/${preview.body.id}/rollback`, {}).expect(409);
   }, 60_000);
+
+  it('creates credit drawdowns without income or expense', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const post = (url: string, body: Record<string, unknown>) =>
+      agent.post(url).set('x-csrf-token', owner.csrf).send(body);
+
+    const card = await post('/api/v1/finance/accounts', {
+      name: 'Карта',
+      kind: 'card',
+      currency: 'BYN',
+      openingBalance: '0',
+      openingDate: '2026-05-27',
+      fxRate: '1',
+    }).expect(201);
+
+    const drawdown = await post('/api/v1/finance/credits/drawdown', {
+      name: 'Кредит на авто',
+      currency: 'BYN',
+      amount: '5000',
+      occurredOn: '2026-11-10',
+      destinationAccountId: card.body.id,
+      description: 'Получение кредита',
+    }).expect(201);
+    expect(drawdown.body.account).toMatchObject({
+      name: 'Кредит на авто',
+      kind: 'credit',
+      balance: '-5000.00',
+    });
+    expect(drawdown.body.transfer).toMatchObject({
+      kind: 'credit',
+      fromAmount: '5000.00',
+      toAmount: '5000.00',
+    });
+
+    const accounts = await agent.get('/api/v1/finance/accounts').expect(200);
+    const byName = new Map(
+      (accounts.body.accounts as Array<{ name: string; balance: string }>).map((account) => [
+        account.name,
+        account,
+      ]),
+    );
+    expect(byName.get('Карта')?.balance).toBe('5000.00');
+    expect(byName.get('Кредит на авто')?.balance).toBe('-5000.00');
+
+    const summary = await agent.get('/api/v1/finance/summary?month=2026-11').expect(200);
+    expect(summary.body.incomeBase).toBe('0.00');
+    expect(summary.body.expenseBase).toBe('0.00');
+    expect(summary.body.netWorthBase).toBe('0.00');
+
+    const debtOnly = await post('/api/v1/finance/credits/drawdown', {
+      name: 'Кредит без зачисления',
+      currency: 'BYN',
+      amount: '1000',
+      occurredOn: '2026-11-10',
+    }).expect(201);
+    expect(debtOnly.body.account.balance).toBe('-1000.00');
+    expect(debtOnly.body.transfer).toBeNull();
+
+    const afterDebt = await agent.get('/api/v1/finance/summary?month=2026-11').expect(200);
+    expect(afterDebt.body.netWorthBase).toBe('-1000.00');
+
+    await post('/api/v1/finance/credits/drawdown', {
+      creditAccountId: drawdown.body.account.id,
+      amount: '10',
+      occurredOn: '2026-11-10',
+      destinationAccountId: drawdown.body.account.id,
+    }).expect(400);
+  }, 60_000);
 });

@@ -27,6 +27,8 @@ import type {
   FinanceCategoryUpdateRequest,
   FinanceCategoryTotal,
   FinanceCategoriesResponse,
+  FinanceCreditDrawdownRequest,
+  FinanceCreditDrawdownResponse,
   FinanceJournalResponse,
   FinanceListQuery,
   FinanceMonthTotal,
@@ -932,6 +934,160 @@ export class FinanceService {
         decimal(b.amountBase).comparedTo(a.amountBase),
       ),
       months,
+    };
+  }
+
+  async creditDrawdown(
+    userId: string,
+    input: FinanceCreditDrawdownRequest,
+    meta: FinanceMeta,
+  ): Promise<FinanceCreditDrawdownResponse> {
+    let credit: FinanceAccount;
+
+    if (input.creditAccountId) {
+      credit = await this.requireAccount(userId, input.creditAccountId);
+      if (credit.kind !== 'credit') {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Selected account is not a credit account',
+        });
+      }
+    } else {
+      if (!input.name) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'A new credit account requires a name',
+        });
+      }
+      const currency = input.currency ?? 'BYN';
+      if (currency !== 'BYN' && !input.fxRate) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'A non-BYN credit account requires an fxRate',
+        });
+      }
+      const [created] = await this.db
+        .insert(financeAccounts)
+        .values({
+          userId,
+          name: input.name,
+          kind: 'credit',
+          currency,
+          openingBalance: '0',
+          openingDate: input.occurredOn,
+          fxRate: currency === 'BYN' ? '1' : (input.fxRate as string),
+        })
+        .returning();
+
+      if (!created) throw new Error('Failed to create credit account');
+      credit = created;
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'finance.account_created',
+          entityType: 'finance_account',
+          entityId: created.id,
+          after: {
+            name: created.name,
+            kind: created.kind,
+            currency: created.currency,
+            openingBalance: created.openingBalance,
+            fxRate: created.fxRate,
+          },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { strict: true },
+      );
+    }
+
+    if (input.destinationAccountId) {
+      const destination = await this.requireAccount(userId, input.destinationAccountId);
+
+      if (destination.id === credit.id || destination.kind === 'credit') {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'Credit destination must be a non-credit account',
+        });
+      }
+
+      const toAmount =
+        input.destinationAmount ?? (destination.currency === credit.currency ? input.amount : null);
+
+      if (!toAmount) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'destinationAmount is required when currencies differ',
+        });
+      }
+
+      const transfer = await this.insertTransfer(
+        userId,
+        {
+          kind: 'credit',
+          occurredOn: input.occurredOn,
+          fromAccountId: credit.id,
+          toAccountId: destination.id,
+          fromAmount: input.amount,
+          toAmount,
+          description: input.description ?? 'Получение кредита',
+        },
+        credit,
+        destination,
+        meta,
+      );
+
+      const balance = (await this.balances(userId)).find((row) => row.account.id === credit.id);
+
+      return {
+        account: {
+          ...toAccount(credit),
+          balance: balance?.balance.toFixed(2) ?? '0.00',
+          balanceBase: balance?.balanceBase.toFixed(2) ?? '0.00',
+        },
+        transfer,
+      };
+    }
+
+    const [updated] = await this.db
+      .update(financeAccounts)
+      .set({
+        openingBalance: decimal(credit.openingBalance).minus(input.amount).toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(financeAccounts.id, credit.id))
+      .returning();
+
+    if (!updated) throw new Error('Failed to increase credit debt');
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'finance.credit_drawdown',
+        entityType: 'finance_account',
+        entityId: credit.id,
+        before: { openingBalance: credit.openingBalance },
+        after: {
+          openingBalance: updated.openingBalance,
+          amount: input.amount,
+          destinationAccountId: null,
+        },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
+
+    const balance = (await this.balances(userId)).find((row) => row.account.id === credit.id);
+
+    return {
+      account: {
+        ...toAccount(updated),
+        balance: balance?.balance.toFixed(2) ?? updated.openingBalance,
+        balanceBase: balance?.balanceBase.toFixed(2) ?? '0.00',
+      },
+      transfer: null,
     };
   }
 
