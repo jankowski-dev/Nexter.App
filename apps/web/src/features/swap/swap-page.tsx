@@ -1055,8 +1055,8 @@ export function SwapPage({
       </Card>
 
       {stepUpOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
-          <Card className="w-full max-w-sm">
+        <div className="dialog-overlay-enter fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/30 p-4">
+          <Card className="dialog-panel-enter w-full max-w-sm">
             <CardTitle>Подтвердите TOTP</CardTitle>
             <CardDescription>
               Для этой суммы нужен свежий код двухфакторной аутентификации.

@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-10 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-10. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
+Status: **UI-0 through UI-11 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-10. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 
@@ -110,6 +110,7 @@ Reports adds period filters, trade statistics, operations, fees/gas, asset break
 - **UI-4** — reports/statistics. Implemented: period presets and custom dates, realized P&L and trade statistics, fees/gas, cash-flow summary, monthly detail, per-asset realized results, operation counts, period-scoped transaction export, and current portfolio/allocation/equity charts. No tax calculations.
 - **UI-5** — remove the hidden legacy swap route from the go-live path, E2E, responsive polish. Implemented: `/swap` redirects to `/portfolio`; the swap panel is embedded-only inside the trade/exchange modal; unused standalone swap history was removed; mobile navigation and dialogs are covered by E2E. The legacy Notion import remains under Settings until the clean cutover.
 - **UI-10** — owner feedback: vault as a separate top-level service; finance period presets (current, previous, custom month, year, all time); Russian finance labels; visual category color markers; global header wallet/chain controls with BNB default; token icons from the token base with manual upload. Implemented. No migration. See ADR 0026.
+- **UI-11** — tasks/notes journal polish: calendar-first tasks with blue/green/red status chips, compact task list without description, one-third-width task view/edit drawer, soft delete + Actual/Archive switch, notes with notebook icon and right-side pin actions, footer save indicator, `Готово` returns to read mode, and page/dialog/drawer motion. Implemented. No migration. See ADR 0027.
 
 ## Header and wallet
 

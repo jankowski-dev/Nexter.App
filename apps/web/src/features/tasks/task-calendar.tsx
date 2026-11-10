@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import type { Task } from '@nexter/contracts';
+import { isTaskOverdue } from '@/lib/tasks';
 import { useState } from 'react';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -16,12 +17,11 @@ function monthTitle(date: Date): string {
   return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 }
 
-function taskTone(task: Task): string {
-  if (task.status === 'done') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+function taskTone(task: Task, now: Date): string {
+  if (task.status === 'done') return 'border-emerald-300 bg-emerald-50 text-emerald-800';
   if (task.status === 'cancelled') return 'border-zinc-200 bg-zinc-50 text-zinc-500';
-  if (task.priority >= 3) return 'border-red-200 bg-red-50 text-red-800';
-  if (task.priority === 2) return 'border-amber-200 bg-amber-50 text-amber-800';
-  return 'border-sky-200 bg-sky-50 text-sky-800';
+  if (isTaskOverdue(task, now)) return 'border-red-300 bg-red-50 text-red-800';
+  return 'border-sky-300 bg-sky-50 text-sky-800';
 }
 
 export function TaskCalendar({
@@ -30,7 +30,7 @@ export function TaskCalendar({
   onPrev,
   onNext,
   onToday,
-  onEdit,
+  onOpen,
   onCreate,
   onMove,
   busy,
@@ -40,7 +40,7 @@ export function TaskCalendar({
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
-  onEdit: (task: Task) => void;
+  onOpen: (task: Task) => void;
   onCreate: (date: string) => void;
   onMove: (task: Task, date: string) => void;
   busy: boolean;
@@ -55,6 +55,7 @@ export function TaskCalendar({
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const cells = Math.ceil((offset + daysInMonth) / 7) * 7;
   const todayKey = dateKey(new Date());
+  const now = new Date();
 
   const byDate = new Map<string, Task[]>();
   for (const task of tasks) {
@@ -80,6 +81,25 @@ export function TaskCalendar({
           </Button>
         </div>
         <div className="text-lg font-semibold capitalize text-zinc-900">{monthTitle(month)}</div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-3 text-xs text-zinc-500">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-sky-400" />
+          Активные
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+          Выполненные
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+          Просроченные
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full bg-zinc-400" />
+          Отменённые
+        </span>
       </div>
 
       <div className="mt-4 grid grid-cols-7 border-l border-t border-zinc-200">
@@ -150,10 +170,11 @@ export function TaskCalendar({
                         title={`${task.title}${task.recurrence ? ' · повтор' : ''}`}
                         className={`w-full truncate rounded border px-1.5 py-1 text-left text-xs ${taskTone(
                           task,
-                        )} ${task.status === 'done' ? 'line-through' : ''} ${
-                          draggingId === task.id ? 'opacity-50' : ''
-                        } ${busy ? 'cursor-wait' : 'cursor-grab'}`}
-                        onClick={() => onEdit(task)}
+                          now,
+                        )} ${draggingId === task.id ? 'opacity-50' : ''} ${
+                          busy ? 'cursor-wait' : 'cursor-grab'
+                        }`}
+                        onClick={() => onOpen(task)}
                         onDragStart={(event) => {
                           event.dataTransfer.setData('text/task-id', task.id);
                           event.dataTransfer.effectAllowed = 'move';
@@ -161,7 +182,8 @@ export function TaskCalendar({
                         }}
                         onDragEnd={() => setDraggingId(null)}
                       >
-                        {task.recurrence ? '↻ ' : ''}
+                        {task.status === 'done' ? '✓ ' : task.recurrence ? '↻ ' : ''}
+                        {task.recurrence && task.status === 'done' ? '↻ ' : ''}
                         {task.title}
                       </button>
                     ))}

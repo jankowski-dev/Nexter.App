@@ -405,7 +405,9 @@ function RootLayoutContent() {
           </nav>
 
           <main id="main" className="min-w-0 flex-1 p-4 md:p-6">
-            <Outlet />
+            <div key={pathname} className="page-enter">
+              <Outlet />
+            </div>
           </main>
         </div>
       </div>
