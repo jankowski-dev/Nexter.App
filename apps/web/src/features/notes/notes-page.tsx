@@ -1,66 +1,104 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { Textarea } from '@/components/ui/textarea';
-import { createNote, fetchNotes, updateNote } from '@/lib/api';
+import { fetchNotes, updateNote } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
+import { NoteDrawer } from './note-drawer';
 
-function tagsFromInput(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 20);
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path d="m13.5 7.5 3 3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PinIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="m9 4 6 6-2 1 4 4-1 1-4-4-1 2-6-6 4-4Z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="m9 15-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RestoreIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="M4 10a8 8 0 1 1 2.3 6.7M4 10V4m0 6h6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+interface DrawerState {
+  note: Note | null;
+  startInEdit?: boolean;
+  startWithDelete?: boolean;
 }
 
 export function NotesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Note | null>(null);
-  const [title, setTitle] = useState('');
-  const [body, setBody] = useState('');
-  const [tags, setTags] = useState('');
-  const [pinned, setPinned] = useState(false);
+  const [archivedOnly, setArchivedOnly] = useState(false);
+  const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const notes = useQuery({
-    queryKey: ['notes', search, includeArchived],
-    queryFn: () => fetchNotes({ search: search || undefined, includeArchived }),
+  const notes = useInfiniteQuery({
+    queryKey: ['notes', search, archivedOnly],
+    queryFn: ({ pageParam }) =>
+      fetchNotes({
+        search: search || undefined,
+        archivedOnly,
+        limit: 30,
+        offset: pageParam,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (last, _pages, lastPageParam) =>
+      last.hasMore ? lastPageParam + last.data.length : undefined,
   });
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['notes'] });
   };
-
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const payload = {
-        title: title.trim(),
-        body,
-        tags: tagsFromInput(tags),
-        pinned,
-      };
-
-      return editing ? updateNote(editing.id, payload) : createNote(payload);
-    },
-    onSuccess: () => {
-      setDialogOpen(false);
-      setEditing(null);
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось сохранить заметку')),
-  });
 
   const pinMutation = useMutation({
     mutationFn: (note: Note) => updateNote(note.id, { pinned: !note.pinned }),
@@ -69,15 +107,6 @@ export function NotesPage() {
       invalidate();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось изменить заметку')),
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: (note: Note) => updateNote(note.id, { archived: true }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось архивировать заметку')),
   });
 
   const restoreMutation = useMutation({
@@ -89,46 +118,17 @@ export function NotesPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось вернуть заметку')),
   });
 
-  function openCreate() {
-    setEditing(null);
-    setTitle('');
-    setBody('');
-    setTags('');
-    setPinned(false);
-    setError(null);
-    setDialogOpen(true);
-  }
-
-  function openEdit(note: Note) {
-    setEditing(note);
-    setTitle(note.title);
-    setBody(note.body);
-    setTags(note.tags.join(', '));
-    setPinned(note.pinned);
-    setError(null);
-    setDialogOpen(true);
-  }
-
-  const rows = notes.data?.data ?? [];
+  const rows = notes.data?.pages.flatMap((page) => page.data) ?? [];
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Заметки"
-        subtitle="Свободные заметки, тезисы и наблюдения. Налоги и учёт не затрагиваются."
+        subtitle="Журнал идей, наблюдений и ссылок. Открывается как запись, редактируется по желанию."
         actions={
-          <>
-            <label className="flex items-center gap-2 text-sm text-zinc-600">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(event) => setIncludeArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 bg-white"
-              />
-              Архив
-            </label>
-            <Button onClick={openCreate}>Новая заметка</Button>
-          </>
+          <Button onClick={() => setDrawer({ note: null, startInEdit: true })}>
+            Новая заметка
+          </Button>
         }
       />
 
@@ -140,15 +140,39 @@ export function NotesPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <div className="ml-auto flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+          <button
+            type="button"
+            onClick={() => setArchivedOnly(false)}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              !archivedOnly
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+          >
+            Актуальные
+          </button>
+          <button
+            type="button"
+            onClick={() => setArchivedOnly(true)}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              archivedOnly
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+          >
+            Архивные
+          </button>
+        </div>
       </div>
 
-      {error && !dialogOpen ? (
+      {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
         </div>
       ) : null}
 
-      {notes.isPending ? <LoadingRows rows={5} /> : null}
+      {notes.isPending ? <LoadingRows rows={6} /> : null}
       {notes.isError ? (
         <ErrorState
           message={toRussianError(notes.error, 'Не удалось загрузить заметки')}
@@ -159,86 +183,100 @@ export function NotesPage() {
       {!notes.isPending && !notes.isError ? (
         rows.length === 0 ? (
           <Card>
-            <CardTitle>Заметок нет</CardTitle>
+            <CardTitle>{archivedOnly ? 'Архив пуст' : 'Заметок нет'}</CardTitle>
             <CardDescription>
-              Запишите идею, наблюдение или ссылку, чтобы вернуться к ней позже.
+              {archivedOnly
+                ? 'Удалённые заметки появятся здесь.'
+                : 'Запишите идею, наблюдение или ссылку, чтобы вернуться к ней позже.'}
             </CardDescription>
-            <Button className="mt-4" onClick={openCreate}>
-              Новая заметка
-            </Button>
+            {!archivedOnly ? (
+              <Button className="mt-4" onClick={() => setDrawer({ note: null, startInEdit: true })}>
+                Новая заметка
+              </Button>
+            ) : null}
           </Card>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2">
             {rows.map((note) => (
-              <Card key={note.id} className={note.archivedAt ? 'opacity-60' : undefined}>
-                <div className="flex items-start justify-between gap-3">
+              <Card
+                key={note.id}
+                className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:border-emerald-300 ${
+                  note.archivedAt ? 'opacity-60' : ''
+                }`}
+                onClick={() => setDrawer({ note })}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <button
+                    type="button"
+                    aria-label={note.pinned ? 'Открепить заметку' : 'Закрепить заметку'}
+                    title={note.pinned ? 'Открепить' : 'Закрепить'}
+                    className={`rounded-lg p-1.5 ${
+                      note.pinned
+                        ? 'text-emerald-700 hover:bg-emerald-50'
+                        : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700'
+                    }`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      pinMutation.mutate(note);
+                    }}
+                  >
+                    <PinIcon filled={note.pinned} />
+                  </button>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-semibold text-zinc-900">{note.title}</span>
+                      <span className="truncate text-base font-semibold text-zinc-900">
+                        {note.title}
+                      </span>
                       {note.pinned ? <Badge tone="info">Закреплена</Badge> : null}
                       {note.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">
-                      Обновлена {formatDate(note.updatedAt)}
+                      Создана {formatDate(note.createdAt)} · обновлена {formatDate(note.updatedAt)}
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    className="h-8 px-2 text-xs"
-                    onClick={() => pinMutation.mutate(note)}
-                    disabled={pinMutation.isPending}
-                  >
-                    {note.pinned ? 'Открепить' : 'Закрепить'}
-                  </Button>
                 </div>
 
-                {note.body ? (
-                  <p className="mt-3 line-clamp-6 whitespace-pre-wrap text-sm text-zinc-600">
-                    {note.body}
-                  </p>
-                ) : null}
-
-                {note.tags.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {note.tags.map((tag) => (
-                      <Badge key={tag} tone="neutral">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => openEdit(note)}
-                  >
-                    Изменить
-                  </Button>
+                <div className="flex items-center gap-1">
                   {note.archivedAt ? (
                     <Button
-                      variant="secondary"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => restoreMutation.mutate(note)}
+                      variant="ghost"
+                      className="h-8 w-8 p-0"
+                      aria-label="Вернуть заметку"
+                      title="Вернуть"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        restoreMutation.mutate(note);
+                      }}
                       disabled={restoreMutation.isPending}
                     >
-                      Вернуть
+                      <RestoreIcon />
                     </Button>
                   ) : (
                     <Button
                       variant="ghost"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => {
-                        if (window.confirm(`Архивировать заметку «${note.title}»?`)) {
-                          archiveMutation.mutate(note);
-                        }
+                      className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
+                      aria-label="Удалить заметку"
+                      title="Удалить"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setDrawer({ note, startWithDelete: true });
                       }}
-                      disabled={archiveMutation.isPending}
                     >
-                      В архив
+                      <TrashIcon />
                     </Button>
                   )}
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 p-0"
+                    aria-label="Изменить заметку"
+                    title="Изменить"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDrawer({ note, startInEdit: true });
+                    }}
+                  >
+                    <PencilIcon />
+                  </Button>
                 </div>
               </Card>
             ))}
@@ -246,66 +284,32 @@ export function NotesPage() {
         )
       ) : null}
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        title={editing ? 'Изменить заметку' : 'Новая заметка'}
-        description="Заметки хранятся на сервере в открытом виде и доступны только владельцу."
-        size="lg"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>
-              Отмена
-            </Button>
-            <Button
-              onClick={() => saveMutation.mutate()}
-              disabled={saveMutation.isPending || !title.trim()}
-            >
-              {saveMutation.isPending ? 'Сохраняю…' : 'Сохранить'}
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-3">
-          <label className="block text-sm text-zinc-600">
-            Заголовок
-            <Input
-              className="mt-1"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Идея по портфелю"
-            />
-          </label>
-          <label className="block text-sm text-zinc-600">
-            Текст
-            <Textarea
-              className="mt-1 min-h-40"
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              placeholder="Текст заметки"
-            />
-          </label>
-          <label className="block text-sm text-zinc-600">
-            Теги (через запятую)
-            <Input
-              className="mt-1"
-              value={tags}
-              onChange={(event) => setTags(event.target.value)}
-              placeholder="Идея, Риск, Наблюдение"
-            />
-          </label>
-          <label className="flex items-center gap-2 text-sm text-zinc-600">
-            <input
-              type="checkbox"
-              checked={pinned}
-              onChange={(event) => setPinned(event.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 bg-white"
-            />
-            Закрепить сверху
-          </label>
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+      {notes.hasNextPage ? (
+        <div className="flex justify-center">
+          <Button
+            variant="secondary"
+            onClick={() => void notes.fetchNextPage()}
+            disabled={notes.isFetchingNextPage}
+          >
+            {notes.isFetchingNextPage ? 'Загружаю…' : 'Загрузить ещё'}
+          </Button>
         </div>
-      </Dialog>
+      ) : null}
+
+      {drawer ? (
+        <NoteDrawer
+          note={drawer.note}
+          startInEdit={drawer.startInEdit}
+          startWithDelete={drawer.startWithDelete}
+          onClose={() => setDrawer(null)}
+          onSaved={() => invalidate()}
+          onImagesChanged={invalidate}
+          onDeleted={() => {
+            invalidate();
+            setDrawer(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

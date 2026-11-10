@@ -183,6 +183,13 @@
       "when": 1794297475654,
       "tag": "0025_clever_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794310710689,
+      "tag": "0026_round_the_santerians",
+      "breakpoints": true
     }
   ]
 }

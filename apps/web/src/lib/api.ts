@@ -25,6 +25,7 @@ import {
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
+  noteImageSchema,
   noteSchema,
   notesResponseSchema,
   portfolioAssetDetailSchema,
@@ -88,6 +89,8 @@ import {
   type ImportsResponse,
   type Note,
   type NoteCreateRequest,
+  type NoteImage,
+  type NoteImageCreateRequest,
   type NoteListQuery,
   type NoteUpdateRequest,
   type NotesResponse,
@@ -824,4 +827,15 @@ export async function createFinanceCreditDrawdown(
   body: FinanceCreditDrawdownRequest,
 ): Promise<FinanceCreditDrawdownResponse> {
   return apiPost('/api/v1/finance/credits/drawdown', body, financeCreditDrawdownResponseSchema);
+}
+
+export async function addNoteImage(
+  noteId: string,
+  body: NoteImageCreateRequest,
+): Promise<NoteImage> {
+  return apiPost(`/api/v1/notes/${noteId}/images`, body, noteImageSchema);
+}
+
+export async function removeNoteImage(noteId: string, imageId: string): Promise<void> {
+  await apiDelete(`/api/v1/notes/${noteId}/images/${imageId}`);
 }

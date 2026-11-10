@@ -1,9 +1,19 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, ilike, isNull, or, sql } from 'drizzle-orm';
-import { assets, notes, tradeGroups, type Database, type NoteRecord } from '@nexter/db';
+import { and, eq, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import {
+  assets,
+  noteImages,
+  notes,
+  tradeGroups,
+  type Database,
+  type DbExecutor,
+  type NoteRecord,
+} from '@nexter/db';
 import type {
   Note,
   NoteCreateRequest,
+  NoteImage,
+  NoteImageCreateRequest,
   NoteListQuery,
   NoteUpdateRequest,
   NotesResponse,
@@ -16,12 +26,51 @@ interface NoteMeta {
   userAgent?: string;
 }
 
-function toContract(row: NoteRecord): Note {
+function toImage(row: {
+  id: string;
+  name: string;
+  mimeType: string;
+  dataUrl: string;
+  sizeBytes: number;
+  createdAt: Date;
+}): NoteImage {
+  return {
+    id: row.id,
+    name: row.name,
+    mimeType: row.mimeType as NoteImage['mimeType'],
+    dataUrl: row.dataUrl,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function loadImages(
+  executor: DbExecutor,
+  userId: string,
+  noteIds: string[],
+): Promise<Map<string, NoteImage[]>> {
+  const byNote = new Map<string, NoteImage[]>();
+  if (noteIds.length === 0) return byNote;
+  const rows = await executor
+    .select()
+    .from(noteImages)
+    .where(and(eq(noteImages.userId, userId), inArray(noteImages.noteId, noteIds)))
+    .orderBy(noteImages.createdAt);
+  for (const row of rows) {
+    const list = byNote.get(row.noteId) ?? [];
+    list.push(toImage(row));
+    byNote.set(row.noteId, list);
+  }
+  return byNote;
+}
+
+function toContract(row: NoteRecord, images: NoteImage[] = []): Note {
   return {
     id: row.id,
     title: row.title,
     body: row.body,
     tags: row.tags,
+    images,
     pinned: row.pinned,
     relatedAssetId: row.relatedAssetId,
     relatedTradeGroupId: row.relatedTradeGroupId,
@@ -41,7 +90,8 @@ export class NotesService {
   async list(userId: string, query: NoteListQuery): Promise<NotesResponse> {
     const conditions = [eq(notes.userId, userId)];
 
-    if (!query.includeArchived) conditions.push(isNull(notes.archivedAt));
+    if (query.archivedOnly) conditions.push(isNotNull(notes.archivedAt));
+    else if (!query.includeArchived) conditions.push(isNull(notes.archivedAt));
     if (query.search) {
       const pattern = `%${query.search}%`;
       conditions.push(
@@ -57,10 +107,22 @@ export class NotesService {
       .select()
       .from(notes)
       .where(and(...conditions))
-      .orderBy(sql`${notes.pinned} desc`, sql`${notes.updatedAt} desc`)
-      .limit(query.limit);
+      .orderBy(sql`${notes.pinned} desc`, sql`${notes.updatedAt} desc`, sql`${notes.id} desc`)
+      .limit(query.limit + 1)
+      .offset(query.offset);
 
-    return { data: rows.map(toContract) };
+    const hasMore = rows.length > query.limit;
+    const page = hasMore ? rows.slice(0, query.limit) : rows;
+    const images = await loadImages(
+      this.db,
+      userId,
+      page.map((row) => row.id),
+    );
+
+    return {
+      data: page.map((row) => toContract(row, images.get(row.id) ?? [])),
+      hasMore,
+    };
   }
 
   async create(userId: string, input: NoteCreateRequest, meta: NoteMeta): Promise<Note> {
@@ -99,7 +161,7 @@ export class NotesService {
       { strict: true },
     );
 
-    return toContract(created);
+    return toContract(created, []);
   }
 
   async update(
@@ -133,7 +195,7 @@ export class NotesService {
         ...(input.relatedTradeGroupId !== undefined
           ? { relatedTradeGroupId: input.relatedTradeGroupId }
           : {}),
-        archivedAt,
+        ...(input.archived !== undefined ? { archivedAt } : {}),
         updatedAt: new Date(),
       })
       .where(eq(notes.id, id))
@@ -155,7 +217,121 @@ export class NotesService {
       { strict: true },
     );
 
-    return toContract(updated);
+    const images = await loadImages(this.db, userId, [updated.id]);
+    return toContract(updated, images.get(updated.id) ?? []);
+  }
+
+  async addImage(
+    userId: string,
+    noteId: string,
+    input: NoteImageCreateRequest,
+    meta: NoteMeta,
+  ): Promise<NoteImage> {
+    const [note] = await this.db
+      .select({ id: notes.id })
+      .from(notes)
+      .where(and(eq(notes.id, noteId), eq(notes.userId, userId)))
+      .limit(1);
+
+    if (!note) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Note not found' });
+    }
+
+    const existing = await this.db
+      .select({ id: noteImages.id })
+      .from(noteImages)
+      .where(and(eq(noteImages.userId, userId), eq(noteImages.noteId, noteId)));
+
+    if (existing.length >= 5) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'A note can have at most 5 images',
+      });
+    }
+
+    const base64 = input.dataUrl.slice(input.dataUrl.indexOf(',') + 1);
+    const sizeBytes = Buffer.byteLength(base64, 'base64');
+
+    if (sizeBytes <= 0 || sizeBytes > 1_500_000) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Image must be between 1 byte and 1.5 MB',
+      });
+    }
+
+    if (!input.dataUrl.startsWith(`data:${input.mimeType};base64,`)) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Image MIME type does not match the data URL',
+      });
+    }
+
+    const [created] = await this.db
+      .insert(noteImages)
+      .values({
+        userId,
+        noteId,
+        name: input.name,
+        mimeType: input.mimeType,
+        dataUrl: input.dataUrl,
+        sizeBytes,
+      })
+      .returning();
+
+    if (!created) throw new Error('Failed to add note image');
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'note.image_added',
+        entityType: 'note',
+        entityId: noteId,
+        after: { imageId: created.id, name: created.name, sizeBytes: created.sizeBytes },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
+
+    return toImage(created);
+  }
+
+  async removeImage(
+    userId: string,
+    noteId: string,
+    imageId: string,
+    meta: NoteMeta,
+  ): Promise<void> {
+    const [image] = await this.db
+      .select()
+      .from(noteImages)
+      .where(
+        and(
+          eq(noteImages.id, imageId),
+          eq(noteImages.userId, userId),
+          eq(noteImages.noteId, noteId),
+        ),
+      )
+      .limit(1);
+
+    if (!image) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Note image not found' });
+    }
+
+    await this.db.delete(noteImages).where(eq(noteImages.id, image.id));
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'note.image_removed',
+        entityType: 'note',
+        entityId: noteId,
+        before: { imageId: image.id, name: image.name, sizeBytes: image.sizeBytes },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
   }
 
   private async requireLinks(

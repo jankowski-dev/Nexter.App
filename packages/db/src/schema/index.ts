@@ -846,6 +846,25 @@ export const notes = pgTable(
   ],
 );
 
+export const noteImages = pgTable(
+  'note_images',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    noteId: uuid('note_id')
+      .notNull()
+      .references(() => notes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    dataUrl: text('data_url').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('note_images_user_note_idx').on(table.userId, table.noteId, table.createdAt)],
+);
+
 export const financeImports = pgTable(
   'finance_imports',
   {
@@ -1067,6 +1086,7 @@ export type VaultConfig = typeof vaultConfigs.$inferSelect;
 export type VaultItem = typeof vaultItems.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
+export type NoteImageRecord = typeof noteImages.$inferSelect;
 export type FinanceImport = typeof financeImports.$inferSelect;
 export type FinanceAccount = typeof financeAccounts.$inferSelect;
 export type FinanceCategory = typeof financeCategories.$inferSelect;
