@@ -5,18 +5,22 @@ export function Drawer({
   open,
   onClose,
   title,
+  titleIcon,
   description,
   children,
   footer,
   wide = false,
+  size,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  titleIcon?: ReactNode;
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  size?: 'md' | 'lg' | 'third';
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -44,6 +48,8 @@ export function Drawer({
 
   if (!open) return null;
 
+  const resolvedSize = size ?? (wide ? 'lg' : 'md');
+
   return (
     <div
       className="fixed inset-0 z-50 bg-zinc-900/30"
@@ -59,13 +65,18 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'ml-auto flex h-full w-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
-          wide ? 'max-w-3xl' : 'max-w-xl',
+          'ml-auto flex h-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
+          resolvedSize === 'md' && 'w-full max-w-xl',
+          resolvedSize === 'lg' && 'w-full max-w-3xl',
+          resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
+              {titleIcon}
+              {title}
+            </h2>
             {description ? <p className="mt-1 text-sm text-zinc-500">{description}</p> : null}
           </div>
           <button

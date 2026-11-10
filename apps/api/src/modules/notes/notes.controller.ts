@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -13,12 +14,15 @@ import { ApiTags } from '@nestjs/swagger';
 import type {
   Note,
   NoteCreateRequest,
+  NoteImage,
+  NoteImageCreateRequest,
   NoteListQuery,
   NoteUpdateRequest,
   NotesResponse,
 } from '@nexter/contracts';
 import {
   noteCreateRequestSchema,
+  noteImageCreateRequestSchema,
   noteListQuerySchema,
   noteUpdateRequestSchema,
 } from '@nexter/contracts';
@@ -61,6 +65,32 @@ export class NotesController {
     @Req() request: FastifyRequest,
   ): Promise<Note> {
     return this.notes.update(auth.user.id, id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Post(':id/images')
+  addImage(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodValidationPipe(noteImageCreateRequestSchema)) body: NoteImageCreateRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<NoteImage> {
+    return this.notes.addImage(auth.user.id, id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Delete(':id/images/:imageId')
+  removeImage(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Param('imageId', new ParseUUIDPipe()) imageId: string,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
+    return this.notes.removeImage(auth.user.id, id, imageId, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });

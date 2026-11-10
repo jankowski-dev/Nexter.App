@@ -23,21 +23,23 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 
 ## Tasks
 
-- Fields: title, description, status (`open`/`done`/`cancelled`), priority 0–3, due date, completion time, optional related asset, archive timestamp.
-- API: `GET /tasks`, `POST /tasks`, `PATCH /tasks/:id`.
-- UI: `/tasks` with status filters, search, create/edit dialog, complete/reopen, and archive.
-- Completing sets `completedAt`; reopening clears it.
+- Fields: title, description, status (`open`/`done`/`cancelled`), priority 0–3, tags, due date, completion time, optional related asset, archive timestamp, recurrence (`daily`/`weekly`/`monthly`) and `seriesId`.
+- Images: up to 5 per task in `task_images`, compressed in the browser, PNG/JPEG/WebP, max 1.5 MB after decoding.
+- API: `GET /tasks`, `POST /tasks`, `PATCH /tasks/:id`, `POST/DELETE /tasks/:id/images`.
+- UI: `/tasks` with list/calendar views, drag/drop between days, status filters, search, tags, autosaving create/edit dialog, complete/reopen, archive, and image upload.
+- Completing sets `completedAt`; reopening clears it. Recurrence rows are generated occurrences, not an RRULE.
 
 ## Notes
 
 - Fields: title, body, tags, pinned flag, optional related asset/trade group, archive timestamp.
-- API: `GET /notes`, `POST /notes`, `PATCH /notes/:id`.
-- UI: `/notes` with search, create/edit dialog, pin, and archive.
-- Plain text rendering; no Markdown parser and no HTML injection.
+- Images: up to 5 per note in `note_images`, compressed in the browser, PNG/JPEG/WebP, max 1.5 MB after decoding.
+- API: `GET /notes` with `archivedOnly`, `offset`, `limit` (default 30) and `hasMore`; `POST /notes`, `PATCH /notes/:id`, `POST/DELETE /notes/:id/images`.
+- UI: `/notes` is a journal. Cards show only title, dates, status, pin/edit/delete icons. Clicking opens a one-third-width side drawer in read mode; edit mode uses a lightweight Markdown editor with autosave every 10 seconds and on close. Photos have a full-screen viewer with arrows/Escape. Delete is a confirmed soft archive; `Актуальные`/`Архивные` filters and `Загрузить ещё` paginate 30 notes.
+- Markdown rendering is a safe React subset (headings, lists, quotes, bold/italic/code, http/https links); no HTML is stored or injected.
 
 ## Database
 
-Migration `0019_remarkable_songbird.sql` adds:
+Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), and `0026` (note images) are additive. `0019` adds:
 
 - `vault_configs` (unique per user).
 - `vault_items` (owner-scoped ciphertext).
@@ -66,5 +68,5 @@ All tables are additive; no existing table or ledger row is changed.
 - No vault import/export, sharing, or recovery.
 - Vault list is capped at 500 items (active by default; `includeArchived=true` uses the same cap).
 - Vault item search is not implemented in this slice.
-- List caps (500 vault items, 200 tasks/notes by default) are not surfaced as a truncation indicator in the UI.
+- List caps (500 vault items, 200 tasks by default) are not surfaced as a truncation indicator in the UI; notes paginate 30 at a time with `Загрузить ещё`.
 - Vault ciphertext is authenticated but not bound to item id/user id with AAD; a party controlling the database could swap ciphertexts between items.

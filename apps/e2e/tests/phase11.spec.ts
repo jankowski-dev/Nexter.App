@@ -179,19 +179,46 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await nav.getByRole('link', { name: 'Заметки' }).click();
   await expect(page.getByRole('heading', { name: 'Заметки', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Новая заметка' }).first().click();
-  const noteDialog = page.getByRole('dialog');
-  await noteDialog.getByLabel('Заголовок').click();
-  await noteDialog.getByLabel('Заголовок').pressSequentially('Идея по портфелю', { delay: 20 });
-  await expect(noteDialog.getByLabel('Заголовок')).toHaveValue('Идея по портфелю');
-  await noteDialog.getByLabel('Текст').click();
-  await noteDialog
-    .getByLabel('Текст')
+  const noteDrawer = page.getByRole('dialog');
+  await noteDrawer.getByLabel('Заголовок заметки').click();
+  await noteDrawer
+    .getByLabel('Заголовок заметки')
+    .pressSequentially('Идея по портфелю', { delay: 20 });
+  await expect(noteDrawer.getByLabel('Заголовок заметки')).toHaveValue('Идея по портфелю');
+  await noteDrawer.getByLabel('Текст заметки').click();
+  await noteDrawer
+    .getByLabel('Текст заметки')
     .pressSequentially('Проверить корреляцию BASED и LINK', { delay: 20 });
-  await expect(noteDialog.getByLabel('Текст')).toHaveValue('Проверить корреляцию BASED и LINK');
-  await noteDialog.getByLabel('Теги (через запятую)').fill('идея, риск');
-  await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Идея по портфелю')).toBeVisible();
-  await expect(page.getByText('Проверить корреляцию BASED и LINK')).toBeVisible();
+  await expect(noteDrawer.getByLabel('Текст заметки')).toHaveValue(
+    'Проверить корреляцию BASED и LINK',
+  );
+  await noteDrawer.getByLabel('Теги (через запятую)').fill('идея, риск');
+  await noteDrawer.getByRole('button', { name: 'Готово' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByText('Идея по портфелю').first().click();
+  const noteView = page.getByRole('dialog');
+  await expect(noteView.getByText('Проверить корреляцию BASED и LINK')).toBeVisible();
+  await noteView.getByLabel('Закрыть').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
   await page.getByLabel('Поиск по заметкам').fill('корреляцию');
+  await expect(page.getByText('Идея по портфелю')).toBeVisible();
+
+  await page.getByText('Идея по портфелю').first().click();
+  const deleteDrawer = page.getByRole('dialog');
+  await deleteDrawer.getByRole('button', { name: 'Удалить' }).click();
+  await expect(page.getByRole('heading', { name: 'Удалить заметку?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Отменить удаление' }).click();
+  await expect(page.getByRole('heading', { name: 'Удалить заметку?' })).toHaveCount(0);
+  await deleteDrawer.getByRole('button', { name: 'Удалить' }).click();
+  await page.getByRole('button', { name: 'Подтвердить удаление' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('Идея по портфелю')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Архивные' }).click();
+  await expect(page.getByText('Идея по портфелю')).toBeVisible();
+  await page.getByRole('button', { name: 'Вернуть заметку' }).click();
+  await page.getByRole('button', { name: 'Актуальные' }).click();
   await expect(page.getByText('Идея по портфелю')).toBeVisible();
 });

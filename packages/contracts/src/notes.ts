@@ -1,10 +1,22 @@
 import { z } from 'zod';
 
+export const noteImageMimeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+
+export const noteImageSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  mimeType: noteImageMimeSchema,
+  dataUrl: z.string(),
+  sizeBytes: z.number().int().nonnegative(),
+  createdAt: z.iso.datetime(),
+});
+
 export const noteSchema = z.object({
   id: z.uuid(),
   title: z.string(),
   body: z.string(),
   tags: z.array(z.string()),
+  images: z.array(noteImageSchema),
   pinned: z.boolean(),
   relatedAssetId: z.uuid().nullable(),
   relatedTradeGroupId: z.uuid().nullable(),
@@ -19,7 +31,21 @@ export const noteListQuerySchema = z.object({
     .union([z.boolean(), z.enum(['true', 'false'])])
     .transform((value) => value === true || value === 'true')
     .default(false),
-  limit: z.coerce.number().int().min(1).max(500).default(200),
+  archivedOnly: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => value === true || value === 'true')
+    .default(false),
+  offset: z.coerce.number().int().min(0).default(0),
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+});
+
+export const noteImageCreateRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  mimeType: noteImageMimeSchema,
+  dataUrl: z
+    .string()
+    .max(2_000_000)
+    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
 });
 
 export const noteCreateRequestSchema = z.object({
@@ -53,8 +79,13 @@ export const noteUpdateRequestSchema = z
     'At least one field must be provided',
   );
 
-export const notesResponseSchema = z.object({ data: z.array(noteSchema) });
+export const notesResponseSchema = z.object({
+  data: z.array(noteSchema),
+  hasMore: z.boolean(),
+});
 
+export type NoteImage = z.infer<typeof noteImageSchema>;
+export type NoteImageCreateRequest = z.infer<typeof noteImageCreateRequestSchema>;
 export type Note = z.infer<typeof noteSchema>;
 export type NoteListQuery = z.infer<typeof noteListQuerySchema>;
 export type NoteCreateRequest = z.infer<typeof noteCreateRequestSchema>;
