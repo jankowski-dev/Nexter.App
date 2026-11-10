@@ -44,7 +44,7 @@ import {
 import { FinanceCreditDialog } from './finance-credit-dialog';
 
 type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories' | 'import';
-type JournalFilter = 'all' | 'income' | 'expense' | 'transfer';
+type JournalFilter = 'all' | 'income' | 'expense' | 'transfer' | 'cancelled';
 
 const tabLabels: Record<FinanceTab, string> = {
   overview: 'Обзор',
@@ -149,7 +149,7 @@ export function FinancePage() {
   const [tab, setTab] = useState<FinanceTab>('overview');
   const [month, setMonth] = useState(currentMonth);
   const [journalFilter, setJournalFilter] = useState<JournalFilter>('all');
-  const [journalIncludeArchived, setJournalIncludeArchived] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [transactionDialog, setTransactionDialog] = useState<{
     transaction?: FinanceTransaction;
     kind?: FinanceTransactionKind;
@@ -175,12 +175,12 @@ export function FinancePage() {
     queryFn: fetchFinanceCategories,
   });
   const journal = useQuery({
-    queryKey: ['finance-journal', month, journalIncludeArchived],
+    queryKey: ['finance-journal', month, journalFilter],
     queryFn: () =>
       fetchFinanceJournal({
         from: `${month}-01`,
         to: monthEnd(month),
-        includeArchived: journalIncludeArchived,
+        includeArchived: journalFilter === 'cancelled',
         limit: 500,
       }),
   });
@@ -214,14 +214,33 @@ export function FinancePage() {
     onSuccess: invalidate,
   });
   const archiveTransaction = useMutation({
-    mutationFn: (transaction: FinanceTransaction) =>
-      updateFinanceTransaction(transaction.id, { archived: !transaction.archivedAt }),
-    onSuccess: invalidate,
+    mutationFn: ({
+      transaction,
+      archived,
+    }: {
+      transaction: FinanceTransaction;
+      archived: boolean;
+    }) => updateFinanceTransaction(transaction.id, { archived }),
+    onSuccess: (_data, variables) => {
+      setNotice(
+        variables.archived
+          ? 'Операция отменена. Вернуть её можно во вкладке «Отменённые».'
+          : 'Операция возвращена.',
+      );
+      invalidate();
+    },
   });
   const archiveTransfer = useMutation({
-    mutationFn: (transfer: FinanceTransfer) =>
-      updateFinanceTransfer(transfer.id, { archived: !transfer.archivedAt }),
-    onSuccess: invalidate,
+    mutationFn: ({ transfer, archived }: { transfer: FinanceTransfer; archived: boolean }) =>
+      updateFinanceTransfer(transfer.id, { archived }),
+    onSuccess: (_data, variables) => {
+      setNotice(
+        variables.archived
+          ? 'Перевод отменён. Вернуть его можно во вкладке «Отменённые».'
+          : 'Перевод возвращён.',
+      );
+      invalidate();
+    },
   });
   const commitImport = useMutation({
     mutationFn: (id: string) => commitFinanceImport(id),
@@ -299,7 +318,11 @@ export function FinancePage() {
     }
 
     return rows
-      .filter((row) => journalFilter === 'all' || row.type === journalFilter)
+      .filter((row) =>
+        journalFilter === 'cancelled'
+          ? row.archived
+          : !row.archived && (journalFilter === 'all' || row.type === journalFilter),
+      )
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   }
 
@@ -546,6 +569,7 @@ export function FinancePage() {
                 ['income', 'Доходы'],
                 ['expense', 'Расходы'],
                 ['transfer', 'Переводы'],
+                ['cancelled', 'Отменённые'],
               ] as const
             ).map(([value, label]) => (
               <button
@@ -561,16 +585,17 @@ export function FinancePage() {
                 {label}
               </button>
             ))}
-            <label className="ml-auto flex items-center gap-2 text-sm text-zinc-600">
-              <input
-                type="checkbox"
-                checked={journalIncludeArchived}
-                onChange={(event) => setJournalIncludeArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 bg-white"
-              />
-              Архив
-            </label>
           </div>
+          <p className="text-xs text-zinc-500">
+            Отменённые операции не удаляются безвозвратно: открой вкладку «Отменённые», чтобы
+            вернуть их.
+          </p>
+
+          {notice ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              {notice}
+            </div>
+          ) : null}
 
           {journal.isPending ? <LoadingRows rows={6} /> : null}
           {journal.isError ? (
@@ -625,7 +650,10 @@ export function FinancePage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-zinc-900">{row.title}</div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-zinc-900">{row.title}</span>
+                            {row.archived ? <Badge tone="neutral">Отменена</Badge> : null}
+                          </div>
                           <div className="text-xs text-zinc-500">{row.subtitle}</div>
                         </td>
                         <td className="px-4 py-3 text-right font-mono text-zinc-900">
@@ -648,13 +676,30 @@ export function FinancePage() {
                           </Button>
                           <Button
                             variant="ghost"
-                            className="h-8 px-2 text-xs text-zinc-500"
+                            className={`h-8 px-2 text-xs ${
+                              row.archived ? 'text-zinc-600' : 'text-red-700'
+                            }`}
                             onClick={() => {
-                              if (row.transaction) archiveTransaction.mutate(row.transaction);
-                              else if (row.transfer) archiveTransfer.mutate(row.transfer);
+                              const archived = !row.archived;
+                              if (
+                                archived &&
+                                !window.confirm(
+                                  'Отменить операцию? Она исчезнет из статистики, но останется в архиве.',
+                                )
+                              ) {
+                                return;
+                              }
+                              if (row.transaction) {
+                                archiveTransaction.mutate({
+                                  transaction: row.transaction,
+                                  archived,
+                                });
+                              } else if (row.transfer) {
+                                archiveTransfer.mutate({ transfer: row.transfer, archived });
+                              }
                             }}
                           >
-                            {row.archived ? 'Вернуть' : 'В архив'}
+                            {row.archived ? 'Вернуть' : 'Отменить'}
                           </Button>
                         </td>
                       </tr>
