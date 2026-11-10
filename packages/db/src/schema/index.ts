@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -120,6 +121,12 @@ export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type TaskRecurrence = 'daily' | 'weekly' | 'monthly';
+export type FinanceCurrency = 'BYN' | 'USD' | 'EUR';
+export type FinanceAccountKind = 'cash' | 'card' | 'bank' | 'savings' | 'investment' | 'credit';
+export type FinanceCategoryKind = 'income' | 'expense' | 'transfer';
+export type FinanceTransactionKind = 'income' | 'expense';
+export type FinanceTransferKind = 'exchange' | 'card_topup' | 'credit' | 'other';
+export type FinanceImportStatus = 'preview' | 'committed' | 'rolled_back';
 export type ReconciliationStatus = 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type ReconciliationItemStatus =
   'MATCH' | 'MISMATCH' | 'MISSING_ONCHAIN' | 'MISSING_LEDGER' | 'UNSUPPORTED';
@@ -839,6 +846,191 @@ export const notes = pgTable(
   ],
 );
 
+export const financeImports = pgTable(
+  'finance_imports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    source: text('source').notNull().default('notion'),
+    sourceHash: text('source_hash').notNull(),
+    status: text('status').$type<FinanceImportStatus>().notNull().default('preview'),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    committedAt: timestamp('committed_at', { withTimezone: true }),
+    rolledBackAt: timestamp('rolled_back_at', { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex('finance_imports_user_source_hash_unique').on(
+      table.userId,
+      table.source,
+      table.sourceHash,
+    ),
+    index('finance_imports_user_created_idx').on(table.userId, table.createdAt),
+  ],
+);
+
+export const financeAccounts = pgTable(
+  'finance_accounts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: text('kind').$type<FinanceAccountKind>().notNull(),
+    currency: text('currency').$type<FinanceCurrency>().notNull().default('BYN'),
+    openingBalance: numeric('opening_balance', { precision: 20, scale: 2 }).notNull().default('0'),
+    openingDate: date('opening_date').notNull(),
+    fxRate: numeric('fx_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+    creditLimit: numeric('credit_limit', { precision: 20, scale: 2 }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('finance_accounts_user_name_unique').on(table.userId, table.name),
+    index('finance_accounts_user_sort_idx').on(table.userId, table.sortOrder),
+    index('finance_accounts_user_archived_idx').on(table.userId, table.archivedAt),
+    check('finance_accounts_fx_rate_positive', sql`${table.fxRate} > 0`),
+    check('finance_accounts_byn_rate_one', sql`${table.currency} <> 'BYN' or ${table.fxRate} = 1`),
+  ],
+);
+
+export const financeCategories = pgTable(
+  'finance_categories',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: text('kind').$type<FinanceCategoryKind>().notNull(),
+    color: text('color'),
+    icon: text('icon'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('finance_categories_user_kind_name_unique').on(
+      table.userId,
+      table.kind,
+      table.name,
+    ),
+    index('finance_categories_user_kind_sort_idx').on(table.userId, table.kind, table.sortOrder),
+  ],
+);
+
+export const financeTransactions = pgTable(
+  'finance_transactions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<FinanceTransactionKind>().notNull(),
+    occurredOn: date('occurred_on').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: 'restrict' }),
+    categoryId: uuid('category_id').references(() => financeCategories.id, {
+      onDelete: 'set null',
+    }),
+    amount: numeric('amount', { precision: 20, scale: 2 }).notNull(),
+    currency: text('currency').$type<FinanceCurrency>().notNull(),
+    fxRate: numeric('fx_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+    baseAmount: numeric('base_amount', { precision: 20, scale: 2 }).notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    source: text('source').notNull().default('manual'),
+    sourceId: text('source_id'),
+    importId: uuid('import_id').references(() => financeImports.id, { onDelete: 'set null' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('finance_transactions_user_source_unique')
+      .on(table.userId, table.sourceId)
+      .where(sql`${table.sourceId} is not null`),
+    index('finance_transactions_user_date_idx').on(table.userId, table.occurredOn),
+    index('finance_transactions_user_account_idx').on(table.userId, table.accountId),
+    index('finance_transactions_user_category_idx').on(table.userId, table.categoryId),
+    check('finance_transactions_amount_positive', sql`${table.amount} > 0`),
+  ],
+);
+
+export const financeTransfers = pgTable(
+  'finance_transfers',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<FinanceTransferKind>().notNull(),
+    occurredOn: date('occurred_on').notNull(),
+    fromAccountId: uuid('from_account_id')
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: 'restrict' }),
+    toAccountId: uuid('to_account_id')
+      .notNull()
+      .references(() => financeAccounts.id, { onDelete: 'restrict' }),
+    fromAmount: numeric('from_amount', { precision: 20, scale: 2 }).notNull(),
+    toAmount: numeric('to_amount', { precision: 20, scale: 2 }).notNull(),
+    fromCurrency: text('from_currency').$type<FinanceCurrency>().notNull(),
+    toCurrency: text('to_currency').$type<FinanceCurrency>().notNull(),
+    fxRate: numeric('fx_rate', { precision: 18, scale: 8 }).notNull().default('1'),
+    fromBaseAmount: numeric('from_base_amount', { precision: 20, scale: 2 }).notNull(),
+    toBaseAmount: numeric('to_base_amount', { precision: 20, scale: 2 }).notNull(),
+    description: text('description'),
+    source: text('source').notNull().default('manual'),
+    sourceId: text('source_id'),
+    importId: uuid('import_id').references(() => financeImports.id, { onDelete: 'set null' }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('finance_transfers_user_source_unique')
+      .on(table.userId, table.sourceId)
+      .where(sql`${table.sourceId} is not null`),
+    index('finance_transfers_user_date_idx').on(table.userId, table.occurredOn),
+    index('finance_transfers_user_from_idx').on(table.userId, table.fromAccountId),
+    index('finance_transfers_user_to_idx').on(table.userId, table.toAccountId),
+    check(
+      'finance_transfers_amounts_positive',
+      sql`${table.fromAmount} > 0 and ${table.toAmount} > 0`,
+    ),
+  ],
+);
+
+export const financeImportRows = pgTable(
+  'finance_import_rows',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    importId: uuid('import_id')
+      .notNull()
+      .references(() => financeImports.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    entityType: text('entity_type').notNull(),
+    sourceId: text('source_id'),
+    data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+    status: text('status').notNull(),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('finance_import_rows_import_status_idx').on(table.importId, table.status),
+    index('finance_import_rows_user_idx').on(table.userId),
+  ],
+);
+
 export const externalApiCalls = pgTable(
   'external_api_calls',
   {
@@ -875,3 +1067,9 @@ export type VaultConfig = typeof vaultConfigs.$inferSelect;
 export type VaultItem = typeof vaultItems.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
+export type FinanceImport = typeof financeImports.$inferSelect;
+export type FinanceAccount = typeof financeAccounts.$inferSelect;
+export type FinanceCategory = typeof financeCategories.$inferSelect;
+export type FinanceTransaction = typeof financeTransactions.$inferSelect;
+export type FinanceTransfer = typeof financeTransfers.$inferSelect;
+export type FinanceImportRow = typeof financeImportRows.$inferSelect;

@@ -12,6 +12,15 @@ import {
   dashboardSummarySchema,
   equityCurveSchema,
   errorEnvelopeSchema,
+  financeAccountsResponseSchema,
+  financeCategoriesResponseSchema,
+  financeImportSchema,
+  financeImportsResponseSchema,
+  financeJournalResponseSchema,
+  financeSummarySchema,
+  financeTransactionSchema,
+  financeTransactionsResponseSchema,
+  financeTransfersResponseSchema,
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
@@ -52,6 +61,25 @@ import {
   type DashboardRecentTrades,
   type DashboardSummary,
   type EquityCurve,
+  type FinanceAccountCreateRequest,
+  type FinanceAccountUpdateRequest,
+  type FinanceAccountsResponse,
+  type FinanceCategoryCreateRequest,
+  type FinanceCategoryUpdateRequest,
+  type FinanceCategoriesResponse,
+  type FinanceImport,
+  type FinanceImportRequest,
+  type FinanceImportsResponse,
+  type FinanceJournalResponse,
+  type FinanceListQuery,
+  type FinanceSummary,
+  type FinanceTransaction,
+  type FinanceTransactionCreateRequest,
+  type FinanceTransactionUpdateRequest,
+  type FinanceTransactionsResponse,
+  type FinanceTransferCreateRequest,
+  type FinanceTransfersResponse,
+  type FinanceTransferUpdateRequest,
   type HealthResponse,
   type ImportResponse,
   type ImportsResponse,
@@ -646,4 +674,145 @@ export async function createNote(body: NoteCreateRequest): Promise<Note> {
 
 export async function updateNote(id: string, body: NoteUpdateRequest): Promise<Note> {
   return apiPatch(`/api/v1/notes/${id}`, body, noteSchema);
+}
+
+export async function fetchFinanceSummary(
+  month?: string,
+  months?: number,
+): Promise<FinanceSummary> {
+  return apiFetch(
+    `/api/v1/finance/summary${queryString({ month, months })}`,
+    {},
+    financeSummarySchema,
+  );
+}
+
+export async function fetchFinanceAccounts(): Promise<FinanceAccountsResponse> {
+  return apiFetch('/api/v1/finance/accounts', {}, financeAccountsResponseSchema);
+}
+
+export async function createFinanceAccount(
+  body: FinanceAccountCreateRequest,
+): Promise<FinanceAccountsResponse['accounts'][number]> {
+  return apiPost(
+    '/api/v1/finance/accounts',
+    body,
+    financeAccountsResponseSchema.shape.accounts.element,
+  );
+}
+
+export async function updateFinanceAccount(
+  id: string,
+  body: FinanceAccountUpdateRequest,
+): Promise<FinanceAccountsResponse['accounts'][number]> {
+  return apiPatch(
+    `/api/v1/finance/accounts/${id}`,
+    body,
+    financeAccountsResponseSchema.shape.accounts.element,
+  );
+}
+
+export async function fetchFinanceCategories(): Promise<FinanceCategoriesResponse> {
+  return apiFetch('/api/v1/finance/categories', {}, financeCategoriesResponseSchema);
+}
+
+export async function createFinanceCategory(
+  body: FinanceCategoryCreateRequest,
+): Promise<FinanceCategoriesResponse['categories'][number]> {
+  return apiPost(
+    '/api/v1/finance/categories',
+    body,
+    financeCategoriesResponseSchema.shape.categories.element,
+  );
+}
+
+export async function updateFinanceCategory(
+  id: string,
+  body: FinanceCategoryUpdateRequest,
+): Promise<FinanceCategoriesResponse['categories'][number]> {
+  return apiPatch(
+    `/api/v1/finance/categories/${id}`,
+    body,
+    financeCategoriesResponseSchema.shape.categories.element,
+  );
+}
+
+export async function fetchFinanceTransactions(
+  params: Partial<FinanceListQuery> = {},
+): Promise<FinanceTransactionsResponse> {
+  return apiFetch(
+    `/api/v1/finance/transactions${queryString(params)}`,
+    {},
+    financeTransactionsResponseSchema,
+  );
+}
+
+export async function createFinanceTransaction(
+  body: FinanceTransactionCreateRequest,
+): Promise<FinanceTransaction> {
+  return apiPost('/api/v1/finance/transactions', body, financeTransactionSchema);
+}
+
+export async function updateFinanceTransaction(
+  id: string,
+  body: FinanceTransactionUpdateRequest,
+): Promise<FinanceTransaction> {
+  return apiPatch(`/api/v1/finance/transactions/${id}`, body, financeTransactionSchema);
+}
+
+export async function fetchFinanceTransfers(
+  params: Partial<FinanceListQuery> = {},
+): Promise<FinanceTransfersResponse> {
+  return apiFetch(
+    `/api/v1/finance/transfers${queryString(params)}`,
+    {},
+    financeTransfersResponseSchema,
+  );
+}
+
+export async function createFinanceTransfer(
+  body: FinanceTransferCreateRequest,
+): Promise<FinanceTransfersResponse['transfers'][number]> {
+  return apiPost(
+    '/api/v1/finance/transfers',
+    body,
+    financeTransfersResponseSchema.shape.transfers.element,
+  );
+}
+
+export async function updateFinanceTransfer(
+  id: string,
+  body: FinanceTransferUpdateRequest,
+): Promise<FinanceTransfersResponse['transfers'][number]> {
+  return apiPatch(
+    `/api/v1/finance/transfers/${id}`,
+    body,
+    financeTransfersResponseSchema.shape.transfers.element,
+  );
+}
+
+export async function fetchFinanceJournal(
+  params: Partial<FinanceListQuery> = {},
+): Promise<FinanceJournalResponse> {
+  return apiFetch(
+    `/api/v1/finance/journal${queryString(params)}`,
+    {},
+    financeJournalResponseSchema,
+  );
+}
+
+export async function previewFinanceImport(body: FinanceImportRequest): Promise<FinanceImport> {
+  return apiPost('/api/v1/finance/import/preview', body, financeImportSchema);
+}
+
+export async function commitFinanceImport(id: string): Promise<FinanceImport> {
+  return apiPost(`/api/v1/finance/import/${id}/commit`, {}, financeImportSchema);
+}
+
+export async function rollbackFinanceImport(id: string): Promise<FinanceImport> {
+  return apiPost(`/api/v1/finance/import/${id}/rollback`, {}, financeImportSchema);
+}
+
+export async function fetchFinanceImports(): Promise<FinanceImportsResponse> {
+  return apiFetch('/api/v1/finance/imports', {}, financeImportsResponseSchema);
 }

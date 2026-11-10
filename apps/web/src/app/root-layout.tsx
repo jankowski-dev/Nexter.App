@@ -17,6 +17,7 @@ const cryptoNavigation = [
 ] as const;
 
 const primaryNavigation = [
+  { to: '/finance', label: messages.nav.finance },
   { to: '/tasks', label: messages.nav.tasks },
   { to: '/notes', label: messages.nav.notes },
   { to: '/settings', label: messages.nav.settings },

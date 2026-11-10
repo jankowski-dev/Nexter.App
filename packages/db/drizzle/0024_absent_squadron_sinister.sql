@@ -1,0 +1,3 @@
+ALTER TABLE "finance_accounts" ADD CONSTRAINT "finance_accounts_fx_rate_positive" CHECK ("finance_accounts"."fx_rate" > 0);--> statement-breakpoint
+ALTER TABLE "finance_transactions" ADD CONSTRAINT "finance_transactions_amount_positive" CHECK ("finance_transactions"."amount" > 0);--> statement-breakpoint
+ALTER TABLE "finance_transfers" ADD CONSTRAINT "finance_transfers_amounts_positive" CHECK ("finance_transfers"."from_amount" > 0 and "finance_transfers"."to_amount" > 0);

@@ -1,0 +1,1 @@
+ALTER TABLE "finance_accounts" ADD CONSTRAINT "finance_accounts_byn_rate_one" CHECK ("finance_accounts"."currency" <> 'BYN' or "finance_accounts"."fx_rate" = 1);
