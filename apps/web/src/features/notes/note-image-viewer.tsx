@@ -40,7 +40,7 @@ export function NoteImageViewer({
 
   return (
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/85 p-4"
+      className="dialog-overlay-enter fixed inset-0 z-[70] flex items-center justify-center bg-zinc-950/85 p-4"
       role="dialog"
       aria-modal="true"
       aria-label="Просмотр фото"
@@ -71,7 +71,7 @@ export function NoteImageViewer({
       <img
         src={image.dataUrl}
         alt={image.name}
-        className="max-h-[86vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+        className="image-enter max-h-[86vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
       />
 
       {index < images.length - 1 ? (

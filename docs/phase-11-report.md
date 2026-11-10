@@ -26,7 +26,7 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Fields: title, description, status (`open`/`done`/`cancelled`), priority 0–3, tags, due date, completion time, optional related asset, archive timestamp, recurrence (`daily`/`weekly`/`monthly`) and `seriesId`.
 - Images: up to 5 per task in `task_images`, compressed in the browser, PNG/JPEG/WebP, max 1.5 MB after decoding.
 - API: `GET /tasks`, `POST /tasks`, `PATCH /tasks/:id`, `POST/DELETE /tasks/:id/images`.
-- UI: `/tasks` with list/calendar views, drag/drop between days, status filters, search, tags, autosaving create/edit dialog, complete/reopen, archive, and image upload.
+- UI: `/tasks` opens on the calendar; completed tasks stay visible and are green, active tasks are blue, overdue tasks are red. The compact list omits descriptions and row edit actions. Clicking a task opens a one-third-width view drawer with delete/complete/edit; creating/editing uses the same drawer with autosave and image upload. `Актуальные`/`Архивные` replaces the archive checkbox; delete is a confirmed soft archive. `GET /tasks` accepts `archivedOnly`.
 - Completing sets `completedAt`; reopening clears it. Recurrence rows are generated occurrences, not an RRULE.
 
 ## Notes
@@ -34,7 +34,7 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Fields: title, body, tags, pinned flag, optional related asset/trade group, archive timestamp.
 - Images: up to 5 per note in `note_images`, compressed in the browser, PNG/JPEG/WebP, max 1.5 MB after decoding.
 - API: `GET /notes` with `archivedOnly`, `offset`, `limit` (default 30) and `hasMore`; `POST /notes`, `PATCH /notes/:id`, `POST/DELETE /notes/:id/images`.
-- UI: `/notes` is a journal. Cards show only title, dates, status, pin/edit/delete icons. Clicking opens a one-third-width side drawer in read mode; edit mode uses a lightweight Markdown editor with autosave every 10 seconds and on close. Photos have a full-screen viewer with arrows/Escape. Delete is a confirmed soft archive; `Актуальные`/`Архивные` filters and `Загрузить ещё` paginate 30 notes.
+- UI: `/notes` is a journal. Cards show a notebook icon, title, dates, status, and right-side pin/delete/edit icons. Clicking opens a one-third-width side drawer in read mode; edit mode uses a lightweight Markdown editor with a slightly narrower text area and autosave every 10 seconds and on close. The save indicator sits in the footer left, opposite the actions. `Готово` saves and returns to read mode without closing. Photos have a full-screen viewer with arrows/Escape. Delete is a confirmed soft archive; `Актуальные`/`Архивные` filters and `Загрузить ещё` paginate 30 notes.
 - Markdown rendering is a safe React subset (headings, lists, quotes, bold/italic/code, http/https links); no HTML is stored or injected.
 
 ## Database

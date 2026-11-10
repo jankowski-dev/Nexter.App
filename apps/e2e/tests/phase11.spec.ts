@@ -111,11 +111,14 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   await nav.getByRole('link', { name: 'Задачи' }).click();
   await expect(page.getByRole('heading', { name: 'Задачи', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Календарь' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const taskDialog = page.getByRole('dialog');
-  await taskDialog.getByLabel('Название').click();
-  await taskDialog.getByLabel('Название').pressSequentially('Проверить BASED', { delay: 20 });
-  await expect(taskDialog.getByLabel('Название')).toHaveValue('Проверить BASED');
+  await taskDialog.getByLabel('Название').fill('Проверить BASED');
   await taskDialog.getByLabel('Описание').fill('Пересмотреть тезис');
   await taskDialog.getByLabel('Теги (через запятую)').fill('риск, портфель');
   await taskDialog.locator('input[type="file"]').setInputFiles({
@@ -127,36 +130,97 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
     ),
   });
   await expect(taskDialog.getByAltText('dot.jpg')).toBeVisible();
-
-  await page.mouse.click(5, 5);
+  await taskDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(taskDialog.getByRole('heading', { name: 'Проверить BASED' })).toBeVisible();
+  await expect(taskDialog.getByLabel('Название')).toHaveCount(0);
+  await expect(taskDialog.getByText('Пересмотреть тезис')).toBeVisible();
+  await expect(taskDialog.getByAltText('dot.jpg')).toBeVisible();
+  await taskDialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('Проверить BASED')).toBeVisible();
-  await expect(page.getByText('риск', { exact: true })).toBeVisible();
-  await expect(page.locator('img[alt="dot.jpg"]')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Завершить' }).click();
-  await expect(page.getByText('Проверить BASED')).toHaveCount(0);
-  await page.getByRole('tab', { name: 'Выполненные' }).click();
-  await expect(page.getByText('Выполнена', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Открытые' }).click();
 
   const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+    today.getDate(),
+  ).padStart(2, '0')}`;
+  const todayCell = page.locator(`[data-date="${todayKey}"]`);
+  await expect(todayCell.getByRole('button', { name: /Проверить BASED/ })).toBeVisible();
+  await todayCell.getByRole('button', { name: /Проверить BASED/ }).click();
+  const completedTaskDrawer = page.getByRole('dialog');
+  await completedTaskDrawer.getByRole('button', { name: 'Завершить' }).click();
+  await expect(completedTaskDrawer.getByText('Выполнена', { exact: true })).toBeVisible();
+  await completedTaskDrawer.getByLabel('Закрыть').click();
+  await expect(todayCell.getByRole('button', { name: /Проверить BASED/ })).toHaveClass(
+    /bg-emerald-50/,
+  );
+
+  await page.getByRole('tab', { name: 'Список' }).click();
+  await page.getByRole('button', { name: 'Новая задача' }).first().click();
+  const listTaskDialog = page.getByRole('dialog');
+  await listTaskDialog.getByLabel('Название').fill('Задача для списка');
+  await listTaskDialog.getByLabel('Описание').fill('Скрытое описание');
+  await listTaskDialog.getByLabel('Теги (через запятую)').fill('тег1, тег2');
+  await listTaskDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(listTaskDialog.getByRole('heading', { name: 'Задача для списка' })).toBeVisible();
+  await listTaskDialog.getByLabel('Закрыть').click();
+  await expect(page.getByText('Задача для списка')).toBeVisible();
+  await expect(page.getByText('Скрытое описание')).toHaveCount(0);
+  await expect(page.getByText('тег1, тег2')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Открыть задачу Задача для списка' }).click();
+  const taskView = page.getByRole('dialog');
+  await expect(taskView.getByText('Скрытое описание')).toBeVisible();
+  await taskView.getByRole('button', { name: 'Изменить' }).click();
+  await expect(taskView.getByLabel('Название')).toHaveValue('Задача для списка');
+  await expect(taskView.getByRole('combobox', { name: 'Повтор' })).toHaveCount(0);
+  await taskView.getByRole('button', { name: 'Готово' }).click();
+  await expect(taskView.getByRole('heading', { name: 'Задача для списка' })).toBeVisible();
+  await taskView.getByLabel('Закрыть').click();
+
+  await page.getByRole('button', { name: 'Завершить задачу' }).click();
+  await expect(page.getByText('Задача для списка')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Выполненные' }).click();
+  await expect(page.getByText('Задача для списка')).toBeVisible();
+
+  const listTaskRow = page.locator('[data-task-id]').filter({ hasText: 'Задача для списка' });
+  await listTaskRow.getByRole('button', { name: 'Удалить задачу' }).click();
+  const deleteTaskDrawer = page.getByRole('dialog');
+  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toHaveCount(0);
+  await expect(deleteTaskDrawer).toBeVisible();
+  await deleteTaskDrawer.getByRole('button', { name: 'Удалить' }).click();
+  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Отменить удаление задачи' }).click();
+  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toHaveCount(0);
+  await deleteTaskDrawer.getByRole('button', { name: 'Удалить' }).click();
+  await page.getByRole('button', { name: 'Подтвердить удаление задачи' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByText('Задача для списка')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Архивные' }).click();
+  await expect(page.getByText('Задача для списка')).toBeVisible();
+  await page.getByRole('button', { name: 'Вернуть задачу' }).click();
+  await expect(page.getByText('Задача для списка')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Актуальные' }).click();
+  await page.getByRole('tab', { name: 'Выполненные' }).click();
+  await expect(page.getByText('Задача для списка')).toBeVisible();
+
   const monthValue = String(today.getMonth() + 1).padStart(2, '0');
   const firstDate = `${today.getFullYear()}-${monthValue}-10`;
   const secondDate = `${today.getFullYear()}-${monthValue}-11`;
   const lastDate = `${today.getFullYear()}-${monthValue}-24`;
 
+  await page.getByRole('tab', { name: 'Календарь' }).click();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const recurringDialog = page.getByRole('dialog');
   await recurringDialog.getByLabel('Название').fill('Календарная задача');
   await recurringDialog.getByLabel('Срок').fill(firstDate);
   await recurringDialog.getByRole('combobox', { name: 'Повтор' }).selectOption('weekly');
   await recurringDialog.getByLabel('Повторять до (необязательно)').fill(lastDate);
-  await page.mouse.click(5, 5);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('Календарная задача').first()).toBeVisible();
+  await recurringDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(recurringDialog.getByRole('heading', { name: 'Календарная задача' })).toBeVisible();
+  await recurringDialog.getByLabel('Закрыть').click();
 
-  await page.getByRole('tab', { name: 'Календарь' }).click();
   const firstCell = page.locator(`[data-date="${firstDate}"]`);
   const secondCell = page.locator(`[data-date="${secondDate}"]`);
   const chip = firstCell.getByRole('button', { name: /Календарная задача/ });
@@ -166,12 +230,18 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(secondCell.getByRole('button', { name: /Календарная задача/ })).toBeVisible();
   await expect(firstCell.getByRole('button', { name: /Календарная задача/ })).toHaveCount(0);
   await secondCell.getByRole('button', { name: /Календарная задача/ }).click();
-  const movedDialog = page.getByRole('dialog');
-  await expect(movedDialog.getByLabel('Срок')).toHaveValue(secondDate);
-  await movedDialog.getByLabel('Закрыть').click();
+  const movedDrawer = page.getByRole('dialog');
+  await expect(movedDrawer.getByText('↻ Еженедельно')).toBeVisible();
+  await movedDrawer.getByRole('button', { name: 'Изменить' }).click();
+  await expect(movedDrawer.getByText(/Повтор: Еженедельно/)).toBeVisible();
+  await expect(movedDrawer.getByLabel('Срок')).toHaveValue(secondDate);
+  await movedDrawer.getByRole('button', { name: 'Готово' }).click();
+  await expect(movedDrawer.getByRole('heading', { name: 'Календарная задача' })).toBeVisible();
+  await movedDrawer.getByLabel('Закрыть').click();
 
   await page.getByRole('tab', { name: 'Список' }).click();
-  await expect(page.getByText('↻').first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Открытые' }).click();
+  await expect(page.getByText('↻ Повтор').first()).toBeVisible();
 
   await nav.getByRole('link', { name: 'Хранилище' }).click();
   await expect(page.getByText('Хранилище заблокировано', { exact: true })).toBeVisible();
@@ -194,6 +264,11 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   );
   await noteDrawer.getByLabel('Теги (через запятую)').fill('идея, риск');
   await noteDrawer.getByRole('button', { name: 'Готово' }).click();
+  await expect(noteDrawer).toBeVisible();
+  await expect(noteDrawer.getByRole('heading', { name: 'Идея по портфелю' })).toBeVisible();
+  await expect(noteDrawer.getByLabel('Заголовок заметки')).toHaveCount(0);
+  await expect(noteDrawer.getByLabel('Текст заметки')).toHaveCount(0);
+  await noteDrawer.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByText('Идея по портфелю').first().click();

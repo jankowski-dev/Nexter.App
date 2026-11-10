@@ -243,10 +243,19 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .send({ archived: true })
       .expect(200);
+    const activeTask = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({ title: 'Активная задача' })
+      .expect(201);
     const tasks = await agent.get('/api/v1/tasks').expect(200);
-    expect(tasks.body.data).toEqual([]);
+    expect(tasks.body.data).toHaveLength(1);
+    expect(tasks.body.data[0].id).toBe(activeTask.body.id);
     const allTasks = await agent.get('/api/v1/tasks?includeArchived=true').expect(200);
-    expect(allTasks.body.data).toHaveLength(1);
+    expect(allTasks.body.data).toHaveLength(2);
+    const archivedOnly = await agent.get('/api/v1/tasks?archivedOnly=true').expect(200);
+    expect(archivedOnly.body.data).toHaveLength(1);
+    expect(archivedOnly.body.data[0].id).toBe(task.body.id);
 
     const note = await agent
       .post('/api/v1/notes')

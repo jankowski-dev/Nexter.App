@@ -11,6 +11,7 @@ export function Drawer({
   footer,
   wide = false,
   size,
+  inert = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -21,6 +22,7 @@ export function Drawer({
   footer?: ReactNode;
   wide?: boolean;
   size?: 'md' | 'lg' | 'third';
+  inert?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -52,8 +54,10 @@ export function Drawer({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-zinc-900/30"
+      className="dialog-overlay-enter fixed inset-0 z-50 bg-zinc-900/30"
       role="presentation"
+      aria-hidden={inert || undefined}
+      inert={inert || undefined}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -65,7 +69,7 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'ml-auto flex h-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
+          'drawer-panel-enter ml-auto flex h-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
           resolvedSize === 'md' && 'w-full max-w-xl',
           resolvedSize === 'lg' && 'w-full max-w-3xl',
           resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',

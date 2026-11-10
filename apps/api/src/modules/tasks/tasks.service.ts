@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   assets,
   taskImages,
@@ -133,7 +133,8 @@ export class TasksService {
   async list(userId: string, query: TaskListQuery): Promise<TasksResponse> {
     const conditions = [eq(tasks.userId, userId)];
 
-    if (!query.includeArchived) conditions.push(isNull(tasks.archivedAt));
+    if (query.archivedOnly) conditions.push(isNotNull(tasks.archivedAt));
+    else if (!query.includeArchived) conditions.push(isNull(tasks.archivedAt));
     if (query.status) conditions.push(eq(tasks.status, query.status));
     if (query.from) conditions.push(gte(tasks.dueAt, new Date(query.from)));
     if (query.to) conditions.push(lte(tasks.dueAt, new Date(query.to)));

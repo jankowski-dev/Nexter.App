@@ -1,6 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
+import { NotebookIcon, PencilIcon, PinIcon, TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { addNoteImage, createNote, removeNoteImage, updateNote } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -10,49 +12,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { Note, NoteImage } from '@nexter/contracts';
 import { NoteImageViewer } from './note-image-viewer';
 import { NoteEditor, NoteMarkdown } from './note-markdown';
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="m13.5 7.5 3 3" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PinIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="m9 4 6 6-2 1 4 4-1 1-4-4-1 2-6-6 4-4Z"
-        fill={filled ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="m9 15-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function tagsFromInput(value: string): string[] {
   return value
@@ -100,6 +59,8 @@ export function NoteDrawer({
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [archived, setArchived] = useState(Boolean(note?.archivedAt));
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
+  const [createdAt, setCreatedAt] = useState<string | null>(note?.createdAt ?? null);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(note?.updatedAt ?? null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(startWithDelete && Boolean(note));
@@ -150,6 +111,8 @@ export function NoteDrawer({
         : await createNote(payload);
       noteIdRef.current = saved.id;
       savedSignatureRef.current = signature;
+      setCreatedAt(saved.createdAt);
+      setUpdatedAt(saved.updatedAt);
       setSaveState('saved');
       onSaved(saved);
       return true;
@@ -264,6 +227,7 @@ export function NoteDrawer({
         updateNote(noteIdRef.current as string, { pinned: nextPinned }),
       );
       setPinned(updated.pinned);
+      setUpdatedAt(updated.updatedAt);
       savedSignatureRef.current = JSON.stringify({
         title: updated.title,
         body: updated.body,
@@ -295,20 +259,42 @@ export function NoteDrawer({
   async function restore(): Promise<void> {
     if (!noteIdRef.current) return;
     try {
-      await enqueue(() => updateNote(noteIdRef.current as string, { archived: false }));
+      const updated = await enqueue(() =>
+        updateNote(noteIdRef.current as string, { archived: false }),
+      );
       setArchived(false);
+      setUpdatedAt(updated.updatedAt);
       setError(null);
-      onSaved({ ...(note as Note), archivedAt: null });
+      onSaved(updated);
     } catch (err) {
       setError(toRussianError(err, 'Не удалось вернуть заметку'));
     }
   }
 
+  async function finishEditing(): Promise<void> {
+    if (!draftRef.current.title.trim()) {
+      setError('Название заметки не может быть пустым.');
+      setSaveState('error');
+      return;
+    }
+
+    const saved = await saveNow();
+    if (saved) {
+      setError(null);
+      setMode('view');
+    }
+  }
+
+  const hasUnsavedChanges =
+    saveState === 'saved' &&
+    JSON.stringify(payloadFrom(draftRef.current)) !== savedSignatureRef.current;
   const statusText =
     saveState === 'saving'
       ? 'Сохраняю…'
       : saveState === 'saved'
-        ? 'Сохранено'
+        ? hasUnsavedChanges
+          ? 'Есть изменения'
+          : 'Сохранено'
         : saveState === 'error'
           ? 'Ошибка сохранения'
           : mode === 'edit'
@@ -321,57 +307,17 @@ export function NoteDrawer({
         open
         onClose={() => void attemptClose()}
         title={mode === 'edit' ? 'Изменить заметку' : 'Заметка'}
-        titleIcon={mode === 'edit' ? <PencilIcon /> : undefined}
+        titleIcon={mode === 'edit' ? <PencilIcon /> : <NotebookIcon />}
         description={
           mode === 'view'
-            ? `Создана ${formatDate(note?.createdAt ?? null)} · обновлена ${formatDate(note?.updatedAt ?? null)}`
+            ? `Создана ${formatDate(createdAt)} · обновлена ${formatDate(updatedAt)}`
             : 'Измените текст и закройте окно — сохранится автоматически.'
         }
         size="third"
+        inert={confirmDelete}
         footer={
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
-            {archived ? (
-              <Button variant="secondary" onClick={() => void restore()}>
-                Вернуть
-              </Button>
-            ) : (
-              <Button
-                variant="ghost"
-                className="text-red-700"
-                onClick={() => {
-                  if (noteIdRef.current) setConfirmDelete(true);
-                }}
-                disabled={!noteIdRef.current}
-              >
-                <TrashIcon />
-                Удалить
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              className="h-9 w-9 p-0"
-              aria-label={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
-              title={pinned ? 'Открепить' : 'Закрепить'}
-              onClick={() => void togglePinned()}
-            >
-              <PinIcon filled={pinned} />
-            </Button>
-            {mode === 'view' ? (
-              <Button onClick={() => setMode('edit')}>
-                <PencilIcon />
-                Изменить
-              </Button>
-            ) : (
-              <Button variant="secondary" onClick={() => void attemptClose()}>
-                Готово
-              </Button>
-            )}
-          </div>
-        }
-      >
-        <div className="space-y-5">
-          {mode === 'edit' ? (
-            <div
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <span
               role="status"
               className={`text-xs ${
                 saveState === 'error'
@@ -381,9 +327,52 @@ export function NoteDrawer({
                     : 'text-zinc-500'
               }`}
             >
-              {statusText}
+              {mode === 'edit' ? statusText : ''}
+            </span>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                className={`h-9 w-9 p-0 ${
+                  pinned ? 'text-emerald-700' : 'text-zinc-400 hover:text-zinc-700'
+                }`}
+                aria-label={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
+                title={pinned ? 'Открепить' : 'Закрепить'}
+                onClick={() => void togglePinned()}
+              >
+                <PinIcon filled={pinned} />
+              </Button>
+              {archived ? (
+                <Button variant="secondary" onClick={() => void restore()}>
+                  Вернуть
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  className="text-red-700"
+                  onClick={() => {
+                    if (noteIdRef.current) setConfirmDelete(true);
+                  }}
+                  disabled={!noteIdRef.current}
+                >
+                  <TrashIcon />
+                  Удалить
+                </Button>
+              )}
+              {mode === 'view' ? (
+                <Button onClick={() => setMode('edit')}>
+                  <PencilIcon />
+                  Изменить
+                </Button>
+              ) : (
+                <Button variant="secondary" onClick={() => void finishEditing()}>
+                  Готово
+                </Button>
+              )}
             </div>
-          ) : null}
+          </div>
+        }
+      >
+        <div className="space-y-5">
           {archived ? <Badge tone="neutral">В архиве</Badge> : null}
 
           {mode === 'edit' ? (
@@ -496,40 +485,17 @@ export function NoteDrawer({
         </div>
       </Drawer>
 
-      {confirmDelete ? (
-        <div
-          className="fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/40 p-4"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setConfirmDelete(false);
-          }}
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl">
-            <h3 className="text-lg font-semibold text-zinc-900">Удалить заметку?</h3>
-            <p className="mt-2 text-sm text-zinc-600">
-              Заметка не удалится безвозвратно: она переместится в архив, откуда её можно вернуть.
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                aria-label="Отменить удаление"
-                onClick={() => setConfirmDelete(false)}
-                disabled={deleting}
-              >
-                Нет
-              </Button>
-              <Button
-                variant="danger"
-                aria-label="Подтвердить удаление"
-                onClick={() => void confirmArchive()}
-                disabled={deleting}
-              >
-                {deleting ? 'Удаляю…' : 'Удалить'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Удалить заметку?"
+        description="Заметка не удалится безвозвратно: она переместится в архив, откуда её можно вернуть."
+        confirmAriaLabel="Подтвердить удаление"
+        cancelAriaLabel="Отменить удаление"
+        busy={deleting}
+        error={error}
+        onConfirm={() => void confirmArchive()}
+        onCancel={() => setConfirmDelete(false)}
+      />
 
       {viewerIndex !== null && images.length > 0 ? (
         <NoteImageViewer

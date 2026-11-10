@@ -1,12 +1,22 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import {
+  CalendarIcon,
+  CheckIcon,
+  ClipboardIcon,
+  ImageIcon,
+  TagIcon,
+  TrashIcon,
+  UndoIcon,
+} from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchTasks, updateTask } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
+import { isTaskOverdue } from '@/lib/tasks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Task, TaskStatus } from '@nexter/contracts';
@@ -16,10 +26,29 @@ import { TaskDialog } from './task-dialog';
 type TaskFilter = 'all' | 'open' | 'done';
 type TaskView = 'list' | 'calendar';
 
+interface TaskDrawerState {
+  task: Task | null;
+  initialDue?: string;
+  startInEdit?: boolean;
+  startWithDelete?: boolean;
+}
+
 const filterLabels: Record<TaskFilter, string> = {
   all: 'Все',
   open: 'Открытые',
   done: 'Выполненные',
+};
+
+const statusLabels: Record<TaskStatus, string> = {
+  open: 'Открыта',
+  done: 'Выполнена',
+  cancelled: 'Отменена',
+};
+
+const statusTones: Record<TaskStatus, 'neutral' | 'success' | 'info'> = {
+  open: 'info',
+  done: 'success',
+  cancelled: 'neutral',
 };
 
 const priorityLabels: Record<number, string> = {
@@ -45,34 +74,24 @@ function monthRange(month: Date): { from: string; to: string } {
 
 export function TasksPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<TaskView>('list');
+  const [view, setView] = useState<TaskView>('calendar');
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [filter, setFilter] = useState<TaskFilter>('open');
+  const [archivedOnly, setArchivedOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const [includeArchived, setIncludeArchived] = useState(false);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<Task | null>(null);
-  const [initialDue, setInitialDue] = useState<string | undefined>(undefined);
+  const [drawer, setDrawer] = useState<TaskDrawerState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const range = view === 'calendar' ? monthRange(month) : null;
   const tasks = useQuery({
-    queryKey: [
-      'tasks',
-      view,
-      filter,
-      search,
-      includeArchived,
-      range?.from ?? null,
-      range?.to ?? null,
-    ],
+    queryKey: ['tasks', view, filter, archivedOnly, search, range?.from ?? null, range?.to ?? null],
     queryFn: () =>
       fetchTasks({
-        status: filter === 'all' ? undefined : filter,
+        status: view === 'list' && !archivedOnly && filter !== 'all' ? filter : undefined,
         search: search || undefined,
-        includeArchived,
+        archivedOnly,
         ...(range ?? {}),
         limit: view === 'calendar' ? 500 : 200,
       }),
@@ -90,15 +109,6 @@ export function TasksPage() {
       invalidate();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось изменить задачу')),
-  });
-
-  const archiveMutation = useMutation({
-    mutationFn: (task: Task) => updateTask(task.id, { archived: true }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось архивировать задачу')),
   });
 
   const restoreMutation = useMutation({
@@ -121,25 +131,19 @@ export function TasksPage() {
   });
 
   function openCreate(date?: string) {
-    setEditing(null);
-    setInitialDue(date);
-    setDialogOpen(true);
+    setDrawer({ task: null, initialDue: date, startInEdit: true });
   }
 
-  function openEdit(task: Task) {
-    setEditing(task);
-    setInitialDue(undefined);
-    setDialogOpen(true);
+  function openView(task: Task) {
+    setDrawer({ task });
   }
 
-  function closeDialog() {
-    setDialogOpen(false);
-    setEditing(null);
-    setInitialDue(undefined);
+  function closeDrawer() {
+    setDrawer(null);
   }
 
   const rows = tasks.data?.data ?? [];
-  const now = Date.now();
+  const now = new Date();
 
   return (
     <div className="space-y-6">
@@ -155,8 +159,8 @@ export function TasksPage() {
             >
               {(
                 [
-                  ['list', 'Список'],
                   ['calendar', 'Календарь'],
+                  ['list', 'Список'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -175,15 +179,6 @@ export function TasksPage() {
                 </button>
               ))}
             </div>
-            <label className="flex items-center gap-2 text-sm text-zinc-600">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(event) => setIncludeArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 bg-white"
-              />
-              Архив
-            </label>
             <Button
               onClick={() =>
                 openCreate(view === 'calendar' ? dateInputValue(new Date()) : undefined)
@@ -196,24 +191,26 @@ export function TasksPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-          {(Object.keys(filterLabels) as TaskFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                filter === item
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-              aria-selected={filter === item}
-              role="tab"
-            >
-              {filterLabels[item]}
-            </button>
-          ))}
-        </div>
+        {view === 'list' && !archivedOnly ? (
+          <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+            {(Object.keys(filterLabels) as TaskFilter[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setFilter(item)}
+                className={`rounded-md px-3 py-1.5 text-sm ${
+                  filter === item
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+                aria-selected={filter === item}
+                role="tab"
+              >
+                {filterLabels[item]}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <Input
           className="max-w-xs"
           placeholder="Поиск по задачам"
@@ -221,6 +218,32 @@ export function TasksPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
+        <div className="ml-auto flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+          <button
+            type="button"
+            onClick={() => setArchivedOnly(false)}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              !archivedOnly
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+            aria-pressed={!archivedOnly}
+          >
+            Актуальные
+          </button>
+          <button
+            type="button"
+            onClick={() => setArchivedOnly(true)}
+            className={`rounded-lg px-3 py-1.5 text-sm ${
+              archivedOnly
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+            aria-pressed={archivedOnly}
+          >
+            Архивные
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -245,132 +268,131 @@ export function TasksPage() {
             onPrev={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
             onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
             onToday={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
-            onEdit={openEdit}
+            onOpen={openView}
             onCreate={(date) => openCreate(date)}
             onMove={(task, date) => moveMutation.mutate({ task, date })}
             busy={moveMutation.isPending}
           />
         ) : rows.length === 0 ? (
           <Card>
-            <CardTitle>Задач нет</CardTitle>
-            <CardDescription>Создайте задачу, чтобы не забыть важное действие.</CardDescription>
-            <Button className="mt-4" onClick={() => openCreate()}>
-              Новая задача
-            </Button>
+            <CardTitle>{archivedOnly ? 'Архив пуст' : 'Задач нет'}</CardTitle>
+            <CardDescription>
+              {archivedOnly
+                ? 'Удалённые задачи появятся здесь.'
+                : 'Создайте задачу, чтобы не забыть важное действие.'}
+            </CardDescription>
+            {!archivedOnly ? (
+              <Button className="mt-4" onClick={() => openCreate()}>
+                Новая задача
+              </Button>
+            ) : null}
           </Card>
         ) : (
-          <div className="grid gap-3">
+          <div className="space-y-2">
             {rows.map((task) => {
-              const overdue =
-                task.status === 'open' &&
-                Boolean(task.dueAt) &&
-                new Date(task.dueAt as string).getTime() < now;
+              const overdue = isTaskOverdue(task, now);
+              const done = task.status === 'done';
               return (
                 <Card
                   key={task.id}
-                  className={`flex min-h-[150px] flex-col ${task.archivedAt ? 'opacity-60' : ''}`}
+                  data-task-id={task.id}
+                  className={`flex items-center justify-between gap-3 p-3 transition-colors hover:border-emerald-300 ${
+                    task.archivedAt ? 'opacity-60' : ''
+                  }`}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      tone={
-                        task.status === 'done'
-                          ? 'success'
-                          : task.status === 'cancelled'
-                            ? 'neutral'
-                            : 'info'
-                      }
+                  <button
+                    type="button"
+                    onClick={() => openView(task)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                    aria-label={`Открыть задачу ${task.title}`}
+                  >
+                    <span
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                        done
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : overdue
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-sky-50 text-sky-700'
+                      }`}
                     >
-                      {task.status === 'done'
-                        ? 'Выполнена'
-                        : task.status === 'cancelled'
-                          ? 'Отменена'
-                          : 'Открыта'}
-                    </Badge>
-                    <Badge tone={task.priority >= 2 ? 'warning' : 'neutral'}>
-                      {priorityLabels[task.priority] ?? 'Обычный'}
-                    </Badge>
-                    {task.recurrence ? <Badge tone="info">↻</Badge> : null}
-                    {task.tags.slice(0, 3).map((tag) => (
-                      <Badge key={tag} tone="neutral">
-                        {tag}
-                      </Badge>
-                    ))}
-                    {task.tags.length > 3 ? (
-                      <span className="text-xs text-zinc-500">+{task.tags.length - 3}</span>
-                    ) : null}
-                    {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                    {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
-                  </div>
-
-                  <h3 className="mt-2 line-clamp-2 min-h-12 text-base font-semibold text-zinc-900">
-                    {task.title}
-                  </h3>
-                  <p className="mt-1 line-clamp-1 min-h-5 text-sm text-zinc-600">
-                    {task.description ?? ' '}
-                  </p>
-
-                  <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pt-3">
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500">
-                      <span>Создана {formatDate(task.createdAt)}</span>
-                      {task.dueAt ? <span>Срок {formatDate(task.dueAt)}</span> : null}
-                      {task.completedAt ? (
-                        <span>Выполнена {formatDate(task.completedAt)}</span>
-                      ) : null}
-                      {task.images.slice(0, 3).map((image) => (
-                        <img
-                          key={image.id}
-                          src={image.dataUrl}
-                          alt={image.name}
-                          className="h-6 w-6 rounded border border-zinc-200 object-cover"
-                        />
-                      ))}
-                      {task.images.length > 3 ? <span>+{task.images.length - 3}</span> : null}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="secondary"
-                        className="h-8 px-3 text-xs"
-                        onClick={() => openEdit(task)}
-                      >
-                        Изменить
-                      </Button>
-                      <Button
-                        variant={task.status === 'done' ? 'ghost' : 'secondary'}
-                        className="h-8 px-3 text-xs"
-                        onClick={() =>
-                          statusMutation.mutate({
-                            task,
-                            status: task.status === 'done' ? 'open' : 'done',
-                          })
-                        }
-                        disabled={statusMutation.isPending}
-                      >
-                        {task.status === 'done' ? 'В работу' : 'Завершить'}
-                      </Button>
-                      {task.archivedAt ? (
-                        <Button
-                          variant="secondary"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => restoreMutation.mutate(task)}
-                          disabled={restoreMutation.isPending}
+                      <ClipboardIcon />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`truncate text-sm font-semibold ${
+                            done ? 'text-zinc-500' : 'text-zinc-900'
+                          }`}
                         >
-                          Вернуть
-                        </Button>
-                      ) : (
+                          {task.title}
+                        </span>
+                        <Badge tone={statusTones[task.status]}>{statusLabels[task.status]}</Badge>
+                        {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
+                        {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
+                      </span>
+                      <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                        <span className="flex items-center gap-1">
+                          <CalendarIcon className="h-3.5 w-3.5" />
+                          {task.dueAt ? formatDate(task.dueAt) : 'Без срока'}
+                        </span>
+                        <span>{priorityLabels[task.priority] ?? 'Обычный'}</span>
+                        {task.recurrence ? <span>↻ Повтор</span> : null}
+                        {task.tags.length > 0 ? (
+                          <span className="flex min-w-0 items-center gap-1">
+                            <TagIcon />
+                            <span className="truncate">{task.tags.join(', ')}</span>
+                          </span>
+                        ) : null}
+                        {task.images.length > 0 ? (
+                          <span className="flex items-center gap-1">
+                            <ImageIcon />
+                            {task.images.length}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                  </button>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    {task.archivedAt ? (
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        aria-label="Вернуть задачу"
+                        title="Вернуть"
+                        onClick={() => restoreMutation.mutate(task)}
+                        disabled={restoreMutation.isPending}
+                      >
+                        <UndoIcon />
+                      </Button>
+                    ) : (
+                      <>
                         <Button
                           variant="ghost"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => {
-                            if (window.confirm(`Архивировать задачу «${task.title}»?`)) {
-                              archiveMutation.mutate(task);
-                            }
-                          }}
-                          disabled={archiveMutation.isPending}
+                          className={`h-8 w-8 p-0 ${done ? 'text-zinc-500' : 'text-emerald-700'}`}
+                          aria-label={done ? 'Вернуть в работу' : 'Завершить задачу'}
+                          title={done ? 'Вернуть в работу' : 'Завершить'}
+                          onClick={() =>
+                            statusMutation.mutate({
+                              task,
+                              status: done ? 'open' : 'done',
+                            })
+                          }
+                          disabled={statusMutation.isPending}
                         >
-                          В архив
+                          {done ? <UndoIcon /> : <CheckIcon />}
                         </Button>
-                      )}
-                    </div>
+                        <Button
+                          variant="ghost"
+                          className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
+                          aria-label="Удалить задачу"
+                          title="Удалить"
+                          onClick={() => setDrawer({ task, startWithDelete: true })}
+                        >
+                          <TrashIcon />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </Card>
               );
@@ -379,12 +401,18 @@ export function TasksPage() {
         )
       ) : null}
 
-      {dialogOpen ? (
+      {drawer ? (
         <TaskDialog
-          task={editing}
-          initialDue={initialDue}
-          onClose={closeDialog}
+          task={drawer.task}
+          initialDue={drawer.initialDue}
+          startInEdit={drawer.startInEdit}
+          startWithDelete={drawer.startWithDelete}
+          onClose={closeDrawer}
           onSaved={invalidate}
+          onDeleted={() => {
+            invalidate();
+            closeDrawer();
+          }}
         />
       ) : null}
     </div>

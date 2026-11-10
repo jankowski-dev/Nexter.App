@@ -10,64 +10,8 @@ import { formatDate } from '@/lib/format';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
+import { NotebookIcon, PencilIcon, PinIcon, TrashIcon, UndoIcon } from '@/components/ui/icons';
 import { NoteDrawer } from './note-drawer';
-
-function PencilIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-      <path d="m13.5 7.5 3 3" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PinIcon({ filled }: { filled: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="m9 4 6 6-2 1 4 4-1 1-4-4-1 2-6-6 4-4Z"
-        fill={filled ? 'currentColor' : 'none'}
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <path d="m9 15-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function RestoreIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
-      <path
-        d="M4 10a8 8 0 1 1 2.3 6.7M4 10V4m0 6h6"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 interface DrawerState {
   note: Note | null;
@@ -206,22 +150,9 @@ export function NotesPage() {
                 onClick={() => setDrawer({ note })}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <button
-                    type="button"
-                    aria-label={note.pinned ? 'Открепить заметку' : 'Закрепить заметку'}
-                    title={note.pinned ? 'Открепить' : 'Закрепить'}
-                    className={`rounded-lg p-1.5 ${
-                      note.pinned
-                        ? 'text-emerald-700 hover:bg-emerald-50'
-                        : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700'
-                    }`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      pinMutation.mutate(note);
-                    }}
-                  >
-                    <PinIcon filled={note.pinned} />
-                  </button>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <NotebookIcon />
+                  </span>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-base font-semibold text-zinc-900">
@@ -237,6 +168,20 @@ export function NotesPage() {
                 </div>
 
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    className={`h-8 w-8 p-0 ${
+                      note.pinned ? 'text-emerald-700' : 'text-zinc-400 hover:text-zinc-700'
+                    }`}
+                    aria-label={note.pinned ? 'Открепить заметку' : 'Закрепить заметку'}
+                    title={note.pinned ? 'Открепить' : 'Закрепить'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      pinMutation.mutate(note);
+                    }}
+                  >
+                    <PinIcon filled={note.pinned} />
+                  </Button>
                   {note.archivedAt ? (
                     <Button
                       variant="ghost"
@@ -249,7 +194,7 @@ export function NotesPage() {
                       }}
                       disabled={restoreMutation.isPending}
                     >
-                      <RestoreIcon />
+                      <UndoIcon />
                     </Button>
                   ) : (
                     <Button

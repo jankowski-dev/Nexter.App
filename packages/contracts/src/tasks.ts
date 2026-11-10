@@ -41,6 +41,10 @@ export const taskListQuerySchema = z
       .union([z.boolean(), z.enum(['true', 'false'])])
       .transform((value) => value === true || value === 'true')
       .default(false),
+    archivedOnly: z
+      .union([z.boolean(), z.enum(['true', 'false'])])
+      .transform((value) => value === true || value === 'true')
+      .default(false),
     from: z.iso.datetime().optional(),
     to: z.iso.datetime().optional(),
     limit: z.coerce.number().int().min(1).max(500).default(200),

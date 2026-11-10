@@ -49,7 +49,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/30 p-0 sm:items-center sm:p-6"
+      className="dialog-overlay-enter fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/30 p-0 sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -62,7 +62,7 @@ export function Dialog({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
+          'dialog-panel-enter max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
           resolvedSize === 'md' && 'sm:max-w-xl',
           resolvedSize === 'lg' && 'sm:max-w-3xl',
           resolvedSize === 'xl' && 'sm:max-w-5xl',
