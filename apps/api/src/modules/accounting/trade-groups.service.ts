@@ -544,6 +544,7 @@ export class TradeGroupsService {
         decimals: row.asset.decimals,
         contractAddress: row.asset.contractAddress,
         coingeckoId: row.asset.coingeckoId,
+        logoUrl: row.asset.logoUrl,
         isStablecoin: row.asset.isStablecoin,
         isCashEquivalent: row.asset.isCashEquivalent,
         isVerified: row.asset.isVerified,

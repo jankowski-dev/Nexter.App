@@ -2,6 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { TokenIcon } from '@/components/token-icon';
 import { fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
@@ -187,7 +188,7 @@ export function PortfolioPage() {
                       <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
                       <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
                       <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
-                      <th className="py-2 pr-3 text-right font-medium">P&L</th>
+                      <th className="py-2 pr-3 text-right font-medium">Результат</th>
                       <th className="py-2 pr-3 text-right font-medium">Доля</th>
                       <th className="py-2 text-right font-medium">Действие</th>
                     </tr>
@@ -208,15 +209,23 @@ export function PortfolioPage() {
                             <button
                               type="button"
                               onClick={() => setSelectedAssetId(position.asset.id)}
-                              className="text-left font-medium text-zinc-800 hover:text-emerald-800"
+                              className="flex items-center gap-2 text-left"
                               aria-label={`Открыть статистику ${position.asset.symbol}`}
                             >
-                              {position.asset.symbol}
+                              <TokenIcon
+                                logoUrl={position.asset.logoUrl}
+                                symbol={position.asset.symbol}
+                              />
+                              <span className="min-w-0">
+                                <span className="block font-medium text-zinc-800 hover:text-emerald-800">
+                                  {position.asset.symbol}
+                                </span>
+                                <span className="block text-xs text-zinc-500">
+                                  {position.asset.chainCode}
+                                  {!position.asset.isVerified ? ' · не проверен' : ''}
+                                </span>
+                              </span>
                             </button>
-                            <div className="text-xs text-zinc-500">
-                              {position.asset.chainCode}
-                              {!position.asset.isVerified ? ' · unverified' : ''}
-                            </div>
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                             {formatTokenAmount(position.amount)}

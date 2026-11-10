@@ -194,7 +194,8 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   expect(usdcAssetId).toBeDefined();
 
   async function openEmbeddedSwap() {
-    await page.getByRole('button', { name: '+ Операция' }).click();
+    await page.goto('/portfolio');
+    await page.getByRole('button', { name: 'Новая сделка' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
     await dialog.getByLabel('Актив', { exact: true }).selectOption(basedAssetId ?? '');
@@ -231,6 +232,8 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   await expect(dialog.getByText('1,99 BASED')).toBeVisible();
   await expect(dialog.getByText('route-ui')).toBeVisible();
   await expect(dialog.getByText('+0,10%')).toBeVisible();
+
+  await dialog.getByLabel('Закрыть').click();
 
   swapsEnabled = false;
   await page.reload();

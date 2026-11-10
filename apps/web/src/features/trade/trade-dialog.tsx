@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch, fetchAccounts, fetchAssets, fetchSwapConfig, fetchTradeGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import { useWallet } from '@/lib/wallet-context';
 import { formatTokenAmount, formatUsd } from '@/lib/format';
 import { manualTransactionResponseSchema } from '@nexter/contracts';
 import type { Account, Asset, SwapConfigResponse } from '@nexter/contracts';
@@ -186,6 +187,7 @@ export function TradeDialog({
   titleOverride,
 }: TradeDialogProps) {
   const queryClient = useQueryClient();
+  const wallet = useWallet();
   const [mode, setMode] = useState<OperationMode>(initialMode);
   const [side, setSide] = useState<TradeSide>(initialSide);
   const [execution, setExecution] = useState<ExecutionMode>('manual');
@@ -224,18 +226,75 @@ export function TradeDialog({
   const assets = assetsQuery.data?.assets ?? [];
   const walletAccounts =
     accountsQuery.data?.accounts.filter((account) => account.type === 'wallet') ?? [];
-  const nonCashAssets = assets.filter((asset) => !asset.isCashEquivalent);
-  const cashAssets = assets.filter((asset) => asset.isCashEquivalent);
+  const nonCashAssets = assets.filter(
+    (asset) =>
+      !asset.isCashEquivalent && (asset.chainCode === wallet.chain || asset.id === assetId),
+  );
+  const cashAssets = assets.filter(
+    (asset) =>
+      asset.isCashEquivalent && (asset.chainCode === wallet.chain || asset.id === quoteAssetId),
+  );
 
   const selectedAsset = assets.find((asset) => asset.id === assetId);
   const selectedQuoteAsset = assets.find((asset) => asset.id === quoteAssetId);
   const selectedAssetIn = assets.find((asset) => asset.id === assetInId);
   const selectedAssetOut = assets.find((asset) => asset.id === assetOutId);
   const chainCode =
-    mode === 'exchange' ? selectedAssetIn?.chainCode : (selectedAsset?.chainCode ?? null);
+    mode === 'exchange'
+      ? (selectedAssetIn?.chainCode ?? wallet.chain)
+      : (selectedAsset?.chainCode ?? wallet.chain);
   const chainAccounts = walletAccounts.filter(
     (account) => !chainCode || account.chainCode === chainCode,
   );
+
+  const switchedInitialAsset = useRef(false);
+  const previousWalletChain = useRef(wallet.chain);
+  const expectedWalletChain = useRef<'bsc' | 'ethereum' | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      switchedInitialAsset.current = false;
+      previousWalletChain.current = wallet.chain;
+      expectedWalletChain.current = null;
+      return;
+    }
+    if (!initialAssetId || switchedInitialAsset.current || assets.length === 0) return;
+    const asset = assets.find((item) => item.id === initialAssetId);
+    if (asset?.chainCode === 'bsc' || asset?.chainCode === 'ethereum') {
+      switchedInitialAsset.current = true;
+      if (wallet.chain !== asset.chainCode) {
+        expectedWalletChain.current = asset.chainCode;
+        wallet.selectChain(asset.chainCode);
+      }
+    }
+  }, [open, initialAssetId, assets, wallet.chain, wallet.selectChain]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (previousWalletChain.current === wallet.chain) return;
+    previousWalletChain.current = wallet.chain;
+
+    if (expectedWalletChain.current === wallet.chain) {
+      expectedWalletChain.current = null;
+      return;
+    }
+
+    setAssetId('');
+    setQuoteAssetId('');
+    setAssetInId('');
+    setAssetOutId('');
+    setAmount('');
+    setQuoteAmount('');
+    setAmountIn('');
+    setAmountOut('');
+    setAccountId('');
+    setUsdValue('');
+    setUsdValueIn('');
+    setUsdValueOut('');
+    setSelectedGroupIds([]);
+    setExecution('manual');
+    setError('Сеть изменилась. Выберите актив и сумму заново.');
+  }, [open, wallet.chain]);
 
   const groupsQuery = useQuery({
     queryKey: ['trade-groups-close', assetId],
@@ -461,6 +520,8 @@ export function TradeDialog({
   }
 
   function canSubmit(): boolean {
+    if (!accountId || !chainAccounts.some((account) => account.id === accountId)) return false;
+
     if (mode === 'income') {
       return Boolean(
         accountId && assetId && isPositiveDecimal(amount) && isPositiveDecimal(usdValue),
@@ -476,8 +537,6 @@ export function TradeDialog({
         reason.trim(),
       );
     }
-
-    if (!accountId) return false;
 
     if (mode === 'trade' && side === 'entry') {
       return Boolean(
@@ -692,6 +751,9 @@ export function TradeDialog({
                 initialTokenOut={swapReady.tokenOut}
                 initialAmountIn={swapReady.amountIn}
                 closeGroupIds={swapReady.closeGroupIds}
+                onSelectChain={(next) => {
+                  expectedWalletChain.current = next;
+                }}
               />
             </div>
           ) : (

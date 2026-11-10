@@ -1,11 +1,11 @@
 import { Button } from '@/components/ui/button';
-import { TradeDialog } from '@/features/trade/trade-dialog';
 import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
+import { useWallet, WalletProvider, type WalletChain } from '@/lib/wallet-context';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 const cryptoNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
@@ -13,11 +13,11 @@ const cryptoNavigation = [
   { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
   { to: '/reports', label: messages.nav.reports },
-  { to: '/vault', label: messages.nav.vault },
 ] as const;
 
 const primaryNavigation = [
   { to: '/finance', label: messages.nav.finance },
+  { to: '/vault', label: messages.nav.vault },
   { to: '/tasks', label: messages.nav.tasks },
   { to: '/notes', label: messages.nav.notes },
   { to: '/settings', label: messages.nav.settings },
@@ -59,14 +59,134 @@ function MoonIcon() {
   );
 }
 
-export function RootLayout() {
+function WalletIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <path
+        d="M4.5 7.8A2.3 2.3 0 0 1 6.8 5.5h9.9a2 2 0 0 1 2 2v1.1H6.8a2.3 2.3 0 0 0-2.3 2.3v7.8A2.3 2.3 0 0 1 2.2 16.4V7.8Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.5 8.6h14.3a2 2 0 0 1 2 2v7.1a2.3 2.3 0 0 1-2.3 2.3H6.8a2.3 2.3 0 0 1-2.3-2.3V8.6Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <circle cx="17.3" cy="14.2" r="1.2" fill="currentColor" />
+    </svg>
+  );
+}
+
+function BnbIcon() {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-4 w-4">
+      <path d="m16 4 4.4 4.4L16 12.8l-4.4-4.4Z" fill="#F3BA2F" />
+      <path d="m7.2 12.8 4.4 4.4-4.4 4.4L2.8 17.2Z" fill="#F3BA2F" />
+      <path d="m24.8 12.8 4.4 4.4-4.4 4.4-4.4-4.4Z" fill="#F3BA2F" />
+      <path d="m16 15.6 4.4 4.4-4.4 4.4-4.4-4.4Z" fill="#F3BA2F" />
+      <path d="m16 27.2 4.4-4.4L16 25l-4.4-2.2Z" fill="#F3BA2F" opacity=".65" />
+    </svg>
+  );
+}
+
+function EthIcon() {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-4 w-4">
+      <path d="M16 3.5 24 16l-8 4.7L8 16Z" fill="#627EEA" />
+      <path d="M16 21.9 24 17.2 16 29l-8-11.8Z" fill="#8A9DF1" />
+    </svg>
+  );
+}
+
+function ChainButton({
+  chain,
+  active,
+  onClick,
+  label,
+  children,
+}: {
+  chain: WalletChain;
+  active: boolean;
+  onClick: (chain: WalletChain) => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      title={chain === 'bsc' ? 'BNB Smart Chain' : 'Ethereum'}
+      onClick={() => onClick(chain)}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+        active
+          ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/15'
+          : 'border-zinc-200 bg-white hover:bg-zinc-50'
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function WalletControls() {
+  const wallet = useWallet();
+
+  return (
+    <>
+      {wallet.connected ? (
+        <Button
+          variant="secondary"
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          title={wallet.address ?? undefined}
+          onClick={() => void wallet.disconnect()}
+        >
+          <WalletIcon />
+          Отключить
+        </Button>
+      ) : (
+        <Button
+          className="h-8 gap-1.5 px-2.5 text-xs"
+          onClick={() => void wallet.connect()}
+          disabled={wallet.connecting || !wallet.projectId}
+          title={!wallet.projectId ? 'WalletConnect не настроен на сервере' : undefined}
+        >
+          <WalletIcon />
+          {wallet.connecting ? 'Подключаю…' : 'Подключить'}
+        </Button>
+      )}
+
+      <div role="group" aria-label="Блокчейн" className="flex items-center gap-1">
+        <ChainButton
+          chain="bsc"
+          active={wallet.chain === 'bsc'}
+          onClick={wallet.selectChain}
+          label="BNB"
+        >
+          <BnbIcon />
+        </ChainButton>
+        <ChainButton
+          chain="ethereum"
+          active={wallet.chain === 'ethereum'}
+          onClick={wallet.selectChain}
+          label="Ethereum"
+        >
+          <EthIcon />
+        </ChainButton>
+      </div>
+    </>
+  );
+}
+
+function RootLayoutContent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const cryptoActive = cryptoNavigation.some(
     (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
   );
-  const [manualOpen, setManualOpen] = useState(false);
   const [cryptoOpen, setCryptoOpen] = useState(cryptoActive);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (document.documentElement.dataset.theme === 'dark') return 'dark';
@@ -76,6 +196,7 @@ export function RootLayout() {
       return 'light';
     }
   });
+  const wallet = useWallet();
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
@@ -132,7 +253,7 @@ export function RootLayout() {
                   : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
               }`}
             >
-              <span>Crypto</span>
+              <span>Крипта</span>
               <span aria-hidden="true">{cryptoOpen ? '▾' : '▸'}</span>
             </button>
             {cryptoOpen ? (
@@ -163,11 +284,7 @@ export function RootLayout() {
             ))}
           </nav>
 
-          <div className="mt-auto space-y-2">
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-500">
-              {messages.app.phase}
-            </div>
-            <div className="truncate px-2 text-xs text-zinc-500">{me.data?.user.email}</div>
+          <div className="mt-auto">
             <Button className="w-full" variant="ghost" onClick={() => void logout()}>
               Выйти
             </Button>
@@ -175,13 +292,9 @@ export function RootLayout() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
-            <div className="text-sm text-zinc-500">{messages.app.header}</div>
-            <div className="flex items-center gap-3">
-              <div className="hidden items-center gap-2 text-xs text-zinc-500 sm:flex">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                {messages.app.status}
-              </div>
+          <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
+            <div className="hidden text-sm text-zinc-500 sm:block">{messages.app.header}</div>
+            <div className="flex items-center gap-2 sm:gap-3">
               <div
                 className="flex items-center gap-0.5 rounded-full border border-zinc-200 bg-zinc-50 p-1"
                 role="group"
@@ -214,13 +327,37 @@ export function RootLayout() {
                   <MoonIcon />
                 </button>
               </div>
-              <Button className="h-8 px-3 text-xs" onClick={() => setManualOpen(true)}>
-                + Операция
-              </Button>
-              <Button className="md:hidden" variant="ghost" onClick={() => void logout()}>
+
+              <div
+                className="hidden max-w-64 truncate text-xs text-zinc-500 lg:block"
+                title={me.data?.user.email}
+              >
+                {me.data?.user.email}
+              </div>
+
+              <WalletControls />
+
+              <Button className="px-2 md:hidden" variant="ghost" onClick={() => void logout()}>
                 Выйти
               </Button>
             </div>
+
+            {wallet.error ? (
+              <div
+                role="alert"
+                className="absolute right-4 top-full z-40 mt-2 flex max-w-sm items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 shadow-lg"
+              >
+                <span>{wallet.error}</span>
+                <button
+                  type="button"
+                  aria-label="Закрыть сообщение"
+                  className="shrink-0 rounded px-1 text-red-500 hover:bg-red-100"
+                  onClick={wallet.clearError}
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
           </header>
 
           <nav
@@ -236,7 +373,7 @@ export function RootLayout() {
                   cryptoActive ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-zinc-600'
                 }`}
               >
-                Crypto {cryptoOpen ? '▾' : '▸'}
+                Крипта {cryptoOpen ? '▾' : '▸'}
               </button>
               {primaryNavigation.map((item) => (
                 <Link
@@ -272,12 +409,14 @@ export function RootLayout() {
           </main>
         </div>
       </div>
-      <TradeDialog
-        open={manualOpen}
-        onClose={() => setManualOpen(false)}
-        initialMode="trade"
-        titleOverride="Новая операция"
-      />
     </div>
+  );
+}
+
+export function RootLayout() {
+  return (
+    <WalletProvider>
+      <RootLayoutContent />
+    </WalletProvider>
   );
 }

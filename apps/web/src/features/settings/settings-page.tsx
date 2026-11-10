@@ -125,9 +125,7 @@ export function SettingsPage() {
 
       <Card>
         <CardTitle>Общие</CardTitle>
-        <CardDescription>
-          Базовая валюта и метод учёта фиксированы для MVP-1: USD и FIFO.
-        </CardDescription>
+        <CardDescription>Базовая валюта и метод учёта фиксированы: USD и FIFO.</CardDescription>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="block text-sm text-zinc-600">
             Базовая валюта

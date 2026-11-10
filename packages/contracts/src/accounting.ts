@@ -61,6 +61,7 @@ export const assetSchema = z.object({
   decimals: z.number().int(),
   contractAddress: z.string().nullable(),
   coingeckoId: z.string().nullable(),
+  logoUrl: z.string().nullable(),
   isStablecoin: z.boolean(),
   isCashEquivalent: z.boolean(),
   isVerified: z.boolean(),

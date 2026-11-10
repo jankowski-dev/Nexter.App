@@ -2,9 +2,7 @@ export const messages = {
   app: {
     name: 'Nexter',
     tagline: 'личные финансы',
-    phase: 'UI-9 · Дизайн',
     header: 'Личный финансовый учёт',
-    status: 'MVP-1 · BSC/Ethereum',
   },
   nav: {
     dashboard: 'Дашборд',

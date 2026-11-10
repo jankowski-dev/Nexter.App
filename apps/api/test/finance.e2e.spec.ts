@@ -212,6 +212,23 @@ describe.runIf(canRun)('Finance API', () => {
       ]),
     );
 
+    const ranged = await agent
+      .get('/api/v1/finance/summary?from=2026-11-01&to=2026-11-30&month=2026-11&months=2')
+      .expect(200);
+    expect(ranged.body).toMatchObject({
+      month: '2026-11',
+      incomeBase: '1296.50',
+      expenseBase: '200.00',
+      netBase: '1096.50',
+    });
+
+    const allTime = await agent.get('/api/v1/finance/summary?all=true&months=2').expect(200);
+    expect(Number(allTime.body.incomeBase)).toBeGreaterThanOrEqual(1296.5);
+    expect(Number(allTime.body.expenseBase)).toBeGreaterThanOrEqual(200);
+    expect(allTime.body.categories.length).toBeGreaterThan(0);
+
+    await agent.get('/api/v1/finance/summary?from=2026-12-01&to=2026-11-01').expect(400);
+
     const journal = await agent
       .get('/api/v1/finance/journal?from=2026-11-01&to=2026-11-30')
       .expect(200);

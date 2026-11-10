@@ -21,7 +21,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type {
   FinanceAccount,
   FinanceAccountKind,
@@ -41,10 +41,12 @@ import {
   FinanceTransactionDialog,
   FinanceTransferDialog,
 } from './finance-dialogs';
+import { categoryColorClass } from './category-colors';
 import { FinanceCreditDialog } from './finance-credit-dialog';
 
 type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories' | 'import';
 type JournalFilter = 'all' | 'income' | 'expense' | 'transfer' | 'cancelled';
+type PeriodPreset = 'current' | 'previous' | 'custom' | 'year' | 'all';
 
 const tabLabels: Record<FinanceTab, string> = {
   overview: 'Обзор',
@@ -70,21 +72,29 @@ const transferKindLabels: Record<FinanceTransferKind, string> = {
   other: 'Другое',
 };
 
-const categoryColorClass: Record<string, string> = {
-  purple: 'bg-violet-500',
-  red: 'bg-red-500',
-  green: 'bg-emerald-500',
-  orange: 'bg-orange-500',
-  yellow: 'bg-amber-400',
-  gray: 'bg-zinc-400',
-  blue: 'bg-sky-500',
-  brown: 'bg-amber-700',
-  pink: 'bg-pink-500',
-  default: 'bg-zinc-300',
+const periodLabels: Record<PeriodPreset, string> = {
+  current: 'Текущий месяц',
+  previous: 'Прошлый месяц',
+  custom: 'Выбрать месяц',
+  year: 'За год',
+  all: 'За всё время',
 };
 
 function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function shiftMonth(month: string, delta: number): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const date = new Date(Date.UTC(year, monthNumber - 1 + delta, 1));
+  return date.toISOString().slice(0, 7);
+}
+
+function localDateString(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate(),
+  ).padStart(2, '0')}`;
 }
 
 function monthEnd(month: string): string {
@@ -109,9 +119,10 @@ function money(
 }
 
 function monthLabel(month: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(
+  const value = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(
     new Date(`${month}-01T12:00:00`),
   );
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function statusTone(status: string): 'success' | 'warning' | 'neutral' {
@@ -147,7 +158,8 @@ function Kpi({
 export function FinancePage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<FinanceTab>('overview');
-  const [month, setMonth] = useState(currentMonth);
+  const [period, setPeriod] = useState<PeriodPreset>('current');
+  const [customMonth, setCustomMonth] = useState(currentMonth);
   const [journalFilter, setJournalFilter] = useState<JournalFilter>('all');
   const [notice, setNotice] = useState<string | null>(null);
   const [transactionDialog, setTransactionDialog] = useState<{
@@ -165,9 +177,59 @@ export function FinancePage() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const periodRange = useMemo(() => {
+    const today = new Date();
+    const current = currentMonth();
+
+    if (period === 'all') {
+      return {
+        from: undefined,
+        to: undefined,
+        all: true,
+        month: current,
+        label: 'Всё время',
+      };
+    }
+
+    if (period === 'year') {
+      const year = today.getFullYear();
+      return {
+        from: `${year}-01-01`,
+        to: localDateString(today),
+        all: false,
+        month: current,
+        label: `${year} год`,
+      };
+    }
+
+    const month =
+      period === 'previous' ? shiftMonth(current, -1) : period === 'custom' ? customMonth : current;
+
+    return {
+      from: `${month}-01`,
+      to: monthEnd(month),
+      all: false,
+      month,
+      label: monthLabel(month),
+    };
+  }, [period, customMonth]);
+
   const summary = useQuery({
-    queryKey: ['finance-summary', month],
-    queryFn: () => fetchFinanceSummary(month, 12),
+    queryKey: [
+      'finance-summary',
+      periodRange.from ?? null,
+      periodRange.to ?? null,
+      periodRange.all,
+      periodRange.month,
+    ],
+    queryFn: () =>
+      fetchFinanceSummary({
+        month: periodRange.month,
+        months: 12,
+        from: periodRange.from,
+        to: periodRange.to,
+        all: periodRange.all,
+      }),
   });
   const accounts = useQuery({ queryKey: ['finance-accounts'], queryFn: fetchFinanceAccounts });
   const categories = useQuery({
@@ -175,11 +237,11 @@ export function FinancePage() {
     queryFn: fetchFinanceCategories,
   });
   const journal = useQuery({
-    queryKey: ['finance-journal', month, journalFilter],
+    queryKey: ['finance-journal', periodRange.from ?? null, periodRange.to ?? null, journalFilter],
     queryFn: () =>
       fetchFinanceJournal({
-        from: `${month}-01`,
-        to: monthEnd(month),
+        from: periodRange.from,
+        to: periodRange.to,
         includeArchived: journalFilter === 'cancelled',
         limit: 500,
       }),
@@ -369,13 +431,6 @@ export function FinancePage() {
         subtitle="Доходы, расходы, переводы и счета в BYN, USD и EUR."
         actions={
           <>
-            <Input
-              className="h-9 w-40"
-              type="month"
-              aria-label="Месяц финансов"
-              value={month}
-              onChange={(event) => setMonth(event.target.value || currentMonth())}
-            />
             <Button variant="secondary" onClick={() => setTransactionDialog({ kind: 'income' })}>
               + Доход
             </Button>
@@ -386,6 +441,40 @@ export function FinancePage() {
           </>
         }
       />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <div
+          className="flex flex-wrap gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1"
+          role="group"
+          aria-label="Период финансов"
+        >
+          {(Object.keys(periodLabels) as PeriodPreset[]).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={period === value}
+              onClick={() => setPeriod(value)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                period === value
+                  ? 'bg-white font-medium text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              {periodLabels[value]}
+            </button>
+          ))}
+        </div>
+        {period === 'custom' ? (
+          <Input
+            className="h-9 w-40"
+            type="month"
+            aria-label="Выбрать месяц"
+            value={customMonth}
+            onChange={(event) => setCustomMonth(event.target.value || currentMonth())}
+          />
+        ) : null}
+        <span className="text-xs text-zinc-500">{periodRange.label}</span>
+      </div>
 
       <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
         {(Object.keys(tabLabels) as FinanceTab[]).map((value) =>
@@ -412,15 +501,15 @@ export function FinancePage() {
         <div className="space-y-6">
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kpi
-              label="Доходы за месяц"
+              label="Доходы"
               value={money(summary.data?.incomeBase, 'BYN')}
-              hint={monthLabel(month)}
+              hint={periodRange.label}
               tone="text-emerald-700"
             />
             <Kpi
-              label="Расходы за месяц"
+              label="Расходы"
               value={money(summary.data?.expenseBase, 'BYN')}
-              hint={monthLabel(month)}
+              hint={periodRange.label}
               tone="text-red-700"
             />
             <Kpi
@@ -430,7 +519,7 @@ export function FinancePage() {
               tone={Number(summary.data?.netBase ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}
             />
             <Kpi
-              label="Net worth"
+              label="Чистый капитал"
               value={money(summary.data?.netWorthBase, 'BYN')}
               hint={`Активы ${money(summary.data?.assetsBase, 'BYN')} · кредит ${money(summary.data?.liabilitiesBase, 'BYN')}`}
             />
@@ -468,11 +557,11 @@ export function FinancePage() {
             </Card>
 
             <Card>
-              <CardTitle>Категории месяца</CardTitle>
-              <CardDescription>{monthLabel(month)}</CardDescription>
+              <CardTitle>Категории периода</CardTitle>
+              <CardDescription>{periodRange.label}</CardDescription>
               <div className="mt-4 space-y-3">
                 {(summary.data?.categories ?? []).length === 0 ? (
-                  <p className="text-sm text-zinc-500">Операций за месяц пока нет.</p>
+                  <p className="text-sm text-zinc-500">Операций за период пока нет.</p>
                 ) : (
                   (summary.data?.categories ?? []).map((category) => {
                     const known = category.categoryId
@@ -529,7 +618,7 @@ export function FinancePage() {
                     <th className="py-2 pr-3 font-medium">Месяц</th>
                     <th className="py-2 pr-3 text-right font-medium">Доходы</th>
                     <th className="py-2 pr-3 text-right font-medium">Расходы</th>
-                    <th className="py-2 text-right font-medium">Net</th>
+                    <th className="py-2 text-right font-medium">Сальдо</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -607,7 +696,7 @@ export function FinancePage() {
           {!journal.isPending && !journal.isError ? (
             journalRows().length === 0 ? (
               <Card>
-                <CardTitle>Операций за месяц нет</CardTitle>
+                <CardTitle>Операций за период нет</CardTitle>
                 <CardDescription>Добавьте доход, расход или перевод.</CardDescription>
               </Card>
             ) : (

@@ -207,7 +207,7 @@ export function TradeDetailPage() {
           </CardDescription>
         </Card>
         <Card>
-          <CardTitle>Return / срок</CardTitle>
+          <CardTitle>Доходность / срок</CardTitle>
           <div className={`mt-1 font-mono text-2xl font-semibold ${pnlTone(group.returnPct)}`}>
             {group.returnPct ? `${group.returnPct}%` : '—'}
           </div>

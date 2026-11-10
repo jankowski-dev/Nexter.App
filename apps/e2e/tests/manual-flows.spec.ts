@@ -83,7 +83,8 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   });
 
   async function openOperation() {
-    await page.getByRole('button', { name: '+ Операция' }).click();
+    await page.goto('/portfolio');
+    await page.getByRole('button', { name: 'Новая сделка' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
     return dialog;

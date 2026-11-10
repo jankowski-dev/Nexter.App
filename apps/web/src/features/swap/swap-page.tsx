@@ -23,9 +23,9 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useWalletConnect } from '@/lib/walletconnect';
+import { useWallet } from '@/lib/wallet-context';
 import { Decimal } from 'decimal.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 function isPositiveDecimal(value: string): boolean {
   return /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0;
@@ -48,6 +48,7 @@ export interface SwapPanelProps {
   initialTokenOut?: string;
   initialAmountIn?: string;
   closeGroupIds?: string[];
+  onSelectChain?: (chain: 'bsc' | 'ethereum') => void;
 }
 
 export function SwapPage({
@@ -57,21 +58,34 @@ export function SwapPage({
   initialTokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d',
   initialAmountIn = '1',
   closeGroupIds,
+  onSelectChain,
 }: SwapPanelProps = {}) {
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
-  const [chainCode, setChainCode] = useState<'bsc' | 'ethereum'>(initialChain);
-  const selectedChainId = chainCode === 'ethereum' ? 1 : 56;
+  const wallet = useWallet();
+  const chainCode = wallet.chain;
+  const selectedChainId = chainIdForCode(chainCode) ?? 56;
   const [tokenIn, setTokenIn] = useState(initialTokenIn);
   const [tokenOut, setTokenOut] = useState(initialTokenOut);
   const [amountIn, setAmountIn] = useState(initialAmountIn);
   const [walletAddress, setWalletAddress] = useState('');
   const [slippageBps, setSlippageBps] = useState<number | null>(null);
-
-  const wallet = useWalletConnect(config.data?.walletConnectProjectId ?? null);
+  const initialChainApplied = useRef(false);
+  const lastChain = useRef(chainCode);
+  const appliedInitialChainTokens = useRef(false);
+  const configTokensApplied = useRef(false);
 
   useEffect(() => {
     if (wallet.address) setWalletAddress(wallet.address);
   }, [wallet.address]);
+
+  useEffect(() => {
+    if (initialChainApplied.current) return;
+    initialChainApplied.current = true;
+    if (initialChain !== wallet.chain) {
+      onSelectChain?.(initialChain);
+      wallet.selectChain(initialChain);
+    }
+  }, [initialChain, wallet.chain, wallet.selectChain, onSelectChain]);
 
   const quote = useMutation({
     mutationFn: () =>
@@ -416,15 +430,7 @@ export function SwapPage({
     walletAddress,
   ]);
 
-  function switchChain(nextCode: 'bsc' | 'ethereum'): void {
-    const target = config.data?.chains.find((item) => item.code === nextCode);
-    if (!target) return;
-
-    if (chainCode !== nextCode) selectChain(nextCode);
-    if (!wallet.onChain(target.chainId)) void wallet.switchToChain(target.chainId);
-  }
-
-  function selectChain(nextCode: 'bsc' | 'ethereum'): void {
+  function resetChainTokens(nextCode: 'bsc' | 'ethereum'): void {
     const next = config.data?.chains.find((item) => item.code === nextCode);
     const nextTokens = next?.tokens ?? [];
     const nextIn = nextTokens.find((token) => !token.native) ?? nextTokens[0];
@@ -433,7 +439,6 @@ export function SwapPage({
         (token) => !token.native && token.address.toLowerCase() !== nextIn?.address.toLowerCase(),
       ) ?? nextTokens[0];
 
-    setChainCode(nextCode);
     setTokenIn(nextIn?.address ?? '');
     setTokenOut(nextOut?.address ?? '');
     quote.reset();
@@ -444,6 +449,39 @@ export function SwapPage({
     setSwapTxHash(null);
     setExecutionError(null);
   }
+
+  useEffect(() => {
+    if (!config.data || configTokensApplied.current) return;
+    configTokensApplied.current = true;
+
+    const chain = config.data.chains.find((item) => item.code === chainCode);
+    if (!chain) return;
+    const addresses = new Set(chain.tokens.map((token) => token.address.toLowerCase()));
+    if (!addresses.has(tokenIn.toLowerCase()) || !addresses.has(tokenOut.toLowerCase())) {
+      resetChainTokens(chainCode);
+    }
+  }, [config.data, chainCode, tokenIn, tokenOut]);
+
+  useEffect(() => {
+    if (lastChain.current === chainCode) return;
+    if (!config.data) return;
+
+    if (
+      !appliedInitialChainTokens.current &&
+      chainCode === initialChain &&
+      initialTokenIn &&
+      initialTokenOut &&
+      tokenIn.toLowerCase() === initialTokenIn.toLowerCase() &&
+      tokenOut.toLowerCase() === initialTokenOut.toLowerCase()
+    ) {
+      appliedInitialChainTokens.current = true;
+      lastChain.current = chainCode;
+      return;
+    }
+
+    lastChain.current = chainCode;
+    resetChainTokens(chainCode);
+  }, [chainCode, config.data, initialChain, initialTokenIn, initialTokenOut, tokenIn, tokenOut]);
 
   if (config.isPending) {
     return (
@@ -493,29 +531,17 @@ export function SwapPage({
               WalletConnect v2 · BSC и Ethereum. Приватные ключи и seed-фраза не передаются серверу.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            {wallet.connected ? (
-              <Badge tone={wallet.onChain(chain.chainId) ? 'success' : 'warning'}>
-                {wallet.onChain(chain.chainId)
-                  ? chain.code.toUpperCase()
-                  : `chain ${wallet.chainId ?? '—'}`}
-              </Badge>
-            ) : null}
+          <div className="flex flex-wrap items-center gap-2">
             {wallet.connected ? (
               <>
-                {data.chains.map((item) => (
-                  <Button
-                    key={item.code}
-                    variant={wallet.onChain(item.chainId) ? 'secondary' : 'ghost'}
-                    onClick={() => switchChain(item.code)}
-                    disabled={executionBusy}
-                  >
-                    {item.code === 'bsc' ? 'BSC' : 'Ethereum'}
-                  </Button>
-                ))}
-                <Button variant="ghost" onClick={() => void wallet.disconnect()}>
-                  Отключить
-                </Button>
+                <Badge tone={wallet.chainId === chain.chainId ? 'success' : 'warning'}>
+                  {wallet.chainId === chain.chainId
+                    ? chain.code.toUpperCase()
+                    : `кошелёк в сети ${wallet.chainId ?? '—'}`}
+                </Badge>
+                <span className="text-xs text-zinc-500">
+                  Подключение и сеть управляются в шапке справа.
+                </span>
               </>
             ) : (
               <Button
@@ -560,7 +586,11 @@ export function SwapPage({
               <Select
                 className="mt-1"
                 value={chainCode}
-                onChange={(event) => selectChain(event.target.value as 'bsc' | 'ethereum')}
+                onChange={(event) => {
+                  const next = event.target.value as 'bsc' | 'ethereum';
+                  onSelectChain?.(next);
+                  wallet.selectChain(next);
+                }}
                 disabled={executionBusy || quote.isPending}
                 aria-label="Сеть свопа"
               >

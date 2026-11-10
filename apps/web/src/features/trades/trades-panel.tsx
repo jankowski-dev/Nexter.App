@@ -4,6 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { TokenIcon } from '@/components/token-icon';
 import { fetchAssets, fetchTradeGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
@@ -18,6 +19,14 @@ const statusLabels: Record<string, string> = {
   closed: 'Закрыта',
   reserve: 'Резерв',
   for_sale: 'В продажу',
+};
+
+const sourceLabels: Record<string, string> = {
+  manual: 'Ручная',
+  notion: 'Notion',
+  onchain: 'В сети',
+  kyberswap: 'KyberSwap',
+  system: 'Система',
 };
 
 const statusTones: Record<string, 'neutral' | 'success' | 'warning' | 'info'> = {
@@ -142,8 +151,12 @@ export function TradesPanel({
             <option value="notion">Notion</option>
             <option value="kyberswap">KyberSwap</option>
           </Select>
-          <Select value={pnl} onChange={(event) => setPnl(event.target.value)} aria-label="P&L">
-            <option value="">Любой P&L</option>
+          <Select
+            value={pnl}
+            onChange={(event) => setPnl(event.target.value)}
+            aria-label="Результат"
+          >
+            <option value="">Любой результат</option>
             <option value="positive">Положительный</option>
             <option value="negative">Отрицательный</option>
           </Select>
@@ -207,8 +220,8 @@ export function TradesPanel({
                     <th className="py-2 pr-3 text-right font-medium">Дней</th>
                     <th className="py-2 pr-3 text-right font-medium">Покупка</th>
                     <th className="py-2 pr-3 text-right font-medium">Продажа</th>
-                    <th className="py-2 pr-3 text-right font-medium">P&L</th>
-                    <th className="py-2 pr-3 text-right font-medium">Return</th>
+                    <th className="py-2 pr-3 text-right font-medium">Результат</th>
+                    <th className="py-2 pr-3 text-right font-medium">Доходность</th>
                     <th className="py-2 pr-3 font-medium">Качество</th>
                     <th className="py-2 text-right font-medium">Источник</th>
                   </tr>
@@ -245,8 +258,13 @@ export function TradesPanel({
                           />
                         </td>
                         <td className="py-2 pr-3">
-                          <div className="font-medium text-zinc-800">{group.asset.symbol}</div>
-                          <div className="text-xs text-zinc-500">{group.asset.chainCode}</div>
+                          <div className="flex items-center gap-2">
+                            <TokenIcon logoUrl={group.asset.logoUrl} symbol={group.asset.symbol} />
+                            <div className="min-w-0">
+                              <div className="font-medium text-zinc-800">{group.asset.symbol}</div>
+                              <div className="text-xs text-zinc-500">{group.asset.chainCode}</div>
+                            </div>
+                          </div>
                         </td>
                         <td className="py-2 pr-3">
                           <Badge tone={statusTones[group.status] ?? 'neutral'}>
@@ -285,7 +303,9 @@ export function TradesPanel({
                             {group.quality.reconciled ? 'сверено' : 'не сверено'}
                           </Badge>
                         </td>
-                        <td className="py-2 text-right text-zinc-600">{group.source}</td>
+                        <td className="py-2 text-right text-zinc-600">
+                          {sourceLabels[group.source] ?? group.source}
+                        </td>
                       </tr>
                     );
                   })}

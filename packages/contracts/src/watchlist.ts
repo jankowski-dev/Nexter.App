@@ -84,6 +84,29 @@ export const watchlistCreateRequestSchema = z.object({
   priority: z.number().int().min(0).max(100).optional(),
 });
 
+const manualIconSchema = z
+  .string()
+  .trim()
+  .max(400_000)
+  .refine((value) => {
+    if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) {
+      const base64 = value.slice(value.indexOf(',') + 1);
+      const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+      const sizeBytes = Math.floor((base64.length * 3) / 4) - padding;
+      return sizeBytes > 0 && sizeBytes <= 250_000;
+    }
+
+    try {
+      const url = new URL(value);
+      return (
+        url.protocol === 'https:' &&
+        (url.hostname === 'coin-images.coingecko.com' || url.hostname === 'assets.coingecko.com')
+      );
+    } catch {
+      return false;
+    }
+  }, 'Иконка должна быть PNG/JPEG/WebP до 250 КБ или ссылкой CoinGecko');
+
 export const watchlistUpdateRequestSchema = z.object({
   groupId: z.uuid().nullable().optional(),
   thesis: z.string().max(2000).nullable().optional(),
@@ -92,6 +115,7 @@ export const watchlistUpdateRequestSchema = z.object({
   websiteUrl: externalUrlSchema.optional(),
   investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  logoUrl: manualIconSchema.nullable().optional(),
   archived: z.boolean().optional(),
 });
 

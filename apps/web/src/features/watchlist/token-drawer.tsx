@@ -1,14 +1,10 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
+import { TokenIcon } from '@/components/token-icon';
 import { formatPct, formatUsd, pnlTone } from '@/lib/format';
 import { Link } from '@tanstack/react-router';
 import type { WatchlistEntry } from '@nexter/contracts';
-
-function iconSrc(logoUrl: string | null): string | null {
-  if (!logoUrl) return null;
-  return `/api/v1/watchlist/icon?url=${encodeURIComponent(logoUrl)}`;
-}
 
 function safeExternalUrl(value: string | null): string | null {
   if (!value) return null;
@@ -42,7 +38,6 @@ export function TokenDrawer({
 }) {
   if (!entry) return null;
 
-  const logo = iconSrc(entry.logoUrl);
   const twitterUrl = safeExternalUrl(entry.twitterUrl);
   const websiteUrl = safeExternalUrl(entry.websiteUrl);
 
@@ -79,13 +74,11 @@ export function TokenDrawer({
         ) : null}
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            {logo ? (
-              <img src={logo} alt="" className="h-12 w-12 rounded-full" />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-200 text-sm font-semibold text-zinc-600">
-                {entry.asset.symbol.slice(0, 2)}
-              </div>
-            )}
+            <TokenIcon
+              logoUrl={entry.logoUrl}
+              symbol={entry.asset.symbol}
+              className="h-12 w-12 text-sm"
+            />
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xl font-semibold text-zinc-900">{entry.asset.symbol}</span>

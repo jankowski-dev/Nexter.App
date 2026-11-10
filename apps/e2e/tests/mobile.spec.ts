@@ -45,11 +45,12 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await expect(mobileNav).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
 
-  const cryptoButton = mobileNav.getByRole('button', { name: /Crypto/ });
+  const cryptoButton = mobileNav.getByRole('button', { name: /Крипта/ });
   await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
   await cryptoButton.click();
   await expect(cryptoButton).toHaveAttribute('aria-expanded', 'false');
   await expect(mobileNav.getByRole('link', { name: 'Портфель' })).toHaveCount(0);
+  await expect(mobileNav.getByRole('link', { name: 'Хранилище' })).toBeVisible();
   await cryptoButton.click();
   await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
 
@@ -62,7 +63,8 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
   await expect(page.getByRole('button', { name: '30 дней' })).toBeVisible();
 
-  await page.getByRole('button', { name: '+ Операция' }).click();
+  await mobileNav.getByRole('link', { name: 'Портфель' }).click();
+  await page.getByRole('button', { name: 'Новая сделка' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
   await expect(dialog.getByLabel('Закрыть')).toBeVisible();
