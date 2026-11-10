@@ -53,10 +53,12 @@ export function AssetDrawer({
   assetId,
   onClose,
   onTrade,
+  logoFallback,
 }: {
   assetId: string | null;
   onClose: () => void;
   onTrade?: (input: { assetId: string; side: 'entry' | 'exit' }) => void;
+  logoFallback?: string | null;
 }) {
   const detail = useQuery({
     queryKey: ['portfolio-asset', assetId],
@@ -78,7 +80,12 @@ export function AssetDrawer({
       onClose={onClose}
       title={data ? `${data.asset.symbol} · ${data.asset.name}` : 'Актив'}
       titleIcon={
-        data ? <TokenIcon logoUrl={data.asset.logoUrl} symbol={data.asset.symbol} /> : undefined
+        data ? (
+          <TokenIcon
+            logoUrl={data.asset.logoUrl ?? logoFallback ?? null}
+            symbol={data.asset.symbol}
+          />
+        ) : undefined
       }
       description={
         data

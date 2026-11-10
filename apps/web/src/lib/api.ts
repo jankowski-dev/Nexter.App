@@ -455,9 +455,10 @@ export async function fetchWatchlist(
   includeArchived = false,
   cursor?: string,
   groupId?: string,
+  limit = 50,
 ): Promise<WatchlistResponse> {
   return apiFetch(
-    `/api/v1/watchlist${queryString({ includeArchived, cursor, groupId })}`,
+    `/api/v1/watchlist${queryString({ includeArchived, cursor, groupId, limit })}`,
     {},
     watchlistResponseSchema,
   );
