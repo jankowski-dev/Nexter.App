@@ -241,3 +241,12 @@ Phase 6 is code/ops hardening with no schema migration. Before deploying:
 3. Deploy and verify `/ready` and the new `/vault`, `/tasks`, `/notes` routes.
 4. Vault encryption is entirely client-side. Do not add server-side key material, recovery keys, or plaintext storage.
 5. Rollback: remove the routes or deploy the previous image. The database tables are additive; do not drop them.
+
+## Finance module rollout (`0023`–`0025`)
+
+The personal-finance module creates six tables. The migration conditionally grants `SELECT, INSERT, UPDATE, DELETE` on them to `nexter_app` when that role exists, because import rollback needs scoped deletes. After the first finance deployment:
+
+1. Confirm the pre-deploy migration applied `0023`–`0025` (`Migrations applied` in the API logs).
+2. If `nexter_app` was provisioned before this migration, re-run `db:provision-app` or verify the finance tables are accessible to the app role.
+3. Smoke-check `GET /api/v1/finance/accounts` and `GET /api/v1/finance/summary` as the owner.
+4. Do not run the Notion finance import until the owner has reviewed the preview counts and totals.

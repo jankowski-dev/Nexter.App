@@ -4,6 +4,7 @@ export { scrubSentryBreadcrumb, scrubSentryEvent } from './sentry';
 export * from './auth';
 export * from './accounting';
 export * from './audit';
+export * from './finance';
 export * from './imports';
 export * from './notes';
 export * from './pagination';

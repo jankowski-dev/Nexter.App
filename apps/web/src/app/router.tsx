@@ -1,4 +1,5 @@
 import { DashboardPage } from '@/features/dashboard/dashboard-page';
+import { FinancePage } from '@/features/finance/finance-page';
 import { ImportPage } from '@/features/import/import-page';
 import { LoginPage } from '@/features/auth/login-page';
 import { AssetDetailPage } from '@/features/portfolio/asset-detail-page';
@@ -184,6 +185,12 @@ const importRoute = createRoute({
   component: ImportPage,
 });
 
+const financeRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/finance',
+  component: FinancePage,
+});
+
 const watchlistRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/watchlist',
@@ -250,6 +257,7 @@ const routeTree = rootRoute.addChildren([
     tasksRoute,
     notesRoute,
     importRoute,
+    financeRoute,
     watchlistRoute,
     swapRoute,
     settingsRoute,

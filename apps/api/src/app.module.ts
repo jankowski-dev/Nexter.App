@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { HealthModule } from './modules/health/health.module';
+import { FinanceModule } from './modules/finance/finance.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { NotesModule } from './modules/notes/notes.module';
 import { TasksModule } from './modules/tasks/tasks.module';
@@ -29,6 +30,7 @@ import { loggerModule } from './shared/logging/logger.module';
     AuthModule,
     AccountingModule,
     ImportsModule,
+    FinanceModule,
     WatchlistModule,
     NotesModule,
     TasksModule,
