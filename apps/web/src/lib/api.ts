@@ -14,6 +14,7 @@ import {
   errorEnvelopeSchema,
   financeAccountsResponseSchema,
   financeCategoriesResponseSchema,
+  financeCreditDrawdownResponseSchema,
   financeImportSchema,
   financeImportsResponseSchema,
   financeJournalResponseSchema,
@@ -67,6 +68,8 @@ import {
   type FinanceCategoryCreateRequest,
   type FinanceCategoryUpdateRequest,
   type FinanceCategoriesResponse,
+  type FinanceCreditDrawdownRequest,
+  type FinanceCreditDrawdownResponse,
   type FinanceImport,
   type FinanceImportRequest,
   type FinanceImportsResponse,
@@ -815,4 +818,10 @@ export async function rollbackFinanceImport(id: string): Promise<FinanceImport> 
 
 export async function fetchFinanceImports(): Promise<FinanceImportsResponse> {
   return apiFetch('/api/v1/finance/imports', {}, financeImportsResponseSchema);
+}
+
+export async function createFinanceCreditDrawdown(
+  body: FinanceCreditDrawdownRequest,
+): Promise<FinanceCreditDrawdownResponse> {
+  return apiPost('/api/v1/finance/credits/drawdown', body, financeCreditDrawdownResponseSchema);
 }

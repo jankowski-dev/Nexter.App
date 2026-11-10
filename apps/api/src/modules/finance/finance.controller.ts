@@ -17,6 +17,8 @@ import type {
   FinanceCategoryCreateRequest,
   FinanceCategoryUpdateRequest,
   FinanceCategoriesResponse,
+  FinanceCreditDrawdownRequest,
+  FinanceCreditDrawdownResponse,
   FinanceImport,
   FinanceImportRequest,
   FinanceImportsResponse,
@@ -36,6 +38,7 @@ import {
   financeAccountUpdateRequestSchema,
   financeCategoryCreateRequestSchema,
   financeCategoryUpdateRequestSchema,
+  financeCreditDrawdownRequestSchema,
   financeImportRequestSchema,
   financeListQuerySchema,
   financeSummaryQuerySchema,
@@ -190,6 +193,16 @@ export class FinanceController {
     @Query(new ZodValidationPipe(financeSummaryQuerySchema)) query: FinanceSummaryQuery,
   ): Promise<FinanceSummary> {
     return this.finance.summary(auth.user.id, query);
+  }
+
+  @Post('credits/drawdown')
+  creditDrawdown(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(financeCreditDrawdownRequestSchema))
+    body: FinanceCreditDrawdownRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<FinanceCreditDrawdownResponse> {
+    return this.finance.creditDrawdown(auth.user.id, body, meta(request));
   }
 
   @Get('imports')

@@ -374,3 +374,28 @@ export type FinanceImportError = z.infer<typeof financeImportErrorSchema>;
 export type FinanceImportSummary = z.infer<typeof financeImportSummarySchema>;
 export type FinanceImport = z.infer<typeof financeImportSchema>;
 export type FinanceImportsResponse = z.infer<typeof financeImportsResponseSchema>;
+
+export const financeCreditDrawdownRequestSchema = z
+  .object({
+    creditAccountId: z.uuid().optional(),
+    name: z.string().trim().min(1).max(80).optional(),
+    currency: financeCurrencySchema.optional(),
+    fxRate: rateSchema.optional(),
+    amount: positiveMoneySchema,
+    occurredOn: dateOnlySchema,
+    destinationAccountId: z.uuid().nullable().optional(),
+    destinationAmount: positiveMoneySchema.nullable().optional(),
+    description: z.string().max(5000).nullable().optional(),
+  })
+  .refine((value) => Boolean(value.creditAccountId) !== Boolean(value.name), {
+    message: 'Provide either creditAccountId or name for a new credit account',
+    path: ['creditAccountId'],
+  });
+
+export const financeCreditDrawdownResponseSchema = z.object({
+  account: financeAccountWithBalanceSchema,
+  transfer: financeTransferSchema.nullable(),
+});
+
+export type FinanceCreditDrawdownRequest = z.infer<typeof financeCreditDrawdownRequestSchema>;
+export type FinanceCreditDrawdownResponse = z.infer<typeof financeCreditDrawdownResponseSchema>;

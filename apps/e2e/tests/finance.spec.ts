@@ -115,6 +115,15 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await expect(page.getByText('950,00 BYN').first()).toBeVisible();
   await expect(page.getByText('100,00 BYN').first()).toBeVisible();
 
+  await page.getByRole('button', { name: 'Получить кредит' }).click();
+  const creditDialog = page.getByRole('dialog');
+  await creditDialog.getByLabel('Название').fill('Кредит на авто');
+  await creditDialog.getByLabel('Сумма кредита').fill('500');
+  await creditDialog.getByLabel('Куда зачислить деньги').selectOption(card.id);
+  await creditDialog.getByRole('button', { name: 'Получить кредит' }).click();
+  await expect(page.getByText('Кредит на авто')).toBeVisible();
+  await expect(page.getByText('1 450,00 BYN').first()).toBeVisible();
+
   await page.getByRole('tab', { name: 'Импорт' }).click();
   await expect(page.getByText('История импортов')).toBeVisible();
 });

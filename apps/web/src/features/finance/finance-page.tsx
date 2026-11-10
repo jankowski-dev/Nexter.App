@@ -41,6 +41,7 @@ import {
   FinanceTransactionDialog,
   FinanceTransferDialog,
 } from './finance-dialogs';
+import { FinanceCreditDialog } from './finance-credit-dialog';
 
 type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories' | 'import';
 type JournalFilter = 'all' | 'income' | 'expense' | 'transfer';
@@ -155,6 +156,7 @@ export function FinancePage() {
   } | null>(null);
   const [transferDialog, setTransferDialog] = useState<{ transfer?: FinanceTransfer } | null>(null);
   const [accountDialog, setAccountDialog] = useState<{ account?: FinanceAccount } | null>(null);
+  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
   const [categoryDialog, setCategoryDialog] = useState<{
     category?: FinanceCategory;
     kind?: FinanceCategoryKind;
@@ -667,7 +669,10 @@ export function FinancePage() {
 
       {!isLoading && !hasError && tab === 'accounts' ? (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="secondary" onClick={() => setCreditDialogOpen(true)}>
+              Получить кредит
+            </Button>
             <Button onClick={() => setAccountDialog({})}>+ Счёт</Button>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -905,6 +910,13 @@ export function FinancePage() {
           transfer={transferDialog.transfer}
           accounts={accountRows}
           onClose={() => setTransferDialog(null)}
+          onSaved={invalidate}
+        />
+      ) : null}
+      {creditDialogOpen ? (
+        <FinanceCreditDialog
+          accounts={accountRows}
+          onClose={() => setCreditDialogOpen(false)}
           onSaved={invalidate}
         />
       ) : null}
