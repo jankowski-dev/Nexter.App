@@ -782,4 +782,61 @@ describe.runIf(canRun)('Notion import e2e', () => {
       totalPnlUsd: '-20.00000000',
     });
   }, 120_000);
+
+  it('skips an active order whose imported lot was partially consumed later', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const firstPreview = await preview(agent, owner.csrf, buildExport());
+    await commit(agent, owner.csrf, firstPreview.body.import.id as string);
+
+    const accountsResponse = await agent.get('/api/v1/accounts').expect(200);
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const wallet = (accountsResponse.body.accounts as Array<{ id: string; name: string }>).find(
+      (account) => account.name === 'Tangem BSC',
+    );
+    const tokenA = (
+      assetsResponse.body.assets as Array<{
+        id: string;
+        chainCode: string;
+        symbol: string;
+      }>
+    ).find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'TOKENA');
+    const usdt = (
+      assetsResponse.body.assets as Array<{
+        id: string;
+        chainCode: string;
+        symbol: string;
+      }>
+    ).find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: tokenA?.id,
+        amount: '100',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '12',
+        usdValue: '12',
+      })
+      .expect(201);
+
+    const refreshedPreview = await preview(agent, owner.csrf, buildExport());
+    expect(refreshedPreview.body.import.summary.errors).toEqual([]);
+    expect(refreshedPreview.body.import.summary.warnings).toEqual(
+      expect.arrayContaining([expect.stringContaining('later ledger activity')]),
+    );
+
+    await commit(agent, owner.csrf, refreshedPreview.body.import.id as string);
+
+    const consumedLot = (await db.select().from(lots).where(eq(lots.userId, owner.userId))).find(
+      (lot) => lot.amount === '500.000000000000000000',
+    );
+    expect(consumedLot?.remainingAmount).toBe('400.000000000000000000');
+    expect(
+      await db.select().from(transactions).where(eq(transactions.userId, owner.userId)),
+    ).toHaveLength(9);
+  }, 120_000);
 });

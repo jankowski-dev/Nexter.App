@@ -1069,9 +1069,17 @@ export class NotionImportService {
       }
 
       if (!lotFullyOpen) {
-        const message = `Order ${order.orderId}: existing lot is not fully open`;
-        errors.push(message);
-        orderDecisions.set(order.sourceId, { status: 'error', error: message });
+        if (order.status === 'closed') {
+          const message = `Order ${order.orderId}: existing lot is not fully open`;
+          errors.push(message);
+          orderDecisions.set(order.sourceId, { status: 'error', error: message });
+          continue;
+        }
+
+        const message = `Order ${order.orderId}: existing lot has later ledger activity; left unchanged`;
+        warnings.push(message);
+        skippedOrders += 1;
+        orderDecisions.set(order.sourceId, { status: 'skipped', error: null });
         continue;
       }
 

@@ -12,7 +12,7 @@ The Notion source has since changed: five orders were added (467–471), and ord
 
 ## Decision
 
-- **Use the existing incremental import.** `detectExisting` verifies each existing buy lot, trade group, and amount against the export. Existing rows are skipped or updated; new orders are added; existing transactions are skipped. This is the same code path the production import already supports, and it does not touch unrelated ledger activity.
+- **Use the existing incremental import.** `detectExisting` verifies buy lots and trade groups for rows that are new or need a status update; already-closed orders and existing transactions are skipped by source id without revalidating their historical amounts. New orders are added and changed orders are closed. The preview totals and the expected totals in the runbook are the manual control for the skipped rows. This is the same code path the production import already supports, and it does not touch unrelated ledger activity.
 - **Scope the legacy control to the original export.** The 429-order control is applicable only when every order id is numeric and at most 466. Later exports get a warning that the baseline is not applicable, not a blocking error. The preview still reports full totals, counts, valuation, and per-row skip/update decisions for owner review.
 - **Do not fabricate a new control snapshot.** There is no independent Phase 3-style audit for the new orders, so inventing expected totals would create false assurance. The per-row detection and the owner-reviewed preview are the control for this refresh.
 - **No full replacement before the clean cutover.** A full replacement remains part of ADR 0014. Incremental refresh is deliberately additive so the existing ledger and later manual operations are preserved.
@@ -20,6 +20,6 @@ The Notion source has since changed: five orders were added (467–471), and ord
 ## Consequences
 
 - The fresh export (436 orders, 417 closed, 19 active, 9 transactions) imports by adding five active orders and closing five existing orders.
-- A malformed or unexpected later export no longer fails the legacy control automatically. The preview must be reviewed; detection still errors on lot amount/cost mismatches, missing groups, sell-without-buy, and duplicate rows.
-- The original 431-order control continues to work for the historical fixture and remains covered by parser tests.
+- A malformed or unexpected later export no longer fails the legacy control automatically. The preview and its totals must be reviewed against the runbook; detection still errors on new/updated lot amount/cost mismatches, missing groups, sell-without-buy, duplicate rows, and closing an order whose lot was partially consumed. An active order whose lot was partially consumed by later activity is skipped with a warning, not overwritten.
+- The original 431-order control continues to work for numeric ids up to 466 and has parser tests for the boundary, later exports, and non-numeric ids.
 - The import is still owner-only, audited, and reversible through the normal rollback path while no later ledger activity exists. After later activity, a compensating reversal or the clean cutover is required.
