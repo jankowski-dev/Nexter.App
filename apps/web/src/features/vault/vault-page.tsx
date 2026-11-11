@@ -64,6 +64,7 @@ export function VaultPage() {
   const [notes, setNotes] = useState('');
   const [itemError, setItemError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (!dataKey || !vault.data) {
@@ -293,6 +294,13 @@ export function VaultPage() {
 
   const config = vault.data?.config;
   const unlocked = Boolean(config && dataKey);
+  const query = search.trim().toLowerCase();
+  const visibleItems = decrypted.filter((row) => {
+    if (!query) return true;
+    return [row.data.title, row.data.username, row.data.url].some((value) =>
+      value.toLowerCase().includes(query),
+    );
+  });
 
   return (
     <div className="space-y-6">
@@ -406,6 +414,19 @@ export function VaultPage() {
         </Card>
       ) : (
         <>
+          <div className="relative">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Поиск по названию, логину или сайту"
+              aria-label="Поиск в хранилище"
+              className="pl-9"
+            />
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+              ⌕
+            </span>
+          </div>
+
           {decrypted.length === 0 && decryptFailures === 0 ? (
             <Card>
               <CardTitle>Записей нет</CardTitle>
@@ -416,9 +437,14 @@ export function VaultPage() {
                 Добавить запись
               </Button>
             </Card>
+          ) : visibleItems.length === 0 ? (
+            <Card>
+              <CardTitle>Ничего не найдено</CardTitle>
+              <CardDescription>Попробуйте другое название, логин или сайт.</CardDescription>
+            </Card>
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {decrypted.map((row) => (
+            <div className="space-y-2">
+              {visibleItems.map((row) => (
                 <Card key={row.item.id} className={row.item.archivedAt ? 'opacity-60' : undefined}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">

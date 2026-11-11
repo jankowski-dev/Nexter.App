@@ -25,7 +25,7 @@ function FanIcon({ spinning }: { spinning: boolean }) {
     <svg
       viewBox="0 0 24 24"
       aria-hidden="true"
-      className={`h-4 w-4 ${spinning ? 'animate-spin [animation-duration:1.1s]' : 'opacity-45'}`}
+      className={`h-5 w-5 ${spinning ? 'animate-spin [animation-duration:1.1s]' : 'opacity-45'}`}
       fill="none"
       stroke="currentColor"
       strokeWidth="1.5"
@@ -73,7 +73,7 @@ export function LiveRefreshIndicator() {
 
   return (
     <div
-      className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-500"
+      className="flex h-9 w-9 items-center justify-center text-zinc-500"
       title="Обновление данных"
       aria-label={spinning ? 'Данные обновляются' : 'Данные не обновляются'}
       aria-busy={spinning}

@@ -583,22 +583,6 @@ export function TokenTradeDrawer({
         }
         description={`${token.name} · ${token.chainCode.toUpperCase()}`}
         size="third"
-        footer={
-          <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-xs text-zinc-500">
-              {phase === 'confirming'
-                ? 'Ожидаю подтверждение сети…'
-                : phase === 'submit_failed'
-                  ? 'Подпись получена, но не отправлена'
-                  : phase === 'success'
-                    ? 'Сделка учтена'
-                    : 'Котировка обновляется каждые 10 секунд'}
-            </span>
-            <Button variant="ghost" onClick={onClose} disabled={closeBlocked}>
-              Готово
-            </Button>
-          </div>
-        }
       >
         <div className="space-y-5">
           {trade ? (
