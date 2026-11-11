@@ -182,7 +182,7 @@ export class MarketQuoteService {
     const cgDue =
       Date.now() - this.lastCoinGeckoAt >= env.MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS * 1000;
     const missingQuoteIds = rows.filter(
-      (row) => !row.isCashEquivalent && !existingById.has(row.id),
+      (row) => !row.isCashEquivalent && row.coingeckoId && !existingById.has(row.id),
     );
     const cgIds = [
       ...new Set(

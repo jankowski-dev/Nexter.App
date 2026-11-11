@@ -17,7 +17,7 @@ The owner also suspected that token icons were downloaded again on every refresh
 - **No three-month history.** The UI shows 24h, 7d, 30d, and 1y only. A 90-day value would require either a history table or a mislabeled CoinGecko field, so it is not shown.
 - **API surface.** `Position`, the portfolio asset quote, and watchlist entries expose the period fields; watchlist entries also expose `marketCapUsd`. Cash equivalents report zero changes.
 - **Sorting.** The token base sorts loaded entries client-side by market cap, 24h, 7d, 30d, or 1y with an ascending/descending toggle. Null values stay last. The page still loads 50 entries per cursor page; sorting applies to loaded entries.
-- **Icon cache.** The API keeps an in-memory 24-hour icon cache with in-flight request coalescing and a 200-entry bound. `/api/v1/watchlist/icon` is exempt from the global `Cache-Control: no-store` header, so the existing `public, max-age=86400, immutable` response is honored by the browser. Uploaded data URLs bypass the proxy as before.
+- **Icon cache.** The API keeps an in-memory 24-hour icon cache with in-flight request coalescing, a 200-entry bound, and an 8 MB byte budget. `/api/v1/watchlist/icon` is exempt from the global `Cache-Control: no-store` header, so the existing `public, max-age=86400, immutable` response is honored by the browser. Uploaded data URLs bypass the proxy as before.
 
 ## Consequences
 

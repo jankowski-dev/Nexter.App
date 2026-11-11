@@ -113,6 +113,16 @@ describe('MarketQuoteService.refreshAll', () => {
     });
   });
 
+  it('does not trigger CoinGecko for an unquotable asset without a CoinGecko id', async () => {
+    const { service, upserts, coingecko } = createHarness([asset({ coingeckoId: null })], []);
+    (service as unknown as { lastCoinGeckoAt: number }).lastCoinGeckoAt = Date.now();
+
+    await service.refreshAll();
+
+    expect(coingecko.getMarkets).not.toHaveBeenCalled();
+    expect(upserts).toHaveLength(0);
+  });
+
   it('preserves multi-period values on a DEX tick without a CoinGecko refresh', async () => {
     const { service, upserts, coingecko, dexscreener } = createHarness(
       [asset({ contractAddress: '0x0000000000000000000000000000000000000001' })],

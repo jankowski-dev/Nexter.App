@@ -633,7 +633,10 @@ export function WatchlistPage() {
                           </span>
                           {entry.marketCapUsd ? (
                             <span className="whitespace-nowrap">
-                              Кап. {formatUsdCompact(entry.marketCapUsd)}
+                              Кап.{' '}
+                              <LiveValue value={formatUsdCompact(entry.marketCapUsd)}>
+                                {formatUsdCompact(entry.marketCapUsd)}
+                              </LiveValue>
                             </span>
                           ) : null}
                           {entry.tags.slice(0, 4).map((tag) => (

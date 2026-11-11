@@ -122,6 +122,7 @@ All tables are additive; no existing table or ledger row is changed.
 
 - API `phase11.e2e.spec.ts`: vault setup, item archive/restore listing, ciphertext/IV pairing and base64-length validation, tasks lifecycle, notes search/update/archive, related-link validation, audit actions, and no ciphertext in audit.
 - E2E `phase11.spec.ts`: vault setup, item creation, server-side plaintext absence, reload lock, wrong password, unlock, manual lock, navigation lock, lock-with-dialog clearing, generate-password, archive/restore, task create/complete, note create/search.
+- UI-16 unit tests cover CoinGecko period merge, new-asset refresh between ticks, stale-period preservation/clearing, icon cache hit/dedup/TTL/host/content-type, and the exact icon cache-control exemption.
 - Full API and E2E suites are run before merge.
 
 ## Security notes
