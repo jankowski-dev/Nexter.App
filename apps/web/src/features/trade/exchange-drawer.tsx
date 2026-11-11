@@ -500,22 +500,6 @@ export function ExchangeDrawer({
         title="Обмен on-chain"
         description="Курс KyberSwap, автоматическая сборка и подпись в кошельке."
         size="third"
-        footer={
-          <div className="flex w-full items-center justify-between gap-2">
-            <span className="text-xs text-zinc-500">
-              {phase === 'confirming'
-                ? 'Ожидаю подтверждение сети…'
-                : phase === 'submit_failed'
-                  ? 'Подпись получена, но не отправлена'
-                  : phase === 'success'
-                    ? 'Обмен учтён'
-                    : 'Котировка обновляется каждые 10 секунд'}
-            </span>
-            <Button variant="ghost" onClick={onClose} disabled={closeBlocked}>
-              Готово
-            </Button>
-          </div>
-        }
       >
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2">

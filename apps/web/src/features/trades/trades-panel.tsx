@@ -170,7 +170,6 @@ export function TradesPanel({
                     <th className="py-2 pr-3 text-right font-medium">Результат</th>
                     <th className="py-2 pr-3 font-medium">Обновлено</th>
                     <th className="py-2 pr-3 text-right font-medium">Доходность</th>
-                    <th className="py-2 pr-3 font-medium">Качество</th>
                     <th className="py-2 text-right font-medium">Источник</th>
                   </tr>
                 </thead>
@@ -243,11 +242,6 @@ export function TradesPanel({
                         <LiveValue value={group.returnPct ? `${group.returnPct}%` : '—'}>
                           {group.returnPct ? `${group.returnPct}%` : '—'}
                         </LiveValue>
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Badge tone={group.quality.reconciled ? 'success' : 'warning'}>
-                          {group.quality.reconciled ? 'сверено' : 'не сверено'}
-                        </Badge>
                       </td>
                       <td className="py-2 text-right text-zinc-600">
                         {sourceLabels[group.source] ?? group.source}
