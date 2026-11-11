@@ -19,6 +19,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
 import { localDateKey } from '@/lib/tasks';
+import { useSaveFlash } from '@/lib/use-save-flash';
 import { useEffect, useRef, useState } from 'react';
 import type {
   Task,
@@ -110,6 +111,7 @@ export function TaskDialog({
   const [images, setImages] = useState<TaskImage[]>(task?.images ?? []);
   const [seriesLocked, setSeriesLocked] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const showSaving = useSaveFlash(saveState);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -382,20 +384,6 @@ export function TaskDialog({
     }
   }
 
-  const hasUnsavedChanges =
-    saveState === 'saved' &&
-    JSON.stringify(basePayload(draftRef.current)) !== savedSignatureRef.current;
-  const statusText =
-    saveState === 'saving'
-      ? 'Сохраняю…'
-      : saveState === 'saved'
-        ? hasUnsavedChanges
-          ? 'Есть изменения'
-          : 'Сохранено'
-        : saveState === 'error'
-          ? 'Ошибка сохранения'
-          : 'Автосохранение каждые 10 секунд';
-
   const effectiveRecurrence = task?.recurrence ?? (recurrence !== 'none' ? recurrence : null);
   const persisted = Boolean(taskIdRef.current);
   const overdue = status === 'open' && Boolean(due) && due < localDateKey(new Date());
@@ -416,17 +404,15 @@ export function TaskDialog({
         inert={confirmDelete}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <span
-              role="status"
-              className={`text-xs ${
-                saveState === 'error'
-                  ? 'text-red-700'
-                  : saveState === 'saved'
-                    ? 'text-emerald-700'
-                    : 'text-zinc-500'
-              }`}
-            >
-              {mode === 'edit' ? statusText : ''}
+            <span role="status" className="text-xs">
+              {saveState === 'error' ? (
+                <span className="text-red-700">Ошибка сохранения</span>
+              ) : showSaving ? (
+                <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  Сохранение…
+                </span>
+              ) : null}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
               {archived ? (

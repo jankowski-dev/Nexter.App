@@ -2,13 +2,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
-import { NotebookIcon, PencilIcon, PinIcon, TrashIcon } from '@/components/ui/icons';
+import { NotebookIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { addNoteImage, createNote, removeNoteImage, updateNote } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
 import { useEffect, useRef, useState } from 'react';
+import { useSaveFlash } from '@/lib/use-save-flash';
 import type { Note, NoteImage } from '@nexter/contracts';
 import { NoteImageViewer } from './note-image-viewer';
 import { NoteEditor, NoteMarkdown } from './note-markdown';
@@ -56,12 +57,13 @@ export function NoteDrawer({
   const [title, setTitle] = useState(note?.title ?? '');
   const [body, setBody] = useState(note?.body ?? '');
   const [tags, setTags] = useState(note?.tags.join(', ') ?? '');
-  const [pinned, setPinned] = useState(note?.pinned ?? false);
+  const [pinned] = useState(note?.pinned ?? false);
   const [archived, setArchived] = useState(Boolean(note?.archivedAt));
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
   const [createdAt, setCreatedAt] = useState<string | null>(note?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(note?.updatedAt ?? null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const showSaving = useSaveFlash(saveState);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(startWithDelete && Boolean(note));
   const [deleting, setDeleting] = useState(false);
@@ -216,32 +218,6 @@ export function NoteDrawer({
     }
   }
 
-  async function togglePinned(): Promise<void> {
-    const nextPinned = !pinned;
-    draftRef.current = { ...draftRef.current, pinned: nextPinned };
-    setPinned(nextPinned);
-    if (!noteIdRef.current) return;
-
-    try {
-      const updated = await enqueue(() =>
-        updateNote(noteIdRef.current as string, { pinned: nextPinned }),
-      );
-      setPinned(updated.pinned);
-      setUpdatedAt(updated.updatedAt);
-      savedSignatureRef.current = JSON.stringify({
-        title: updated.title,
-        body: updated.body,
-        tags: updated.tags,
-        pinned: updated.pinned,
-      });
-      onSaved(updated);
-    } catch (err) {
-      setPinned(!nextPinned);
-      draftRef.current = { ...draftRef.current, pinned: !nextPinned };
-      setError(toRussianError(err, 'Не удалось закрепить заметку'));
-    }
-  }
-
   async function confirmArchive(): Promise<void> {
     if (!noteIdRef.current) return;
     setDeleting(true);
@@ -285,22 +261,6 @@ export function NoteDrawer({
     }
   }
 
-  const hasUnsavedChanges =
-    saveState === 'saved' &&
-    JSON.stringify(payloadFrom(draftRef.current)) !== savedSignatureRef.current;
-  const statusText =
-    saveState === 'saving'
-      ? 'Сохраняю…'
-      : saveState === 'saved'
-        ? hasUnsavedChanges
-          ? 'Есть изменения'
-          : 'Сохранено'
-        : saveState === 'error'
-          ? 'Ошибка сохранения'
-          : mode === 'edit'
-            ? 'Автосохранение каждые 10 секунд'
-            : '';
-
   return (
     <>
       <Drawer
@@ -317,30 +277,17 @@ export function NoteDrawer({
         inert={confirmDelete}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <span
-              role="status"
-              className={`text-xs ${
-                saveState === 'error'
-                  ? 'text-red-700'
-                  : saveState === 'saved'
-                    ? 'text-emerald-700'
-                    : 'text-zinc-500'
-              }`}
-            >
-              {mode === 'edit' ? statusText : ''}
+            <span role="status" className="text-xs">
+              {saveState === 'error' ? (
+                <span className="text-red-700">Ошибка сохранения</span>
+              ) : showSaving ? (
+                <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  Сохранение…
+                </span>
+              ) : null}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button
-                variant="ghost"
-                className={`h-9 w-9 p-0 ${
-                  pinned ? 'text-emerald-700' : 'text-zinc-400 hover:text-zinc-700'
-                }`}
-                aria-label={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
-                title={pinned ? 'Открепить' : 'Закрепить'}
-                onClick={() => void togglePinned()}
-              >
-                <PinIcon filled={pinned} />
-              </Button>
               {archived ? (
                 <Button variant="secondary" onClick={() => void restore()}>
                   Вернуть
