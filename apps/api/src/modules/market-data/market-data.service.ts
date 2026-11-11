@@ -7,8 +7,20 @@ import { AssetsService } from '../accounting/assets.service';
 import { EvmRpcService } from '../swap/evm-rpc.service';
 import { CoinGeckoClient, type CoinGeckoMarket } from './coingecko.client';
 
+interface IconCacheEntry {
+  body: Buffer;
+  contentType: string;
+  expiresAt: number;
+}
+
+const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const ICON_CACHE_MAX_ENTRIES = 200;
+
 @Injectable()
 export class MarketDataService {
+  private readonly iconCache = new Map<string, IconCacheEntry>();
+  private readonly iconInFlight = new Map<string, Promise<{ body: Buffer; contentType: string }>>();
+
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly rpc: EvmRpcService,
@@ -102,6 +114,33 @@ export class MarketDataService {
   }
 
   async fetchIcon(url: string): Promise<{ body: Buffer; contentType: string }> {
+    const cached = this.iconCache.get(url);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { body: cached.body, contentType: cached.contentType };
+    }
+    if (cached) this.iconCache.delete(url);
+
+    const inFlight = this.iconInFlight.get(url);
+    if (inFlight) return inFlight;
+
+    const pending = this.fetchIconUncached(url).then((icon) => {
+      if (this.iconCache.size >= ICON_CACHE_MAX_ENTRIES) {
+        const oldest = this.iconCache.keys().next().value;
+        if (oldest) this.iconCache.delete(oldest);
+      }
+      this.iconCache.set(url, { ...icon, expiresAt: Date.now() + ICON_CACHE_TTL_MS });
+      return icon;
+    });
+
+    this.iconInFlight.set(url, pending);
+    try {
+      return await pending;
+    } finally {
+      this.iconInFlight.delete(url);
+    }
+  }
+
+  private async fetchIconUncached(url: string): Promise<{ body: Buffer; contentType: string }> {
     let parsed: URL;
 
     try {

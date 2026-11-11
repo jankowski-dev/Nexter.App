@@ -11,6 +11,10 @@ import { AssetsService } from './assets.service';
 export interface PriceQuote {
   priceUsd: string;
   change24hPct: string | null;
+  change7dPct: string | null;
+  change30dPct: string | null;
+  change1yPct: string | null;
+  marketCapUsd: string | null;
   source: string;
   fetchedAt: Date;
   changedAt: Date;
@@ -107,6 +111,10 @@ export class PricingService {
       result.set(assetId, {
         priceUsd: quote.priceUsd,
         change24hPct: quote.change24hPct,
+        change7dPct: quote.change7dPct,
+        change30dPct: quote.change30dPct,
+        change1yPct: quote.change1yPct,
+        marketCapUsd: quote.marketCapUsd,
         source: quote.source,
         fetchedAt: quote.fetchedAt,
         changedAt: quote.changedAt,
@@ -152,6 +160,10 @@ export class PricingService {
       result.set(assetId, {
         priceUsd: latest.priceUsd,
         change24hPct,
+        change7dPct: null,
+        change30dPct: null,
+        change1yPct: null,
+        marketCapUsd: null,
         source: latest.source,
         fetchedAt: latest.observedAt,
         changedAt: latest.observedAt,

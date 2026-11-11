@@ -146,6 +146,10 @@ export const transactionsListQuerySchema = z.object({
 export const portfolioQuoteSchema = z.object({
   priceUsd: z.string(),
   change24hPct: z.string().nullable(),
+  change7dPct: z.string().nullable(),
+  change30dPct: z.string().nullable(),
+  change1yPct: z.string().nullable(),
+  marketCapUsd: z.string().nullable(),
   priceUpdatedAt: z.iso.datetime().nullable(),
   priceFetchedAt: z.iso.datetime().nullable(),
   priceSource: z.string().nullable(),

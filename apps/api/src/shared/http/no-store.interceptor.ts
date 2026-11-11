@@ -13,7 +13,7 @@ export class NoStoreInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const reply = context.switchToHttp().getResponse<FastifyReply>();
 
-    if (request.url.startsWith('/api/v1/')) {
+    if (request.url.startsWith('/api/v1/') && !request.url.startsWith('/api/v1/watchlist/icon')) {
       void reply.header('Cache-Control', 'no-store');
     }
 

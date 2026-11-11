@@ -60,6 +60,10 @@ export class PortfolioService {
         ? {
             priceUsd: quote.priceUsd,
             change24hPct: quote.change24hPct,
+            change7dPct: quote.change7dPct,
+            change30dPct: quote.change30dPct,
+            change1yPct: quote.change1yPct,
+            marketCapUsd: quote.marketCapUsd,
             priceUpdatedAt: quote.changedAt.toISOString(),
             priceFetchedAt: quote.fetchedAt.toISOString(),
             priceSource: quote.source,

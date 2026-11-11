@@ -24,7 +24,7 @@ import {
   updateWatchlist,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPct, formatPrice, formatUsd, pnlTone } from '@/lib/format';
+import { formatPct, formatPrice, formatUsd, formatUsdCompact, pnlTone } from '@/lib/format';
 import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -84,9 +84,38 @@ function isValidIconValue(value: string): boolean {
   }
 }
 
+type TokenSortKey = 'default' | 'marketCap' | 'change24h' | 'change7d' | 'change30d' | 'change1y';
+
+const TOKEN_SORT_LABELS: Record<TokenSortKey, string> = {
+  default: 'По умолчанию',
+  marketCap: 'Капитализация',
+  change24h: 'Изменение 24ч',
+  change7d: 'Изменение 7д',
+  change30d: 'Изменение 30д',
+  change1y: 'Изменение 1г',
+};
+
+function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>): number | null {
+  const raw =
+    key === 'marketCap'
+      ? entry.marketCapUsd
+      : key === 'change24h'
+        ? entry.change24hPct
+        : key === 'change7d'
+          ? entry.change7dPct
+          : key === 'change30d'
+            ? entry.change30dPct
+            : entry.change1yPct;
+  if (raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 export function WatchlistPage() {
   const queryClient = useQueryClient();
   const [includeArchived, setIncludeArchived] = useState(false);
+  const [sortKey, setSortKey] = useState<TokenSortKey>('default');
+  const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<WatchlistEntry | null>(null);
@@ -127,6 +156,17 @@ export function WatchlistPage() {
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
+  const sortedEntries =
+    sortKey === 'default'
+      ? entries
+      : [...entries].sort((left, right) => {
+          const a = sortValue(left, sortKey);
+          const b = sortValue(right, sortKey);
+          if (a === null && b === null) return 0;
+          if (a === null) return 1;
+          if (b === null) return -1;
+          return sortDirection === 'desc' ? b - a : a - b;
+        });
 
   useEffect(() => {
     if (!searchGroupId && defaultGroup) setSearchGroupId(defaultGroup.id);
@@ -395,6 +435,32 @@ export function WatchlistPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-zinc-500">Сортировка</span>
+        <Select
+          aria-label="Сортировка базы токенов"
+          className="w-auto"
+          value={sortKey}
+          onChange={(event) => setSortKey(event.target.value as TokenSortKey)}
+        >
+          {(Object.keys(TOKEN_SORT_LABELS) as TokenSortKey[]).map((key) => (
+            <option key={key} value={key}>
+              {TOKEN_SORT_LABELS[key]}
+            </option>
+          ))}
+        </Select>
+        <Button
+          variant="secondary"
+          className="h-10 px-3"
+          aria-label={sortDirection === 'desc' ? 'По убыванию' : 'По возрастанию'}
+          title={sortDirection === 'desc' ? 'По убыванию' : 'По возрастанию'}
+          disabled={sortKey === 'default'}
+          onClick={() => setSortDirection((value) => (value === 'desc' ? 'asc' : 'desc'))}
+        >
+          {sortDirection === 'desc' ? '↓' : '↑'}
+        </Button>
+      </div>
+
       <Card>
         <CardTitle>Найти токен по контракту</CardTitle>
         <CardDescription>
@@ -528,8 +594,13 @@ export function WatchlistPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {entries.map((entry) => {
+            {sortedEntries.map((entry) => {
               const group = entry.groupId ? groupById.get(entry.groupId) : null;
+              const periodChanges = [
+                { label: '7д', value: entry.change7dPct },
+                { label: '30д', value: entry.change30dPct },
+                { label: '1г', value: entry.change1yPct },
+              ];
               return (
                 <Card
                   key={entry.id}
@@ -560,6 +631,11 @@ export function WatchlistPage() {
                           <span className="truncate">
                             {entry.asset.name} · {entry.asset.chainCode}
                           </span>
+                          {entry.marketCapUsd ? (
+                            <span className="whitespace-nowrap">
+                              Кап. {formatUsdCompact(entry.marketCapUsd)}
+                            </span>
+                          ) : null}
                           {entry.tags.slice(0, 4).map((tag) => (
                             <Badge key={tag} tone="info">
                               {tag}
@@ -588,6 +664,13 @@ export function WatchlistPage() {
                           >
                             {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
                           </LiveValue>
+                        </span>
+                        <span className="mt-0.5 flex justify-end gap-2 text-[11px] text-zinc-500">
+                          {periodChanges.map(({ label, value }) => (
+                            <span key={label} className={pnlTone(value)}>
+                              {label} {value ? formatPct(value) : '—'}
+                            </span>
+                          ))}
                         </span>
                       </span>
                       <span aria-hidden="true" className="text-lg text-zinc-300">
