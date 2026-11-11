@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect } from 'react';
 import type { NoteImage } from '@nexter/contracts';
 
@@ -14,6 +15,8 @@ export function NoteImageViewer({
   onClose: () => void;
 }) {
   const image = images[index];
+
+  useBodyScrollLock(Boolean(image));
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {

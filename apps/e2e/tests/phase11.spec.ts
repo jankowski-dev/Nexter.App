@@ -49,8 +49,10 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await habitDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Без сахара')).toBeVisible();
   await page.getByRole('button', { name: 'Удалить привычку Без сахара' }).click();
+  await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('hidden');
   await page.getByRole('button', { name: 'Удалить', exact: true }).click();
   await expect(page.getByText('Без сахара')).toHaveCount(0);
+  await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('');
   await page.getByRole('button', { name: 'Архив', exact: true }).click();
   await expect(page.getByText('Без сахара')).toBeVisible();
   await page.getByRole('button', { name: 'Вернуть' }).click();

@@ -17,6 +17,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useCallback, useState } from 'react';
+import { useLiveFlash } from '@/lib/use-live-flash';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
 import { ManualTradeDialog } from '../trade/manual-trade-dialog';
@@ -25,17 +26,22 @@ import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
 import { TokenBuyList } from './token-buy-list';
 
-type PortfolioTab = 'portfolio' | 'buy' | 'trades';
+type PortfolioTab = 'portfolio' | 'trades';
+type PortfolioView = 'positions' | 'main';
 
 function tabFromHash(): PortfolioTab {
   if (typeof window === 'undefined') return 'portfolio';
-  if (window.location.hash === '#trades') return 'trades';
-  if (window.location.hash === '#buy') return 'buy';
-  return 'portfolio';
+  return window.location.hash === '#trades' ? 'trades' : 'portfolio';
+}
+
+function viewFromHash(): PortfolioView {
+  if (typeof window === 'undefined') return 'positions';
+  return window.location.hash === '#list' || window.location.hash === '#buy' ? 'main' : 'positions';
 }
 
 export function PortfolioPage() {
   const [tab, setTab] = useState<PortfolioTab>(tabFromHash);
+  const [portfolioView, setPortfolioView] = useState<PortfolioView>(viewFromHash);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [buyTarget, setBuyTarget] = useState<{
     asset: Asset;
@@ -52,6 +58,7 @@ export function PortfolioPage() {
     queryFn: fetchPositions,
     refetchInterval: 15_000,
   });
+  const positionsFlash = useLiveFlash(positions.dataUpdatedAt);
   const refetchPositions = useCallback(() => {
     void positions.refetch();
   }, [positions.refetch]);
@@ -92,8 +99,13 @@ export function PortfolioPage() {
     window.history.replaceState(
       null,
       '',
-      next === 'trades' ? '#trades' : next === 'buy' ? '#buy' : '#portfolio',
+      next === 'trades' ? '#trades' : portfolioView === 'main' ? '#list' : '#portfolio',
     );
+  }
+
+  function changePortfolioView(next: PortfolioView): void {
+    setPortfolioView(next);
+    window.history.replaceState(null, '', next === 'main' ? '#list' : '#portfolio');
   }
 
   return (
@@ -108,11 +120,14 @@ export function PortfolioPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+      <div
+        role="tablist"
+        aria-label="Раздел портфеля"
+        className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+      >
         {(
           [
             ['portfolio', 'Портфель'],
-            ['buy', 'Основной список'],
             ['trades', 'Сделки'],
           ] as const
         ).map(([value, label]) => (
@@ -170,120 +185,148 @@ export function PortfolioPage() {
             </Card>
           </div>
 
-          <Card>
-            <CardTitle>Позиции по активам</CardTitle>
-            <CardDescription>
-              Нажми на токен, чтобы открыть статистику, лоты и сделки в боковой панели.
-            </CardDescription>
-            {sortedPositions.length === 0 ? (
-              <p className="mt-4 text-sm text-zinc-600">Позиций нет.</p>
-            ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                      <th className="py-2 pr-3 font-medium">Актив</th>
-                      <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                      <th className="py-2 pr-3 text-right font-medium">Цена</th>
-                      <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
-                      <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                      <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
-                      <th className="py-2 pr-3 text-right font-medium">Результат</th>
-                      <th className="py-2 pr-3 text-right font-medium">Доля</th>
-                      <th className="py-2 text-right font-medium">Действие</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedPositions.map((position) => {
-                      const share =
-                        Number(data.equityUsd) > 0 && position.valueUsd
-                          ? (Number(position.valueUsd) / Number(data.equityUsd)) * 100
-                          : null;
+          <div
+            role="tablist"
+            aria-label="Вид портфеля"
+            className="flex w-fit flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+          >
+            {(
+              [
+                ['positions', 'Позиции по активам'],
+                ['main', 'Основной список'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => changePortfolioView(value)}
+                className={`rounded-md px-3 py-1.5 text-sm ${
+                  portfolioView === value
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+                aria-selected={portfolioView === value}
+                role="tab"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-                      return (
-                        <tr
-                          key={position.asset.id}
-                          className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
-                        >
-                          <td className="py-2 pr-3">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedAssetId(position.asset.id)}
-                              className="flex items-center gap-2 text-left"
-                              aria-label={`Открыть статистику ${position.asset.symbol}`}
-                            >
-                              <TokenIcon
-                                logoUrl={
-                                  position.asset.logoUrl ??
-                                  watchlistLogos.get(position.asset.id) ??
-                                  null
-                                }
-                                symbol={position.asset.symbol}
-                              />
-                              <span className="min-w-0">
-                                <span className="block font-medium text-zinc-800 hover:text-emerald-800">
-                                  {position.asset.symbol}
-                                </span>
-                                <span className="block text-xs text-zinc-500">
-                                  {position.asset.chainCode}
-                                  {!position.asset.isVerified ? ' · не проверен' : ''}
-                                </span>
-                              </span>
-                            </button>
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                            {formatTokenAmount(position.amount, 8)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                            {formatPrice(position.priceUsd)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {formatPrice(position.avgCostUsd)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
-                            {formatUsd(position.valueUsd)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {formatUsd(position.costBasisUsd)}
-                          </td>
-                          <td
-                            className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
-                              position.unrealizedPnlUsd,
-                            )}`}
+          {portfolioView === 'positions' ? (
+            <Card className={positionsFlash ? 'live-flash' : ''}>
+              <CardDescription>
+                Нажми на токен, чтобы открыть статистику, лоты и сделки в боковой панели.
+              </CardDescription>
+              {sortedPositions.length === 0 ? (
+                <p className="mt-4 text-sm text-zinc-600">Позиций нет.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-3 font-medium">Актив</th>
+                        <th className="py-2 pr-3 text-right font-medium">Количество</th>
+                        <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                        <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
+                        <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
+                        <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
+                        <th className="py-2 pr-3 text-right font-medium">Результат</th>
+                        <th className="py-2 pr-3 text-right font-medium">Доля</th>
+                        <th className="py-2 text-right font-medium">Действие</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedPositions.map((position) => {
+                        const share =
+                          Number(data.equityUsd) > 0 && position.valueUsd
+                            ? (Number(position.valueUsd) / Number(data.equityUsd)) * 100
+                            : null;
+
+                        return (
+                          <tr
+                            key={position.asset.id}
+                            className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
                           >
-                            {formatSignedUsd(position.unrealizedPnlUsd)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
-                          </td>
-                          <td className="py-2 text-right">
-                            <Button
-                              variant="ghost"
-                              className="h-8 px-2 text-xs"
-                              onClick={() => setSelectedAssetId(position.asset.id)}
+                            <td className="py-2 pr-3">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAssetId(position.asset.id)}
+                                className="flex items-center gap-2 text-left"
+                                aria-label={`Открыть статистику ${position.asset.symbol}`}
+                              >
+                                <TokenIcon
+                                  logoUrl={
+                                    position.asset.logoUrl ??
+                                    watchlistLogos.get(position.asset.id) ??
+                                    null
+                                  }
+                                  symbol={position.asset.symbol}
+                                />
+                                <span className="min-w-0">
+                                  <span className="block font-medium text-zinc-800 hover:text-emerald-800">
+                                    {position.asset.symbol}
+                                  </span>
+                                  <span className="block text-xs text-zinc-500">
+                                    {position.asset.chainCode}
+                                    {!position.asset.isVerified ? ' · не проверен' : ''}
+                                  </span>
+                                </span>
+                              </button>
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                              {formatTokenAmount(position.amount, 8)}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                              {formatPrice(position.priceUsd)}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                              {formatPrice(position.avgCostUsd)}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
+                              {formatUsd(position.valueUsd)}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                              {formatUsd(position.costBasisUsd)}
+                            </td>
+                            <td
+                              className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
+                                position.unrealizedPnlUsd,
+                              )}`}
                             >
-                              Статистика
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
+                              {formatSignedUsd(position.unrealizedPnlUsd)}
+                            </td>
+                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                              {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
+                            </td>
+                            <td className="py-2 text-right">
+                              <Button
+                                variant="ghost"
+                                className="h-8 px-2 text-xs"
+                                onClick={() => setSelectedAssetId(position.asset.id)}
+                              >
+                                Статистика
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          ) : (
+            <TokenBuyList
+              positions={data.positions}
+              showHeading={false}
+              onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
+              onManual={(asset) => {
+                setManual({ assetId: asset.id, side: 'entry' });
+              }}
+            />
+          )}
         </>
-      ) : null}
-
-      {tab === 'buy' ? (
-        <TokenBuyList
-          positions={data.positions}
-          onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
-          onManual={(asset) => {
-            setManual({ assetId: asset.id, side: 'entry' });
-          }}
-        />
       ) : null}
 
       {tab === 'trades' ? <TradesPanel onOpenTrade={setSellGroup} logos={watchlistLogos} /> : null}

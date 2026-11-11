@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect, useRef } from 'react';
 
 export function ConfirmDialog({
@@ -28,6 +29,8 @@ export function ConfirmDialog({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCancelRef = useRef(onCancel);
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     onCancelRef.current = onCancel;

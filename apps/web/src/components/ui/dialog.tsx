@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils';
+import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect, useRef, type ReactNode } from 'react';
 
 export function Dialog({
@@ -23,6 +24,8 @@ export function Dialog({
   const resolvedSize = size ?? (wide ? 'lg' : 'md');
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+
+  useBodyScrollLock(open);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -62,7 +65,7 @@ export function Dialog({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'dialog-panel-enter max-h-[92dvh] w-full overflow-y-auto rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
+          'dialog-panel-enter max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
           resolvedSize === 'md' && 'sm:max-w-xl',
           resolvedSize === 'lg' && 'sm:max-w-3xl',
           resolvedSize === 'xl' && 'sm:max-w-5xl',

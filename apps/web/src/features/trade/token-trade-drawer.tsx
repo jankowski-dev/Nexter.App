@@ -755,6 +755,12 @@ export function TokenTradeDrawer({
             </div>
           ) : null}
 
+          {phase === 'signing' || phase === 'approval' ? (
+            <p className="text-xs text-zinc-500">
+              Ожидаю ответ кошелька. Чтобы отменить, отклоните запрос в приложении кошелька.
+            </p>
+          ) : null}
+
           {phase === 'success' ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
               {mode === 'buy' ? 'Покупка учтена.' : 'Продажа учтена.'}{' '}

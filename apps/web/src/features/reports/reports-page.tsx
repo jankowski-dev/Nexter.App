@@ -14,6 +14,7 @@ import {
   pluralizeRu,
   pnlTone,
 } from '@/lib/format';
+import { useLiveFlash } from '@/lib/use-live-flash';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
@@ -127,7 +128,9 @@ export function ReportsPage() {
     queryKey: ['reports', period.from ?? null, period.to ?? null],
     queryFn: () => fetchReports(period.from, period.to),
     enabled: !invalidPeriod,
+    refetchInterval: 30_000,
   });
+  const reportsFlash = useLiveFlash(reports.dataUpdatedAt);
 
   const exportMutation = useMutation({
     mutationFn: ({
@@ -263,7 +266,7 @@ export function ReportsPage() {
 
       {!reports.isPending && report ? (
         <>
-          <Card>
+          <Card className={reportsFlash ? 'live-flash' : ''}>
             <CardTitle>Итоги за период</CardTitle>
             <CardDescription>
               Реализованный P&L по FIFO, сборы из транзакций и сетевой газ подтверждённых on-chain

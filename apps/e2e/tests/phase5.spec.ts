@@ -171,6 +171,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await assetDrawer.getByRole('link', { name: 'Открыть полную карточку' }).click();
   await expect(page).toHaveURL(/\/portfolio\/assets\//);
   await expect(page.getByRole('heading', { name: /BASED/ })).toBeVisible();
+  await expect(page.getByTitle(/Данные обновляются автоматически/)).toHaveCount(0);
   await expect(page.getByText('Лоты').first()).toBeVisible();
   await expect(page.getByText('Сделки').first()).toBeVisible();
   await expect(page.getByText('Транзакции').first()).toBeVisible();
@@ -224,10 +225,9 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await watchDialog.getByLabel('Инвесторы (через запятую)').fill('Alpha Capital, Beta Ventures');
   await watchDialog.getByLabel('Приоритет').fill('10');
   await watchDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Playwright thesis')).toBeVisible();
-  await expect(page.getByText('тест')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('button', { name: /BASED/ }).click();
+  await page.getByRole('button', { name: /BASED/ }).first().click();
   const tokenDrawer = page.getByRole('dialog');
   await expect(tokenDrawer.getByRole('heading', { name: 'BASED' })).toBeVisible();
   await expect(tokenDrawer.getByText('Playwright thesis')).toBeVisible();
@@ -252,25 +252,29 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   });
   await expect(editDialog.locator('img[src^="data:image/"]')).toBeVisible();
   await editDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: /BASED/ }).first().click();
+  const updatedDrawer = page.getByRole('dialog');
+  await expect(updatedDrawer.getByText('Updated Playwright thesis')).toBeVisible();
+  await updatedDrawer.getByLabel('Закрыть').click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
 
   page.on('dialog', (dialog) => {
     void dialog.accept();
   });
-  await page.getByRole('button', { name: /BASED/ }).click();
+  await page.getByRole('button', { name: /BASED/ }).first().click();
   const drawerToArchive = page.getByRole('dialog');
   await expect(drawerToArchive.getByText('Updated Playwright thesis')).toBeVisible();
   await drawerToArchive.getByRole('button', { name: 'В архив' }).click();
-  await expect(page.getByText('Updated Playwright thesis')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
 
   await page.getByLabel('Архив').check();
-  await page.getByRole('button', { name: /BASED/ }).click();
+  await page.getByRole('button', { name: /BASED/ }).first().click();
   const archivedDrawer = page.getByRole('dialog');
   await archivedDrawer.getByRole('button', { name: 'Вернуть' }).click();
   await archivedDrawer.getByLabel('Закрыть').click();
   await page.getByLabel('Архив').uncheck();
-  await expect(page.getByText('Updated Playwright thesis')).toBeVisible();
+  await expect(page.getByRole('button', { name: /BASED/ }).first()).toBeVisible();
 
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
