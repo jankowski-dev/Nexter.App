@@ -12,7 +12,7 @@ const cryptoNavigation = [
   { to: '/portfolio', label: messages.nav.portfolio },
   { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
-  { to: '/reports', label: messages.nav.reports },
+  { to: '/statistics', label: messages.nav.reports },
 ] as const;
 
 const primaryNavigation = [
@@ -105,12 +105,14 @@ function ChainButton({
   active,
   onClick,
   label,
+  shortLabel,
   children,
 }: {
   chain: WalletChain;
   active: boolean;
   onClick: (chain: WalletChain) => void;
   label: string;
+  shortLabel: string;
   children: ReactNode;
 }) {
   return (
@@ -120,13 +122,15 @@ function ChainButton({
       aria-pressed={active}
       title={chain === 'bsc' ? 'BNB Smart Chain' : 'Ethereum'}
       onClick={() => onClick(chain)}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+      className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition ${
         active
-          ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-500/15'
-          : 'border-zinc-200 bg-white hover:bg-zinc-50'
+          ? 'bg-white text-zinc-900 shadow-sm'
+          : 'text-zinc-400 hover:bg-white/60 hover:text-zinc-600'
       }`}
     >
-      {children}
+      <span className={active ? '' : 'opacity-40 grayscale'}>{children}</span>
+      <span className="hidden md:inline">{shortLabel}</span>
+      {active ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
     </button>
   );
 }
@@ -158,12 +162,17 @@ function WalletControls() {
         </Button>
       )}
 
-      <div role="group" aria-label="Блокчейн" className="flex items-center gap-1">
+      <div
+        role="group"
+        aria-label="Блокчейн"
+        className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1"
+      >
         <ChainButton
           chain="bsc"
           active={wallet.chain === 'bsc'}
           onClick={wallet.selectChain}
           label="BNB"
+          shortLabel="BNB"
         >
           <BnbIcon />
         </ChainButton>
@@ -172,6 +181,7 @@ function WalletControls() {
           active={wallet.chain === 'ethereum'}
           onClick={wallet.selectChain}
           label="Ethereum"
+          shortLabel="ETH"
         >
           <EthIcon />
         </ChainButton>

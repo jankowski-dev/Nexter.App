@@ -79,6 +79,22 @@ export const swapQuoteRequestSchema = z
     path: ['tokenOut'],
   });
 
+export const swapPreviewSchema = z.object({
+  chain: swapChainCodeSchema,
+  tokenIn: swapTokenSchema,
+  tokenOut: swapTokenSchema,
+  amountIn: z.string(),
+  amountOut: z.string(),
+  minOut: z.string(),
+  slippageBps: z.number().int(),
+  priceImpactBps: z.number().int().nullable(),
+  amountInUsd: z.string().nullable(),
+  amountOutUsd: z.string().nullable(),
+  gasUsd: z.string().nullable(),
+  routeId: z.string().nullable(),
+  fetchedAt: z.iso.datetime(),
+});
+
 export const swapOrderSummarySchema = z.object({
   id: z.uuid(),
   chain: swapChainCodeSchema,
@@ -226,6 +242,7 @@ export type SwapQuoteRequest = z.infer<typeof swapQuoteRequestSchema>;
 export type SwapOrderSummary = z.infer<typeof swapOrderSummarySchema>;
 export type SwapOrderDetail = z.infer<typeof swapOrderDetailSchema>;
 export type SwapOrdersQuery = z.infer<typeof swapOrdersQuerySchema>;
+export type SwapPreview = z.infer<typeof swapPreviewSchema>;
 export type SwapOrdersResponse = z.infer<typeof swapOrdersResponseSchema>;
 export type SwapBuildRequest = z.infer<typeof swapBuildRequestSchema>;
 export type SwapSubmitRequest = z.infer<typeof swapSubmitRequestSchema>;

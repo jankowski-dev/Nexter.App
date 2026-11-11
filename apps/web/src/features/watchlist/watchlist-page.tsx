@@ -21,7 +21,7 @@ import {
   updateWatchlist,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPct, formatUsd, pnlTone } from '@/lib/format';
+import { formatPct, formatPrice, formatUsd, pnlTone } from '@/lib/format';
 import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -142,6 +142,7 @@ export function WatchlistPage() {
       fetchWatchlist(includeArchived, pageParam ?? undefined, selectedGroupId ?? undefined),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.page.hasMore ? last.page.nextCursor : undefined),
+    refetchInterval: 30_000,
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
@@ -500,7 +501,7 @@ export function WatchlistPage() {
               </div>
               <div className="text-right">
                 <div className="font-mono text-lg font-semibold text-zinc-900">
-                  {formatUsd(searchResult.priceUsd)}
+                  {formatPrice(searchResult.priceUsd)}
                 </div>
                 <div className={`text-xs ${pnlTone(searchResult.change24hPct)}`}>
                   {searchResult.change24hPct ? formatPct(searchResult.change24hPct) : '24ч: —'}
@@ -601,7 +602,7 @@ export function WatchlistPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <div className="font-mono text-lg font-semibold text-zinc-900">
-                          {formatUsd(entry.priceUsd)}
+                          {formatPrice(entry.priceUsd)}
                         </div>
                         <div className={`text-xs ${pnlTone(entry.change24hPct)}`}>
                           {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}

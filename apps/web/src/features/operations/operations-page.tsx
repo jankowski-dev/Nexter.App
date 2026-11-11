@@ -7,8 +7,9 @@ import { fetchAccounts, fetchAssets, fetchTransactions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { TradeDialog } from '../trade/trade-dialog';
+import { useCallback, useState } from 'react';
+import { ExchangeDrawer } from '../trade/exchange-drawer';
+import { ManualOperationDialog } from './manual-operation-dialog';
 
 type OperationFilter = 'all' | 'deposit' | 'withdrawal' | 'swap';
 
@@ -44,6 +45,7 @@ const subtypeLabels: Record<string, string> = {
 export function OperationsPage() {
   const [filter, setFilter] = useState<OperationFilter>('all');
   const [manualOpen, setManualOpen] = useState(false);
+  const [onchainOpen, setOnchainOpen] = useState(false);
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts });
 
@@ -62,6 +64,9 @@ export function OperationsPage() {
   });
 
   const rows = transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
+  const refreshOperations = useCallback(() => {
+    void transactions.refetch();
+  }, [transactions.refetch]);
   const assetById = new Map((assets.data?.assets ?? []).map((asset) => [asset.id, asset]));
   const accountById = new Map(
     (accounts.data?.accounts ?? []).map((account) => [account.id, account]),
@@ -72,7 +77,14 @@ export function OperationsPage() {
       <PageHeader
         title="Операции"
         subtitle="Пополнения, выводы и обмены. Сделки ведутся в Портфеле."
-        actions={<Button onClick={() => setManualOpen(true)}>Новая операция</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setOnchainOpen(true)}>
+              Обмен on-chain
+            </Button>
+            <Button onClick={() => setManualOpen(true)}>Новая операция</Button>
+          </>
+        }
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -204,12 +216,26 @@ export function OperationsPage() {
         </Card>
       ) : null}
 
-      <TradeDialog
+      <ManualOperationDialog
         open={manualOpen}
+        initialMode="exchange"
         onClose={() => setManualOpen(false)}
-        initialMode="deposit"
-        titleOverride="Новая операция"
+        onSaved={refreshOperations}
       />
+
+      {onchainOpen ? (
+        <ExchangeDrawer
+          onClose={() => {
+            setOnchainOpen(false);
+            refreshOperations();
+          }}
+          onManual={() => {
+            setOnchainOpen(false);
+            setManualOpen(true);
+          }}
+          onCompleted={refreshOperations}
+        />
+      ) : null}
     </div>
   );
 }

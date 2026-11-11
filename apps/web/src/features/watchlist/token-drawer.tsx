@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { TokenIcon } from '@/components/token-icon';
-import { formatPct, formatUsd, pnlTone } from '@/lib/format';
+import { formatPct, formatPrice, pnlTone } from '@/lib/format';
 import { Link } from '@tanstack/react-router';
 import type { WatchlistEntry } from '@nexter/contracts';
 
@@ -91,7 +91,7 @@ export function TokenDrawer({
           </div>
           <div className="text-right">
             <div className="font-mono text-xl font-semibold text-zinc-900">
-              {formatUsd(entry.priceUsd)}
+              {formatPrice(entry.priceUsd)}
             </div>
             <div className={`text-sm ${pnlTone(entry.change24hPct)}`}>
               {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}

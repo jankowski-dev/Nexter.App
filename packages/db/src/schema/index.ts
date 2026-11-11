@@ -865,6 +865,27 @@ export const noteImages = pgTable(
   (table) => [index('note_images_user_note_idx').on(table.userId, table.noteId, table.createdAt)],
 );
 
+export const habits = pgTable(
+  'habits',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    startedOn: date('started_on').notNull(),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('habits_user_name_unique')
+      .on(table.userId, table.name)
+      .where(sql`${table.archivedAt} is null`),
+    index('habits_user_archived_idx').on(table.userId, table.archivedAt),
+  ],
+);
+
 export const financeImports = pgTable(
   'finance_imports',
   {
@@ -1087,6 +1108,7 @@ export type VaultItem = typeof vaultItems.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type NoteImageRecord = typeof noteImages.$inferSelect;
+export type HabitRecord = typeof habits.$inferSelect;
 export type FinanceImport = typeof financeImports.$inferSelect;
 export type FinanceAccount = typeof financeAccounts.$inferSelect;
 export type FinanceCategory = typeof financeCategories.$inferSelect;

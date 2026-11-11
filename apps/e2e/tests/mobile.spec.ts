@@ -58,15 +58,15 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await expect(page).toHaveURL(/\/portfolio$/);
   await expect(page.getByRole('heading', { name: 'Портфель' })).toBeVisible();
 
-  await mobileNav.getByRole('link', { name: 'Отчёты' }).click();
-  await expect(page).toHaveURL(/\/reports$/);
-  await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
+  await mobileNav.getByRole('link', { name: 'Статистика' }).click();
+  await expect(page).toHaveURL(/\/statistics$/);
+  await expect(page.getByRole('heading', { name: 'Статистика' })).toBeVisible();
   await expect(page.getByRole('button', { name: '30 дней' })).toBeVisible();
 
   await mobileNav.getByRole('link', { name: 'Портфель' }).click();
-  await page.getByRole('button', { name: 'Новая сделка' }).click();
+  await page.getByRole('button', { name: 'Ручная сделка' }).click();
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
   await expect(dialog.getByLabel('Закрыть')).toBeVisible();
   await dialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);

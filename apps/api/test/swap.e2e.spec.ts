@@ -16,6 +16,7 @@ import {
   swapOrderCloseGroups,
   swapOrders,
   tokenApprovals,
+  tradeGroups,
   transactions,
   watchedAddresses,
   type Database,
@@ -367,10 +368,32 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       'bsc',
       'ethereum',
     ]);
-    expect(config.body.chains[0].tokens).toHaveLength(7);
-    expect(config.body.chains[1].tokens).toHaveLength(5);
+    expect(config.body.chains[0].tokens).toHaveLength(8);
+    expect(config.body.chains[1].tokens).toHaveLength(6);
     expect(config.body.chains[0].executionEnabled).toBe(true);
     expect(config.body.chains[1].executionEnabled).toBe(false);
+
+    const preview = await agent
+      .post('/api/v1/swap/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn,
+        tokenOut,
+        amountIn: '1',
+        slippageBps: 50,
+        walletAddress: wallet,
+      })
+      .expect(200);
+    expect(preview.body).toMatchObject({
+      amountIn: '1.000000000000000000',
+      amountOut: '2.000000000000000000',
+      minOut: '1.990000000000000000',
+      slippageBps: 50,
+      priceImpactBps: 10,
+      amountInUsd: '1.00000000',
+      amountOutUsd: '0.99900000',
+    });
 
     const quoted = await agent
       .post('/api/v1/swap/quote')
@@ -564,7 +587,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
 
-    const mismatch = await agent
+    const partial = await agent
       .post('/api/v1/swap/quote')
       .set('x-csrf-token', owner.csrf)
       .send({
@@ -575,8 +598,30 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         walletAddress: wallet,
         closeGroupIds: [group?.id],
       })
+      .expect(201);
+    const partialRows = await db
+      .select()
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, partial.body.id));
+    expect(partialRows[0]?.expectedAmount).toBe('9.000000000000000000');
+    await agent
+      .post(`/api/v1/swap/orders/${partial.body.id}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
+    const tooLarge = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: based?.contractAddress,
+        tokenOut: usdc?.contractAddress,
+        amountIn: '11',
+        walletAddress: wallet,
+        closeGroupIds: [group?.id],
+      })
       .expect(400);
-    expect(mismatch.body.error.code).toBe('SWAP_CLOSE_AMOUNT_MISMATCH');
+    expect(tooLarge.body.error.code).toBe('SWAP_CLOSE_AMOUNT_MISMATCH');
 
     const changedQuote = await agent
       .post('/api/v1/swap/quote')
@@ -1906,6 +1951,154 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .from(transactions)
       .where(and(eq(transactions.source, 'kyberswap'), eq(transactions.sourceId, txHash)));
     expect(repeats).toHaveLength(1);
+  }, 60_000);
+
+  it('accounts a partial on-chain close only against the selected trade group', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const accounts = app.get(AccountsService);
+    const assets = app.get(AssetsService);
+    const ledger = app.get(LedgerService);
+    const tracking = app.get(SwapTrackingService);
+
+    const account = await accounts.defaultWalletForChain(owner.userId, 'bsc');
+    const usdcAsset = await assets.ensureForSwapToken('bsc', getSwapToken('bsc', tokenIn)!);
+    const basedAsset = await assets.ensureForSwapToken('bsc', getSwapToken('bsc', tokenOut)!);
+    const bnbAsset = await assets.ensureForSwapToken('bsc', nativeTokenForChain('bsc'));
+
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: usdcAsset.id,
+        amount: '10',
+        usdValue: '10',
+      },
+      {},
+    );
+    await ledger.createManual(
+      owner.userId,
+      {
+        type: 'deposit',
+        accountId: account.id,
+        assetId: bnbAsset.id,
+        amount: '0.1',
+        usdValue: '60',
+      },
+      {},
+    );
+    const buy = await ledger.createManual(
+      owner.userId,
+      {
+        type: 'buy',
+        accountId: account.id,
+        assetId: basedAsset.id,
+        amount: '2',
+        quoteAssetId: usdcAsset.id,
+        quoteAmount: '2',
+      },
+      {},
+    );
+    const groupId = buy.transaction.tradeGroupId;
+    expect(groupId).toBeTruthy();
+
+    buildData = makeBuildData({
+      srcToken: tokenOut,
+      dstToken: tokenIn,
+      amount: 1_000_000_000_000_000_000n,
+      minOut: 1_990_000_000_000_000_000n,
+    });
+    const quoted = await agent
+      .post('/api/v1/swap/quote')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        chain: 'bsc',
+        tokenIn: tokenOut,
+        tokenOut: tokenIn,
+        amountIn: '1',
+        walletAddress: wallet,
+        closeGroupIds: [groupId],
+      })
+      .expect(201);
+    const orderId = quoted.body.id as string;
+    const built = await agent
+      .post('/api/v1/swap/build')
+      .set('x-csrf-token', owner.csrf)
+      .send({ orderId, walletAddress: wallet })
+      .expect(201);
+    const txHash = `0x${'4'.repeat(64)}`;
+
+    await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash })
+      .expect(200);
+
+    chainTx = {
+      hash: txHash,
+      from: wallet,
+      to: router,
+      input: built.body.calldata as string,
+      value: '0x0',
+      nonce: 7,
+      blockNumber: 100,
+    };
+    chainReceipt = {
+      status: true,
+      blockNumber: 100,
+      blockHash: `0x${'4'.repeat(64)}`,
+      transactionHash: txHash,
+      gasUsed: '100000',
+      effectiveGasPrice: '0x3b9aca00',
+      logs: [swappedLog(1_000_000_000_000_000_000n, 2_000_000_000_000_000_000n, tokenOut, tokenIn)],
+    };
+    latestBlock = 114;
+    blockTimestamp = Math.floor(Date.now() / 1000);
+
+    await tracking.tick();
+
+    const [order] = await db.select().from(swapOrders).where(eq(swapOrders.id, orderId));
+    expect(order).toMatchObject({
+      status: 'CONFIRMED',
+      executedAmountIn: '1.000000000000000000',
+      executedAmountOut: '2.000000000000000000',
+    });
+    expect(order.accountingTransactionId, JSON.stringify(order.errors)).toBeTruthy();
+    // A close sell does not create a new trade group.
+    expect(order.tradeGroupId).toBeNull();
+
+    const groupLots = await db.select().from(lots).where(eq(lots.tradeGroupId, groupId!));
+    expect(groupLots).toHaveLength(1);
+    expect(groupLots[0]?.remainingAmount).toBe('1.000000000000000000');
+
+    const [group] = await db.select().from(tradeGroups).where(eq(tradeGroups.id, groupId!));
+    expect(group?.status).toBe('partial');
+
+    const [closeRow] = await db
+      .select()
+      .from(swapOrderCloseGroups)
+      .where(eq(swapOrderCloseGroups.orderId, orderId));
+    expect(closeRow?.tradeGroupId).toBe(groupId);
+    expect(closeRow?.expectedAmount).toBe('1.000000000000000000');
+
+    const [accounting] = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.id, order.accountingTransactionId!));
+    expect(accounting).toMatchObject({
+      type: 'trade',
+      subtype: 'swap',
+      source: 'kyberswap',
+      sourceId: txHash,
+      tradeGroupId: null,
+    });
+
+    const accountingPostings = await db
+      .select()
+      .from(postings)
+      .where(eq(postings.transactionId, accounting.id));
+    expect(accountingPostings).toHaveLength(6);
   }, 60_000);
 
   it('keeps BSC tracking when the Ethereum RPC fails', async () => {

@@ -37,14 +37,31 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - UI: `/notes` is a journal. Cards show a notebook icon, title, dates, status, and right-side pin/delete/edit icons. Clicking opens a one-third-width side drawer in read mode; edit mode uses a lightweight Markdown editor with a slightly narrower text area and autosave every 10 seconds and on close. The save indicator sits in the footer left, opposite the actions. `Готово` saves and returns to read mode without closing. Photos have a full-screen viewer with arrows/Escape. Delete is a confirmed soft archive; `Актуальные`/`Архивные` filters and `Загрузить ещё` paginate 30 notes.
 - Markdown rendering is a safe React subset (headings, lists, quotes, bold/italic/code, http/https links); no HTML is stored or injected.
 
+## Crypto/habits overhaul (UI-12)
+
+- Main dashboard combines crypto KPIs (month net P&L, positive/negative unrealized, equity), finance KPIs (average daily income/expense, month income/expense), today's tasks including overdue, and habit streaks. The finance page dashboard is unchanged.
+- Reported page is renamed `Статистика`; detailed crypto statistics remain there.
+- Portfolio tabs: positions, `Основной список` (default watchlist group with buy buttons), trades.
+- Token-first buy/sell drawer: live `POST /swap/preview` every 10s, CoinGecko vs Kyber rate difference, one-click build/approval/sign, post-buy trade summary and automatic sell mode. Manual trade entry is separate.
+- Single-trade close only, full or partial. Partial close uses FIFO within the selected trade group and keeps the remaining position.
+- Trade tabs: active (default), profitable, losing, closed. Mass selection and mass close are removed.
+- Manual operations dialog: exchange, deposit, withdrawal, income, adjustment. Manual exchange records a normal swap transaction and appears in the journal.
+- On-chain exchange uses a dedicated automatic drawer.
+- Live polling: positions/trades/dashboard every 10–15s; small prices use `formatPrice`.
+- BNB/ETH header switch is a labeled segmented control with a clear active state.
+- Background asset-logo backfill fills missing `assets.logo_url` from CoinGecko.
+- `habits` table, API, dashboard form and streak cards; migration `0027`.
+
 ## Database
 
-Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), and `0026` (note images) are additive. `0019` adds:
+Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), and `0027` (habits) are additive. `0019` adds:
 
 - `vault_configs` (unique per user).
 - `vault_items` (owner-scoped ciphertext).
 - `tasks`.
 - `notes`.
+
+`0027` adds `habits` (`name`, `started_on`, `archived_at`) with a partial unique index on active names per user and a conditional DML grant for `nexter_app`.
 
 All tables are additive; no existing table or ledger row is changed.
 

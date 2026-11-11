@@ -15,6 +15,7 @@ import {
   updateTradeGroupNotes,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import { idempotencyForPayload } from '@/lib/idempotency';
 import {
   formatDate,
   formatDateTime,
@@ -25,7 +26,7 @@ import {
 } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const statusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -51,7 +52,8 @@ export function TradeDetailPage() {
   const [proceedsAmount, setProceedsAmount] = useState('');
   const [sellNotes, setSellNotes] = useState('');
   const [sellError, setSellError] = useState<string | null>(null);
-  const [sellIdempotencyKey, setSellIdempotencyKey] = useState(() => crypto.randomUUID());
+  const sellIdempotencyKey = useRef<string>(crypto.randomUUID());
+  const sellPayloadSignature = useRef<string | null>(null);
   const [notesError, setNotesError] = useState<string | null>(null);
 
   const detail = useQuery({
@@ -65,12 +67,36 @@ export function TradeDetailPage() {
   useEffect(() => {
     if (!detail.data) return;
     setNotes(detail.data.group.notes ?? '');
-    const wallet = accounts.data?.accounts.find((account) => account.type === 'wallet');
-    const usdt = assets.data?.assets.find(
-      (asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT',
+    const chainCode = detail.data.group.asset.chainCode;
+    const wallet = accounts.data?.accounts.find(
+      (account) => account.type === 'wallet' && account.chainCode === chainCode,
     );
-    if (wallet) setAccountId((current) => current || wallet.id);
-    if (usdt) setProceedsAssetId((current) => current || usdt.id);
+    const cashAssets = (assets.data?.assets ?? []).filter(
+      (asset) => asset.isCashEquivalent && asset.chainCode === chainCode,
+    );
+    const proceeds =
+      cashAssets.find((asset) => asset.symbol === 'USDT') ??
+      cashAssets.find((asset) => asset.symbol === 'USDC') ??
+      cashAssets[0];
+    if (wallet) {
+      setAccountId((current) =>
+        accounts.data?.accounts.some(
+          (account) =>
+            account.id === current && account.type === 'wallet' && account.chainCode === chainCode,
+        )
+          ? current
+          : wallet.id,
+      );
+    } else {
+      setAccountId('');
+    }
+    if (proceeds) {
+      setProceedsAssetId((current) =>
+        cashAssets.some((asset) => asset.id === current) ? current : proceeds.id,
+      );
+    } else {
+      setProceedsAssetId('');
+    }
   }, [detail.data, accounts.data, assets.data]);
 
   const invalidate = () => {
@@ -88,25 +114,33 @@ export function TradeDetailPage() {
   };
 
   const sellMutation = useMutation({
-    mutationFn: () =>
-      sellTradeGroup(
-        tradeId,
-        {
-          accountId,
-          amount,
-          proceedsAssetId,
-          proceedsAmount,
-          notes: sellNotes || undefined,
-        },
-        sellIdempotencyKey,
-      ),
+    mutationFn: () => {
+      const payload = {
+        accountId,
+        amount,
+        proceedsAssetId,
+        proceedsAmount,
+        notes: sellNotes || undefined,
+      };
+      const signature = JSON.stringify(payload);
+      const next = idempotencyForPayload(
+        sellIdempotencyKey.current,
+        sellPayloadSignature.current,
+        signature,
+      );
+      sellIdempotencyKey.current = next.key;
+      sellPayloadSignature.current = next.signature;
+
+      return sellTradeGroup(tradeId, payload, next.key);
+    },
     onSuccess: () => {
       setSellOpen(false);
       setAmount('');
       setProceedsAmount('');
       setSellNotes('');
       setSellError(null);
-      setSellIdempotencyKey(crypto.randomUUID());
+      sellIdempotencyKey.current = crypto.randomUUID();
+      sellPayloadSignature.current = null;
       invalidate();
     },
     onError: (error) => {
@@ -148,9 +182,14 @@ export function TradeDetailPage() {
   }
 
   const { group, legs, lots, consumptions, audit } = detail.data;
-  const usdt = assets.data?.assets.find(
-    (asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT',
-  );
+  const chainWallets =
+    accounts.data?.accounts.filter(
+      (account) => account.type === 'wallet' && account.chainCode === group.asset.chainCode,
+    ) ?? [];
+  const proceedsAssets =
+    assets.data?.assets.filter(
+      (asset) => asset.isCashEquivalent && asset.chainCode === group.asset.chainCode,
+    ) ?? [];
   const assetById = new Map(assets.data?.assets.map((asset) => [asset.id, asset.symbol]) ?? []);
 
   return (
@@ -167,7 +206,8 @@ export function TradeDetailPage() {
             </Button>
             <Button
               onClick={() => {
-                setSellIdempotencyKey(crypto.randomUUID());
+                sellIdempotencyKey.current = crypto.randomUUID();
+                sellPayloadSignature.current = null;
                 setSellOpen(true);
               }}
               disabled={group.status === 'closed'}
@@ -401,13 +441,11 @@ export function TradeDetailPage() {
               onChange={(event) => setAccountId(event.target.value)}
             >
               <option value="">Выберите счёт</option>
-              {accounts.data?.accounts
-                .filter((account) => account.type === 'wallet')
-                .map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
+              {chainWallets.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
             </Select>
           </label>
           <label className="block text-sm text-zinc-600">
@@ -428,13 +466,11 @@ export function TradeDetailPage() {
               onChange={(event) => setProceedsAssetId(event.target.value)}
             >
               <option value="">Выберите актив</option>
-              {assets.data?.assets
-                .filter((asset) => asset.isCashEquivalent)
-                .map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.symbol} · {asset.chainCode}
-                  </option>
-                ))}
+              {proceedsAssets.map((asset) => (
+                <option key={asset.id} value={asset.id}>
+                  {asset.symbol} · {asset.chainCode}
+                </option>
+              ))}
             </Select>
           </label>
           <label className="block text-sm text-zinc-600">
@@ -456,9 +492,10 @@ export function TradeDetailPage() {
               placeholder="Необязательно"
             />
           </label>
-          {usdt ? null : (
+          {proceedsAssets.length > 0 ? null : (
             <p className="text-xs text-amber-700">
-              USDT не найден; выберите валюту выручки вручную.
+              На сети {group.asset.chainCode.toUpperCase()} не найден cash-equivalent актив;
+              добавьте USDT или USDC.
             </p>
           )}
           {sellError ? <p className="text-sm text-red-700">{sellError}</p> : null}

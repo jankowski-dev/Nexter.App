@@ -7,8 +7,6 @@ const password = 'correct horse battery staple';
 const wallet = '0x1111111111111111111111111111111111111111';
 const usdc = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
 const based = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
-const ethereumUsdc = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
-const ethereumLink = '0x514910771af9ca656af840dff83e8264ecf986ca';
 
 test.skip(
   process.env.NEXTER_TEST_DB !== '1',
@@ -16,11 +14,8 @@ test.skip(
 );
 
 test.beforeAll(async () => {
-  if (process.env.NEXTER_TEST_DB !== '1') return;
-
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
-
   try {
     await client.query(
       'truncate table prices, audit_log, sessions, settings, rate_limits, users restart identity cascade',
@@ -30,7 +25,7 @@ test.beforeAll(async () => {
   }
 });
 
-test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) => {
+test('buy drawer preview and on-chain exchange UI', async ({ page }) => {
   const email = `playwright-swap-${Date.now()}@example.com`;
 
   await page.goto('/setup');
@@ -60,7 +55,7 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
         buildEnabled: true,
         executionEnabled: false,
         rpcConfigured: true,
-        walletAllowlistConfigured: true,
+        walletAllowlistConfigured: false,
         chains: [
           {
             code: 'bsc',
@@ -80,36 +75,6 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
             rpcConfigured: true,
             executionEnabled: false,
           },
-          {
-            code: 'ethereum',
-            chainId: 1,
-            name: 'Ethereum',
-            tokens: [
-              {
-                symbol: 'USDC',
-                name: 'USD Coin',
-                address: ethereumUsdc,
-                decimals: 6,
-                native: false,
-              },
-              {
-                symbol: 'LINK',
-                name: 'ChainLink Token',
-                address: ethereumLink,
-                decimals: 18,
-                native: false,
-              },
-              {
-                symbol: 'ETH',
-                name: 'Ether',
-                address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-                decimals: 18,
-                native: true,
-              },
-            ],
-            rpcConfigured: true,
-            executionEnabled: false,
-          },
         ],
         quoteTtlSeconds: 15,
         maxPriceImpactBps: 200,
@@ -120,13 +85,24 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
     });
   });
 
-  await page.route('**/api/v1/swap/orders?limit=5', async (route) => {
+  await page.route('**/api/v1/swap/preview', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        data: [],
-        page: { nextCursor: null, hasMore: false },
+        chain: 'bsc',
+        tokenIn: { symbol: 'USDC', name: 'USD Coin', address: usdc, decimals: 18, native: false },
+        tokenOut: { symbol: 'BASED', name: 'BASED', address: based, decimals: 18, native: false },
+        amountIn: '1.000000000000000000',
+        amountOut: '2.000000000000000000',
+        minOut: '1.990000000000000000',
+        slippageBps: 50,
+        priceImpactBps: 10,
+        amountInUsd: '1.00',
+        amountOutUsd: '1.02',
+        gasUsd: '0.01',
+        routeId: 'route-ui',
+        fetchedAt: new Date().toISOString(),
       }),
     });
   });
@@ -187,60 +163,53 @@ test('read-only BSC quote UI and disabled kill-switch state', async ({ page }) =
   const basedAssetId = assets.find(
     (asset) => asset.symbol === 'BASED' && asset.chainCode === 'bsc',
   )?.id;
-  const usdcAssetId = assets.find(
-    (asset) => asset.symbol === 'USDC' && asset.chainCode === 'bsc',
-  )?.id;
   expect(basedAssetId).toBeDefined();
-  expect(usdcAssetId).toBeDefined();
 
-  async function openEmbeddedSwap() {
-    await page.goto('/portfolio');
-    await page.getByRole('button', { name: 'Новая сделка' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
-    await dialog.getByLabel('Актив', { exact: true }).selectOption(basedAssetId ?? '');
-    await dialog.getByLabel('Количество BASED').fill('1');
-    await dialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdcAssetId ?? '');
-    await dialog.getByLabel('Сумма USDC').fill('1');
-    const onchain = dialog.getByRole('button', { name: 'Выполнить on-chain' });
-    await expect(onchain).toBeEnabled();
-    await onchain.click();
-    await expect(dialog.getByText('Кошелёк Tangem')).toBeVisible();
-    return dialog;
-  }
+  const csrf =
+    (await page.context().cookies()).find((cookie) => cookie.name === 'nexter_csrf')?.value ?? '';
+  await page.request.post('/api/v1/watchlist', {
+    headers: { 'x-csrf-token': csrf },
+    data: { assetId: basedAssetId },
+  });
 
-  await page.goto('/dashboard');
-  const dialog = await openEmbeddedSwap();
-  await expect(dialog.getByRole('button', { name: 'Подключить Tangem' })).toBeVisible();
-  await expect(dialog.getByRole('button', { name: 'Проверить сборку' })).toBeVisible();
-  await expect(
-    dialog.getByText('Исполнение для сети BNB Smart Chain выключено.', { exact: false }),
-  ).toBeVisible();
+  await page.reload();
+  await page.goto('/portfolio');
+  await page.getByRole('tab', { name: 'Основной список' }).click();
+  await expect(page.getByText('BASED', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Купить' }).first().click();
 
-  await dialog.getByLabel('Сеть свопа').selectOption('ethereum');
-  await expect(dialog.getByLabel('Токен отдачи')).toHaveValue(ethereumUsdc);
-  await expect(dialog.getByLabel('Токен получения')).toHaveValue(ethereumLink);
-  await dialog.getByLabel('Сеть свопа').selectOption('bsc');
+  const buyDrawer = page.getByRole('dialog');
+  await expect(buyDrawer.getByRole('heading', { name: 'Купить BASED' })).toBeVisible();
+  await buyDrawer.getByLabel('Сколько USDC потратить').fill('1');
+  await expect(buyDrawer.getByText('Получите BASED')).toBeVisible();
+  await expect(buyDrawer.getByText('2', { exact: true }).first()).toBeVisible();
+  await expect(buyDrawer.getByText('KyberSwap')).toBeVisible();
+  await expect(buyDrawer.getByText('Записать покупку вручную')).toBeVisible();
+  await expect(buyDrawer.getByRole('button', { name: 'Купить BASED' })).toBeDisabled();
+  await buyDrawer.getByRole('button', { name: 'Готово' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await dialog.getByLabel('Адрес кошелька').fill(wallet);
-  await dialog.getByLabel('Количество токена отдачи').fill('1');
-  await dialog.getByRole('button', { name: 'Получить котировку' }).click();
-
-  await expect(dialog.getByText('2 BASED').first()).toBeVisible();
-  await expect(dialog.getByText('1 USDC = 2 BASED')).toBeVisible();
-  await expect(dialog.getByText(/1 BASED =/)).toBeVisible();
-  await expect(dialog.getByText('1,99 BASED')).toBeVisible();
-  await expect(dialog.getByText('route-ui')).toBeVisible();
-  await expect(dialog.getByText('+0,10%')).toBeVisible();
-
-  await dialog.getByLabel('Закрыть').click();
+  await page.goto('/operations');
+  await page.getByRole('button', { name: 'Обмен on-chain' }).click();
+  const exchangeDrawer = page.getByRole('dialog');
+  await expect(exchangeDrawer.getByRole('heading', { name: 'Обмен on-chain' })).toBeVisible();
+  await exchangeDrawer.getByLabel('Сколько USDC отдать').fill('1');
+  await expect(exchangeDrawer.getByText('Получите BASED')).toBeVisible();
+  await expect(exchangeDrawer.getByText('2', { exact: true }).first()).toBeVisible();
+  await expect(exchangeDrawer.getByText('KyberSwap', { exact: true })).toBeVisible();
+  await expect(exchangeDrawer.getByText('CoinGecko', { exact: true })).toBeVisible();
+  await expect(exchangeDrawer.getByRole('button', { name: 'Обменять' })).toBeDisabled();
+  await exchangeDrawer.getByRole('button', { name: 'Готово' }).click();
 
   swapsEnabled = false;
   await page.reload();
-  const disabledDialog = await openEmbeddedSwap();
-  await expect(disabledDialog.getByText('Свопы отключены')).toBeVisible();
-  await expect(disabledDialog.getByRole('button', { name: 'Получить котировку' })).toBeDisabled();
-
-  await page.goto('/swap');
-  await expect(page).toHaveURL(/\/portfolio$/);
+  await page.goto('/operations');
+  await page.getByRole('button', { name: 'Обмен on-chain' }).click();
+  const disabledDrawer = page.getByRole('dialog');
+  await expect(
+    disabledDrawer.getByText(
+      'On-chain исполнение для этой сети выключено. Используйте ручной обмен.',
+    ),
+  ).toBeVisible();
+  await expect(disabledDrawer.getByRole('button', { name: 'Обменять' })).toBeDisabled();
 });

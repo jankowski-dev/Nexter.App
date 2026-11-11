@@ -159,7 +159,7 @@ export function ReportsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Отчёты"
+        title="Статистика"
         subtitle="Статистика по портфелю, сделкам и издержкам. Налоги не рассчитываются."
       />
 

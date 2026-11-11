@@ -5,6 +5,7 @@ export * from './auth';
 export * from './accounting';
 export * from './audit';
 export * from './finance';
+export * from './habits';
 export * from './imports';
 export * from './notes';
 export * from './pagination';

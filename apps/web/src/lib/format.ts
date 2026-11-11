@@ -95,3 +95,35 @@ export function pnlTone(value: string | null | undefined): string {
   if (!Number.isFinite(number) || number === 0) return 'text-zinc-500';
   return number > 0 ? 'text-emerald-700' : 'text-red-700';
 }
+
+export function formatPrice(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number)) return '—';
+  if (number === 0) return '0';
+
+  const absolute = Math.abs(number);
+  const maximumFractionDigits =
+    absolute >= 1
+      ? 2
+      : absolute >= 0.01
+        ? 3
+        : Math.min(12, Math.max(8, Math.ceil(-Math.log10(absolute)) + 2));
+
+  return new Intl.NumberFormat('ru-RU', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  }).format(number);
+}
+
+export function formatByn(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return new Intl.NumberFormat('ru-RU', {
+    style: 'currency',
+    currency: 'BYN',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(number);
+}
