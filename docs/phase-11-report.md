@@ -115,6 +115,18 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - After commit: transactions 856→866, postings 3406→3446, lots 433→438, trade groups 431→436, lot consumptions 416→421. Order 439 remained `partial` with 1,036,750 POP left. Positions became XNY 151,507, POP 4,177,605, BASED 8,516; realized P&L `-18.07`, equity about `$1,610`, monthly dashboard net `-$85.00`.
 - No migration. See ADR 0032.
 
+## UI-20 feedback batch (2026-11-12)
+
+- Statistics asset breakdown now shows token icons. The full asset card no longer renders manual price or lots; lots remain in the asset drawer/trade detail.
+- Watchlist entries store optional BSC and Ethereum contract addresses for reference (migration `0030`), editable in the token card and linked to BscScan/Etherscan.
+- Recurring-task content, due-date shifts, archive, and deletion apply to the whole series; completion remains per occurrence. The task dialog keeps recurrence visible until the first explicit save and shows the series scope in confirmations.
+- Notes support PDF/TXT/DOC/DOCX/XLS/XLSX/RAR/ZIP plus images, with a paperclip/count in the compact list. List responses return attachment counts; full data URLs are loaded only when the note drawer opens.
+- Vault rows are compact; password show/copy and archive/edit sit on the right.
+- Token base shows only 24h change and market cap, with button sorting (default/cap/24h). Positions and the main list keep 7d/30d/1y.
+- Sell drawer caps the amount at the group remainder and shows a proportional P/L block next to proceeds plus the invested amount. Swap preview is debounced 500 ms, polls every 15 s, and is cached server-side for 5 s to reduce Kyber bursts.
+- Native `tron`/`solana` chains plus TRX/SOL assets and manual wallet accounts are seeded (migration `0031`). The manual operation dialog can select any wallet account, so native holdings are recorded as adjustments.
+- Production: PR #83 deployed on 2026-11-12, bundle `assets/index-fdiLwFO8.js`, `/ready` green. Migrations `0030`/`0031` applied. Adjustments set BNB 6.15, ETH 1.15, TRX 0.35, SOL 2.83, and zeroed USDT; XNY/POP/BASED/APR were kept. Cash became `0.33692995` (USDC only), equity about `$8,422.50`. Backup `nexter-2026-11-12-ui20.dump.enc` was restore-verified before merge.
+
 ## Database
 
 Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), `0027` (habits), `0028` (market quotes), and `0029` (multi-period quote fields) are additive. `0019` adds:

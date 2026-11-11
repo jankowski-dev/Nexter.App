@@ -575,12 +575,15 @@ export function TokenTradeDrawer({
     remainingForSell && enteredAmount && remainingForSell.gt(0) && trade
       ? new Decimal(trade.group.remainingCostBasisUsd).mul(enteredAmount).div(remainingForSell)
       : null;
-  const sellProceedsUsd =
-    previewData && !sellExceedsRemaining
+  const sellProceedsUsd = showPreview
+    ? previewData
       ? previewData.amountOutUsd
         ? new Decimal(previewData.amountOutUsd)
         : new Decimal(previewData.amountOut)
-      : null;
+      : enteredAmount && effectiveMarketPrice
+        ? enteredAmount.mul(effectiveMarketPrice)
+        : null
+    : null;
   const sellPnl =
     !isBuy && sellCostBasis && sellProceedsUsd ? sellProceedsUsd.minus(sellCostBasis) : null;
   const canSubmit =

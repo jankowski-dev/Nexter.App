@@ -268,3 +268,11 @@ The personal-finance module creates six tables. The migration conditionally gran
 3. Wait for two refresher ticks, then verify `GET /api/v1/portfolio/positions`, the token base, and `market_quotes` show non-null 7d/30d/1y/cap for CoinGecko-covered assets. DexScreener-only tokens may keep `—` for periods.
 4. Verify the icon proxy returns `Cache-Control: public, max-age=86400, immutable` and a repeated browser request is served from cache.
 5. Rollback: redeploy the previous image. The nullable columns are additive and may remain; no data rewrite is needed.
+
+## UI-20 native chains and watchlist contracts (`0030`, `0031`)
+
+1. Take and restore-verify an encrypted backup. `0030` adds nullable BSC/ETH contract metadata to `watchlist`; `0031` inserts `tron`/`solana` chains and native TRX/SOL assets if absent.
+2. Deploy `main`; pre-deploy migrations run automatically. `AccountingBootstrapService` then creates `TRON wallet` and `Solana wallet` for existing users; if the chains are missing it skips these optional seeds.
+3. Verify `/ready`, the new chains/assets, the wallet accounts, and CoinGecko quotes for TRX/SOL.
+4. Record native holdings through `Операции → Новая операция → Корректировка` after selecting the matching wallet account.
+5. Rollback: redeploy the previous image. Both migrations are additive; the new chains/assets/accounts may remain unused.
