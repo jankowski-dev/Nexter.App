@@ -103,10 +103,12 @@ describe.runIf(canRun)('Notes API', () => {
     }).expect(201);
 
     const withImage = await agent.get('/api/v1/notes?limit=10').expect(200);
-    const firstNote = (withImage.body.data as Array<{ id: string; images: unknown[] }>).find(
+    const firstNote = (withImage.body.data as Array<{ id: string; attachmentCount: number }>).find(
       (note) => note.id === notes[0].id,
     );
-    expect(firstNote?.images).toHaveLength(1);
+    expect(firstNote?.attachmentCount).toBe(1);
+    const noteDetail = await agent.get(`/api/v1/notes/${notes[0].id}`).expect(200);
+    expect(noteDetail.body.images).toHaveLength(1);
 
     await agent
       .delete(`/api/v1/notes/${notes[0].id}/images/${image.body.id}`)
