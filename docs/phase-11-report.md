@@ -72,6 +72,7 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - A header live indicator appears on Dashboard/Portfolio/Статистика/Watchlist/Operations, shows a countdown, `Обновляю…`, and `Обновлено`; updated cards flash green briefly. Статистика and Operations poll every 30 seconds.
 - Pending wallet-signature cancellation is intentionally unchanged: the owner chose not to disconnect WalletConnect; the drawer explains that the request must be rejected in the wallet.
 - No migration. See ADR 0029.
+- Production: PR #74 deployed on 2026-11-11, bundle `assets/index-Dzy6ybJW.js`, `/ready` green. Verified on production: menu order, portfolio sub-tabs, Buy column placement, token-base rows/chain switch, header countdown, body scroll lock (`overflow: hidden` while open, restored after close), and no console errors.
 
 ## Database
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for the owner UI-polish batch (2026-11-11). No schema changes.
+Accepted and deployed on 2026-11-11. No schema changes.
 
 ## Context
 
