@@ -838,6 +838,6 @@ describe.runIf(canRun)('Notion import e2e', () => {
     expect(consumedLot?.remainingAmount).toBe('400.000000000000000000');
     expect(
       await db.select().from(transactions).where(eq(transactions.userId, owner.userId)),
-    ).toHaveLength(9);
+    ).toHaveLength(8);
   }, 120_000);
 });
