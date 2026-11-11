@@ -62,6 +62,43 @@ describe('parseNotionExport', () => {
   const tokenA = sourceRow('b', 'TOKENA', 0.12);
   const tokenB = sourceRow('c', 'TOKENB', 0.15);
 
+  it('does not apply the legacy 429-order control to later exports', () => {
+    const closed = (id: string, openedAt: string) =>
+      orderRow({
+        id,
+        status: 'Закрыта',
+        openedAt,
+        closedAt: '2026-01-02T00:00:00.000Z',
+        source: usdt.url,
+        destination: tokenA.url,
+        sourceAmount: 100,
+        destinationAmount: 1000,
+        saleRate: 0.12,
+      });
+    const result = parseNotionExport({
+      source: [usdt, tokenA],
+      orders: [
+        closed('450', '2026-01-01T00:00:00.000Z'),
+        closed('463', '2026-01-01T00:00:00.000Z'),
+        closed('465', '2026-01-01T00:00:00.000Z'),
+        closed('466', '2026-01-01T00:00:00.000Z'),
+        orderRow({
+          id: '467',
+          status: 'Активна',
+          openedAt: '2026-11-04T00:00:00.000Z',
+          source: usdt.url,
+          destination: tokenA.url,
+          sourceAmount: 100,
+          destinationAmount: 1000,
+        }),
+      ],
+      transactions: [],
+    });
+
+    expect(result.parsed.summary.control.applicable).toBe(false);
+    expect(result.errors).toEqual([]);
+  });
+
   it('normalizes orders, transactions and control totals', () => {
     const result = parseNotionExport({
       source: [usdt, tokenA, tokenB],
@@ -151,7 +188,7 @@ describe('parseNotionExport', () => {
     });
     expect(result.parsed.summary.control.applicable).toBe(false);
     expect(result.parsed.summary.warnings).toContain(
-      'Control snapshot adjustments are not present in this export; baseline reconciliation is not applicable',
+      'Control snapshot is scoped to the original 431-order export; baseline reconciliation is not applicable',
     );
   });
 

@@ -103,3 +103,18 @@ To add new Notion rows, export again. Preview detects existing source ids and sk
 - **`NEGATIVE_BALANCE`**: the final wallet balance would be negative. Check deposits/withdrawals and previous imports.
 - **Control mismatch**: the export is not the expected 429 baseline plus the four known order changes. Do not commit until the difference is explained.
 - **Rollback 409**: later manual activity or a later import exists. Keep the import and prepare a compensating reversal.
+
+## Incremental refresh after the legacy baseline
+
+Use this path when the owner wants current Notion orders after the original 431-order import and a full rollback is blocked by later ledger activity.
+
+1. Read the current `Source`, `Orders`, and `Transactions` data through the `notion` MCP. Do not export `Statistics`.
+2. Keep the three raw JSON arrays in a temporary directory outside the repository.
+3. Preview through `/import` and verify:
+   - source assets 36, orders 436, closed 417, active 19, transactions 9;
+   - `newOrders` is 5, `updatedOrders` is 5, `skippedOrders` is 421, `skippedTransactions` is 9;
+   - no errors; the control warning says the 429-order baseline is not applicable;
+   - the preview valuation is plausible and all 19 active assets have prices.
+4. Confirm the later manual ledger activity is untouched (BNB/ETH opening lots and the small USDC→BNB swap).
+5. Commit only after the owner reviews the preview. Rollback follows the normal import rollback path while no later activity exists; otherwise a compensating reversal or the clean cutover is required.
+6. The legacy control is intentionally skipped for exports with order ids above 466. This is documented in ADR 0032; do not treat the warning as a reason to edit the hard-coded snapshot.
