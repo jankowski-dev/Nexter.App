@@ -111,6 +111,8 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - The Phase 4 parser's 429-order control is now scoped to numeric order ids up to 466. The original 431-order export still runs the full control; later exports get a warning instead of a blocking error.
 - The current Notion export has 436 orders (417 closed, 19 active), 36 source assets, and 9 transactions. It adds orders 467–471 and closes 458, 461, 462, 465, and 466.
 - The refresh uses the existing incremental import. `detectExisting` verifies buy lots/groups for new and status-updated rows; already-closed orders and transactions are skipped by source id, so preview totals are checked against the runbook. An active order whose lot was partially consumed later is skipped with a warning. Full rollback-and-reimport remains blocked by later ledger activity and stays part of the ADR 0014 clean cutover.
+- Production refresh committed on 2026-11-11 19:45 UTC as import `f5ee13d3-85c3-46d9-8233-f58f0038445a` after PRs #80/#81 (`4162e7e`). Preview: 5 new, 5 updated, 426 skipped orders, 9 skipped transactions, no errors; order 439 warning because its POP lot had later manual activity.
+- After commit: transactions 856→866, postings 3406→3446, lots 433→438, trade groups 431→436, lot consumptions 416→421. Order 439 remained `partial` with 1,036,750 POP left. Positions became XNY 151,507, POP 4,177,605, BASED 8,516; realized P&L `-18.07`, equity about `$1,610`, monthly dashboard net `-$85.00`.
 - No migration. See ADR 0032.
 
 ## Database
@@ -131,6 +133,7 @@ All tables are additive; no existing table or ledger row is changed.
 - API `phase11.e2e.spec.ts`: vault setup, item archive/restore listing, ciphertext/IV pairing and base64-length validation, tasks lifecycle, notes search/update/archive, related-link validation, audit actions, and no ciphertext in audit.
 - E2E `phase11.spec.ts`: vault setup, item creation, server-side plaintext absence, reload lock, wrong password, unlock, manual lock, navigation lock, lock-with-dialog clearing, generate-password, archive/restore, task create/complete, note create/search.
 - UI-16 unit tests cover CoinGecko period merge, new-asset refresh between ticks, stale-period preservation/clearing, icon cache hit/dedup/TTL/host/content-type, and the exact icon cache-control exemption.
+- UI-17 parser tests cover the legacy control boundary at 466, later exports, and non-numeric ids. UI-18 adds an import e2e test for an active order whose imported lot was partially consumed later; it is skipped with a warning and adds no transactions.
 - Full API and E2E suites are run before merge.
 
 ## Security notes
