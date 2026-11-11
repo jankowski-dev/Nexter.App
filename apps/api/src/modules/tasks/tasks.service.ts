@@ -267,6 +267,117 @@ export class TasksService {
 
     await this.requireAsset(input.relatedAssetId);
 
+    const now = new Date();
+    const applyToSeries = Boolean(existing.seriesId) && input.applyToSeries !== false;
+    const seriesId = existing.seriesId as string;
+
+    if (applyToSeries && seriesId) {
+      if (input.dueAt === null) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'A recurring series must keep a due date',
+        });
+      }
+      if (input.dueAt !== undefined && !existing.dueAt) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'The recurring series has no anchor due date to shift',
+        });
+      }
+      const updated = await this.db.transaction(async (tx) => {
+        const rows = await tx
+          .select()
+          .from(tasks)
+          .where(and(eq(tasks.userId, userId), eq(tasks.seriesId, seriesId)))
+          .for('update');
+
+        const deltaMs =
+          input.dueAt !== undefined && existing.dueAt
+            ? new Date(input.dueAt as string).getTime() - existing.dueAt.getTime()
+            : null;
+
+        for (const row of rows) {
+          await tx
+            .update(tasks)
+            .set({
+              ...(input.title !== undefined ? { title: input.title } : {}),
+              ...(input.description !== undefined ? { description: input.description } : {}),
+              ...(input.priority !== undefined ? { priority: input.priority } : {}),
+              ...(input.tags !== undefined ? { tags: input.tags } : {}),
+              ...(input.relatedAssetId !== undefined
+                ? { relatedAssetId: input.relatedAssetId }
+                : {}),
+              ...(input.dueAt !== undefined
+                ? {
+                    dueAt:
+                      row.dueAt && deltaMs !== null
+                        ? new Date(row.dueAt.getTime() + deltaMs)
+                        : new Date(input.dueAt as string),
+                    ...(row.recurrenceEndsAt && deltaMs !== null
+                      ? { recurrenceEndsAt: new Date(row.recurrenceEndsAt.getTime() + deltaMs) }
+                      : {}),
+                  }
+                : {}),
+              ...(input.archived !== undefined
+                ? { archivedAt: input.archived ? (row.archivedAt ?? now) : null }
+                : {}),
+              updatedAt: now,
+            })
+            .where(eq(tasks.id, row.id));
+        }
+
+        if (input.status !== undefined) {
+          await tx
+            .update(tasks)
+            .set({
+              status: input.status,
+              completedAt: input.status === 'done' ? (existing.completedAt ?? now) : null,
+              updatedAt: now,
+            })
+            .where(eq(tasks.id, id));
+        }
+
+        const [refreshed] = await tx
+          .select()
+          .from(tasks)
+          .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+          .limit(1);
+
+        if (!refreshed) throw new Error('Failed to update task series');
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'task.series_updated',
+            entityType: 'task',
+            entityId: id,
+            before: {
+              title: existing.title,
+              priority: existing.priority,
+              dueAt: existing.dueAt?.toISOString() ?? null,
+              archivedAt: existing.archivedAt?.toISOString() ?? null,
+            },
+            after: {
+              title: refreshed.title,
+              priority: refreshed.priority,
+              dueAt: refreshed.dueAt?.toISOString() ?? null,
+              archivedAt: refreshed.archivedAt?.toISOString() ?? null,
+              seriesId,
+              affected: rows.length,
+            },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+
+        return refreshed;
+      });
+
+      const images = await loadImages(this.db, userId, [updated.id]);
+      return toContract(updated, images.get(updated.id) ?? []);
+    }
+
     const status = input.status ?? existing.status;
     const completedAt =
       status === 'done'

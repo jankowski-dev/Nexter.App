@@ -244,7 +244,8 @@ export function TaskDialog({
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (mode === 'edit') void saveNowRef.current();
+      // Keep the recurrence controls available until the first explicit save of a new task.
+      if (mode === 'edit' && taskIdRef.current) void saveNowRef.current();
     }, 10_000);
 
     return () => window.clearInterval(timer);
@@ -286,7 +287,7 @@ export function TaskDialog({
 
     const next = status === 'done' ? 'open' : 'done';
     try {
-      const updated = await updateTask(taskIdRef.current, { status: next });
+      const updated = await updateTask(taskIdRef.current, { status: next, applyToSeries: false });
       setStatus(updated.status);
       setCompletedAt(updated.completedAt);
       setUpdatedAt(updated.updatedAt);
@@ -553,31 +554,11 @@ export function TaskDialog({
                 </label>
               </div>
 
-              <label className="block text-sm text-zinc-600">
-                Описание
-                <Textarea
-                  className="mt-1 min-h-52"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Детали, ссылки, следующий шаг"
-                />
-              </label>
-
-              <label className="block text-sm text-zinc-600">
-                Теги (через запятую)
-                <Input
-                  className="mt-1"
-                  value={tags}
-                  onChange={(event) => setTags(event.target.value)}
-                  placeholder="Топ, Дашборд, Риск"
-                />
-              </label>
-
               {persisted ? (
                 effectiveRecurrence ? (
                   <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
-                    Повтор: {recurrenceLabels[effectiveRecurrence]}. Изменяется только это
-                    вхождение; остальные остаются как есть.
+                    Повтор: {recurrenceLabels[effectiveRecurrence]}. Изменения и удаление
+                    применяются ко всей серии; отметка «выполнено» остаётся у каждого дня своя.
                   </div>
                 ) : null
               ) : (
@@ -613,8 +594,34 @@ export function TaskDialog({
                       />
                     </label>
                   ) : null}
+                  {recurrence !== 'none' ? (
+                    <p className="text-xs text-zinc-500 sm:col-span-2">
+                      Изменения и удаление применятся ко всей серии; «выполнено» отмечается отдельно
+                      в каждом дне.
+                    </p>
+                  ) : null}
                 </div>
               )}
+
+              <label className="block text-sm text-zinc-600">
+                Описание
+                <Textarea
+                  className="mt-1 min-h-52"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Детали, ссылки, следующий шаг"
+                />
+              </label>
+
+              <label className="block text-sm text-zinc-600">
+                Теги (через запятую)
+                <Input
+                  className="mt-1"
+                  value={tags}
+                  onChange={(event) => setTags(event.target.value)}
+                  placeholder="Топ, Дашборд, Риск"
+                />
+              </label>
 
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -677,16 +684,18 @@ export function TaskDialog({
             </div>
           ) : null}
 
-          {seriesLocked ? (
-            <Badge tone="info">Повтор создан; изменения применяются к этому вхождению</Badge>
-          ) : null}
+          {seriesLocked ? <Badge tone="info">Изменения применяются ко всей серии</Badge> : null}
         </div>
       </Drawer>
 
       <ConfirmDialog
         open={confirmDelete}
         title="Удалить задачу?"
-        description="Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть."
+        description={
+          effectiveRecurrence
+            ? 'Все задачи серии переместятся в архив; вернуть можно будет всю серию.'
+            : 'Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть.'
+        }
         confirmAriaLabel="Подтвердить удаление задачи"
         cancelAriaLabel="Отменить удаление задачи"
         busy={deleting}

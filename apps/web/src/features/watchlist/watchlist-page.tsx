@@ -84,28 +84,16 @@ function isValidIconValue(value: string): boolean {
   }
 }
 
-type TokenSortKey = 'default' | 'marketCap' | 'change24h' | 'change7d' | 'change30d' | 'change1y';
+type TokenSortKey = 'default' | 'marketCap' | 'change24h';
 
 const TOKEN_SORT_LABELS: Record<TokenSortKey, string> = {
   default: 'По умолчанию',
   marketCap: 'Капитализация',
-  change24h: 'Изменение 24ч',
-  change7d: 'Изменение 7д',
-  change30d: 'Изменение 30д',
-  change1y: 'Изменение 1г',
+  change24h: '24ч',
 };
 
 function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>): number | null {
-  const raw =
-    key === 'marketCap'
-      ? entry.marketCapUsd
-      : key === 'change24h'
-        ? entry.change24hPct
-        : key === 'change7d'
-          ? entry.change7dPct
-          : key === 'change30d'
-            ? entry.change30dPct
-            : entry.change1yPct;
+  const raw = key === 'marketCap' ? entry.marketCapUsd : entry.change24hPct;
   if (raw === null) return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;
@@ -124,6 +112,8 @@ export function WatchlistPage() {
   const [tags, setTags] = useState('');
   const [twitterUrl, setTwitterUrl] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [bscContractAddress, setBscContractAddress] = useState('');
+  const [ethereumContractAddress, setEthereumContractAddress] = useState('');
   const [investors, setInvestors] = useState('');
   const [priority, setPriority] = useState('0');
   const [logoUrl, setLogoUrl] = useState('');
@@ -186,6 +176,8 @@ export function WatchlistPage() {
         tags: tagsFromInput(tags),
         twitterUrl: urlOrNull(twitterUrl),
         websiteUrl: urlOrNull(websiteUrl),
+        bscContractAddress: bscContractAddress.trim() || null,
+        ethereumContractAddress: ethereumContractAddress.trim() || null,
         investors: investorsFromInput(investors),
         priority: Number.parseInt(priority, 10) || 0,
         ...(editGroupId ? { groupId: editGroupId } : {}),
@@ -211,6 +203,8 @@ export function WatchlistPage() {
       setTags('');
       setTwitterUrl('');
       setWebsiteUrl('');
+      setBscContractAddress('');
+      setEthereumContractAddress('');
       setInvestors('');
       setPriority('0');
       setLogoUrl('');
@@ -318,6 +312,8 @@ export function WatchlistPage() {
     setTags(entry.tags.join(', '));
     setTwitterUrl(entry.twitterUrl ?? '');
     setWebsiteUrl(entry.websiteUrl ?? '');
+    setBscContractAddress(entry.bscContractAddress ?? '');
+    setEthereumContractAddress(entry.ethereumContractAddress ?? '');
     setInvestors(entry.investors.join(', '));
     setPriority(String(entry.priority));
     setLogoUrl(entry.logoUrl ?? '');
@@ -352,9 +348,19 @@ export function WatchlistPage() {
   const investorValues = investorsFromInput(investors);
   const twitterInvalid = !isValidExternalUrl(twitterUrl);
   const websiteInvalid = !isValidExternalUrl(websiteUrl);
+  const bscContractInvalid =
+    bscContractAddress.trim() !== '' && !/^0x[0-9a-fA-F]{40}$/.test(bscContractAddress.trim());
+  const ethereumContractInvalid =
+    ethereumContractAddress.trim() !== '' &&
+    !/^0x[0-9a-fA-F]{40}$/.test(ethereumContractAddress.trim());
   const iconInvalid = !isValidIconValue(logoUrl);
   const metadataInvalid =
-    investorValues.length > 30 || twitterInvalid || websiteInvalid || iconInvalid;
+    investorValues.length > 30 ||
+    twitterInvalid ||
+    websiteInvalid ||
+    bscContractInvalid ||
+    ethereumContractInvalid ||
+    iconInvalid;
 
   return (
     <div className="space-y-6">
@@ -437,18 +443,27 @@ export function WatchlistPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-zinc-500">Сортировка</span>
-        <Select
+        <div
+          className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+          role="group"
           aria-label="Сортировка базы токенов"
-          className="w-auto"
-          value={sortKey}
-          onChange={(event) => setSortKey(event.target.value as TokenSortKey)}
         >
           {(Object.keys(TOKEN_SORT_LABELS) as TokenSortKey[]).map((key) => (
-            <option key={key} value={key}>
+            <button
+              key={key}
+              type="button"
+              aria-pressed={sortKey === key}
+              onClick={() => setSortKey(key)}
+              className={`rounded-md px-3 py-1.5 text-sm ${
+                sortKey === key
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
               {TOKEN_SORT_LABELS[key]}
-            </option>
+            </button>
           ))}
-        </Select>
+        </div>
         <Button
           variant="secondary"
           className="h-10 px-3"
@@ -596,11 +611,6 @@ export function WatchlistPage() {
           <div className="space-y-2">
             {sortedEntries.map((entry) => {
               const group = entry.groupId ? groupById.get(entry.groupId) : null;
-              const periodChanges = [
-                { label: '7д', value: entry.change7dPct },
-                { label: '30д', value: entry.change30dPct },
-                { label: '1г', value: entry.change1yPct },
-              ];
               return (
                 <Card
                   key={entry.id}
@@ -667,16 +677,6 @@ export function WatchlistPage() {
                           >
                             {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
                           </LiveValue>
-                        </span>
-                        <span className="mt-0.5 flex justify-end gap-2 text-[11px] text-zinc-500">
-                          {periodChanges.map(({ label, value }) => {
-                            const display = value ? formatPct(value) : '—';
-                            return (
-                              <span key={label} className={pnlTone(value)}>
-                                {label} <LiveValue value={display}>{display}</LiveValue>
-                              </span>
-                            );
-                          })}
                         </span>
                       </span>
                       <span aria-hidden="true" className="text-lg text-zinc-300">
@@ -890,6 +890,34 @@ export function WatchlistPage() {
               onChange={(event) => setTags(event.target.value)}
               placeholder="Топ, Дашборд"
             />
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Контракт BNB Smart Chain
+            <Input
+              className="mt-1 font-mono"
+              value={bscContractAddress}
+              onChange={(event) => setBscContractAddress(event.target.value)}
+              placeholder="0x…"
+            />
+            {bscContractInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Укажите адрес 0x… из 40 hex-символов.
+              </span>
+            ) : null}
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Контракт Ethereum
+            <Input
+              className="mt-1 font-mono"
+              value={ethereumContractAddress}
+              onChange={(event) => setEthereumContractAddress(event.target.value)}
+              placeholder="0x…"
+            />
+            {ethereumContractInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Укажите адрес 0x… из 40 hex-символов.
+              </span>
+            ) : null}
           </label>
           <label className="block text-sm text-zinc-600">
             Twitter / X

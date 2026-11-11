@@ -1,6 +1,20 @@
 import { z } from 'zod';
 
-export const noteImageMimeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+export const noteImageMimeSchema = z.enum([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.rar',
+  'application/x-rar-compressed',
+  'application/zip',
+  'application/x-zip-compressed',
+]);
 
 export const noteImageSchema = z.object({
   id: z.uuid(),
@@ -17,6 +31,7 @@ export const noteSchema = z.object({
   body: z.string(),
   tags: z.array(z.string()),
   images: z.array(noteImageSchema),
+  attachmentCount: z.number().int().nonnegative(),
   pinned: z.boolean(),
   relatedAssetId: z.uuid().nullable(),
   relatedTradeGroupId: z.uuid().nullable(),
@@ -44,8 +59,8 @@ export const noteImageCreateRequestSchema = z.object({
   mimeType: noteImageMimeSchema,
   dataUrl: z
     .string()
-    .max(2_000_000)
-    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
+    .max(2_100_000)
+    .regex(/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i),
 });
 
 export const noteCreateRequestSchema = z.object({

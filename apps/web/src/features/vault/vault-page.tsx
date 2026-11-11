@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
+import { CopyIcon, EyeIcon } from '@/components/ui/icons';
 import { createVaultItem, fetchVault, initializeVault, updateVaultItem } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
@@ -445,98 +446,100 @@ export function VaultPage() {
           ) : (
             <div className="space-y-2">
               {visibleItems.map((row) => (
-                <Card key={row.item.id} className={row.item.archivedAt ? 'opacity-60' : undefined}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
+                <Card
+                  key={row.item.id}
+                  className={`p-3 transition-colors hover:border-emerald-300 ${
+                    row.item.archivedAt ? 'opacity-60' : ''
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-base font-semibold text-zinc-900">
                           {row.data.title || 'Без названия'}
                         </div>
                         {row.item.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                       </div>
-                      {row.data.username ? (
-                        <div className="mt-1 truncate font-mono text-xs text-zinc-600">
-                          {row.data.username}
-                        </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+                        {row.data.username ? (
+                          <span className="truncate font-mono text-zinc-600">
+                            {row.data.username}
+                          </span>
+                        ) : null}
+                        {row.data.url ? (
+                          safeUrl(row.data.url) ? (
+                            <a
+                              className="truncate text-emerald-800 hover:text-emerald-700"
+                              href={safeUrl(row.data.url) ?? undefined}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              {row.data.url}
+                            </a>
+                          ) : (
+                            <span className="truncate text-zinc-600">{row.data.url}</span>
+                          )
+                        ) : null}
+                        <span>{formatDateTime(row.item.updatedAt)}</span>
+                      </div>
+                      {row.data.notes ? (
+                        <p className="mt-1 line-clamp-1 text-xs text-zinc-600">{row.data.notes}</p>
                       ) : null}
                     </div>
-                    <div className="text-xs text-zinc-500">
-                      {formatDateTime(row.item.updatedAt)}
-                    </div>
-                  </div>
 
-                  {row.data.url ? (
-                    safeUrl(row.data.url) ? (
-                      <a
-                        className="mt-2 block truncate text-sm text-emerald-800 hover:text-emerald-700"
-                        href={safeUrl(row.data.url) ?? undefined}
-                        target="_blank"
-                        rel="noreferrer"
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      <code className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-xs text-zinc-700">
+                        {revealed === row.item.id ? row.data.password : '••••••••••••'}
+                      </code>
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        aria-label={revealed === row.item.id ? 'Скрыть пароль' : 'Показать пароль'}
+                        title={revealed === row.item.id ? 'Скрыть' : 'Показать'}
+                        onClick={() => setRevealed(revealed === row.item.id ? null : row.item.id)}
                       >
-                        {row.data.url}
-                      </a>
-                    ) : (
-                      <div className="mt-2 truncate text-sm text-zinc-600">{row.data.url}</div>
-                    )
-                  ) : null}
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <code className="rounded-md border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-xs text-zinc-700">
-                      {revealed === row.item.id ? row.data.password : '••••••••••••'}
-                    </code>
-                    <Button
-                      variant="ghost"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => setRevealed(revealed === row.item.id ? null : row.item.id)}
-                    >
-                      {revealed === row.item.id ? 'Скрыть' : 'Показать'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => void copyPassword(row.data.password)}
-                    >
-                      Копировать
-                    </Button>
-                  </div>
-
-                  {row.data.notes ? (
-                    <p className="mt-3 whitespace-pre-wrap text-sm text-zinc-600">
-                      {row.data.notes}
-                    </p>
-                  ) : null}
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button
-                      variant="secondary"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => openEdit(row)}
-                    >
-                      Изменить
-                    </Button>
-                    {row.item.archivedAt ? (
+                        <EyeIcon />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
+                        aria-label="Копировать пароль"
+                        title="Копировать"
+                        onClick={() => void copyPassword(row.data.password)}
+                      >
+                        <CopyIcon />
+                      </Button>
                       <Button
                         variant="secondary"
                         className="h-8 px-3 text-xs"
-                        onClick={() => restoreMutation.mutate(row.item)}
-                        disabled={restoreMutation.isPending}
+                        onClick={() => openEdit(row)}
                       >
-                        Вернуть
+                        Изменить
                       </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        className="h-8 px-3 text-xs"
-                        onClick={() => {
-                          if (window.confirm(`Архивировать запись «${row.data.title}»?`)) {
-                            archiveMutation.mutate(row.item);
-                          }
-                        }}
-                        disabled={archiveMutation.isPending}
-                      >
-                        В архив
-                      </Button>
-                    )}
+                      {row.item.archivedAt ? (
+                        <Button
+                          variant="secondary"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => restoreMutation.mutate(row.item)}
+                          disabled={restoreMutation.isPending}
+                        >
+                          Вернуть
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => {
+                            if (window.confirm(`Архивировать запись «${row.data.title}»?`)) {
+                              archiveMutation.mutate(row.item);
+                            }
+                          }}
+                          disabled={archiveMutation.isPending}
+                        >
+                          В архив
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </Card>
               ))}

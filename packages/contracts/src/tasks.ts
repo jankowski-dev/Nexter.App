@@ -92,6 +92,7 @@ export const taskUpdateRequestSchema = z
     dueAt: z.iso.datetime().nullable().optional(),
     relatedAssetId: z.uuid().nullable().optional(),
     archived: z.boolean().optional(),
+    applyToSeries: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -102,7 +103,8 @@ export const taskUpdateRequestSchema = z
       value.tags !== undefined ||
       value.dueAt !== undefined ||
       value.relatedAssetId !== undefined ||
-      value.archived !== undefined,
+      value.archived !== undefined ||
+      value.applyToSeries !== undefined,
     'At least one field must be provided',
   );
 
@@ -112,7 +114,7 @@ export const taskImageCreateRequestSchema = z.object({
   dataUrl: z
     .string()
     .max(2_000_000)
-    .regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/),
+    .regex(/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i),
 });
 
 export const tasksResponseSchema = z.object({ data: z.array(taskSchema) });

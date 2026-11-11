@@ -1,4 +1,5 @@
 import { BarChart } from '@/components/charts/bar-chart';
+import { TokenIcon } from '@/components/token-icon';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -462,14 +463,23 @@ export function ReportsPage() {
                         className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                       >
                         <td className="py-2 pr-3">
-                          <Link
-                            to="/portfolio/assets/$assetId"
-                            params={{ assetId: row.asset.id }}
-                            className="font-medium text-zinc-800 hover:text-emerald-800"
-                          >
-                            {row.asset.symbol}
-                          </Link>
-                          <div className="text-xs text-zinc-500">{row.asset.chainCode}</div>
+                          <div className="flex items-center gap-2">
+                            <TokenIcon
+                              logoUrl={row.asset.logoUrl}
+                              symbol={row.asset.symbol}
+                              className="h-7 w-7 text-[10px]"
+                            />
+                            <div className="min-w-0">
+                              <Link
+                                to="/portfolio/assets/$assetId"
+                                params={{ assetId: row.asset.id }}
+                                className="font-medium text-zinc-800 hover:text-emerald-800"
+                              >
+                                {row.asset.symbol}
+                              </Link>
+                              <div className="text-xs text-zinc-500">{row.asset.chainCode}</div>
+                            </div>
+                          </div>
                         </td>
                         <td
                           className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(

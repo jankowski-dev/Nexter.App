@@ -172,7 +172,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page).toHaveURL(/\/portfolio\/assets\//);
   await expect(page.getByRole('heading', { name: /BASED/ })).toBeVisible();
   await expect(page.getByTitle(/Данные обновляются автоматически/)).toHaveCount(0);
-  await expect(page.getByText('Лоты').first()).toBeVisible();
+  await expect(page.getByText('Установить цену')).toHaveCount(0);
+  await expect(page.getByText('Лоты')).toHaveCount(0);
   await expect(page.getByText('Сделки').first()).toBeVisible();
   await expect(page.getByText('Транзакции').first()).toBeVisible();
 

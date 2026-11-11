@@ -38,15 +38,31 @@ export function TokenDrawer({
 }) {
   if (!entry) return null;
 
+  const chainLabel =
+    entry.asset.chainCode === 'bsc'
+      ? 'BNB Smart Chain'
+      : entry.asset.chainCode === 'ethereum'
+        ? 'Ethereum'
+        : entry.asset.chainCode === 'tron'
+          ? 'TRON'
+          : entry.asset.chainCode === 'solana'
+            ? 'Solana'
+            : entry.asset.chainCode;
   const twitterUrl = safeExternalUrl(entry.twitterUrl);
   const websiteUrl = safeExternalUrl(entry.websiteUrl);
+  const bscAddress =
+    entry.bscContractAddress ??
+    (entry.asset.chainCode === 'bsc' ? entry.asset.contractAddress : null);
+  const ethereumAddress =
+    entry.ethereumContractAddress ??
+    (entry.asset.chainCode === 'ethereum' ? entry.asset.contractAddress : null);
 
   return (
     <Drawer
       open
       onClose={onClose}
       title={entry.asset.symbol}
-      description={`${entry.asset.name} · ${entry.asset.chainCode === 'ethereum' ? 'Ethereum' : 'BNB Smart Chain'}`}
+      description={`${entry.asset.name} · ${chainLabel}`}
       wide
       footer={
         <>
@@ -100,9 +116,38 @@ export function TokenDrawer({
         </div>
 
         <div>
-          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Контракт</div>
-          <div className="mt-1 break-all rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-xs text-zinc-700">
-            {entry.asset.contractAddress ?? 'Нативный актив без контракта'}
+          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Контракты</div>
+          <div className="mt-1 space-y-2">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="text-[11px] font-medium text-zinc-500">BNB Smart Chain</div>
+              {bscAddress ? (
+                <a
+                  className="mt-0.5 block break-all font-mono text-xs text-emerald-800 hover:underline"
+                  href={`https://bscscan.com/address/${bscAddress}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {bscAddress}
+                </a>
+              ) : (
+                <div className="mt-0.5 text-xs text-zinc-500">Не указан</div>
+              )}
+            </div>
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="text-[11px] font-medium text-zinc-500">Ethereum</div>
+              {ethereumAddress ? (
+                <a
+                  className="mt-0.5 block break-all font-mono text-xs text-emerald-800 hover:underline"
+                  href={`https://etherscan.io/address/${ethereumAddress}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  {ethereumAddress}
+                </a>
+              ) : (
+                <div className="mt-0.5 text-xs text-zinc-500">Не указан</div>
+              )}
+            </div>
           </div>
         </div>
 

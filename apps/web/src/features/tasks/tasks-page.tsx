@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -52,6 +53,7 @@ export function TasksPage() {
   const [archivedOnly, setArchivedOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<TaskDrawerState | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const range = view === 'calendar' ? monthRange(month) : null;
@@ -73,7 +75,7 @@ export function TasksPage() {
 
   const statusMutation = useMutation({
     mutationFn: ({ task, status }: { task: Task; status: TaskStatus }) =>
-      updateTask(task.id, { status }),
+      updateTask(task.id, { status, applyToSeries: false }),
     onSuccess: () => {
       setError(null);
       invalidate();
@@ -92,12 +94,25 @@ export function TasksPage() {
 
   const moveMutation = useMutation({
     mutationFn: ({ task, date }: { task: Task; date: string }) =>
-      updateTask(task.id, { dueAt: new Date(`${date}T12:00:00`).toISOString() }),
+      updateTask(task.id, {
+        dueAt: new Date(`${date}T12:00:00`).toISOString(),
+        applyToSeries: false,
+      }),
     onSuccess: () => {
       setError(null);
       invalidate();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось перенести задачу')),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (task: Task) => updateTask(task.id, { archived: true }),
+    onSuccess: () => {
+      setError(null);
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось удалить задачу')),
   });
 
   function openCreate(date?: string) {
@@ -271,7 +286,7 @@ export function TasksPage() {
                     status: task.status === 'done' ? 'open' : 'done',
                   })
                 }
-                onDelete={() => setDrawer({ task, startWithDelete: true })}
+                onDelete={() => setDeleteTarget(task)}
                 onRestore={task.archivedAt ? () => restoreMutation.mutate(task) : undefined}
                 busy={statusMutation.isPending || restoreMutation.isPending}
               />
@@ -279,6 +294,24 @@ export function TasksPage() {
           </div>
         )
       ) : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Удалить задачу?"
+        description={
+          deleteTarget?.seriesId
+            ? 'Все задачи этой серии переместятся в архив; вернуть можно будет всю серию.'
+            : 'Задача переместится в архив, откуда её можно вернуть.'
+        }
+        confirmAriaLabel="Подтвердить удаление задачи"
+        cancelAriaLabel="Отменить удаление задачи"
+        busy={deleteMutation.isPending}
+        error={error}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget);
+        }}
+        onCancel={() => setDeleteTarget(null)}
+      />
 
       {drawer ? (
         <TaskDialog

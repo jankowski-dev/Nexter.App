@@ -149,6 +149,7 @@ function tokenFor(address: string, chain: string, symbol: string): SwapToken {
 @Injectable()
 export class SwapService {
   private readonly logger = new Logger(SwapService.name);
+  private readonly previewCache = new Map<string, { expiresAt: number; value: SwapPreview }>();
 
   constructor(
     @Inject(DB) private readonly db: Database,
@@ -222,6 +223,19 @@ export class SwapService {
     }
 
     const amountInBase = toBaseUnits(input.amountIn, tokenIn.decimals);
+    const cacheKey = [
+      input.chain,
+      tokenIn.address.toLowerCase(),
+      tokenOut.address.toLowerCase(),
+      amountInBase,
+      slippageBps,
+      (input.walletAddress ?? '').toLowerCase(),
+    ].join('|');
+    const cached = this.previewCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value;
+    }
+
     let route;
 
     try {
@@ -335,7 +349,7 @@ export class SwapService {
         ? normalizeUsd(route.gasUsd)
         : null;
 
-    return {
+    const preview: SwapPreview = {
       chain: input.chain,
       tokenIn,
       tokenOut,
@@ -350,6 +364,14 @@ export class SwapService {
       routeId,
       fetchedAt: new Date().toISOString(),
     };
+
+    if (this.previewCache.size >= 100) {
+      const oldest = this.previewCache.keys().next().value;
+      if (oldest) this.previewCache.delete(oldest);
+    }
+    this.previewCache.set(cacheKey, { expiresAt: Date.now() + 5_000, value: preview });
+
+    return preview;
   }
 
   async quote(userId: string, input: SwapQuoteRequest, meta: SwapMeta): Promise<SwapOrderDetail> {

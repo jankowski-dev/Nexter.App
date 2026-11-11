@@ -77,15 +77,19 @@ export function ManualOperationDialog({
   const allAssets = assets.data?.assets ?? [];
   const walletAccounts =
     accounts.data?.accounts.filter((account) => account.type === 'wallet') ?? [];
-  const chainAssets = allAssets.filter((asset) => asset.chainCode === wallet.chain);
-  const chainAccounts = walletAccounts.filter((account) => account.chainCode === wallet.chain);
+  const selectedAccount = walletAccounts.find((account) => account.id === accountId);
+  const chainCode = selectedAccount?.chainCode ?? wallet.chain;
+  const chainAssets = allAssets.filter((asset) => asset.chainCode === chainCode);
+  const chainAccounts = walletAccounts;
   const selectedAsset = allAssets.find((asset) => asset.id === assetId);
   const selectedIn = allAssets.find((asset) => asset.id === assetInId);
   const selectedOut = allAssets.find((asset) => asset.id === assetOutId);
   const effectiveAccountId =
     accountId && chainAccounts.some((account) => account.id === accountId)
       ? accountId
-      : (chainAccounts[0]?.id ?? '');
+      : (chainAccounts.find((account) => account.chainCode === wallet.chain)?.id ??
+        chainAccounts[0]?.id ??
+        '');
 
   const autoUsdIn = useMemo(
     () => (selectedIn ? usdFrom(amount, priceIn, selectedIn.isCashEquivalent) : null),
@@ -325,7 +329,16 @@ export function ManualOperationDialog({
           <Select
             className="mt-1"
             value={effectiveAccountId}
-            onChange={(event) => setAccountId(event.target.value)}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              const nextAccount = walletAccounts.find((account) => account.id === nextId);
+              if (nextAccount?.chainCode !== chainCode) {
+                setAssetId('');
+                setAssetInId('');
+                setAssetOutId('');
+              }
+              setAccountId(nextId);
+            }}
           >
             {chainAccounts.map(accountOption)}
           </Select>

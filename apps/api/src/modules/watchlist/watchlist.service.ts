@@ -448,6 +448,8 @@ export class WatchlistService {
             tags: input.tags ?? [],
             twitterUrl: input.twitterUrl ?? null,
             websiteUrl: input.websiteUrl ?? null,
+            bscContractAddress: input.bscContractAddress ?? null,
+            ethereumContractAddress: input.ethereumContractAddress ?? null,
             investors: input.investors ?? [],
             priority: input.priority ?? 0,
           })
@@ -526,6 +528,14 @@ export class WatchlistService {
           tags: input.tags !== undefined ? input.tags : existing.tags,
           twitterUrl: input.twitterUrl !== undefined ? input.twitterUrl : existing.twitterUrl,
           websiteUrl: input.websiteUrl !== undefined ? input.websiteUrl : existing.websiteUrl,
+          bscContractAddress:
+            input.bscContractAddress !== undefined
+              ? input.bscContractAddress
+              : existing.bscContractAddress,
+          ethereumContractAddress:
+            input.ethereumContractAddress !== undefined
+              ? input.ethereumContractAddress
+              : existing.ethereumContractAddress,
           investors: input.investors !== undefined ? input.investors : existing.investors,
           priority: input.priority !== undefined ? input.priority : existing.priority,
           archivedAt:
@@ -774,6 +784,8 @@ export class WatchlistService {
       tags: row.entry.tags,
       twitterUrl: row.entry.twitterUrl,
       websiteUrl: row.entry.websiteUrl,
+      bscContractAddress: row.entry.bscContractAddress,
+      ethereumContractAddress: row.entry.ethereumContractAddress,
       investors: row.entry.investors,
       priority: row.entry.priority,
       archivedAt: row.entry.archivedAt?.toISOString() ?? null,

@@ -211,6 +211,20 @@
       "when": 1794417853379,
       "tag": "0029_heavy_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1794430407197,
+      "tag": "0030_yielding_layla_miller",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794432161037,
+      "tag": "0031_tron_solana_holdings",
+      "breakpoints": true
     }
   ]
 }

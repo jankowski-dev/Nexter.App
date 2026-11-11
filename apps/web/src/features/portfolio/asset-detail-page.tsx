@@ -1,10 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { fetchPortfolioAsset, setPrice } from '@/lib/api';
+import { fetchPortfolioAsset } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatDate,
@@ -15,9 +14,8 @@ import {
   formatUsd,
   pnlTone,
 } from '@/lib/format';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
-import { useState } from 'react';
 
 const statusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -29,25 +27,11 @@ const statusLabels: Record<string, string> = {
 
 export function AssetDetailPage() {
   const { assetId } = useParams({ strict: false }) as { assetId: string };
-  const queryClient = useQueryClient();
-  const [price, setPriceValue] = useState('');
   const detail = useQuery({
     queryKey: ['portfolio-asset', assetId],
     queryFn: () => fetchPortfolioAsset(assetId),
     enabled: Boolean(assetId),
   });
-  const priceMutation = useMutation({
-    mutationFn: () => setPrice(assetId, price),
-    onSuccess: () => {
-      setPriceValue('');
-      void queryClient.invalidateQueries({ queryKey: ['portfolio-asset', assetId] });
-      void queryClient.invalidateQueries({ queryKey: ['positions'] });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard-allocation'] });
-      void queryClient.invalidateQueries({ queryKey: ['dashboard-active-positions'] });
-    },
-  });
-
   if (detail.isPending) {
     return (
       <div className="space-y-6">
@@ -136,122 +120,40 @@ export function AssetDetailPage() {
       </div>
 
       <Card>
-        <CardTitle>Установить цену</CardTitle>
-        <CardDescription>
-          Рыночная цена DexScreener/CoinGecko имеет приоритет. Ручная цена используется только как
-          fallback, если рыночная недоступна. Деньги хранятся как десятичные строки.
-        </CardDescription>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <Input
-            type="text"
-            inputMode="decimal"
-            placeholder="Например, 0.04182"
-            value={price}
-            onChange={(event) => setPriceValue(event.target.value)}
-            aria-label="Цена в USD"
-          />
-          <Button
-            onClick={() => priceMutation.mutate()}
-            disabled={
-              priceMutation.isPending || !/^\d+(?:\.\d+)?$/.test(price) || Number(price) <= 0
-            }
-          >
-            Сохранить цену
-          </Button>
-        </div>
-        {priceMutation.isError ? (
-          <p className="mt-2 text-sm text-red-700">
-            {toRussianError(priceMutation.error, 'Не удалось сохранить цену')}
-          </p>
-        ) : null}
-        {data.prices.length > 0 ? (
-          <div className="mt-3 text-xs text-zinc-500">
-            Последние цены:{' '}
-            {data.prices
-              .slice(0, 5)
-              .map((item) => `${formatPrice(item.priceUsd)} (${formatDateTime(item.observedAt)})`)
-              .join(' · ')}
+        <CardTitle>Сделки</CardTitle>
+        <CardDescription>{data.tradeGroups.length} торговых групп по активу.</CardDescription>
+        {data.tradeGroups.length === 0 ? (
+          <p className="mt-4 text-sm text-zinc-600">Сделок нет.</p>
+        ) : (
+          <div className="mt-4 max-h-96 overflow-y-auto">
+            {data.tradeGroups.map((group) => (
+              <Link
+                key={group.id}
+                to="/trades/$tradeId"
+                params={{ tradeId: group.id }}
+                className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2 text-sm last:border-0 hover:text-emerald-800"
+              >
+                <div>
+                  <div className="text-zinc-800">{formatDate(group.openedAt)}</div>
+                  <div className="text-xs text-zinc-500">
+                    {group.status === 'closed'
+                      ? 'Закрыта'
+                      : (statusLabels[group.status] ?? group.status)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className={`font-mono tabular-nums ${pnlTone(group.totalPnlUsd)}`}>
+                    {formatSignedUsd(group.totalPnlUsd)}
+                  </div>
+                  <div className="text-xs text-zinc-500">
+                    {group.returnPct ? `${group.returnPct}%` : '—'}
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-        ) : null}
+        )}
       </Card>
-
-      <div className="grid gap-6 xl:grid-cols-2">
-        <Card>
-          <CardTitle>Лоты</CardTitle>
-          <CardDescription>Оставшиеся лоты и себестоимость.</CardDescription>
-          {data.lots.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-600">Лотов нет.</p>
-          ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Дата</th>
-                    <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                    <th className="py-2 pr-3 text-right font-medium">Остаток</th>
-                    <th className="py-2 text-right font-medium">Себестоимость</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.lots.map((lot) => (
-                    <tr
-                      key={lot.id}
-                      className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
-                    >
-                      <td className="py-2 pr-3 text-zinc-600">{formatDate(lot.acquiredAt)}</td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                        {formatTokenAmount(lot.amount)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                        {formatTokenAmount(lot.remainingAmount)}
-                      </td>
-                      <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
-                        {formatUsd(lot.remainingCostBasisUsd)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <CardTitle>Сделки</CardTitle>
-          <CardDescription>{data.tradeGroups.length} торговых групп по активу.</CardDescription>
-          {data.tradeGroups.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-600">Сделок нет.</p>
-          ) : (
-            <div className="mt-4 max-h-96 overflow-y-auto">
-              {data.tradeGroups.map((group) => (
-                <Link
-                  key={group.id}
-                  to="/trades/$tradeId"
-                  params={{ tradeId: group.id }}
-                  className="flex items-center justify-between gap-3 border-b border-zinc-100 py-2 text-sm last:border-0 hover:text-emerald-800"
-                >
-                  <div>
-                    <div className="text-zinc-800">{formatDate(group.openedAt)}</div>
-                    <div className="text-xs text-zinc-500">
-                      {group.status === 'closed'
-                        ? 'Закрыта'
-                        : (statusLabels[group.status] ?? group.status)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`font-mono tabular-nums ${pnlTone(group.totalPnlUsd)}`}>
-                      {formatSignedUsd(group.totalPnlUsd)}
-                    </div>
-                    <div className="text-xs text-zinc-500">
-                      {group.returnPct ? `${group.returnPct}%` : '—'}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
 
       <Card>
         <CardTitle>Транзакции</CardTitle>
