@@ -89,6 +89,19 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(new Date(value));
 }
 
+export function formatRelativeTime(value: string | Date | null | undefined): string {
+  if (!value) return '—';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+  if (seconds < 10) return 'только что';
+  if (seconds < 60) return `${seconds} с назад`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} мин назад`;
+  if (seconds < 86_400) return `${Math.floor(seconds / 3600)} ч назад`;
+  return `${Math.floor(seconds / 86_400)} дн назад`;
+}
+
 export function pnlTone(value: string | null | undefined): string {
   if (value === null || value === undefined || value === '') return 'text-zinc-500';
   const number = Number(value);

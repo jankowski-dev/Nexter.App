@@ -6,6 +6,8 @@ import { Dialog } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { LiveValue } from '@/components/ui/live-value';
+import { PriceFreshness } from '@/components/ui/price-freshness';
 import {
   createHabit,
   fetchDashboardPnl,
@@ -18,7 +20,6 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatByn, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Decimal } from 'decimal.js';
@@ -69,7 +70,7 @@ function SummaryMetric({
       <div
         className={`mt-1 font-mono text-xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
       >
-        {value}
+        <LiveValue value={value}>{value}</LiveValue>
       </div>
       {hint ? <div className="mt-1 text-xs text-zinc-500">{hint}</div> : null}
     </div>
@@ -115,10 +116,6 @@ export function DashboardPage() {
     queryFn: () => fetchHabits(showArchivedHabits),
     refetchInterval: 60_000,
   });
-  const cryptoFlash = useLiveFlash(Math.max(summary.dataUpdatedAt, pnl.dataUpdatedAt));
-  const financeFlash = useLiveFlash(finance.dataUpdatedAt);
-  const tasksFlash = useLiveFlash(tasks.dataUpdatedAt);
-  const habitsFlash = useLiveFlash(habits.dataUpdatedAt);
 
   const invalidateTasks = () => {
     void queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -233,11 +230,17 @@ export function DashboardPage() {
       {summary.isPending ? <LoadingRows rows={4} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card className={cryptoFlash ? 'live-flash' : ''}>
+        <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Крипта</CardTitle>
-              <CardDescription>Ключевые показатели портфеля.</CardDescription>
+              <CardDescription>
+                Ключевые показатели портфеля. Цены:{' '}
+                <PriceFreshness
+                  updatedAt={summary.data?.priceUpdatedAt}
+                  fetchedAt={summary.data?.priceFetchedAt}
+                />
+              </CardDescription>
             </div>
             <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
               <Link to="/portfolio">Портфель</Link>
@@ -270,7 +273,7 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card className={financeFlash ? 'live-flash' : ''}>
+        <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Финансы</CardTitle>
@@ -310,7 +313,7 @@ export function DashboardPage() {
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-        <Card className={tasksFlash ? 'live-flash' : ''}>
+        <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>Задачи на сегодня</CardTitle>
@@ -345,7 +348,7 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card className={habitsFlash ? 'live-flash' : ''}>
+        <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle>Без вредных привычек</CardTitle>

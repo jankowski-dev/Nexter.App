@@ -31,7 +31,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { LedgerService, type LedgerMeta } from './ledger.service';
-import { PricingService } from './pricing.service';
+import { PricingService, type PriceQuote } from './pricing.service';
 
 interface GroupRow {
   group: TradeGroup;
@@ -573,13 +573,13 @@ export class TradeGroupsService {
     }));
   }
 
-  private toSummary(row: GroupRow, priceValue?: string): TradeGroupSummary {
+  private toSummary(row: GroupRow, quote?: PriceQuote): TradeGroupSummary {
     const buyUsd = decimal(row.buyUsd ?? '0');
     const sellUsd = decimal(row.sellUsd ?? '0');
     const realized = decimal(row.realized ?? '0');
     const remainingAmount = decimal(row.remainingAmount ?? '0');
     const remainingCost = decimal(row.remainingCost ?? '0');
-    const price = priceValue ? decimal(priceValue) : null;
+    const price = quote ? decimal(quote.priceUsd) : null;
     const source = (row.source ?? 'manual') as TransactionSource;
     const end = row.group.closedAt ?? new Date();
     const holdingDays = Math.max(
@@ -626,6 +626,9 @@ export class TradeGroupsService {
       realizedPnlUsd: usdString(realized),
       unrealizedPnlUsd: unrealized === null ? null : usdString(unrealized),
       totalPnlUsd: totalPnl === null ? null : usdString(totalPnl),
+      priceUpdatedAt: quote?.changedAt.toISOString() ?? null,
+      priceFetchedAt: quote?.fetchedAt.toISOString() ?? null,
+      priceSource: quote?.source ?? null,
       gasUsd: usdString(decimal(row.gasUsd ?? '0')),
       remainingAmount: remainingAmount.toFixed(18),
       costBasisUsd: usdString(buyUsd),

@@ -111,7 +111,7 @@ export function AssetDetailPage() {
         <Card>
           <CardTitle>Цена</CardTitle>
           <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-            {formatPrice(position?.priceUsd ?? null)}
+            {formatPrice(position?.priceUsd ?? data.quote?.priceUsd ?? null)}
           </div>
           <CardDescription>Последняя цена</CardDescription>
         </Card>
@@ -138,8 +138,8 @@ export function AssetDetailPage() {
       <Card>
         <CardTitle>Установить цену</CardTitle>
         <CardDescription>
-          Цена используется для оценки портфеля и нереализованного P&L. Деньги хранятся как
-          десятичные строки.
+          Рыночная цена DexScreener/CoinGecko имеет приоритет. Ручная цена используется только как
+          fallback, если рыночная недоступна. Деньги хранятся как десятичные строки.
         </CardDescription>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Input

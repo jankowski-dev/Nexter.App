@@ -94,10 +94,12 @@ jobs:
           BACKUP_ENCRYPTION_KEY: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff'
           BACKUP_DUMP_MODE: docker
 
-      - name: Install Playwright Chromium
-        run: pnpm --filter @nexter/e2e exec playwright install --with-deps chromium
+      - name: Verify Chrome
+        run: google-chrome --version
 
       - name: Auth browser E2E
+        env:
+          PLAYWRIGHT_CHANNEL: chrome
         run: pnpm test:e2e
 
       - name: Compile migration runner and migrate again

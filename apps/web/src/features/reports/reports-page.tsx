@@ -4,6 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { LiveValue } from '@/components/ui/live-value';
 import { downloadExport, fetchReports } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
@@ -14,7 +15,6 @@ import {
   pluralizeRu,
   pnlTone,
 } from '@/lib/format';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
@@ -86,7 +86,7 @@ function Metric({
       <div
         className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
       >
-        {value}
+        <LiveValue value={value}>{value}</LiveValue>
       </div>
       {hint ? <CardDescription>{hint}</CardDescription> : null}
     </Card>
@@ -130,7 +130,6 @@ export function ReportsPage() {
     enabled: !invalidPeriod,
     refetchInterval: 30_000,
   });
-  const reportsFlash = useLiveFlash(reports.dataUpdatedAt);
 
   const exportMutation = useMutation({
     mutationFn: ({
@@ -266,7 +265,7 @@ export function ReportsPage() {
 
       {!reports.isPending && report ? (
         <>
-          <Card className={reportsFlash ? 'live-flash' : ''}>
+          <Card>
             <CardTitle>Итоги за период</CardTitle>
             <CardDescription>
               Реализованный P&L по FIFO, сборы из транзакций и сетевой газ подтверждённых on-chain

@@ -66,6 +66,9 @@ export const watchlistEntrySchema = z.object({
   priceUsd: z.string().nullable(),
   price24hAgoUsd: z.string().nullable(),
   change24hPct: z.string().nullable(),
+  priceUpdatedAt: z.iso.datetime().nullable(),
+  priceFetchedAt: z.iso.datetime().nullable(),
+  priceSource: z.string().nullable(),
 });
 
 export const watchlistResponseSchema = z.object({

@@ -248,6 +248,9 @@ export const positionSchema = z.object({
   asset: assetSchema,
   amount: z.string(),
   priceUsd: z.string().nullable(),
+  priceUpdatedAt: z.iso.datetime().nullable(),
+  priceFetchedAt: z.iso.datetime().nullable(),
+  priceSource: z.string().nullable(),
   valueUsd: z.string().nullable(),
   avgCostUsd: z.string().nullable(),
   costBasisUsd: z.string(),
@@ -295,6 +298,8 @@ export const dashboardSummarySchema = z.object({
   roiPct: z.string().nullable(),
   activePositionsCount: z.number().int().nonnegative(),
   missingPrices: z.array(z.string()),
+  priceUpdatedAt: z.iso.datetime().nullable(),
+  priceFetchedAt: z.iso.datetime().nullable(),
 });
 
 export type DecimalString = z.infer<typeof decimalStringSchema>;

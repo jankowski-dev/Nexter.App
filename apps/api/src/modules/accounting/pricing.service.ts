@@ -5,7 +5,16 @@ import type { Price, SetPriceRequest } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
+import { MarketQuoteService } from '../market-data/market-quote.service';
 import { AssetsService } from './assets.service';
+
+export interface PriceQuote {
+  priceUsd: string;
+  change24hPct: string | null;
+  source: string;
+  fetchedAt: Date;
+  changedAt: Date;
+}
 
 export interface PriceMeta {
   ip?: string;
@@ -17,6 +26,7 @@ export class PricingService {
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly assets: AssetsService,
+    private readonly quotes: MarketQuoteService,
     private readonly audit: AuditService,
   ) {}
 
@@ -85,23 +95,67 @@ export class PricingService {
     return rows.map((row) => this.toContract(row));
   }
 
-  async latestForAssets(assetIds: string[]): Promise<Map<string, string>> {
+  async latestForAssets(assetIds: string[]): Promise<Map<string, PriceQuote>> {
     if (assetIds.length === 0) {
       return new Map();
     }
 
+    const result = new Map<string, PriceQuote>();
+    const marketQuotes = await this.quotes.getQuotes(assetIds);
+
+    for (const [assetId, quote] of marketQuotes) {
+      result.set(assetId, {
+        priceUsd: quote.priceUsd,
+        change24hPct: quote.change24hPct,
+        source: quote.source,
+        fetchedAt: quote.fetchedAt,
+        changedAt: quote.changedAt,
+      });
+    }
+
+    const missing = assetIds.filter((assetId) => !result.has(assetId));
+    if (missing.length === 0) return result;
+
     const rows = await this.db
       .select()
       .from(prices)
-      .where(inArray(prices.assetId, assetIds))
+      .where(inArray(prices.assetId, missing))
       .orderBy(desc(prices.observedAt));
 
-    const result = new Map<string, string>();
-
+    const rowsByAsset = new Map<string, typeof rows>();
     for (const row of rows) {
-      if (!result.has(row.assetId)) {
-        result.set(row.assetId, row.priceUsd);
+      const list = rowsByAsset.get(row.assetId) ?? [];
+      list.push(row);
+      rowsByAsset.set(row.assetId, list);
+    }
+
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+
+    for (const [assetId, assetRows] of rowsByAsset) {
+      const latest = assetRows[0];
+      if (!latest || result.has(assetId)) continue;
+
+      let change24hPct: string | null = null;
+      if (latest.observedAt.getTime() >= cutoff) {
+        const previous = assetRows.find(
+          (row) => row.observedAt.getTime() <= latest.observedAt.getTime() - 24 * 60 * 60 * 1000,
+        );
+        if (previous && decimal(previous.priceUsd).gt(0)) {
+          change24hPct = decimal(latest.priceUsd)
+            .minus(previous.priceUsd)
+            .div(previous.priceUsd)
+            .mul(100)
+            .toFixed(2);
+        }
       }
+
+      result.set(assetId, {
+        priceUsd: latest.priceUsd,
+        change24hPct,
+        source: latest.source,
+        fetchedAt: latest.observedAt,
+        changedAt: latest.observedAt,
+      });
     }
 
     return result;

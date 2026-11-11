@@ -229,11 +229,13 @@ export function TokenTradeDrawer({
     queryKey: ['token-market-price', token.id],
     queryFn: async () => {
       const detail = await fetchPortfolioAsset(token.id);
-      return detail.position?.priceUsd ?? detail.prices[0]?.priceUsd ?? null;
+      return (
+        detail.position?.priceUsd ?? detail.quote?.priceUsd ?? detail.prices[0]?.priceUsd ?? null
+      );
     },
     refetchInterval: 15_000,
   });
-  const effectiveMarketPrice = fallbackMarket.data ?? marketPriceUsd ?? null;
+  const effectiveMarketPrice = marketPriceUsd ?? fallbackMarket.data ?? null;
 
   const liveOrder = useQuery({
     queryKey: ['token-trade-order', order?.id],
@@ -607,7 +609,9 @@ export function TokenTradeDrawer({
 
           <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
             <div>
-              <div className="text-xs text-zinc-500">CoinGecko</div>
+              <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
+                Рынок
+              </div>
               <div className="font-mono text-lg font-semibold text-zinc-900">
                 {formatPrice(effectiveMarketPrice)}
               </div>
@@ -723,9 +727,13 @@ export function TokenTradeDrawer({
                 className="ml-2"
                 variant="secondary"
                 onClick={() => void wallet.connect()}
-                disabled={wallet.connecting || !wallet.projectId}
+                disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
               >
-                {wallet.connecting ? 'Подключаю…' : 'Подключить'}
+                {wallet.restoring
+                  ? 'Восстанавливаю…'
+                  : wallet.connecting
+                    ? 'Подключаю…'
+                    : 'Подключить'}
               </Button>
             </div>
           ) : null}

@@ -20,7 +20,7 @@ test.beforeAll(async () => {
   await client.connect();
   try {
     await client.query(
-      'truncate table prices, audit_log, sessions, settings, rate_limits, users restart identity cascade',
+      'truncate table prices, market_quotes, audit_log, sessions, settings, rate_limits, users restart identity cascade',
     );
   } finally {
     await client.end();

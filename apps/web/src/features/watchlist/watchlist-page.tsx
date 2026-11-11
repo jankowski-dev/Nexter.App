@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { LiveValue } from '@/components/ui/live-value';
+import { PriceFreshness } from '@/components/ui/price-freshness';
 import { TokenIcon } from '@/components/token-icon';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -23,7 +25,6 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatUsd, pnlTone } from '@/lib/format';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -126,7 +127,6 @@ export function WatchlistPage() {
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
-  const listFlash = useLiveFlash(watchlist.dataUpdatedAt);
 
   useEffect(() => {
     if (!searchGroupId && defaultGroup) setSearchGroupId(defaultGroup.id);
@@ -535,7 +535,7 @@ export function WatchlistPage() {
                   key={entry.id}
                   className={`p-0 transition-colors hover:border-emerald-300 ${
                     entry.archivedAt ? 'opacity-60' : ''
-                  } ${listFlash ? 'live-flash' : ''}`}
+                  }`}
                 >
                   <button
                     type="button"
@@ -570,12 +570,24 @@ export function WatchlistPage() {
                     </span>
 
                     <span className="flex shrink-0 items-center gap-4">
+                      <PriceFreshness
+                        updatedAt={entry.priceUpdatedAt}
+                        fetchedAt={entry.priceFetchedAt}
+                        source={entry.priceSource}
+                        className="hidden sm:inline-flex"
+                      />
                       <span className="block text-right">
                         <span className="block font-mono text-base font-semibold text-zinc-900">
-                          {formatPrice(entry.priceUsd)}
+                          <LiveValue value={formatPrice(entry.priceUsd)}>
+                            {formatPrice(entry.priceUsd)}
+                          </LiveValue>
                         </span>
                         <span className={`block text-xs ${pnlTone(entry.change24hPct)}`}>
-                          {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
+                          <LiveValue
+                            value={entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
+                          >
+                            {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
+                          </LiveValue>
                         </span>
                       </span>
                       <span aria-hidden="true" className="text-lg text-zinc-300">

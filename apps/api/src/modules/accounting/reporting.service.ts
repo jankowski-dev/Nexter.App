@@ -105,7 +105,7 @@ export class ReportingService {
       };
 
       const price = priceByAsset.get(row.assetId);
-      const priceValue = price ? decimal(price) : null;
+      const priceValue = price ? decimal(price.priceUsd) : null;
       const costBasis = decimal(costByAsset.get(row.assetId) ?? '0');
 
       if (assetRow.asset.isCashEquivalent) {
@@ -126,7 +126,10 @@ export class ReportingService {
       positions.push({
         asset: assetContract,
         amount: amount.toFixed(18),
-        priceUsd: price ?? null,
+        priceUsd: price?.priceUsd ?? null,
+        priceUpdatedAt: price?.changedAt.toISOString() ?? null,
+        priceFetchedAt: price?.fetchedAt.toISOString() ?? null,
+        priceSource: price?.source ?? null,
         valueUsd: value ? usdString(value) : null,
         avgCostUsd: amount.gt(0) ? usdString(costBasis.div(amount)) : null,
         costBasisUsd: usdString(costBasis),
@@ -193,6 +196,9 @@ export class ReportingService {
         asset: assetContract,
         amount: amount.toFixed(18),
         priceUsd: '1.00000000',
+        priceUpdatedAt: null,
+        priceFetchedAt: null,
+        priceSource: 'stablecoin',
         valueUsd: usdString(amount),
         avgCostUsd: '1.00000000',
         costBasisUsd: usdString(amount),
@@ -222,6 +228,20 @@ export class ReportingService {
       new Decimal(0),
     );
     const netDeposits = await this.netDeposits(userId);
+    const lastPriceUpdatedAt = positions.positions.reduce<string | null>(
+      (latest, position) =>
+        position.priceUpdatedAt && (!latest || position.priceUpdatedAt > latest)
+          ? position.priceUpdatedAt
+          : latest,
+      null,
+    );
+    const lastPriceFetchedAt = positions.positions.reduce<string | null>(
+      (latest, position) =>
+        position.priceFetchedAt && (!latest || position.priceFetchedAt > latest)
+          ? position.priceFetchedAt
+          : latest,
+      null,
+    );
 
     const cashRows = await this.db
       .select({
@@ -309,6 +329,8 @@ export class ReportingService {
       cashByAsset,
       positionsValueUsd: positions.positionsValueUsd,
       equityUsd: positions.equityUsd,
+      priceUpdatedAt: lastPriceUpdatedAt,
+      priceFetchedAt: lastPriceFetchedAt,
       netDepositsUsd: usdString(netDeposits),
       incomeUsd: usdString(income),
       adjustmentsUsd: usdString(adjustments),
@@ -660,7 +682,9 @@ export class ReportingService {
         }
         const price = priceByAsset.get(assetId);
         if (price) {
-          positionsValue = positionsValue.plus(decimal(usdString(amount.mul(decimal(price)))));
+          positionsValue = positionsValue.plus(
+            decimal(usdString(amount.mul(decimal(price.priceUsd)))),
+          );
         }
       }
 

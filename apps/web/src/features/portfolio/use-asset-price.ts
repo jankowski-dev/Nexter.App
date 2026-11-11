@@ -9,5 +9,10 @@ export function useAssetUsdPrice(assetId: string | null | undefined): string | n
     refetchInterval: 15_000,
   });
 
-  return query.data?.position?.priceUsd ?? query.data?.prices[0]?.priceUsd ?? null;
+  return (
+    query.data?.position?.priceUsd ??
+    query.data?.quote?.priceUsd ??
+    query.data?.prices[0]?.priceUsd ??
+    null
+  );
 }
