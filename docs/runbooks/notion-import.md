@@ -99,7 +99,7 @@ To add new Notion rows, export again. Preview detects existing source ids and sk
 ## 8. Troubleshooting
 
 - **413 / body too large**: the import preview accepts 10 MiB; other routes keep 1 MiB. Confirm the reverse proxy/edge also allows the 1.7 MiB `orders.json` for `/api/v1/imports/notion/preview`.
-- **`IMPORT_CONFLICT`**: an existing lot amount/cost basis differs, a sell exists without a buy, a lot was partially consumed by a manual trade, or another import changed the state after preview. Do not force the import; compare the existing import and the new export. If a manual sell consumed the same order, choose one source of truth for that disposal.
+- **`IMPORT_CONFLICT`**: an existing lot amount/cost basis differs, a sell exists without a buy, a close targets a lot partially consumed by a manual trade, or another import changed the state after preview. An active order whose lot was partially consumed later is skipped with a warning instead of being overwritten. Do not force the import; compare the existing import and the new export. If a manual sell consumed the same order, choose one source of truth for that disposal.
 - **`NEGATIVE_BALANCE`**: the final wallet balance would be negative. Check deposits/withdrawals and previous imports.
 - **Control mismatch**: the export is not the expected 429 baseline plus the four known order changes. Do not commit until the difference is explained.
 - **Rollback 409**: later manual activity or a later import exists. Keep the import and prepare a compensating reversal.
@@ -112,9 +112,11 @@ Use this path when the owner wants current Notion orders after the original 431-
 2. Keep the three raw JSON arrays in a temporary directory outside the repository.
 3. Preview through `/import` and verify:
    - source assets 36, orders 436, closed 417, active 19, transactions 9;
-   - `newOrders` is 5, `updatedOrders` is 5, `skippedOrders` is 421, `skippedTransactions` is 9;
-   - no errors; the control warning says the 429-order baseline is not applicable;
-   - the preview valuation is plausible and all 19 active assets have prices.
+   - `newOrders` is 5, `updatedOrders` is 5, `skippedOrders` is 426, `skippedTransactions` is 9, `newAssets` is 0, `reusedAssets` is 36;
+   - no errors; the warning says the 429-order baseline is not applicable to exports with ids above 466;
+   - totals are buy `55875.80`, sell `53429.1539653516`, realized `-18.0460346484`, cash `16.1539653516`, active cost `2428.60`; realized is about `-73.682334` lower than the 431-order export because five orders were closed;
+   - order `439` is skipped with a warning because its POP lot was partially consumed by later manual activity; its remaining amount must stay unchanged;
+   - all 19 active assets have prices in the preview valuation.
 4. Confirm the later manual ledger activity is untouched (BNB/ETH opening lots and the small USDC→BNB swap).
 5. Commit only after the owner reviews the preview. Rollback follows the normal import rollback path while no later activity exists; otherwise a compensating reversal or the clean cutover is required.
 6. The legacy control is intentionally skipped for exports with order ids above 466. This is documented in ADR 0032; do not treat the warning as a reason to edit the hard-coded snapshot.

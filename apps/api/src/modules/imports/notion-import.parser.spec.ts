@@ -96,7 +96,71 @@ describe('parseNotionExport', () => {
     });
 
     expect(result.parsed.summary.control.applicable).toBe(false);
+    expect(result.parsed.summary.warnings).toContain(
+      'Control snapshot is scoped to the original 431-order export; baseline reconciliation is not applicable',
+    );
     expect(result.errors).toEqual([]);
+  });
+
+  it('applies the legacy control at the 466 boundary', () => {
+    const closed = (id: string) =>
+      orderRow({
+        id,
+        status: 'Закрыта',
+        openedAt: '2026-01-01T00:00:00.000Z',
+        closedAt: '2026-01-02T00:00:00.000Z',
+        source: usdt.url,
+        destination: tokenA.url,
+        sourceAmount: 100,
+        destinationAmount: 1000,
+        saleRate: 0.12,
+      });
+    const result = parseNotionExport({
+      source: [usdt, tokenA],
+      orders: [closed('450'), closed('463'), closed('465'), closed('466')],
+      transactions: [],
+    });
+
+    expect(result.parsed.summary.control.applicable).toBe(true);
+  });
+
+  it('does not treat prefixed or non-numeric ids as the legacy export', () => {
+    const closed = (id: string) =>
+      orderRow({
+        id,
+        status: 'Закрыта',
+        openedAt: '2026-01-01T00:00:00.000Z',
+        closedAt: '2026-01-02T00:00:00.000Z',
+        source: usdt.url,
+        destination: tokenA.url,
+        sourceAmount: 100,
+        destinationAmount: 1000,
+        saleRate: 0.12,
+      });
+    const result = parseNotionExport({
+      source: [usdt, tokenA],
+      orders: [
+        closed('450'),
+        closed('463'),
+        closed('465'),
+        closed('466'),
+        orderRow({
+          id: 'abc123',
+          status: 'Активна',
+          openedAt: '2026-11-04T00:00:00.000Z',
+          source: usdt.url,
+          destination: tokenA.url,
+          sourceAmount: 100,
+          destinationAmount: 1000,
+        }),
+      ],
+      transactions: [],
+    });
+
+    expect(result.parsed.summary.control.applicable).toBe(false);
+    expect(result.parsed.summary.warnings).toContain(
+      'Control snapshot is scoped to the original 431-order export; baseline reconciliation is not applicable',
+    );
   });
 
   it('normalizes orders, transactions and control totals', () => {

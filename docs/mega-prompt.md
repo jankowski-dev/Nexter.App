@@ -603,7 +603,7 @@ Control sums:
 - Active return: -18.14295600572087%
 - XIRR (approx): -13.209982601711564%
 
-Tolerance: ±0.01 USD for totals, ±0.01 percentage point for rates. If outside tolerance, import must not commit.
+Tolerance: ±0.01 USD for totals, ±0.01 percentage point for rates. For the original 431-order export (numeric ids up to 466), if outside tolerance, import must not commit. Later incremental exports follow ADR 0032 and are checked against the refresh runbook totals.
 
 ---
 
@@ -1134,7 +1134,7 @@ Exit: buy/sell/swap/transfer/income produce balanced ledger.
 - Commit/rollback.
 - Import UI.
 
-Exit: 429 orders, control sums match.
+Exit: 429 orders, control sums match for the original export; later refreshes follow ADR 0032.
 
 ### Phase 5 — MVP-1 UI
 

@@ -39,7 +39,7 @@
 
 Control sums (429-order Phase 3 snapshot): 429 orders, 410 closed, 19 active, deposits 2519.80, withdrawals 57.00, net 2462.80, buy 54955.30, sell 52508.0139345416, cash 15.513934541602794, equity 2075.937588921603, total P&L -386.86241107839714, realized 69.81393454159962, unrealized -456.67634561999995, ROI -15.70823497963282%, win rate 54.87804878048781%, profit factor 1.0189656366911293.
 
-The current Notion export has 431 orders (412 closed, 19 active). Preview reconstructs the 429-order baseline by excluding new orders `465`/`466` and treating `450`/`463` as still active. The baseline must match the transaction-based control sums, cash, and active cost within ±0.01 USD; otherwise commit is blocked. Current 431 totals are shown separately.
+The original Notion export has 431 orders (412 closed, 19 active). Preview reconstructs the 429-order baseline by excluding new orders `465`/`466` and treating `450`/`463` as still active. For that original export (numeric order ids up to 466), the baseline must match the transaction-based control sums, cash, and active cost within ±0.01 USD; otherwise commit is blocked. Later incremental exports skip this historical baseline and must be checked against the runbook totals and `detectExisting`; see ADR 0032.
 
 The Phase 3 snapshot also contains price-dependent metrics (active value, equity, unrealized P&L, total P&L, ROI, win rate, profit factor, XIRR). Those were calculated at audit-time prices. The current export contains current Source `Курс [1]` prices, so the preview reports current valuation separately and does not use it for commit gating. The audit-time active value was 2060.42365438 and current active value at Source prices is 1829.88804762; the difference is price movement, not a cost-basis or transaction mismatch. Active cost (2517.10) is invariant and is reconciled.
 
@@ -86,6 +86,6 @@ Import commit checks final wallet balances, not chronological interim balances. 
 7. Equity = cash + positions at market.
 8. Equity − net deposits = total P&L within visible tolerance.
 9. Imports are idempotent by `(source, source_id)`.
-10. Import commit is blocked when the reconstructed 429-order control baseline is outside tolerance.
+10. Import commit is blocked when the reconstructed 429-order control baseline is outside tolerance for the original 431-order export (numeric ids up to 466). Later exports use the ADR 0032 incremental path.
 11. Import rollback is allowed only for the newest committed import with no later non-import ledger activity.
 12. Every mutation is audited.

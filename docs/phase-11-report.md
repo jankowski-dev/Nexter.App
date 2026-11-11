@@ -110,7 +110,7 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 
 - The Phase 4 parser's 429-order control is now scoped to numeric order ids up to 466. The original 431-order export still runs the full control; later exports get a warning instead of a blocking error.
 - The current Notion export has 436 orders (417 closed, 19 active), 36 source assets, and 9 transactions. It adds orders 467–471 and closes 458, 461, 462, 465, and 466.
-- The refresh uses the existing incremental import. `detectExisting` verifies every existing lot, group, and amount; existing transactions are skipped. Full rollback-and-reimport remains blocked by later ledger activity and stays part of the ADR 0014 clean cutover.
+- The refresh uses the existing incremental import. `detectExisting` verifies buy lots/groups for new and status-updated rows; already-closed orders and transactions are skipped by source id, so preview totals are checked against the runbook. An active order whose lot was partially consumed later is skipped with a warning. Full rollback-and-reimport remains blocked by later ledger activity and stays part of the ADR 0014 clean cutover.
 - No migration. See ADR 0032.
 
 ## Database

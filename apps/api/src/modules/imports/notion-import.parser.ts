@@ -307,12 +307,9 @@ function buildControl(input: {
     const order = orderById.get(id);
     return order?.status === 'closed';
   });
-  const numericOrderIds = input.orders
-    .map((order) => Number(order.orderId.match(/\d+/)?.[0]))
-    .filter((id) => Number.isFinite(id));
-  const withinLegacyRange =
-    numericOrderIds.length === input.orders.length &&
-    Math.max(...numericOrderIds) <= CONTROL_LEGACY_MAX_ORDER_ID;
+  const withinLegacyRange = input.orders.every(
+    (order) => /^\d+$/.test(order.orderId) && Number(order.orderId) <= CONTROL_LEGACY_MAX_ORDER_ID,
+  );
   const applicable =
     withinLegacyRange &&
     added.length === CONTROL_ADDED_ORDER_IDS.length &&
