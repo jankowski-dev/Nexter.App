@@ -22,6 +22,7 @@ import type {
   SwapConfigResponse,
   SwapOrderDetail,
   SwapOrdersQuery,
+  SwapPreview,
   SwapOrdersResponse,
   SwapQuoteRequest,
   SwapSubmitRequest,
@@ -67,6 +68,16 @@ export class SwapController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Post('preview')
+  @HttpCode(HttpStatus.OK)
+  preview(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(swapQuoteRequestSchema)) body: SwapQuoteRequest,
+  ): Promise<SwapPreview> {
+    void auth;
+    return this.swaps.preview(body);
   }
 
   @Post('build')

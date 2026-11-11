@@ -12,6 +12,13 @@ const BSC_TOKENS: SwapToken[] = [
     native: false,
   },
   {
+    symbol: 'USDT',
+    name: 'Tether USD',
+    address: '0x55d398326f99059ff775485246999027b3197955',
+    decimals: 18,
+    native: false,
+  },
+  {
     symbol: 'XNY',
     name: 'XNY',
     address: '0xe3225e11cab122f1a126a28997788e5230838ab9',
@@ -60,6 +67,13 @@ const ETHEREUM_TOKENS: SwapToken[] = [
     symbol: 'USDC',
     name: 'USD Coin',
     address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+    decimals: 6,
+    native: false,
+  },
+  {
+    symbol: 'USDT',
+    name: 'Tether USD',
+    address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
     decimals: 6,
     native: false,
   },

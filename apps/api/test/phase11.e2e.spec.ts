@@ -257,6 +257,62 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     expect(archivedOnly.body.data).toHaveLength(1);
     expect(archivedOnly.body.data[0].id).toBe(task.body.id);
 
+    const habit = await agent
+      .post('/api/v1/habits')
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'Без сахара', startedOn: '2026-11-01' })
+      .expect(201);
+    expect(habit.body).toMatchObject({ name: 'Без сахара', startedOn: '2026-11-01' });
+
+    await agent
+      .post('/api/v1/habits')
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'Без сахара', startedOn: '2026-11-02' })
+      .expect(409);
+
+    const habits = await agent.get('/api/v1/habits').expect(200);
+    expect(habits.body.data).toHaveLength(1);
+
+    const updatedHabit = await agent
+      .patch(`/api/v1/habits/${habit.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ startedOn: '2026-11-10' })
+      .expect(200);
+    expect(updatedHabit.body.startedOn).toBe('2026-11-10');
+
+    await agent
+      .patch(`/api/v1/habits/${habit.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: true })
+      .expect(200);
+    const activeHabits = await agent.get('/api/v1/habits').expect(200);
+    expect(activeHabits.body.data).toEqual([]);
+    const allHabits = await agent.get('/api/v1/habits?includeArchived=true').expect(200);
+    expect(allHabits.body.data).toHaveLength(1);
+
+    // Archived names are not reserved; restoring conflicts with an active duplicate.
+    const recreatedHabit = await agent
+      .post('/api/v1/habits')
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'Без сахара', startedOn: '2026-11-05' })
+      .expect(201);
+    await agent
+      .patch(`/api/v1/habits/${habit.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: false })
+      .expect(409);
+    await agent
+      .patch(`/api/v1/habits/${recreatedHabit.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: true })
+      .expect(200);
+    const restoredHabit = await agent
+      .patch(`/api/v1/habits/${habit.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ archived: false })
+      .expect(200);
+    expect(restoredHabit.body.archivedAt).toBeNull();
+
     const note = await agent
       .post('/api/v1/notes')
       .set('x-csrf-token', owner.csrf)

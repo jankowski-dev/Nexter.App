@@ -28,6 +28,7 @@ import type {
   SwapOrderSummary,
   SwapOrdersQuery,
   SwapOrdersResponse,
+  SwapPreview,
   SwapQuoteRequest,
   SwapSubmitRequest,
   SwapToken,
@@ -189,6 +190,168 @@ export class SwapService {
     };
   }
 
+  async preview(input: SwapQuoteRequest): Promise<SwapPreview> {
+    this.assertEnabled();
+
+    const chain = getSwapChain(input.chain);
+    if (!chain) {
+      throw new BadRequestException({
+        code: 'SWAP_CHAIN_UNSUPPORTED',
+        message: 'This chain is not enabled for swaps',
+      });
+    }
+
+    const tokenIn = getSwapToken(input.chain, input.tokenIn);
+    const tokenOut = getSwapToken(input.chain, input.tokenOut);
+
+    if (!tokenIn || !tokenOut) {
+      throw new BadRequestException({
+        code: 'SWAP_TOKEN_NOT_ALLOWED',
+        message: 'One or both tokens are not in the allowlist',
+      });
+    }
+
+    this.assertWallet(input.walletAddress);
+
+    const slippageBps = input.slippageBps ?? env.SWAP_DEFAULT_SLIPPAGE_BPS;
+    if (slippageBps > env.SWAP_MAX_SLIPPAGE_BPS) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: `slippageBps must be at most ${env.SWAP_MAX_SLIPPAGE_BPS}`,
+      });
+    }
+
+    const amountInBase = toBaseUnits(input.amountIn, tokenIn.decimals);
+    let route;
+
+    try {
+      route = await this.kyber.getRoutes({
+        chain: input.chain,
+        tokenIn: tokenIn.address,
+        tokenOut: tokenOut.address,
+        amountInBase,
+        walletAddress: input.walletAddress,
+        slippageBps,
+      });
+    } catch (error) {
+      throw this.providerError(error, 'SWAP_QUOTE_FAILED');
+    }
+
+    if (route.amountIn !== amountInBase) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider amountIn does not match the requested amount',
+      });
+    }
+
+    const amountOutBase = route.amountOut;
+    if (!/^\d+$/.test(amountOutBase) || amountOutBase.length > 36 || BigInt(amountOutBase) <= 0n) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider returned an invalid output amount',
+      });
+    }
+
+    if (!/^0x[0-9a-fA-F]{40}$/.test(route.routerAddress)) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider returned an invalid router address',
+      });
+    }
+
+    const routeIn = route.routeSummary.tokenIn;
+    const routeOut = route.routeSummary.tokenOut;
+
+    if (
+      typeof routeIn !== 'string' ||
+      normalizeAddress(routeIn) !== normalizeAddress(tokenIn.address)
+    ) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider route tokenIn does not match the request',
+      });
+    }
+
+    if (
+      typeof routeOut !== 'string' ||
+      normalizeAddress(routeOut) !== normalizeAddress(tokenOut.address)
+    ) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider route tokenOut does not match the request',
+      });
+    }
+
+    const amountInUsd = normalizeUsd(route.amountInUsd);
+    if (!amountInUsd) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid input USD value',
+      });
+    }
+    const amountOutUsd = normalizeUsd(route.amountOutUsd);
+
+    if (!amountOutUsd && !isCashEquivalentSymbol(tokenOut.symbol)) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return a valid output USD value',
+        details: { reason: 'SWAP_OUTPUT_USD_MISSING' },
+      });
+    }
+
+    const providerImpactBps = fractionToPriceImpactBps(route.priceImpact);
+    const usdImpactBps = usdToPriceImpactBps(amountInUsd, amountOutUsd);
+    const priceImpactBps =
+      providerImpactBps === null
+        ? usdImpactBps
+        : usdImpactBps === null
+          ? providerImpactBps
+          : Math.max(providerImpactBps, usdImpactBps);
+
+    if (priceImpactBps === null) {
+      throw new BadRequestException({
+        code: 'SWAP_VALIDATION_FAILED',
+        message: 'Provider did not return enough data to validate price impact',
+      });
+    }
+
+    if (priceImpactBps > env.SWAP_MAX_PRICE_IMPACT_BPS) {
+      throw new BadRequestException({
+        code: 'SWAP_PRICE_IMPACT_TOO_HIGH',
+        message: `Price impact ${(priceImpactBps / 100).toFixed(2)}% exceeds the configured limit`,
+      });
+    }
+
+    const minOutBase = (BigInt(amountOutBase) * BigInt(10_000 - slippageBps)) / BigInt(10_000);
+    const routeIdValue =
+      typeof route.routeSummary.routeID === 'string'
+        ? route.routeSummary.routeID
+        : typeof route.routeSummary.routeId === 'string'
+          ? route.routeSummary.routeId
+          : null;
+    const routeId = routeIdValue ? routeIdValue.slice(0, 200) : null;
+    const gasUsd =
+      route.gasUsd && /^\d+(?:\.\d+)?$/.test(route.gasUsd) && route.gasUsd.length <= 32
+        ? normalizeUsd(route.gasUsd)
+        : null;
+
+    return {
+      chain: input.chain,
+      tokenIn,
+      tokenOut,
+      amountIn: fromBaseUnits(amountInBase, tokenIn.decimals),
+      amountOut: fromBaseUnits(amountOutBase, tokenOut.decimals),
+      minOut: fromBaseUnits(minOutBase.toString(), tokenOut.decimals),
+      slippageBps,
+      priceImpactBps,
+      amountInUsd,
+      amountOutUsd,
+      gasUsd,
+      routeId,
+      fetchedAt: new Date().toISOString(),
+    };
+  }
+
   async quote(userId: string, input: SwapQuoteRequest, meta: SwapMeta): Promise<SwapOrderDetail> {
     this.assertEnabled();
 
@@ -227,6 +390,13 @@ export class SwapService {
     const amountInBase = toBaseUnits(input.amountIn, tokenIn.decimals);
 
     if (input.closeGroupIds) {
+      if (input.closeGroupIds.length !== 1) {
+        throw new BadRequestException({
+          code: 'SWAP_CLOSE_SINGLE_GROUP_REQUIRED',
+          message: 'Only one trade group can be closed per swap',
+        });
+      }
+
       await this.validateCloseGroups(
         userId,
         input.chain,
@@ -413,7 +583,7 @@ export class SwapService {
             orderId: created.id,
             tradeGroupId: row.id,
             assetId: closeGroups.assetId,
-            expectedAmount: row.remaining,
+            expectedAmount: input.amountIn,
           })),
         );
       }
@@ -1591,6 +1761,9 @@ export class SwapService {
     }
   }
 
+  // Lots are intentionally not reserved while the order is unsigned: a concurrent manual
+  // sale can still change the group, and build/accounting fail closed if the remaining
+  // amount is no longer sufficient. See ADR 0028 for the residual.
   private async validateCloseGroups(
     userId: string,
     chain: SwapChainCode,
@@ -1706,10 +1879,10 @@ export class SwapService {
       total = total.plus(remaining);
     }
 
-    if (enforceTotal && !total.eq(decimal(amountIn))) {
+    if (enforceTotal && total.lt(decimal(amountIn))) {
       throw new BadRequestException({
         code: 'SWAP_CLOSE_AMOUNT_MISMATCH',
-        message: 'Swap amount must equal the remaining amount of the selected close groups',
+        message: 'Swap amount exceeds the remaining amount of the selected close group',
         details: {
           closeGroupIds,
           amountIn: decimal(amountIn).toFixed(tokenIn.decimals),
@@ -1783,7 +1956,7 @@ export class SwapService {
     for (const row of stored) {
       const remaining = remainingById.get(row.tradeGroupId as string);
 
-      if (!remaining || !decimal(remaining).eq(decimal(row.expectedAmount))) {
+      if (!remaining || decimal(remaining).lt(decimal(row.expectedAmount))) {
         throw new BadRequestException({
           code: 'SWAP_CLOSE_GROUP_CHANGED',
           message: 'A selected close group changed after the quote; request a new quote',

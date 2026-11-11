@@ -103,6 +103,7 @@ export const tradeGroupListQuerySchema = z.object({
   source: transactionSourceSchema.optional(),
   search: z.string().max(100).optional(),
   pnl: z.enum(['positive', 'negative']).optional(),
+  view: z.enum(['active', 'profitable', 'losing', 'closed']).optional(),
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
 });
@@ -238,6 +239,7 @@ export type TradeGroupsResponse = z.infer<typeof tradeGroupsResponseSchema>;
 export type TradeGroupDetail = z.infer<typeof tradeGroupDetailSchema>;
 export type TradeGroupSellRequest = z.infer<typeof tradeGroupSellRequestSchema>;
 export type TradeGroupNotesRequest = z.infer<typeof tradeGroupNotesRequestSchema>;
+export type TradeGroupView = NonNullable<z.infer<typeof tradeGroupListQuerySchema>['view']>;
 export type TradeGroupListQuery = z.infer<typeof tradeGroupListQuerySchema>;
 export type TransactionsListQuery = z.infer<typeof transactionsListQuerySchema>;
 export type TransactionsPageResponse = z.infer<typeof transactionsPageResponseSchema>;

@@ -22,9 +22,12 @@ import {
   financeTransactionSchema,
   financeTransactionsResponseSchema,
   financeTransfersResponseSchema,
+  habitSchema,
+  habitsResponseSchema,
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
+  manualTransactionResponseSchema,
   noteImageSchema,
   noteSchema,
   notesResponseSchema,
@@ -40,6 +43,7 @@ import {
   swapBuildResponseSchema,
   swapConfigResponseSchema,
   swapOrderDetailSchema,
+  swapPreviewSchema,
   tokenApprovalSchema,
   tradeGroupDetailSchema,
   tradeGroupsResponseSchema,
@@ -84,9 +88,15 @@ import {
   type FinanceTransferCreateRequest,
   type FinanceTransfersResponse,
   type FinanceTransferUpdateRequest,
+  type Habit,
+  type HabitCreateRequest,
+  type HabitUpdateRequest,
+  type HabitsResponse,
   type HealthResponse,
   type ImportResponse,
   type ImportsResponse,
+  type ManualTransactionRequest,
+  type ManualTransactionResponse,
   type Note,
   type NoteCreateRequest,
   type NoteImage,
@@ -111,6 +121,7 @@ import {
   type SwapBuildResponse,
   type SwapConfigResponse,
   type SwapOrderDetail,
+  type SwapPreview,
   type TokenApproval,
   type TradeGroupDetail,
   type VaultConfig,
@@ -445,6 +456,24 @@ export async function setPrice(assetId: string, priceUsd: string): Promise<void>
   await apiPost(`/api/v1/prices/${assetId}`, { priceUsd });
 }
 
+export async function createManualTransaction(
+  body: ManualTransactionRequest,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<ManualTransactionResponse> {
+  return apiFetch(
+    '/api/v1/transactions',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(body),
+    },
+    manualTransactionResponseSchema,
+  );
+}
+
 export async function fetchTransactions(
   params: Partial<TransactionsListQuery> = {},
 ): Promise<TransactionsPageResponse> {
@@ -553,6 +582,17 @@ export async function quoteSwap(body: {
   return apiPost('/api/v1/swap/quote', body, swapOrderDetailSchema);
 }
 
+export async function previewSwap(body: {
+  chain: SwapChainCode;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  slippageBps?: number;
+  walletAddress?: string;
+}): Promise<SwapPreview> {
+  return apiPost('/api/v1/swap/preview', body, swapPreviewSchema);
+}
+
 export async function buildSwap(
   orderId: string,
   walletAddress: string,
@@ -658,6 +698,18 @@ export async function createTask(body: TaskCreateRequest): Promise<Task> {
 
 export async function updateTask(id: string, body: TaskUpdateRequest): Promise<Task> {
   return apiPatch(`/api/v1/tasks/${id}`, body, taskSchema);
+}
+
+export async function fetchHabits(includeArchived = false): Promise<HabitsResponse> {
+  return apiFetch(`/api/v1/habits${queryString({ includeArchived })}`, {}, habitsResponseSchema);
+}
+
+export async function createHabit(body: HabitCreateRequest): Promise<Habit> {
+  return apiPost('/api/v1/habits', body, habitSchema);
+}
+
+export async function updateHabit(id: string, body: HabitUpdateRequest): Promise<Habit> {
+  return apiPatch(`/api/v1/habits/${id}`, body, habitSchema);
 }
 
 export async function addTaskImage(

@@ -10,12 +10,14 @@ import {
   formatDate,
   formatDateTime,
   formatSignedUsd,
+  formatPrice,
   formatTokenAmount,
   formatUsd,
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import type { Asset } from '@nexter/contracts';
 
 const statusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -52,12 +54,12 @@ function Metric({
 export function AssetDrawer({
   assetId,
   onClose,
-  onTrade,
+  onBuy,
   logoFallback,
 }: {
   assetId: string | null;
   onClose: () => void;
-  onTrade?: (input: { assetId: string; side: 'entry' | 'exit' }) => void;
+  onBuy?: (asset: Asset) => void;
   logoFallback?: string | null;
 }) {
   const detail = useQuery({
@@ -68,11 +70,6 @@ export function AssetDrawer({
 
   const data = detail.data;
   const position = data?.position;
-  const hasOpenGroups = Boolean(
-    data?.tradeGroups.some(
-      (group) => group.status !== 'closed' && Number(group.remainingAmount) > 0,
-    ),
-  );
 
   return (
     <Drawer
@@ -95,25 +92,15 @@ export function AssetDrawer({
       footer={
         data ? (
           <div className="flex flex-wrap justify-end gap-2">
-            {onTrade ? (
+            {onBuy ? (
               <Button
                 variant="secondary"
                 onClick={() => {
                   onClose();
-                  onTrade({ assetId: data.asset.id, side: 'entry' });
+                  onBuy(data.asset);
                 }}
               >
                 Купить
-              </Button>
-            ) : null}
-            {onTrade && hasOpenGroups ? (
-              <Button
-                onClick={() => {
-                  onClose();
-                  onTrade({ assetId: data.asset.id, side: 'exit' });
-                }}
-              >
-                Закрыть позиции
               </Button>
             ) : null}
             <Button variant="secondary" asChild>
@@ -163,7 +150,7 @@ export function AssetDrawer({
             />
             <Metric
               label="Цена"
-              value={formatUsd(position?.priceUsd ?? null)}
+              value={formatPrice(position?.priceUsd ?? null)}
               hint="Последняя цена"
             />
             <Metric

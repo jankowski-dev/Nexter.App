@@ -155,10 +155,18 @@ const operationsRoute = createRoute({
   component: OperationsPage,
 });
 
+const statisticsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/statistics',
+  component: ReportsPage,
+});
+
 const reportsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/reports',
-  component: ReportsPage,
+  beforeLoad: () => {
+    throw redirect({ to: '/statistics' });
+  },
 });
 
 const vaultRoute = createRoute({
@@ -252,6 +260,7 @@ const routeTree = rootRoute.addChildren([
     tradesRoute,
     tradeDetailRoute,
     operationsRoute,
+    statisticsRoute,
     reportsRoute,
     vaultRoute,
     tasksRoute,

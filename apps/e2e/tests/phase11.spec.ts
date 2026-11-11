@@ -28,6 +28,7 @@ test.beforeAll(async () => {
 
 test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   const email = `playwright-phase11-${Date.now()}@example.com`;
+  const habitStartedOn = new Date().toISOString().slice(0, 10);
 
   await page.goto('/setup');
   await page.getByLabel('Setup token').fill(setupToken);
@@ -40,6 +41,21 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByLabel('Код из приложения').fill(generateSync({ secret }));
   await page.getByRole('button', { name: 'Включить 2FA' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+  const habitDialog = page.getByRole('dialog');
+  await habitDialog.getByLabel('Название').fill('Без сахара');
+  await habitDialog.getByLabel('Дата начала воздержания').fill(habitStartedOn);
+  await habitDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByText('Без сахара')).toBeVisible();
+  await page.getByRole('button', { name: 'Удалить привычку Без сахара' }).click();
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await expect(page.getByText('Без сахара')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Архив', exact: true }).click();
+  await expect(page.getByText('Без сахара')).toBeVisible();
+  await page.getByRole('button', { name: 'Вернуть' }).click();
+  await page.getByRole('button', { name: 'Активные', exact: true }).click();
+  await expect(page.getByText('Без сахара')).toBeVisible();
 
   const nav = page.getByRole('navigation', { name: 'Основная навигация' });
 

@@ -635,6 +635,47 @@ describe.runIf(canRun)('Accounting e2e', () => {
     expect(otherAfter?.status).toBe('open');
     expect(otherAfter?.remainingAmount).toBe('10.000000000000000000');
 
+    const activeView = await agent
+      .get(`/api/v1/trade-groups?assetId=${link?.id}&view=active`)
+      .expect(200);
+    const activeIds = (activeView.body.data as Array<{ id: string }>).map((group) => group.id);
+    expect(activeIds).toContain(other?.id);
+    expect(activeIds).not.toContain(target?.id);
+
+    const closedView = await agent
+      .get(`/api/v1/trade-groups?assetId=${link?.id}&view=closed`)
+      .expect(200);
+    const closedIds = (closedView.body.data as Array<{ id: string }>).map((group) => group.id);
+    expect(closedIds).toContain(target?.id);
+    expect(closedIds).not.toContain(other?.id);
+
+    // Filtering must happen before LIMIT: the newest row is closed, but page=1 of the
+    // active view must still contain the active group and report no extra page.
+    await db
+      .update(tradeGroups)
+      .set({ openedAt: new Date() })
+      .where(eq(tradeGroups.id, target?.id ?? ''));
+    await db
+      .update(tradeGroups)
+      .set({ openedAt: new Date(Date.now() - 60_000) })
+      .where(eq(tradeGroups.id, other?.id ?? ''));
+
+    const activePage = await agent
+      .get(`/api/v1/trade-groups?assetId=${link?.id}&view=active&limit=1`)
+      .expect(200);
+    expect((activePage.body.data as Array<{ id: string }>).map((group) => group.id)).toEqual([
+      other?.id,
+    ]);
+    expect(activePage.body.page.hasMore).toBe(false);
+
+    const closedPage = await agent
+      .get(`/api/v1/trade-groups?assetId=${link?.id}&view=closed&limit=1`)
+      .expect(200);
+    expect((closedPage.body.data as Array<{ id: string }>).map((group) => group.id)).toEqual([
+      target?.id,
+    ]);
+    expect(closedPage.body.page.hasMore).toBe(false);
+
     const lotRows = await db
       .select()
       .from(lots)

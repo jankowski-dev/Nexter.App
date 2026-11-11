@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, lt, lte, ne, or, sql } from 'drizzle-orm';
 import {
   assets,
   auditLog,
@@ -56,26 +56,81 @@ export class TradeGroupsService {
   ) {}
 
   async list(userId: string, query: TradeGroupListQuery): Promise<TradeGroupsResponse> {
-    const rows = await this.queryRows(userId, query, query.limit + 1);
-    const priceByAsset = await this.pricing.latestForAssets([
-      ...new Set(rows.map((row) => row.asset.id)),
-    ]);
-    const summaries = rows.map((row) => this.toSummary(row, priceByAsset.get(row.asset.id)));
-    const filtered = query.pnl
-      ? summaries.filter((summary) => {
-          if (summary.totalPnlUsd === null) return false;
-          const pnl = decimal(summary.totalPnlUsd);
-          return query.pnl === 'positive' ? pnl.gt(0) : pnl.lt(0);
-        })
-      : summaries;
-    const page = makePage(rows, query.limit, (row) =>
-      encodeCursor({ openedAt: row.group.openedAt.toISOString(), id: row.group.id }),
+    const needsSummaryFilter =
+      Boolean(query.pnl) || query.view === 'profitable' || query.view === 'losing';
+
+    if (!needsSummaryFilter) {
+      const rows = await this.queryRows(userId, query, query.limit + 1);
+      const priceByAsset = await this.pricing.latestForAssets([
+        ...new Set(rows.map((row) => row.asset.id)),
+      ]);
+      const summaries = rows.map((row) => this.toSummary(row, priceByAsset.get(row.asset.id)));
+      const page = makePage(rows, query.limit, (row) =>
+        encodeCursor({ openedAt: row.group.openedAt.toISOString(), id: row.group.id }),
+      );
+
+      return {
+        data: summaries.slice(0, query.limit),
+        page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
+      };
+    }
+
+    const batchSize = Math.max(query.limit + 1, 50);
+    const matched: TradeGroupSummary[] = [];
+    let cursor = query.cursor;
+    let exhausted = false;
+
+    while (matched.length <= query.limit && !exhausted) {
+      const rows = await this.queryRows(userId, { ...query, cursor }, batchSize);
+      if (rows.length === 0) break;
+
+      const priceByAsset = await this.pricing.latestForAssets([
+        ...new Set(rows.map((row) => row.asset.id)),
+      ]);
+      for (const row of rows) {
+        const summary = this.toSummary(row, priceByAsset.get(row.asset.id));
+        if (this.matchesSummaryFilter(summary, query)) matched.push(summary);
+      }
+
+      exhausted = rows.length < batchSize;
+      const last = rows.at(-1);
+      if (!exhausted && last) {
+        cursor = encodeCursor({
+          openedAt: last.group.openedAt.toISOString(),
+          id: last.group.id,
+        });
+      }
+    }
+
+    const page = makePage(matched, query.limit, (summary) =>
+      encodeCursor({ openedAt: summary.openedAt, id: summary.id }),
     );
 
     return {
-      data: filtered.slice(0, query.limit),
+      data: page.data,
       page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
     };
+  }
+
+  private matchesSummaryFilter(
+    summary: TradeGroupSummary,
+    query: Partial<TradeGroupListQuery>,
+  ): boolean {
+    if (query.pnl) {
+      if (summary.totalPnlUsd === null) return false;
+      const pnl = decimal(summary.totalPnlUsd);
+      if (query.pnl === 'positive' ? !pnl.gt(0) : !pnl.lt(0)) return false;
+    }
+
+    if (!query.view) return true;
+
+    const active = summary.status !== 'closed' && decimal(summary.remainingAmount).gt(0);
+    if (query.view === 'closed') return summary.status === 'closed';
+    if (!active) return false;
+    if (query.view === 'active') return true;
+    if (!summary.totalPnlUsd) return false;
+    const pnl = decimal(summary.totalPnlUsd);
+    return query.view === 'profitable' ? pnl.gt(0) : pnl.lt(0);
   }
 
   async get(userId: string, groupId: string): Promise<TradeGroupDetail> {
@@ -321,6 +376,20 @@ export class TradeGroupsService {
     if (query.search) {
       const pattern = `%${query.search}%`;
       conditions.push(or(ilike(assets.symbol, pattern), ilike(assets.name, pattern))!);
+    }
+    if (query.view) {
+      if (query.view === 'closed') {
+        conditions.push(eq(tradeGroups.status, 'closed'));
+      } else {
+        conditions.push(ne(tradeGroups.status, 'closed'));
+        conditions.push(
+          sql`exists (
+            select 1 from ${lots}
+            where ${lots.tradeGroupId} = ${tradeGroups.id}
+              and ${lots.remainingAmount} > 0
+          )`,
+        );
+      }
     }
     if (query.cursor) {
       const cursor = decodeCursor<{ openedAt: string; id: string }>(query.cursor);

@@ -12,6 +12,7 @@ export function Drawer({
   wide = false,
   size,
   inert = false,
+  closeDisabled = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,19 +24,22 @@ export function Drawer({
   wide?: boolean;
   size?: 'md' | 'lg' | 'third';
   inert?: boolean;
+  closeDisabled?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+  const closeDisabledRef = useRef(closeDisabled);
 
   useEffect(() => {
     onCloseRef.current = onClose;
-  }, [onClose]);
+    closeDisabledRef.current = closeDisabled;
+  }, [onClose, closeDisabled]);
 
   useEffect(() => {
     if (!open) return;
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onCloseRef.current();
+      if (event.key === 'Escape' && !closeDisabledRef.current) onCloseRef.current();
     }
 
     document.addEventListener('keydown', onKeyDown);
@@ -59,7 +63,7 @@ export function Drawer({
       aria-hidden={inert || undefined}
       inert={inert || undefined}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !closeDisabled) onClose();
       }}
     >
       <div
@@ -86,7 +90,8 @@ export function Drawer({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            disabled={closeDisabled}
+            className="rounded-md px-2 py-1 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Закрыть"
           >
             ✕

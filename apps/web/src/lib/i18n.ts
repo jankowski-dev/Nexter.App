@@ -10,7 +10,7 @@ export const messages = {
     operations: 'Операции',
     finance: 'Финансы',
     watchlist: 'База токенов',
-    reports: 'Отчёты',
+    reports: 'Статистика',
     vault: 'Хранилище',
     tasks: 'Задачи',
     notes: 'Заметки',

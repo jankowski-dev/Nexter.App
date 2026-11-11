@@ -73,7 +73,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   ).accounts;
   const based = assets.find((asset) => asset.symbol === 'BASED');
   const usdt = assets.find((asset) => asset.symbol === 'USDT');
-  const usdc = assets.find((asset) => asset.symbol === 'USDC');
   const wallet = accounts.find((account) => account.name === 'Tangem BSC');
   expect(based).toBeDefined();
   expect(usdt).toBeDefined();
@@ -128,7 +127,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
-  await expect(page.getByText('Кривая капитала')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Задачи на сегодня' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Без вредных привычек' })).toBeVisible();
+  await expect(page.getByText('Чистая прибыль за месяц')).toBeVisible();
+  await expect(page.getByText('Средний расход в день')).toBeVisible();
   await page.getByRole('button', { name: 'Тёмная тема' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
@@ -136,12 +140,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.getByRole('button', { name: 'Светлая тема' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.getByText('Капитал').first()).toBeVisible();
-  await expect(page.getByText('Итого P&L').first()).toBeVisible();
-  await expect(page.getByText('Качество торговли')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Доходность по месяцам' })).toBeVisible();
-  await expect(page.getByText('Кривая капитала')).toBeVisible();
-  await expect(page.getByText(/135,00/).first()).toBeVisible();
 
   await page.goto('/operations');
   await expect(page.getByRole('heading', { name: 'Операции' })).toBeVisible();
@@ -149,8 +147,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.getByRole('tab', { name: 'Пополнения' }).click();
   await expect(page.getByText('Пополнение').first()).toBeVisible();
 
-  await page.goto('/reports');
-  await expect(page.getByRole('heading', { name: 'Отчёты' })).toBeVisible();
+  await page.goto('/statistics');
+  await expect(page.getByRole('heading', { name: 'Статистика' })).toBeVisible();
   await expect(page.getByText('Итоги за период')).toBeVisible();
   await expect(page.getByRole('button', { name: '12 месяцев' })).toBeVisible();
   await expect(page.getByText('Разбивка по активам')).toBeVisible();
@@ -179,17 +177,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/portfolio');
   await page.getByRole('tab', { name: 'Сделки' }).click();
-  await expect(page.getByRole('heading', { name: 'Сделки' })).toBeVisible();
+  await expect(page.getByText('Активные сделки')).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   const tradeDrawer = page.getByRole('dialog');
-  await expect(tradeDrawer.getByRole('heading', { name: /BASED/ })).toBeVisible();
-  await tradeDrawer.getByRole('button', { name: 'Выйти из сделки' }).click();
-  const closeTradesDialog = page.getByRole('dialog');
-  await expect(closeTradesDialog.getByRole('heading', { name: 'Закрытие сделок' })).toBeVisible();
-  await expect(closeTradesDialog.getByText('Очередь закрытия')).toBeVisible();
-  await closeTradesDialog.getByLabel('Закрыть').click();
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
-  await page.getByRole('link', { name: 'Полная карточка' }).click();
+  await expect(tradeDrawer.getByRole('heading', { name: 'Продать BASED' })).toBeVisible();
+  await expect(tradeDrawer.getByText('Текущая сделка')).toBeVisible();
+  await tradeDrawer.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
   await expect(page.getByText('Ноги сделки')).toBeVisible();
   await expect(page.getByText('Лоты').first()).toBeVisible();
@@ -203,29 +196,20 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Playwright trade note')).toBeVisible();
 
   await page.goto('/portfolio');
-  await page.getByRole('button', { name: 'Новая сделка' }).click();
+  await page.getByRole('button', { name: 'Ручная сделка' }).click();
   const tradeDialog = page.getByRole('dialog');
-  await expect(tradeDialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
-  await tradeDialog.getByLabel('Актив', { exact: true }).selectOption(based?.id ?? '');
+  await expect(tradeDialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
+  await tradeDialog
+    .locator('select')
+    .nth(0)
+    .selectOption(based?.id ?? '');
   await tradeDialog.getByLabel('Количество BASED').fill('1');
-  await tradeDialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdc?.id ?? '');
-  await tradeDialog.getByLabel('Сумма USDC').fill('2');
-  await tradeDialog.getByRole('button', { name: 'Выполнить on-chain' }).click();
-  await expect(tradeDialog.getByText('Кошелёк Tangem')).toBeVisible();
-  await tradeDialog.getByRole('button', { name: 'Записать' }).click();
-  await tradeDialog.getByLabel('Валюта покупки', { exact: true }).selectOption(usdt?.id ?? '');
-  await tradeDialog.getByLabel('Сумма USDT').fill('2');
+  await tradeDialog
+    .locator('select')
+    .nth(1)
+    .selectOption(usdt?.id ?? '');
+  await tradeDialog.getByLabel('Сумма покупки').fill('2');
   await tradeDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-
-  await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
-  const assetDrawerForClose = page.getByRole('dialog');
-  await assetDrawerForClose.getByRole('button', { name: 'Закрыть позиции' }).click();
-  const closeDialog = page.getByRole('dialog');
-  await expect(closeDialog.getByText('Закрываемые позиции')).toBeVisible();
-  await closeDialog.getByRole('checkbox').first().check();
-  await expect(closeDialog.getByLabel(/Количество BASED/)).not.toHaveValue('');
-  await closeDialog.getByRole('button', { name: 'Отмена' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/watchlist');
@@ -300,15 +284,21 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain('transactions');
 
-  await page.goto('/portfolio');
-  await page.getByRole('button', { name: 'Новая сделка' }).click();
+  await page.goto('/operations');
+  await page.getByRole('button', { name: 'Новая операция' }).click();
   const manualDialog = page.getByRole('dialog');
-  await expect(manualDialog.getByRole('tab', { name: 'Сделка' })).toBeVisible();
-  await manualDialog.getByRole('tab', { name: 'Пополнение' }).click();
-  await manualDialog.getByLabel('Кошелёк').selectOption(wallet?.id ?? '');
-  await manualDialog.getByLabel('Актив', { exact: true }).selectOption(usdt?.id ?? '');
-  await manualDialog.getByLabel('Количество', { exact: true }).fill('5');
-  await manualDialog.getByLabel('USD стоимость', { exact: true }).fill('5');
+  await expect(manualDialog.getByRole('heading', { name: 'Новая операция' })).toBeVisible();
+  await manualDialog.getByRole('button', { name: 'Пополнение' }).click();
+  await manualDialog
+    .locator('select')
+    .nth(0)
+    .selectOption(wallet?.id ?? '');
+  await manualDialog
+    .locator('select')
+    .nth(1)
+    .selectOption(usdt?.id ?? '');
+  await manualDialog.getByLabel('Количество USDT').fill('5');
+  await manualDialog.getByLabel('Сколько USD потрачено на токены').fill('5');
   await manualDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 

@@ -1,27 +1,16 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import {
-  CalendarIcon,
-  CheckIcon,
-  ClipboardIcon,
-  ImageIcon,
-  TagIcon,
-  TrashIcon,
-  UndoIcon,
-} from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchTasks, updateTask } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDate } from '@/lib/format';
-import { isTaskOverdue } from '@/lib/tasks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Task, TaskStatus } from '@nexter/contracts';
 import { TaskCalendar } from './task-calendar';
 import { TaskDialog } from './task-dialog';
+import { TaskCompactRow } from './task-row';
 
 type TaskFilter = 'all' | 'open' | 'done';
 type TaskView = 'list' | 'calendar';
@@ -37,25 +26,6 @@ const filterLabels: Record<TaskFilter, string> = {
   all: 'Все',
   open: 'Открытые',
   done: 'Выполненные',
-};
-
-const statusLabels: Record<TaskStatus, string> = {
-  open: 'Открыта',
-  done: 'Выполнена',
-  cancelled: 'Отменена',
-};
-
-const statusTones: Record<TaskStatus, 'neutral' | 'success' | 'info'> = {
-  open: 'info',
-  done: 'success',
-  cancelled: 'neutral',
-};
-
-const priorityLabels: Record<number, string> = {
-  0: 'Низкий',
-  1: 'Обычный',
-  2: 'Высокий',
-  3: 'Критичный',
 };
 
 function dateInputValue(date: Date): string {
@@ -289,114 +259,23 @@ export function TasksPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {rows.map((task) => {
-              const overdue = isTaskOverdue(task, now);
-              const done = task.status === 'done';
-              return (
-                <Card
-                  key={task.id}
-                  data-task-id={task.id}
-                  className={`flex items-center justify-between gap-3 p-3 transition-colors hover:border-emerald-300 ${
-                    task.archivedAt ? 'opacity-60' : ''
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => openView(task)}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    aria-label={`Открыть задачу ${task.title}`}
-                  >
-                    <span
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                        done
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : overdue
-                            ? 'bg-red-50 text-red-700'
-                            : 'bg-sky-50 text-sky-700'
-                      }`}
-                    >
-                      <ClipboardIcon />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`truncate text-sm font-semibold ${
-                            done ? 'text-zinc-500' : 'text-zinc-900'
-                          }`}
-                        >
-                          {task.title}
-                        </span>
-                        <Badge tone={statusTones[task.status]}>{statusLabels[task.status]}</Badge>
-                        {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
-                        {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                      </span>
-                      <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                        <span className="flex items-center gap-1">
-                          <CalendarIcon className="h-3.5 w-3.5" />
-                          {task.dueAt ? formatDate(task.dueAt) : 'Без срока'}
-                        </span>
-                        <span>{priorityLabels[task.priority] ?? 'Обычный'}</span>
-                        {task.recurrence ? <span>↻ Повтор</span> : null}
-                        {task.tags.length > 0 ? (
-                          <span className="flex min-w-0 items-center gap-1">
-                            <TagIcon />
-                            <span className="truncate">{task.tags.join(', ')}</span>
-                          </span>
-                        ) : null}
-                        {task.images.length > 0 ? (
-                          <span className="flex items-center gap-1">
-                            <ImageIcon />
-                            {task.images.length}
-                          </span>
-                        ) : null}
-                      </span>
-                    </span>
-                  </button>
-
-                  <div className="flex shrink-0 items-center gap-1">
-                    {task.archivedAt ? (
-                      <Button
-                        variant="ghost"
-                        className="h-8 w-8 p-0"
-                        aria-label="Вернуть задачу"
-                        title="Вернуть"
-                        onClick={() => restoreMutation.mutate(task)}
-                        disabled={restoreMutation.isPending}
-                      >
-                        <UndoIcon />
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          variant="ghost"
-                          className={`h-8 w-8 p-0 ${done ? 'text-zinc-500' : 'text-emerald-700'}`}
-                          aria-label={done ? 'Вернуть в работу' : 'Завершить задачу'}
-                          title={done ? 'Вернуть в работу' : 'Завершить'}
-                          onClick={() =>
-                            statusMutation.mutate({
-                              task,
-                              status: done ? 'open' : 'done',
-                            })
-                          }
-                          disabled={statusMutation.isPending}
-                        >
-                          {done ? <UndoIcon /> : <CheckIcon />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
-                          aria-label="Удалить задачу"
-                          title="Удалить"
-                          onClick={() => setDrawer({ task, startWithDelete: true })}
-                        >
-                          <TrashIcon />
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
+            {rows.map((task) => (
+              <TaskCompactRow
+                key={task.id}
+                task={task}
+                now={now}
+                onOpen={() => openView(task)}
+                onToggleStatus={() =>
+                  statusMutation.mutate({
+                    task,
+                    status: task.status === 'done' ? 'open' : 'done',
+                  })
+                }
+                onDelete={() => setDrawer({ task, startWithDelete: true })}
+                onRestore={task.archivedAt ? () => restoreMutation.mutate(task) : undefined}
+                busy={statusMutation.isPending || restoreMutation.isPending}
+              />
+            ))}
           </div>
         )
       ) : null}

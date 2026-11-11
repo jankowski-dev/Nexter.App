@@ -11,6 +11,7 @@ import {
   formatDateTime,
   formatSignedUsd,
   formatTokenAmount,
+  formatPrice,
   formatUsd,
   pnlTone,
 } from '@/lib/format';
@@ -110,7 +111,7 @@ export function AssetDetailPage() {
         <Card>
           <CardTitle>Цена</CardTitle>
           <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-            {formatUsd(position?.priceUsd ?? null)}
+            {formatPrice(position?.priceUsd ?? null)}
           </div>
           <CardDescription>Последняя цена</CardDescription>
         </Card>
@@ -168,7 +169,7 @@ export function AssetDetailPage() {
             Последние цены:{' '}
             {data.prices
               .slice(0, 5)
-              .map((item) => `${formatUsd(item.priceUsd)} (${formatDateTime(item.observedAt)})`)
+              .map((item) => `${formatPrice(item.priceUsd)} (${formatDateTime(item.observedAt)})`)
               .join(' · ')}
           </div>
         ) : null}

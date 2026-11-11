@@ -20,6 +20,7 @@ describe('swap token registry', () => {
     expect(getSwapChain('ethereum')?.chainId).toBe(1);
     expect(getSwapChain('bsc')?.tokens.map((token) => token.symbol)).toEqual([
       'USDC',
+      'USDT',
       'XNY',
       'BASED',
       'APR',
@@ -29,6 +30,7 @@ describe('swap token registry', () => {
     ]);
     expect(getSwapChain('ethereum')?.tokens.map((token) => token.symbol)).toEqual([
       'USDC',
+      'USDT',
       'LINK',
       'BASED',
       'APR',

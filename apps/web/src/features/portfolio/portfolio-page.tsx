@@ -8,6 +8,7 @@ import { toRussianError } from '@/lib/error-messages';
 import {
   formatCount,
   formatPct,
+  formatPrice,
   formatSignedUsd,
   formatTokenAmount,
   formatUsd,
@@ -15,39 +16,45 @@ import {
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
-import { useState } from 'react';
-import type { TradeGroupSummary } from '@nexter/contracts';
+import { useCallback, useState } from 'react';
+import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
-import { TradeDialog } from '../trade/trade-dialog';
-import { AssetDrawer } from './asset-drawer';
-import { CloseTradesDialog } from './close-trades-dialog';
-import { MassCloseDrawer } from './mass-close-drawer';
-import { TradeDrawer } from './trade-drawer';
+import { ManualTradeDialog } from '../trade/manual-trade-dialog';
+import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
+import { AssetDrawer } from './asset-drawer';
+import { TokenBuyList } from './token-buy-list';
 
-type PortfolioTab = 'portfolio' | 'trades';
+type PortfolioTab = 'portfolio' | 'buy' | 'trades';
 
-interface TradeInitial {
-  side: 'entry' | 'exit';
-  assetId: string;
+function tabFromHash(): PortfolioTab {
+  if (typeof window === 'undefined') return 'portfolio';
+  if (window.location.hash === '#trades') return 'trades';
+  if (window.location.hash === '#buy') return 'buy';
+  return 'portfolio';
 }
 
 export function PortfolioPage() {
-  const [tab, setTab] = useState<PortfolioTab>(() =>
-    typeof window !== 'undefined' && window.location.hash === '#trades' ? 'trades' : 'portfolio',
-  );
+  const [tab, setTab] = useState<PortfolioTab>(tabFromHash);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [selectedGroups, setSelectedGroups] = useState<TradeGroupSummary[]>([]);
-  const [tradeDrawerId, setTradeDrawerId] = useState<string | null>(null);
-  const [massDrawerOpen, setMassDrawerOpen] = useState(false);
-  const [closeGroups, setCloseGroups] = useState<TradeGroupSummary[]>([]);
-  const [closeOpen, setCloseOpen] = useState(false);
-  const [tradeOpen, setTradeOpen] = useState(false);
-  const [tradeInitial, setTradeInitial] = useState<TradeInitial>({
-    side: 'entry',
-    assetId: '',
+  const [buyTarget, setBuyTarget] = useState<{
+    asset: Asset;
+    marketPriceUsd: string | null;
+  } | null>(null);
+  const [sellGroup, setSellGroup] = useState<TradeGroupSummary | null>(null);
+  const [manual, setManual] = useState<{
+    assetId?: string;
+    side?: 'entry' | 'exit';
+    tradeGroupId?: string;
+  } | null>(null);
+  const positions = useQuery({
+    queryKey: ['positions'],
+    queryFn: fetchPositions,
+    refetchInterval: 15_000,
   });
-  const positions = useQuery({ queryKey: ['positions'], queryFn: fetchPositions });
+  const refetchPositions = useCallback(() => {
+    void positions.refetch();
+  }, [positions.refetch]);
   const watchlistLogos = useWatchlistLogos();
 
   if (positions.isPending) {
@@ -65,7 +72,7 @@ export function PortfolioPage() {
         <PageHeader title="Портфель" />
         <ErrorState
           message={toRussianError(positions.error, 'Не удалось загрузить позиции')}
-          onRetry={() => void positions.refetch()}
+          onRetry={refetchPositions}
         />
       </div>
     );
@@ -75,64 +82,55 @@ export function PortfolioPage() {
   const sortedPositions = [...data.positions].sort((a, b) =>
     new Decimal(b.costBasisUsd).comparedTo(a.costBasisUsd),
   );
+  const positionByAsset = new Map(data.positions.map((position) => [position.asset.id, position]));
 
   function changeTab(next: PortfolioTab): void {
     setTab(next);
-    setSelectedGroups([]);
-    setTradeDrawerId(null);
-    setMassDrawerOpen(false);
-    window.history.replaceState(null, '', next === 'trades' ? '#trades' : '#portfolio');
-  }
-
-  function openNewTrade(): void {
-    setTradeInitial({ side: 'entry', assetId: '' });
-    setTradeOpen(true);
+    setSelectedAssetId(null);
+    setBuyTarget(null);
+    setSellGroup(null);
+    window.history.replaceState(
+      null,
+      '',
+      next === 'trades' ? '#trades' : next === 'buy' ? '#buy' : '#portfolio',
+    );
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Портфель"
-        subtitle="Активы, сделки и статистика по токенам."
+        subtitle="Позиции, покупка токенов и сделки."
         actions={
-          <>
-            {tab === 'trades' && selectedGroups.length > 0 ? (
-              <Button variant="danger" onClick={() => setMassDrawerOpen(true)}>
-                Закрыть сделки ({formatCount(selectedGroups.length)})
-              </Button>
-            ) : null}
-            <Button onClick={openNewTrade}>Новая сделка</Button>
-          </>
+          <Button variant="secondary" onClick={() => setManual({})}>
+            Ручная сделка
+          </Button>
         }
       />
 
-      <div className="flex gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-        <button
-          type="button"
-          onClick={() => changeTab('portfolio')}
-          className={`rounded-md px-4 py-2 text-sm ${
-            tab === 'portfolio'
-              ? 'bg-white text-zinc-900 shadow-sm'
-              : 'text-zinc-500 hover:text-zinc-900'
-          }`}
-          aria-selected={tab === 'portfolio'}
-          role="tab"
-        >
-          Портфель
-        </button>
-        <button
-          type="button"
-          onClick={() => changeTab('trades')}
-          className={`rounded-md px-4 py-2 text-sm ${
-            tab === 'trades'
-              ? 'bg-white text-zinc-900 shadow-sm'
-              : 'text-zinc-500 hover:text-zinc-900'
-          }`}
-          aria-selected={tab === 'trades'}
-          role="tab"
-        >
-          Сделки
-        </button>
+      <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+        {(
+          [
+            ['portfolio', 'Портфель'],
+            ['buy', 'Основной список'],
+            ['trades', 'Сделки'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => changeTab(value)}
+            className={`rounded-md px-4 py-2 text-sm ${
+              tab === value
+                ? 'bg-white text-zinc-900 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-900'
+            }`}
+            aria-selected={tab === value}
+            role="tab"
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {tab === 'portfolio' ? (
@@ -234,13 +232,13 @@ export function PortfolioPage() {
                             </button>
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                            {formatTokenAmount(position.amount)}
+                            {formatTokenAmount(position.amount, 8)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                            {formatPrice(position.priceUsd)}
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {formatUsd(position.priceUsd)}
-                          </td>
-                          <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {formatUsd(position.avgCostUsd)}
+                            {formatPrice(position.avgCostUsd)}
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
                             {formatUsd(position.valueUsd)}
@@ -249,17 +247,19 @@ export function PortfolioPage() {
                             {formatUsd(position.costBasisUsd)}
                           </td>
                           <td
-                            className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(position.unrealizedPnlUsd)}`}
+                            className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
+                              position.unrealizedPnlUsd,
+                            )}`}
                           >
                             {formatSignedUsd(position.unrealizedPnlUsd)}
                           </td>
                           <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                            {share === null ? '—' : formatPct(String(share))}
+                            {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
                           </td>
                           <td className="py-2 text-right">
                             <Button
                               variant="ghost"
-                              className="h-8 px-3 text-xs"
+                              className="h-8 px-2 text-xs"
                               onClick={() => setSelectedAssetId(position.asset.id)}
                             >
                               Статистика
@@ -274,56 +274,78 @@ export function PortfolioPage() {
             )}
           </Card>
         </>
-      ) : (
-        <TradesPanel
-          selectedIds={selectedGroups.map((group) => group.id)}
-          onSelectionChange={setSelectedGroups}
-          onOpenTrade={setTradeDrawerId}
-          logos={watchlistLogos}
+      ) : null}
+
+      {tab === 'buy' ? (
+        <TokenBuyList
+          positions={data.positions}
+          onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
+          onManual={(asset) => {
+            setManual({ assetId: asset.id, side: 'entry' });
+          }}
         />
-      )}
+      ) : null}
+
+      {tab === 'trades' ? <TradesPanel onOpenTrade={setSellGroup} logos={watchlistLogos} /> : null}
 
       <AssetDrawer
         assetId={selectedAssetId}
         logoFallback={selectedAssetId ? (watchlistLogos.get(selectedAssetId) ?? null) : null}
         onClose={() => setSelectedAssetId(null)}
-        onTrade={(input) => {
-          setTradeInitial({ side: input.side, assetId: input.assetId });
-          setTradeOpen(true);
+        onBuy={(asset) => {
+          setSelectedAssetId(null);
+          setBuyTarget({
+            asset,
+            marketPriceUsd: positionByAsset.get(asset.id)?.priceUsd ?? null,
+          });
         }}
       />
-      <TradeDrawer
-        tradeId={tradeDrawerId}
-        onClose={() => setTradeDrawerId(null)}
-        onCloseTrade={(group) => {
-          setCloseGroups([group]);
-          setCloseOpen(true);
-        }}
-      />
-      <MassCloseDrawer
-        open={massDrawerOpen}
-        onClose={() => setMassDrawerOpen(false)}
-        groups={selectedGroups}
-        onCloseTrades={(groups) => {
-          setCloseGroups(groups);
-          setCloseOpen(true);
-        }}
-      />
-      <CloseTradesDialog
-        open={closeOpen}
-        onClose={() => {
-          setCloseOpen(false);
-          setCloseGroups([]);
-        }}
-        groups={closeGroups}
-        onCompleted={() => setSelectedGroups([])}
-      />
-      <TradeDialog
-        open={tradeOpen}
-        onClose={() => setTradeOpen(false)}
-        initialMode="trade"
-        initialSide={tradeInitial.side}
-        initialAssetId={tradeInitial.assetId}
+
+      {buyTarget ? (
+        <TokenTradeDrawer
+          token={buyTarget.asset}
+          initialMode="buy"
+          marketPriceUsd={buyTarget.marketPriceUsd}
+          onClose={() => setBuyTarget(null)}
+          onCompleted={refetchPositions}
+          onManual={(input) => {
+            setBuyTarget(null);
+            setManual({
+              assetId: input.asset.id,
+              side: input.side === 'buy' ? 'entry' : 'exit',
+              tradeGroupId: input.tradeGroupId ?? undefined,
+            });
+          }}
+        />
+      ) : null}
+
+      {sellGroup ? (
+        <TokenTradeDrawer
+          token={sellGroup.asset}
+          initialMode="sell"
+          tradeGroupId={sellGroup.id}
+          marketPriceUsd={positionByAsset.get(sellGroup.asset.id)?.priceUsd ?? null}
+          onClose={() => setSellGroup(null)}
+          onCompleted={refetchPositions}
+          onManual={(input) => {
+            setSellGroup(null);
+            setManual({
+              assetId: input.asset.id,
+              side: 'exit',
+              tradeGroupId: input.tradeGroupId ?? undefined,
+            });
+          }}
+        />
+      ) : null}
+
+      <ManualTradeDialog
+        key={`${manual?.assetId ?? 'none'}-${manual?.side ?? 'entry'}-${manual?.tradeGroupId ?? 'none'}`}
+        open={Boolean(manual)}
+        initialAssetId={manual?.assetId}
+        initialSide={manual?.side}
+        initialTradeGroupId={manual?.tradeGroupId}
+        onClose={() => setManual(null)}
+        onSaved={refetchPositions}
       />
     </div>
   );

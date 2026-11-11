@@ -508,10 +508,10 @@ export class LedgerService {
               closeTotal = closeTotal.plus(decimal(group.remaining));
             }
 
-            if (!closeTotal.eq(amountIn)) {
+            if (closeTotal.lt(amountIn)) {
               throw new BadRequestException({
                 code: 'SWAP_CLOSE_AMOUNT_MISMATCH',
-                message: 'Swap amount must equal the remaining amount of the selected close groups',
+                message: 'Swap amount exceeds the remaining amount of the selected close group',
                 details: {
                   closeGroupIds: input.closeGroupIds,
                   amountIn: amountIn.toFixed(tokenIn.decimals),

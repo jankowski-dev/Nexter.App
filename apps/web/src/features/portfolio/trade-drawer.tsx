@@ -5,7 +5,14 @@ import { Drawer } from '@/components/ui/drawer';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchAssets, fetchTradeGroup } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDate, formatSignedUsd, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
+import {
+  formatDate,
+  formatPrice,
+  formatSignedUsd,
+  formatTokenAmount,
+  formatUsd,
+  pnlTone,
+} from '@/lib/format';
 import type { TradeGroupSummary } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -138,7 +145,7 @@ export function TradeDrawer({
             <Metric
               label="Остаток"
               value={formatTokenAmount(group.remainingAmount)}
-              hint={`Средняя цена ${formatUsd(averagePrice?.toFixed(8) ?? null)}`}
+              hint={`Средняя цена ${formatPrice(averagePrice?.toFixed(12) ?? null)}`}
             />
             <Metric
               label="Текущая стоимость"
