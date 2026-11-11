@@ -14,6 +14,9 @@ export interface CoinGeckoToken {
 export interface CoinGeckoMarket {
   priceUsd: string;
   change24hPct: string | null;
+  change7dPct: string | null;
+  change30dPct: string | null;
+  change1yPct: string | null;
   logoUrl: string | null;
   marketCapUsd: string | null;
   volume24hUsd: string | null;
@@ -115,7 +118,7 @@ export class CoinGeckoClient {
 
     for (const chunk of chunks) {
       const body = await this.fetchJson(
-        `/coins/markets?vs_currency=usd&ids=${encodeURIComponent(chunk.join(','))}&price_change_percentage=24h`,
+        `/coins/markets?vs_currency=usd&ids=${encodeURIComponent(chunk.join(','))}&price_change_percentage=24h,7d,30d,1y`,
       );
 
       if (!Array.isArray(body)) continue;
@@ -126,6 +129,12 @@ export class CoinGeckoClient {
           id?: unknown;
           current_price?: unknown;
           price_change_percentage_24h?: unknown;
+          price_change_percentage_7d_in_currency?: unknown;
+          price_change_percentage_30d_in_currency?: unknown;
+          price_change_percentage_1y_in_currency?: unknown;
+          price_change_percentage_7d?: unknown;
+          price_change_percentage_30d?: unknown;
+          price_change_percentage_1y?: unknown;
           image?: unknown;
           market_cap?: unknown;
           total_volume?: unknown;
@@ -138,6 +147,15 @@ export class CoinGeckoClient {
         const market: CoinGeckoMarket = {
           priceUsd: price,
           change24hPct: optionalPercent(row.price_change_percentage_24h),
+          change7dPct: optionalPercent(
+            row.price_change_percentage_7d_in_currency ?? row.price_change_percentage_7d,
+          ),
+          change30dPct: optionalPercent(
+            row.price_change_percentage_30d_in_currency ?? row.price_change_percentage_30d,
+          ),
+          change1yPct: optionalPercent(
+            row.price_change_percentage_1y_in_currency ?? row.price_change_percentage_1y,
+          ),
           logoUrl: typeof row.image === 'string' ? row.image : null,
           marketCapUsd: optionalNumber(row.market_cap),
           volume24hUsd: optionalNumber(row.total_volume),

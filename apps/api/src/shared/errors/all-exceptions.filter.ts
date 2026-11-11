@@ -181,7 +181,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     }
 
-    if (request.url.startsWith('/api/v1/auth/')) {
+    if (request.url.startsWith('/api/v1/')) {
       void reply.header('Cache-Control', 'no-store');
     }
 

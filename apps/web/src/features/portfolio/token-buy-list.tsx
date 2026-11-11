@@ -3,10 +3,18 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
+import { PeriodChange } from '@/components/period-change';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPct, formatPrice, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
+import {
+  formatPct,
+  formatPrice,
+  formatTokenAmount,
+  formatUsd,
+  formatUsdCompact,
+  pnlTone,
+} from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import type { Asset, Position, SwapConfigResponse } from '@nexter/contracts';
 
@@ -84,7 +92,7 @@ export function TokenBuyList({
         </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                 <th className="py-2 pr-3 font-medium">Токен</th>
@@ -92,6 +100,10 @@ export function TokenBuyList({
                 <th className="py-2 pr-3 text-right font-medium">Цена</th>
                 <th className="py-2 pr-3 font-medium">Обновлено</th>
                 <th className="py-2 pr-3 text-right font-medium">24ч</th>
+                <th className="py-2 pr-3 text-right font-medium">7д</th>
+                <th className="py-2 pr-3 text-right font-medium">30д</th>
+                <th className="py-2 pr-3 text-right font-medium">1г</th>
+                <th className="py-2 pr-3 text-right font-medium">Кап.</th>
                 <th className="py-2 pr-3 text-right font-medium">В портфеле</th>
                 <th className="py-2 text-right font-medium">Стоимость</th>
               </tr>
@@ -163,6 +175,12 @@ export function TokenBuyList({
                       <LiveValue value={entry.change24hPct ? formatPct(entry.change24hPct) : '—'}>
                         {entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
                       </LiveValue>
+                    </td>
+                    <PeriodChange value={entry.change7dPct} />
+                    <PeriodChange value={entry.change30dPct} />
+                    <PeriodChange value={entry.change1yPct} />
+                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                      {entry.marketCapUsd ? formatUsdCompact(entry.marketCapUsd) : '—'}
                     </td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                       {position ? formatTokenAmount(position.amount, 8) : '—'}

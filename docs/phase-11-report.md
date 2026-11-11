@@ -88,16 +88,33 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - See ADR 0030.
 - Production: PR #76 deployed on 2026-11-11, bundle `assets/index-4eVw9zSV.js`, `/ready` green. Migration `0028` applied; `market_quotes` had 45 rows, XNY 0.005035 from DexScreener, `nexter_app` DELETE = false. Dashboard equity moved from 1845.89 to 1757.46 and negative unrealized from 672.74 to 768.92 as quotes replaced stale manual prices. Backup `nexter-2026-11-11-ui14.dump.enc` was restore-verified (counts and sums matched) before deploy.
 
+## UI-15 cosmetic batch (2026-11-11)
+
+- Buy/sell and exchange drawers no longer render the bottom quote-status/`Готово` footer. They close on header X or backdrop mousedown; unsafe execution phases keep the close guard.
+- The trade journal drops the quality/reconciled column and keeps only the source.
+- The live-refresh fan has no bordered background and is slightly larger.
+- The vault list is full width with instant client-side search by title, login, or URL.
+- Task and note drawers show a transient three-second `Сохранение…` indicator with a moving loader; the permanent autosave/status text is removed. The note drawer no longer offers pin/unpin; pinning stays in the compact list.
+- No migration. Production: PR #78 deployed on 2026-11-11, bundle `assets/index-DuPzXk-4.js`, `/ready` green. Backup `nexter-2026-11-11-ui15.dump.enc` was restore-verified (transactions 856, postings 3406, lots 433, trade groups 431, quotes 45, users 1; counts matched) before merge.
+
+## UI-16 multi-period changes and icon cache (2026-11-11)
+
+- `market_quotes` gains nullable 7-day, 30-day, 1-year percentage changes and market cap. CoinGecko `/coins/markets` requests 24h/7d/30d/1y; period/cap values merge into DexScreener-priced tokens, while DexScreener remains the primary price and 24-hour source.
+- New quote values are exposed on positions, portfolio asset quotes, and watchlist entries. `Позиции по активам`, `Основной список`, and the token base show 24h/7d/30d/1y; the token base sorts by cap or any period with an ascending/descending toggle.
+- Three-month history is intentionally omitted; the UI never labels a different period as three months.
+- The icon proxy caches images in memory for 24 hours with in-flight coalescing and an 8 MB/200-entry bound. The global API no-store hook exempts exactly `/api/v1/watchlist/icon`, so the existing public 24-hour browser cache header survives.
+- Migration `0029` is additive. See ADR 0031.
+
 ## Database
 
-Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), `0027` (habits), and `0028` (market quotes) are additive. `0019` adds:
+Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), `0027` (habits), `0028` (market quotes), and `0029` (multi-period quote fields) are additive. `0019` adds:
 
 - `vault_configs` (unique per user).
 - `vault_items` (owner-scoped ciphertext).
 - `tasks`.
 - `notes`.
 
-`0027` adds `habits` (`name`, `started_on`, `archived_at`) with a partial unique index on active names per user and a conditional DML grant for `nexter_app`. `0028` adds `market_quotes` (one row per asset: price, 24h change, source, liquidity, fetched/changed timestamps) and conditionally grants SELECT/INSERT/UPDATE plus revokes DELETE for `nexter_app`.
+`0027` adds `habits` (`name`, `started_on`, `archived_at`) with a partial unique index on active names per user and a conditional DML grant for `nexter_app`. `0028` adds `market_quotes` (one row per asset: price, 24h change, source, liquidity, fetched/changed timestamps) and conditionally grants SELECT/INSERT/UPDATE plus revokes DELETE for `nexter_app`. `0029` adds nullable `change_7d_pct`, `change_30d_pct`, `change_1y_pct`, and `market_cap_usd` to `market_quotes`; existing table-level grants cover the new columns.
 
 All tables are additive; no existing table or ledger row is changed.
 
@@ -105,6 +122,7 @@ All tables are additive; no existing table or ledger row is changed.
 
 - API `phase11.e2e.spec.ts`: vault setup, item archive/restore listing, ciphertext/IV pairing and base64-length validation, tasks lifecycle, notes search/update/archive, related-link validation, audit actions, and no ciphertext in audit.
 - E2E `phase11.spec.ts`: vault setup, item creation, server-side plaintext absence, reload lock, wrong password, unlock, manual lock, navigation lock, lock-with-dialog clearing, generate-password, archive/restore, task create/complete, note create/search.
+- UI-16 unit tests cover CoinGecko period merge, new-asset refresh between ticks, stale-period preservation/clearing, icon cache hit/dedup/TTL/host/content-type, and the exact icon cache-control exemption.
 - Full API and E2E suites are run before merge.
 
 ## Security notes

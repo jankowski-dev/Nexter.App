@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
+import { PeriodChange } from '@/components/period-change';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -222,12 +223,16 @@ export function PortfolioPage() {
                 <p className="mt-4 text-sm text-zinc-600">Позиций нет.</p>
               ) : (
                 <div className="mt-4 overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[1120px] text-sm">
                     <thead>
                       <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                         <th className="py-2 pr-3 font-medium">Актив</th>
                         <th className="py-2 pr-3 text-right font-medium">Количество</th>
                         <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                        <th className="py-2 pr-3 text-right font-medium">24ч</th>
+                        <th className="py-2 pr-3 text-right font-medium">7д</th>
+                        <th className="py-2 pr-3 text-right font-medium">30д</th>
+                        <th className="py-2 pr-3 text-right font-medium">1г</th>
                         <th className="py-2 pr-3 font-medium">Обновлено</th>
                         <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
                         <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
@@ -283,6 +288,10 @@ export function PortfolioPage() {
                                 {formatPrice(position.priceUsd)}
                               </LiveValue>
                             </td>
+                            <PeriodChange value={position.change24hPct} />
+                            <PeriodChange value={position.change7dPct} />
+                            <PeriodChange value={position.change30dPct} />
+                            <PeriodChange value={position.change1yPct} />
                             <td className="py-2 pr-3">
                               <PriceFreshness
                                 updatedAt={position.priceUpdatedAt}
