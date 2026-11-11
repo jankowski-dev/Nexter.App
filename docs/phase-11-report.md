@@ -86,6 +86,7 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Monthly net profit remains realized Net P&L by design; unrealized P&L and capital are price-driven.
 - Migration `0028` is additive. Pending signature cancellation remains unchanged per owner decision.
 - See ADR 0030.
+- Production: PR #76 deployed on 2026-11-11, bundle `assets/index-4eVw9zSV.js`, `/ready` green. Migration `0028` applied; `market_quotes` had 45 rows, XNY 0.005035 from DexScreener, `nexter_app` DELETE = false. Dashboard equity moved from 1845.89 to 1757.46 and negative unrealized from 672.74 to 768.92 as quotes replaced stale manual prices. Backup `nexter-2026-11-11-ui14.dump.enc` was restore-verified (counts and sums matched) before deploy.
 
 ## Database
 

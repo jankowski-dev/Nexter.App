@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for the owner feedback batch (2026-11-11). Migration `0028` adds `market_quotes`.
+Accepted and deployed on 2026-11-11. Migration `0028` added `market_quotes` after a verified encrypted backup and restore check.
 
 ## Context
 
