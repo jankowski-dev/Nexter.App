@@ -104,10 +104,11 @@ function buildExport(
     includeNewOrder?: boolean;
     closeOrder102?: boolean;
     status102?: 'Активна' | 'В продажу' | 'Резерв';
+    tokenAPrice?: number;
   } = {},
 ) {
   const usdt = sourceRow('1', 'USDT', 0.99873);
-  const tokenA = sourceRow('2', 'TOKENA', 0.12);
+  const tokenA = sourceRow('2', 'TOKENA', options.tokenAPrice ?? 0.12);
   const tokenB = sourceRow('3', 'TOKENB', 0.15);
   const closed102 = options.closeOrder102 ?? false;
 
@@ -823,7 +824,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
       })
       .expect(201);
 
-    const refreshedPreview = await preview(agent, owner.csrf, buildExport());
+    const refreshedPreview = await preview(agent, owner.csrf, buildExport({ tokenAPrice: 0.121 }));
     expect(refreshedPreview.body.import.summary.errors).toEqual([]);
     expect(refreshedPreview.body.import.summary.warnings).toEqual(
       expect.arrayContaining([expect.stringContaining('later ledger activity')]),
