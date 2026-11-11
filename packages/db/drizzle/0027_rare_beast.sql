@@ -15,6 +15,6 @@ CREATE INDEX "habits_user_archived_idx" ON "habits" USING btree ("user_id","arch
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nexter_app') THEN
-    GRANT SELECT, INSERT, UPDATE, DELETE ON habits TO nexter_app;
+    GRANT SELECT, INSERT, UPDATE ON habits TO nexter_app;
   END IF;
 END $$;
