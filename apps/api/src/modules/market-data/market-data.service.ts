@@ -15,11 +15,13 @@ interface IconCacheEntry {
 
 const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ICON_CACHE_MAX_ENTRIES = 200;
+const ICON_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 
 @Injectable()
 export class MarketDataService {
   private readonly iconCache = new Map<string, IconCacheEntry>();
   private readonly iconInFlight = new Map<string, Promise<{ body: Buffer; contentType: string }>>();
+  private iconCacheBytes = 0;
 
   constructor(
     @Inject(DB) private readonly db: Database,
@@ -118,17 +120,31 @@ export class MarketDataService {
     if (cached && cached.expiresAt > Date.now()) {
       return { body: cached.body, contentType: cached.contentType };
     }
-    if (cached) this.iconCache.delete(url);
+    if (cached) {
+      this.iconCache.delete(url);
+      this.iconCacheBytes -= cached.body.length;
+    }
 
     const inFlight = this.iconInFlight.get(url);
     if (inFlight) return inFlight;
 
     const pending = this.fetchIconUncached(url).then((icon) => {
-      if (this.iconCache.size >= ICON_CACHE_MAX_ENTRIES) {
-        const oldest = this.iconCache.keys().next().value;
-        if (oldest) this.iconCache.delete(oldest);
+      if (icon.body.length <= ICON_CACHE_MAX_BYTES) {
+        while (
+          this.iconCache.size > 0 &&
+          (this.iconCache.size >= ICON_CACHE_MAX_ENTRIES ||
+            this.iconCacheBytes + icon.body.length > ICON_CACHE_MAX_BYTES)
+        ) {
+          const oldestKey = this.iconCache.keys().next().value;
+          if (!oldestKey) break;
+          const oldest = this.iconCache.get(oldestKey);
+          this.iconCache.delete(oldestKey);
+          if (oldest) this.iconCacheBytes -= oldest.body.length;
+        }
+
+        this.iconCache.set(url, { ...icon, expiresAt: Date.now() + ICON_CACHE_TTL_MS });
+        this.iconCacheBytes += icon.body.length;
       }
-      this.iconCache.set(url, { ...icon, expiresAt: Date.now() + ICON_CACHE_TTL_MS });
       return icon;
     });
 

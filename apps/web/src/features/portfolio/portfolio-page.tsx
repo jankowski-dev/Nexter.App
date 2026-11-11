@@ -4,6 +4,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
+import { PeriodChange } from '@/components/period-change';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -38,16 +39,6 @@ function tabFromHash(): PortfolioTab {
 function viewFromHash(): PortfolioView {
   if (typeof window === 'undefined') return 'positions';
   return window.location.hash === '#list' || window.location.hash === '#buy' ? 'main' : 'positions';
-}
-
-function PeriodChange({ value }: { value: string | null }) {
-  const display = value ? formatPct(value) : '—';
-
-  return (
-    <td className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(value)}`}>
-      <LiveValue value={display}>{display}</LiveValue>
-    </td>
-  );
 }
 
 export function PortfolioPage() {

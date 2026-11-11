@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Observable } from 'rxjs';
+import { apiCacheControl } from './cache-control';
 
 @Injectable()
 export class NoStoreInterceptor implements NestInterceptor {
@@ -13,8 +14,9 @@ export class NoStoreInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const reply = context.switchToHttp().getResponse<FastifyReply>();
 
-    if (request.url.startsWith('/api/v1/') && !request.url.startsWith('/api/v1/watchlist/icon')) {
-      void reply.header('Cache-Control', 'no-store');
+    const cacheControl = apiCacheControl(request.url);
+    if (cacheControl) {
+      void reply.header('Cache-Control', cacheControl);
     }
 
     return next.handle();

@@ -3,6 +3,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
+import { PeriodChange } from '@/components/period-change';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -27,16 +28,6 @@ function isOnchainAllowed(asset: Asset, config: SwapConfigResponse | undefined):
     );
   }
   return chain.tokens.some((token) => token.native && token.symbol === asset.symbol);
-}
-
-function PeriodChange({ value }: { value: string | null }) {
-  const display = value ? formatPct(value) : '—';
-
-  return (
-    <td className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(value)}`}>
-      <LiveValue value={display}>{display}</LiveValue>
-    </td>
-  );
 }
 
 export function TokenBuyList({

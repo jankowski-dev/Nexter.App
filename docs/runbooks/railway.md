@@ -260,3 +260,11 @@ The personal-finance module creates six tables. The migration conditionally gran
 5. Verify `nexter_app` cannot delete from `market_quotes`:
    `select has_table_privilege('nexter_app', 'market_quotes', 'DELETE');` must return `false`.
 6. Rollback: redeploy the previous image. Setting `MARKET_QUOTES_ENABLED=false` only stops the refresher; `PricingService` still reads existing `market_quotes` rows. For a true manual-price fallback, take a backup and clear `market_quotes` (or revert the previous image). The table is additive and may remain.
+
+## UI-16 multi-period quotes rollout (`0029`)
+
+1. Take and restore-verify an encrypted backup; migration `0029` only adds nullable columns to `market_quotes`.
+2. Deploy `main`; pre-deploy runs `node packages/db/dist/migrate.js`. Confirm the four columns exist and `nexter_app` still has SELECT/INSERT/UPDATE and no DELETE (table-level grants cover new columns).
+3. Wait for two refresher ticks, then verify `GET /api/v1/portfolio/positions`, the token base, and `market_quotes` show non-null 7d/30d/1y/cap for CoinGecko-covered assets. DexScreener-only tokens may keep `—` for periods.
+4. Verify the icon proxy returns `Cache-Control: public, max-age=86400, immutable` and a repeated browser request is served from cache.
+5. Rollback: redeploy the previous image. The nullable columns are additive and may remain; no data rewrite is needed.

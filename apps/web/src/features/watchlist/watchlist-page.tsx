@@ -666,11 +666,14 @@ export function WatchlistPage() {
                           </LiveValue>
                         </span>
                         <span className="mt-0.5 flex justify-end gap-2 text-[11px] text-zinc-500">
-                          {periodChanges.map(({ label, value }) => (
-                            <span key={label} className={pnlTone(value)}>
-                              {label} {value ? formatPct(value) : '—'}
-                            </span>
-                          ))}
+                          {periodChanges.map(({ label, value }) => {
+                            const display = value ? formatPct(value) : '—';
+                            return (
+                              <span key={label} className={pnlTone(value)}>
+                                {label} <LiveValue value={display}>{display}</LiveValue>
+                              </span>
+                            );
+                          })}
                         </span>
                       </span>
                       <span aria-hidden="true" className="text-lg text-zinc-300">

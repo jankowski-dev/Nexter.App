@@ -18,6 +18,7 @@ import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { registerImportAuthHook } from './modules/imports/import-auth.hook';
 import { registerNotionImportBodyParser } from './modules/imports/import-body-parser';
+import { apiCacheControl } from './shared/http/cache-control';
 import { env } from './shared/config/env';
 import { parseTrustProxy } from './shared/config/trust-proxy';
 import { AllExceptionsFilter } from './shared/errors/all-exceptions.filter';
@@ -53,8 +54,9 @@ async function bootstrap(): Promise<void> {
   fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-    if (request.url.startsWith('/api/v1/')) {
-      void reply.header('Cache-Control', 'no-store');
+    const cacheControl = apiCacheControl(request.url);
+    if (cacheControl) {
+      void reply.header('Cache-Control', cacheControl);
     }
 
     done(null, payload);

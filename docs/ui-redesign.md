@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-14 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-11. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
+Status: **UI-0 through UI-16 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-11. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 
@@ -126,6 +126,8 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - **UI-12** — crypto/habits overhaul: combined main dashboard, `Статистика` rename, portfolio `Основной список`, token-first buy/sell drawer with live 10s Kyber preview and partial single-trade close, separate manual trade/operation dialogs, on-chain exchange drawer, trade tabs (active/profitable/losing/closed), live polling, exact tiny-price formatting, clearer BNB/ETH switch, background token icon backfill, and habit streaks. Migration `0027` adds `habits`. See ADR 0028.
 - **UI-13** — UI polish: reference-counted scroll lock behind dialogs/drawers, Dashboard and Tasks moved to top-level navigation, portfolio `Позиции по активам`/`Основной список` sub-tabs, Buy action next to the token name, shared BNB/ETH chain toggle and compact one-row token list in the token base, and a header live-refresh countdown with a brief green flash on updated cards. No migration. See ADR 0029.
 - **UI-14** — unified market quotes and live-value polish: `market_quotes` with DexScreener primary (60s) and CoinGecko fallback (10 min), one price source for portfolio/dashboard/trades/watchlist, per-row last-update times, value-level green flashes only when displayed values change, a spinning fan instead of the countdown, and silent WalletConnect session restore with persisted chain. Migration `0028`. See ADR 0030.
+- **UI-15** — owner cosmetic batch: trade/exchange drawers drop the footer status and `Готово` (backdrop/X close), the trade journal drops the quality/reconciled column, the fan loses its background and grows slightly, the vault list is full-width with instant search, task/note saves show a transient three-second loader, and pinning leaves the note drawer. No migration. See `docs/decisions.md`.
+- **UI-16** — multi-period market changes, token-base sorting, and icon caching: `market_quotes` gains 7d/30d/1y changes and market cap from CoinGecko; positions, Основной список, and token base show 24h/7d/30d/1y; token base sorts by cap or any period in both directions; icons are cached in the API for 24 hours and the icon route is exempt from no-store. Migration `0029`. See ADR 0031.
 
 ## Header and wallet
 

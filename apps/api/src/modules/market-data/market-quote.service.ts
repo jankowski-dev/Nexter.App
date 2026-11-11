@@ -56,25 +56,37 @@ function toValue(row: MarketQuote): MarketQuoteValue {
 
 function formatPercent(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (!decimal(value).abs().lt(99_999_999.9999)) return null;
-  return decimal(value).toFixed(4);
+  try {
+    const parsed = decimal(value);
+    if (!parsed.isFinite() || !parsed.abs().lt(99_999_999.9999)) return null;
+    return parsed.toFixed(4);
+  } catch {
+    return null;
+  }
 }
 
 function formatUsd(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (!decimal(value).isFinite() || decimal(value).lt(0)) return null;
-  return decimal(value).toFixed(2);
+  try {
+    const parsed = decimal(value);
+    if (!parsed.isFinite() || parsed.lt(0)) return null;
+    return parsed.toFixed(2);
+  } catch {
+    return null;
+  }
 }
 
 function periodValues(
   market: CoinGeckoMarket | undefined,
   existing: ExistingQuote | undefined,
 ): Pick<QuoteInput, 'change7dPct' | 'change30dPct' | 'change1yPct' | 'marketCapUsd'> {
+  const source = market ?? existing;
+
   return {
-    change7dPct: formatPercent(market?.change7dPct ?? existing?.change7dPct),
-    change30dPct: formatPercent(market?.change30dPct ?? existing?.change30dPct),
-    change1yPct: formatPercent(market?.change1yPct ?? existing?.change1yPct),
-    marketCapUsd: formatUsd(market?.marketCapUsd ?? existing?.marketCapUsd),
+    change7dPct: formatPercent(source?.change7dPct),
+    change30dPct: formatPercent(source?.change30dPct),
+    change1yPct: formatPercent(source?.change1yPct),
+    marketCapUsd: formatUsd(source?.marketCapUsd),
   };
 }
 
@@ -169,6 +181,9 @@ export class MarketQuoteService {
 
     const cgDue =
       Date.now() - this.lastCoinGeckoAt >= env.MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS * 1000;
+    const missingQuoteIds = rows.filter(
+      (row) => !row.isCashEquivalent && !existingById.has(row.id),
+    );
     const cgIds = [
       ...new Set(
         rows
@@ -178,7 +193,7 @@ export class MarketQuoteService {
     ];
     const cgMarkets = new Map<string, CoinGeckoMarket>();
 
-    if (cgDue && cgIds.length > 0) {
+    if (cgIds.length > 0 && (cgDue || missingQuoteIds.length > 0)) {
       this.lastCoinGeckoAt = Date.now();
       const markets = await this.coingecko.getMarkets(cgIds);
       for (const id of cgIds) {
