@@ -67,6 +67,7 @@ export interface ParseResult {
 const CONTROL_ADDED_ORDER_IDS = ['465', '466'] as const;
 const CONTROL_CLOSED_AFTER_SNAPSHOT_ORDER_IDS = ['450', '463'] as const;
 const CONTROL_AS_OF = '2026-10-31T23:59:59.999Z';
+const CONTROL_LEGACY_MAX_ORDER_ID = 466;
 const CONTROL_TOLERANCE_USD = '0.01';
 
 const CONTROL_EXPECTED: ImportTotals = {
@@ -306,7 +307,14 @@ function buildControl(input: {
     const order = orderById.get(id);
     return order?.status === 'closed';
   });
+  const numericOrderIds = input.orders
+    .map((order) => Number(order.orderId.match(/\d+/)?.[0]))
+    .filter((id) => Number.isFinite(id));
+  const withinLegacyRange =
+    numericOrderIds.length === input.orders.length &&
+    Math.max(...numericOrderIds) <= CONTROL_LEGACY_MAX_ORDER_ID;
   const applicable =
+    withinLegacyRange &&
     added.length === CONTROL_ADDED_ORDER_IDS.length &&
     closedAfterSnapshot.length === CONTROL_CLOSED_AFTER_SNAPSHOT_ORDER_IDS.length;
 
@@ -731,7 +739,7 @@ export function parseNotionExport(input: {
   }
   if (!control.applicable) {
     warnings.push(
-      'Control snapshot adjustments are not present in this export; baseline reconciliation is not applicable',
+      'Control snapshot is scoped to the original 431-order export; baseline reconciliation is not applicable',
     );
   }
 
