@@ -155,7 +155,11 @@ export class AssetsService {
         .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, token.symbol)))
         .limit(1);
 
-      if (conflict && conflict.contractAddress !== address) {
+      if (!conflict) throw new Error('Failed to create market asset');
+
+      const existingAddress = conflict.contractAddress?.toLowerCase() ?? null;
+
+      if (existingAddress && existingAddress !== address) {
         throw new ConflictException({
           code: 'ASSET_SYMBOL_CONFLICT',
           message: 'An asset with this symbol already exists on the chain',
@@ -168,8 +172,51 @@ export class AssetsService {
         });
       }
 
-      if (conflict) return conflict;
-      throw new Error('Failed to create market asset');
+      // Imported assets may have a symbol but no contract. Attach the verified
+      // on-chain contract instead of creating a duplicate or rejecting the add.
+      const [updated] = await executor
+        .update(assets)
+        .set({
+          contractAddress: address,
+          decimals: token.decimals,
+          ...(token.coingeckoId && !conflict.coingeckoId ? { coingeckoId: token.coingeckoId } : {}),
+          ...(token.logoUrl && !conflict.logoUrl ? { logoUrl: token.logoUrl } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(assets.id, conflict.id))
+        .returning();
+
+      if (!updated) throw new Error('Failed to attach market asset contract');
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'accounting.asset_metadata_updated',
+          entityType: 'asset',
+          entityId: updated.id,
+          before: {
+            contractAddress: conflict.contractAddress,
+            decimals: conflict.decimals,
+            coingeckoId: conflict.coingeckoId,
+            logoUrl: conflict.logoUrl?.startsWith('data:image/')
+              ? `data:image;base64,${conflict.logoUrl.length} chars`
+              : conflict.logoUrl,
+          },
+          after: {
+            chainCode,
+            symbol: updated.symbol,
+            contractAddress: updated.contractAddress,
+            decimals: updated.decimals,
+            coingeckoId: updated.coingeckoId,
+            logoUrl: updated.logoUrl?.startsWith('data:image/')
+              ? `data:image;base64,${updated.logoUrl.length} chars`
+              : updated.logoUrl,
+          },
+        },
+        { executor, strict: true },
+      );
+
+      return updated;
     }
 
     await this.audit.log(
