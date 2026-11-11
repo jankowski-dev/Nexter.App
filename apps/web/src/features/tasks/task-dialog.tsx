@@ -244,7 +244,8 @@ export function TaskDialog({
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      if (mode === 'edit') void saveNowRef.current();
+      // Keep the recurrence controls available until the first explicit save of a new task.
+      if (mode === 'edit' && taskIdRef.current) void saveNowRef.current();
     }, 10_000);
 
     return () => window.clearInterval(timer);
