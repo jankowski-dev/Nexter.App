@@ -10,7 +10,14 @@ import { formatDate } from '@/lib/format';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
-import { NotebookIcon, PencilIcon, PinIcon, TrashIcon, UndoIcon } from '@/components/ui/icons';
+import {
+  NotebookIcon,
+  PaperclipIcon,
+  PencilIcon,
+  PinIcon,
+  TrashIcon,
+  UndoIcon,
+} from '@/components/ui/icons';
 import { NoteDrawer } from './note-drawer';
 
 interface DrawerState {
@@ -160,6 +167,15 @@ export function NotesPage() {
                       </span>
                       {note.pinned ? <Badge tone="info">Закреплена</Badge> : null}
                       {note.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
+                      {note.images.length > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-1 text-xs text-zinc-500"
+                          title={`Вложений: ${note.images.length}`}
+                        >
+                          <PaperclipIcon className="h-3.5 w-3.5" />
+                          {note.images.length}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">
                       Создана {formatDate(note.createdAt)} · обновлена {formatDate(note.updatedAt)}

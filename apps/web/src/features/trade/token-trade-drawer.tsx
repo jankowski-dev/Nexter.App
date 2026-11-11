@@ -42,7 +42,8 @@ import {
 import { Link } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
-import { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useEffect, useRef, useState } from 'react';
 import type {
   Asset,
   SwapConfigResponse,
@@ -187,7 +188,13 @@ export function TokenTradeDrawer({
   const tokenIn = mode === 'buy' ? quoteAddress : assetAddress;
   const tokenOut = mode === 'buy' ? assetAddress : quoteAddress;
   const allowlistRequired = config.data?.walletAllowlistConfigured ?? false;
-  const previewAmount = useDeferredValue(amount);
+  const previewAmount = useDebouncedValue(amount, 500);
+  const remainingForSell =
+    mode === 'sell' && trade ? new Decimal(trade.group.remainingAmount) : null;
+  const enteredAmount = isPositiveDecimal(amount) ? new Decimal(amount) : null;
+  const sellExceedsRemaining = Boolean(
+    remainingForSell && enteredAmount && enteredAmount.gt(remainingForSell),
+  );
   const pendingSubmit = phase === 'submit_failed';
   const executing = !['idle', 'success', 'submit_failed'].includes(phase);
   const closeBlocked = executing || pendingSubmit || stepUpOpen;
@@ -217,11 +224,12 @@ export function TokenTradeDrawer({
       tokenIn &&
       tokenOut &&
       isPositiveDecimal(previewAmount) &&
+      !sellExceedsRemaining &&
       (!allowlistRequired || wallet.address) &&
       !executing &&
       !pendingSubmit,
     ),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
     retry: false,
   });
 
@@ -559,14 +567,27 @@ export function TokenTradeDrawer({
   const previewData = preview.data;
   const kyberPrice = previewData ? orderPrice(previewData, mode) : null;
   const difference = priceDifference(effectiveMarketPrice, kyberPrice);
-  const amountOut = previewData?.amountOut;
-  const minimumOut = previewData?.minOut;
+  const amountOut = sellExceedsRemaining ? undefined : previewData?.amountOut;
+  const minimumOut = sellExceedsRemaining ? undefined : previewData?.minOut;
+  const sellCostBasis =
+    remainingForSell && enteredAmount && remainingForSell.gt(0) && trade
+      ? new Decimal(trade.group.remainingCostBasisUsd).mul(enteredAmount).div(remainingForSell)
+      : null;
+  const sellProceedsUsd =
+    previewData && !sellExceedsRemaining
+      ? previewData.amountOutUsd
+        ? new Decimal(previewData.amountOutUsd)
+        : new Decimal(previewData.amountOut)
+      : null;
+  const sellPnl =
+    !isBuy && sellCostBasis && sellProceedsUsd ? sellProceedsUsd.minus(sellCostBasis) : null;
   const canSubmit =
     Boolean(config.data?.enabled) &&
     Boolean(chain?.executionEnabled) &&
     Boolean(tokenIn && tokenOut) &&
     Boolean(wallet.connected) &&
     isPositiveDecimal(amount) &&
+    !sellExceedsRemaining &&
     (mode === 'buy' || Boolean(tradeGroupId)) &&
     !executing &&
     !pendingSubmit;
@@ -647,19 +668,57 @@ export function TokenTradeDrawer({
               onChange={(event) => setAmount(event.target.value)}
               placeholder="0.00"
               disabled={executing}
+              aria-invalid={sellExceedsRemaining}
             />
+            {sellExceedsRemaining && trade ? (
+              <p className="mt-1 text-xs text-red-700">
+                Нельзя продать больше остатка: {formatTokenAmount(trade.group.remainingAmount, 8)}{' '}
+                {assetSymbol}.
+              </p>
+            ) : null}
           </label>
 
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-            <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-              {isBuy ? `Получите ${assetSymbol}` : `Получите ${quoteDisplay}`}
+          <div className={`grid gap-2 ${!isBuy ? 'sm:grid-cols-2' : ''}`}>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                {isBuy ? `Получите ${assetSymbol}` : `Получите ${quoteDisplay}`}
+              </div>
+              <div className="mt-1 font-mono text-2xl font-semibold text-emerald-900">
+                {amountOut ? `${formatTokenAmount(amountOut, 8)}` : '—'}
+              </div>
+              {minimumOut ? (
+                <div className="mt-1 text-xs text-emerald-700">
+                  Минимум с учётом проскальзывания: {formatTokenAmount(minimumOut, 8)}
+                </div>
+              ) : null}
             </div>
-            <div className="mt-1 font-mono text-2xl font-semibold text-emerald-900">
-              {amountOut ? `${formatTokenAmount(amountOut, 8)}` : '—'}
-            </div>
-            {minimumOut ? (
-              <div className="mt-1 text-xs text-emerald-700">
-                Минимум с учётом проскальзывания: {formatTokenAmount(minimumOut, 8)}
+            {!isBuy ? (
+              <div
+                className={`rounded-xl border p-3 ${
+                  sellPnl?.gt(0)
+                    ? 'border-emerald-200 bg-emerald-50'
+                    : sellPnl?.lt(0)
+                      ? 'border-red-200 bg-red-50'
+                      : 'border-zinc-200 bg-zinc-50'
+                }`}
+              >
+                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                  P&L по продаже
+                </div>
+                <div
+                  className={`mt-1 font-mono text-2xl font-semibold ${
+                    sellPnl?.gt(0)
+                      ? 'text-emerald-900'
+                      : sellPnl?.lt(0)
+                        ? 'text-red-900'
+                        : 'text-zinc-800'
+                  }`}
+                >
+                  {sellPnl ? formatSignedUsd(sellPnl.toFixed(2)) : '—'}
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  Вложено: {sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
+                </div>
               </div>
             ) : null}
           </div>
@@ -872,7 +931,6 @@ function TradeSummary({
   const originalAmount =
     trade.lots.reduce((total, lot) => total.plus(lot.amount), new Decimal(0)) || new Decimal(0);
   const buyPrice = originalAmount.gt(0) ? new Decimal(group.buyUsd).div(originalAmount) : null;
-  const pnl = group.totalPnlUsd;
 
   return (
     <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
@@ -900,8 +958,8 @@ function TradeSummary({
           </div>
         </div>
         <div>
-          <div className="text-xs text-zinc-500">P&L</div>
-          <div className={`font-mono font-semibold ${pnlTone(pnl)}`}>{formatSignedUsd(pnl)}</div>
+          <div className="text-xs text-zinc-500">Вложено</div>
+          <div className="font-mono font-semibold text-zinc-900">{formatUsd(group.buyUsd)}</div>
         </div>
       </div>
       <Button variant="ghost" className="h-8 px-2 text-xs" asChild>

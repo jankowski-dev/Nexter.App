@@ -32,7 +32,8 @@ import {
 import { useAssetUsdPrice } from '../portfolio/use-asset-price';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
-import { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useDebouncedValue } from '@/lib/use-debounced-value';
+import { useEffect, useRef, useState } from 'react';
 import type { Asset, SwapOrderDetail, SwapPreview, SwapQuoteRequest } from '@nexter/contracts';
 
 type Phase =
@@ -160,7 +161,7 @@ export function ExchangeDrawer({
   const outAsset = outToken ? assetForToken(assets.data?.assets ?? [], chainCode, outToken) : null;
   const marketIn = useAssetUsdPrice(inAsset?.id);
   const marketOut = useAssetUsdPrice(outAsset?.id);
-  const previewAmount = useDeferredValue(amountIn);
+  const previewAmount = useDebouncedValue(amountIn, 500);
   const allowlistRequired = config.data?.walletAllowlistConfigured ?? false;
   const pendingSubmit = phase === 'submit_failed';
   const executing = !['idle', 'success', 'submit_failed'].includes(phase);
@@ -196,7 +197,7 @@ export function ExchangeDrawer({
       !executing &&
       !pendingSubmit,
     ),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
     retry: false,
   });
 
@@ -541,6 +542,14 @@ export function ExchangeDrawer({
                   ))}
               </Select>
             </label>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
+            <span className="text-zinc-500">Сеть</span>
+            <span className="text-right text-zinc-700">
+              {chain?.name ?? '—'}
+              <span className="block text-[11px] text-zinc-500">переключатель BNB/ETH в шапке</span>
+            </span>
           </div>
 
           <label className="block text-sm text-zinc-600">

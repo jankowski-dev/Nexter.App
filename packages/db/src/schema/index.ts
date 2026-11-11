@@ -341,6 +341,8 @@ export const watchlist = pgTable(
       .default(sql`'{}'::text[]`),
     twitterUrl: text('twitter_url'),
     websiteUrl: text('website_url'),
+    bscContractAddress: text('bsc_contract_address'),
+    ethereumContractAddress: text('ethereum_contract_address'),
     investors: text('investors')
       .array()
       .notNull()

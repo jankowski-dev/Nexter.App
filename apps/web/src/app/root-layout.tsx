@@ -7,7 +7,7 @@ import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const cryptoNavigation = [
   { to: '/portfolio', label: messages.nav.portfolio },
@@ -113,6 +113,39 @@ function WalletControls() {
 
       <ChainToggle value={wallet.chain} onChange={wallet.selectChain} />
     </>
+  );
+}
+
+function RouteLoadingOverlay() {
+  const active = useRouterState({
+    select: (state) => state.status === 'pending' || state.isLoading,
+  });
+  const [visible, setVisible] = useState(false);
+  const shownAt = useRef(0);
+
+  useEffect(() => {
+    if (active) {
+      shownAt.current = Date.now();
+      setVisible(true);
+      return;
+    }
+
+    if (!visible) return;
+    const remaining = Math.max(0, 1000 - (Date.now() - shownAt.current));
+    const timer = window.setTimeout(() => setVisible(false), remaining);
+    return () => window.clearTimeout(timer);
+  }, [active, visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-white/55 backdrop-blur-[1px]"
+      role="status"
+      aria-label="Загрузка страницы"
+    >
+      <span className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+    </div>
   );
 }
 
@@ -370,6 +403,7 @@ function RootLayoutContent() {
           </main>
         </div>
       </div>
+      <RouteLoadingOverlay />
     </div>
   );
 }

@@ -245,7 +245,7 @@ export class NotesService {
     if (existing.length >= 5) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: 'A note can have at most 5 images',
+        message: 'A note can have at most 5 attachments',
       });
     }
 
@@ -255,14 +255,14 @@ export class NotesService {
     if (sizeBytes <= 0 || sizeBytes > 1_500_000) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: 'Image must be between 1 byte and 1.5 MB',
+        message: 'Attachment must be between 1 byte and 1.5 MB',
       });
     }
 
     if (!input.dataUrl.startsWith(`data:${input.mimeType};base64,`)) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: 'Image MIME type does not match the data URL',
+        message: 'Attachment MIME type does not match the data URL',
       });
     }
 
@@ -278,7 +278,7 @@ export class NotesService {
       })
       .returning();
 
-    if (!created) throw new Error('Failed to add note image');
+    if (!created) throw new Error('Failed to add note attachment');
 
     await this.audit.log(
       {

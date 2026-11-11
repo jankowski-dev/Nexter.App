@@ -329,9 +329,24 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
       tags: ['идея', 'риск'],
     });
 
+    const attachment = await agent
+      .post(`/api/v1/notes/${note.body.id}/images`)
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'report.pdf',
+        mimeType: 'application/pdf',
+        dataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJcTl8uXrp/Og0MTGCjQ=',
+      })
+      .expect(201);
+    expect(attachment.body).toMatchObject({
+      name: 'report.pdf',
+      mimeType: 'application/pdf',
+    });
+
     const found = await agent.get('/api/v1/notes?search=корреляцию').expect(200);
     expect(found.body.data).toHaveLength(1);
     expect(found.body.data[0].id).toBe(note.body.id);
+    expect(found.body.data[0].images).toHaveLength(1);
 
     const updatedNote = await agent
       .patch(`/api/v1/notes/${note.body.id}`)
@@ -410,7 +425,7 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     expect(created.body.seriesId).toBeTruthy();
 
     const all = await agent.get('/api/v1/tasks?limit=50').expect(200);
-    const daily = (all.body.data as Array<{ seriesId: string; dueAt: string }>).filter(
+    const daily = (all.body.data as Array<{ id: string; seriesId: string; dueAt: string }>).filter(
       (task) => task.seriesId === created.body.seriesId,
     );
     expect(daily).toHaveLength(5);
@@ -440,7 +455,44 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     const movedSeries = (afterMove.body.data as Array<{ seriesId: string; dueAt: string }>).filter(
       (task) => task.seriesId === created.body.seriesId,
     );
-    expect(movedSeries.some((task) => task.dueAt === '2026-12-10T12:00:00.000Z')).toBe(true);
+    expect(movedSeries.map((task) => task.dueAt)).toEqual([
+      '2026-12-10T12:00:00.000Z',
+      '2026-12-11T12:00:00.000Z',
+      '2026-12-12T12:00:00.000Z',
+      '2026-12-13T12:00:00.000Z',
+      '2026-12-14T12:00:00.000Z',
+    ]);
+
+    await agent
+      .patch(`/api/v1/tasks/${created.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ title: 'Daily renamed' })
+      .expect(200);
+    const renamed = (await agent.get('/api/v1/tasks?limit=50').expect(200)).body.data as Array<{
+      seriesId: string;
+      title: string;
+      status: string;
+    }>;
+    expect(
+      renamed
+        .filter((task) => task.seriesId === created.body.seriesId)
+        .every((task) => task.title === 'Daily renamed'),
+    ).toBe(true);
+
+    await agent
+      .patch(`/api/v1/tasks/${daily[1]?.id ?? created.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ status: 'done', applyToSeries: false })
+      .expect(200);
+    const afterStatus = (await agent.get('/api/v1/tasks?limit=50').expect(200)).body.data as Array<{
+      seriesId: string;
+      status: string;
+    }>;
+    expect(
+      afterStatus.filter(
+        (task) => task.seriesId === created.body.seriesId && task.status === 'done',
+      ),
+    ).toHaveLength(1);
 
     const monthly = await agent
       .post('/api/v1/tasks')
@@ -470,6 +522,6 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     const remaining = (await agent.get('/api/v1/tasks?limit=50').expect(200)).body.data as Array<{
       seriesId: string;
     }>;
-    expect(remaining.filter((task) => task.seriesId === monthly.body.seriesId)).toHaveLength(2);
+    expect(remaining.filter((task) => task.seriesId === monthly.body.seriesId)).toHaveLength(0);
   }, 60_000);
 });

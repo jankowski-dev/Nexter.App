@@ -24,6 +24,8 @@ const ACCOUNT_SEEDS: AccountSeed[] = [
   { name: 'Equity', type: 'equity', isSystem: true },
   { name: 'Tangem BSC', type: 'wallet', chainCode: 'bsc', isSystem: false },
   { name: 'Tangem Ethereum', type: 'wallet', chainCode: 'ethereum', isSystem: false },
+  { name: 'TRON wallet', type: 'wallet', chainCode: 'tron', isSystem: false },
+  { name: 'Solana wallet', type: 'wallet', chainCode: 'solana', isSystem: false },
 ];
 
 @Injectable()

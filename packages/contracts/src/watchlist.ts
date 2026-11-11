@@ -58,6 +58,8 @@ export const watchlistEntrySchema = z.object({
   tags: z.array(z.string()),
   twitterUrl: z.string().nullable(),
   websiteUrl: z.string().nullable(),
+  bscContractAddress: z.string().nullable(),
+  ethereumContractAddress: z.string().nullable(),
   investors: z.array(z.string()),
   priority: z.number().int(),
   archivedAt: z.iso.datetime().nullable(),
@@ -87,6 +89,16 @@ export const watchlistCreateRequestSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   twitterUrl: externalUrlSchema.optional(),
   websiteUrl: externalUrlSchema.optional(),
+  bscContractAddress: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .nullable()
+    .optional(),
+  ethereumContractAddress: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .nullable()
+    .optional(),
   investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
 });
@@ -120,6 +132,16 @@ export const watchlistUpdateRequestSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   twitterUrl: externalUrlSchema.optional(),
   websiteUrl: externalUrlSchema.optional(),
+  bscContractAddress: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .nullable()
+    .optional(),
+  ethereumContractAddress: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{40}$/)
+    .nullable()
+    .optional(),
   investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
   logoUrl: manualIconSchema.nullable().optional(),
