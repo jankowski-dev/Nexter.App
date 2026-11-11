@@ -1,25 +1,30 @@
+import { ChainToggle } from '@/components/chain-toggle';
+import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost } from '@/lib/api';
 import { messages } from '@/lib/i18n';
-import { useWallet, WalletProvider, type WalletChain } from '@/lib/wallet-context';
+import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 
 const cryptoNavigation = [
-  { to: '/dashboard', label: messages.nav.dashboard },
   { to: '/portfolio', label: messages.nav.portfolio },
   { to: '/operations', label: messages.nav.operations },
   { to: '/watchlist', label: messages.nav.watchlist },
   { to: '/statistics', label: messages.nav.reports },
 ] as const;
 
-const primaryNavigation = [
-  { to: '/finance', label: messages.nav.finance },
-  { to: '/vault', label: messages.nav.vault },
+const topNavigation = [
+  { to: '/dashboard', label: messages.nav.dashboard },
   { to: '/tasks', label: messages.nav.tasks },
+] as const;
+
+const afterCryptoNavigation = [
+  { to: '/finance', label: messages.nav.finance },
   { to: '/notes', label: messages.nav.notes },
+  { to: '/vault', label: messages.nav.vault },
   { to: '/settings', label: messages.nav.settings },
 ] as const;
 
@@ -79,62 +84,6 @@ function WalletIcon() {
   );
 }
 
-function BnbIcon() {
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-4 w-4">
-      <path d="m16 4 4.4 4.4L16 12.8l-4.4-4.4Z" fill="#F3BA2F" />
-      <path d="m7.2 12.8 4.4 4.4-4.4 4.4L2.8 17.2Z" fill="#F3BA2F" />
-      <path d="m24.8 12.8 4.4 4.4-4.4 4.4-4.4-4.4Z" fill="#F3BA2F" />
-      <path d="m16 15.6 4.4 4.4-4.4 4.4-4.4-4.4Z" fill="#F3BA2F" />
-      <path d="m16 27.2 4.4-4.4L16 25l-4.4-2.2Z" fill="#F3BA2F" opacity=".65" />
-    </svg>
-  );
-}
-
-function EthIcon() {
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-4 w-4">
-      <path d="M16 3.5 24 16l-8 4.7L8 16Z" fill="#627EEA" />
-      <path d="M16 21.9 24 17.2 16 29l-8-11.8Z" fill="#8A9DF1" />
-    </svg>
-  );
-}
-
-function ChainButton({
-  chain,
-  active,
-  onClick,
-  label,
-  shortLabel,
-  children,
-}: {
-  chain: WalletChain;
-  active: boolean;
-  onClick: (chain: WalletChain) => void;
-  label: string;
-  shortLabel: string;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={active}
-      title={chain === 'bsc' ? 'BNB Smart Chain' : 'Ethereum'}
-      onClick={() => onClick(chain)}
-      className={`flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition ${
-        active
-          ? 'bg-white text-zinc-900 shadow-sm'
-          : 'text-zinc-400 hover:bg-white/60 hover:text-zinc-600'
-      }`}
-    >
-      <span className={active ? '' : 'opacity-40 grayscale'}>{children}</span>
-      <span className="hidden md:inline">{shortLabel}</span>
-      {active ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
-    </button>
-  );
-}
-
 function WalletControls() {
   const wallet = useWallet();
 
@@ -162,30 +111,7 @@ function WalletControls() {
         </Button>
       )}
 
-      <div
-        role="group"
-        aria-label="Блокчейн"
-        className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1"
-      >
-        <ChainButton
-          chain="bsc"
-          active={wallet.chain === 'bsc'}
-          onClick={wallet.selectChain}
-          label="BNB"
-          shortLabel="BNB"
-        >
-          <BnbIcon />
-        </ChainButton>
-        <ChainButton
-          chain="ethereum"
-          active={wallet.chain === 'ethereum'}
-          onClick={wallet.selectChain}
-          label="Ethereum"
-          shortLabel="ETH"
-        >
-          <EthIcon />
-        </ChainButton>
-      </div>
+      <ChainToggle value={wallet.chain} onChange={wallet.selectChain} />
     </>
   );
 }
@@ -197,7 +123,7 @@ function RootLayoutContent() {
   const cryptoActive = cryptoNavigation.some(
     (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
   );
-  const [cryptoOpen, setCryptoOpen] = useState(cryptoActive);
+  const [cryptoOpen, setCryptoOpen] = useState(true);
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     if (document.documentElement.dataset.theme === 'dark') return 'dark';
     try {
@@ -253,6 +179,17 @@ function RootLayoutContent() {
           </Link>
 
           <nav aria-label="Основная навигация" className="flex flex-col gap-1">
+            {topNavigation.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                activeProps={activeLinkProps}
+                inactiveProps={inactiveLinkProps}
+                className="rounded-xl px-3 py-2 text-sm transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
             <button
               type="button"
               onClick={() => setCryptoOpen((value) => !value)}
@@ -281,7 +218,7 @@ function RootLayoutContent() {
                 ))}
               </div>
             ) : null}
-            {primaryNavigation.map((item) => (
+            {afterCryptoNavigation.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
@@ -305,6 +242,7 @@ function RootLayoutContent() {
           <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
             <div className="hidden text-sm text-zinc-500 sm:block">{messages.app.header}</div>
             <div className="flex items-center gap-2 sm:gap-3">
+              <LiveRefreshIndicator />
               <div
                 className="flex items-center gap-0.5 rounded-full border border-zinc-200 bg-zinc-50 p-1"
                 role="group"
@@ -375,6 +313,17 @@ function RootLayoutContent() {
             className="flex flex-col gap-1 border-b border-zinc-200 bg-white px-2 py-2 md:hidden"
           >
             <div className="flex gap-1 overflow-x-auto">
+              {topNavigation.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  activeProps={activeLinkProps}
+                  inactiveProps={{ className: 'text-zinc-600' }}
+                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
+                >
+                  {item.label}
+                </Link>
+              ))}
               <button
                 type="button"
                 onClick={() => setCryptoOpen((value) => !value)}
@@ -385,7 +334,7 @@ function RootLayoutContent() {
               >
                 Крипта {cryptoOpen ? '▾' : '▸'}
               </button>
-              {primaryNavigation.map((item) => (
+              {afterCryptoNavigation.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}

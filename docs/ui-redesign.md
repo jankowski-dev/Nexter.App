@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-12 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-11. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
+Status: **UI-0 through UI-13 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-11. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 
@@ -124,6 +124,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - **UI-10** — owner feedback: vault as a separate top-level service; finance period presets (current, previous, custom month, year, all time); Russian finance labels; visual category color markers; global header wallet/chain controls with BNB default; token icons from the token base with manual upload. Implemented. No migration. See ADR 0026.
 - **UI-11** — tasks/notes journal polish: calendar-first tasks with blue/green/red status chips, compact task list without description, one-third-width task view/edit drawer, soft delete + Actual/Archive switch, notes with notebook icon and right-side pin actions, footer save indicator, `Готово` returns to read mode, and page/dialog/drawer motion. Implemented. No migration. See ADR 0027.
 - **UI-12** — crypto/habits overhaul: combined main dashboard, `Статистика` rename, portfolio `Основной список`, token-first buy/sell drawer with live 10s Kyber preview and partial single-trade close, separate manual trade/operation dialogs, on-chain exchange drawer, trade tabs (active/profitable/losing/closed), live polling, exact tiny-price formatting, clearer BNB/ETH switch, background token icon backfill, and habit streaks. Migration `0027` adds `habits`. See ADR 0028.
+- **UI-13** — UI polish: reference-counted scroll lock behind dialogs/drawers, Dashboard and Tasks moved to top-level navigation, portfolio `Позиции по активам`/`Основной список` sub-tabs, Buy action next to the token name, shared BNB/ETH chain toggle and compact one-row token list in the token base, and a header live-refresh countdown with a brief green flash on updated cards. No migration. See ADR 0029.
 
 ## Header and wallet
 

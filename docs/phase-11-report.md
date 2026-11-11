@@ -62,6 +62,17 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Migration `0027`: applied through a Railway SSH tunnel using the owner connection. Verified `habits` exists, `habits_user_name_unique` is partial on `archived_at IS NULL`, `nexter_app` has SELECT/INSERT/UPDATE/DELETE, and 28 migrations are recorded.
 - Asset logo backfill filled 38 assets (including BNB, ETH, BASED, POP, APR, XNY, USDC, USDT). Production dashboard, portfolio, `Основной список`, buy drawer, Статистика, Operations, Tasks, Notes, and Vault were opened; no console errors. Habits API returned `{"data":[]}` and the create form rendered.
 
+## UI-13 UI polish (2026-11-11)
+
+- Dialog/Drawer gained a reference-counted body scroll lock with scrollbar-width compensation and `overscroll-contain`; background scrolling is disabled until the last overlay closes.
+- Navigation order is now Дашборд, Задачи, Крипта, Финансы, Заметки, Хранилище, Настройки; Dashboard and Tasks are top-level.
+- Portfolio keeps Портфель/Сделки at the top and adds Позиции по активам/Основной список below the summary cards. The legacy `#buy` hash maps to the main list; `#list` is canonical.
+- The Buy/manual action is the column immediately after the token name. Non-allowlisted tokens show `Вручную` and an explanation; the allowlist itself is unchanged.
+- Token base uses the shared header BNB/ETH switch and one-row token entries with icon, symbol/name/chain, group/tags, price, and 24h.
+- A header live indicator appears on Dashboard/Portfolio/Статистика/Watchlist/Operations, shows a countdown, `Обновляю…`, and `Обновлено`; updated cards flash green briefly. Статистика and Operations poll every 30 seconds.
+- Pending wallet-signature cancellation is intentionally unchanged: the owner chose not to disconnect WalletConnect; the drawer explains that the request must be rejected in the wallet.
+- No migration. See ADR 0029.
+
 ## Database
 
 Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), and `0027` (habits) are additive. `0019` adds:

@@ -5,6 +5,7 @@ import { TokenIcon } from '@/components/token-icon';
 import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
+import { useLiveFlash } from '@/lib/use-live-flash';
 import { useQuery } from '@tanstack/react-query';
 import type { Asset, Position, SwapConfigResponse } from '@nexter/contracts';
 
@@ -24,10 +25,12 @@ export function TokenBuyList({
   positions,
   onBuy,
   onManual,
+  showHeading = true,
 }: {
   positions: Position[];
   onBuy: (asset: Asset, marketPriceUsd: string | null) => void;
   onManual?: (asset: Asset, marketPriceUsd: string | null) => void;
+  showHeading?: boolean;
 }) {
   const groups = useQuery({ queryKey: ['watchlist-groups'], queryFn: fetchWatchlistGroups });
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
@@ -36,8 +39,9 @@ export function TokenBuyList({
     queryKey: ['buy-list', defaultGroup?.id],
     queryFn: () => fetchWatchlist(false, undefined, defaultGroup?.id, 100),
     enabled: Boolean(defaultGroup?.id),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
+  const flashing = useLiveFlash(watchlist.dataUpdatedAt);
 
   if (groups.isPending || watchlist.isPending) {
     return <LoadingRows rows={8} />;
@@ -62,15 +66,15 @@ export function TokenBuyList({
   const positionByAsset = new Map(positions.map((position) => [position.asset.id, position]));
 
   return (
-    <Card>
-      <CardTitle>Основной список</CardTitle>
+    <Card className={flashing ? 'live-flash' : ''}>
+      {showHeading ? <CardTitle>Основной список</CardTitle> : null}
       <CardDescription>
-        Токены из группы «Основная». Цены обновляются автоматически; кнопка «Купить» открывает
-        on-chain покупку, для токенов вне allowlist доступна только ручная запись.
+        Токены из группы «Основная». On-chain покупка доступна только для токенов из разрешённого
+        списка (allowlist); для остальных доступна ручная запись.
       </CardDescription>
       {config.isError ? (
         <p className="mt-2 text-xs text-amber-700">
-          Не удалось проверить on-chain allowlist. Доступна только ручная запись.
+          Не удалось проверить разрешённый список токенов. Доступна только ручная запись.
         </p>
       ) : null}
 
@@ -80,20 +84,21 @@ export function TokenBuyList({
         </p>
       ) : (
         <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                 <th className="py-2 pr-3 font-medium">Токен</th>
+                <th className="py-2 pr-3 font-medium">Действие</th>
                 <th className="py-2 pr-3 text-right font-medium">Цена CoinGecko</th>
                 <th className="py-2 pr-3 text-right font-medium">24ч</th>
                 <th className="py-2 pr-3 text-right font-medium">В портфеле</th>
-                <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                <th className="py-2 text-right font-medium">Действие</th>
+                <th className="py-2 text-right font-medium">Стоимость</th>
               </tr>
             </thead>
             <tbody>
               {entries.map((entry) => {
                 const position = positionByAsset.get(entry.asset.id);
+                const onchainAllowed = isOnchainAllowed(entry.asset, config.data);
                 return (
                   <tr
                     key={entry.id}
@@ -113,6 +118,30 @@ export function TokenBuyList({
                         </div>
                       </div>
                     </td>
+                    <td className="whitespace-nowrap py-2 pr-3">
+                      {config.isPending ? (
+                        <Button className="h-8 px-3 text-xs" disabled>
+                          Проверяю…
+                        </Button>
+                      ) : onchainAllowed ? (
+                        <Button
+                          className="h-8 px-3 text-xs"
+                          onClick={() => onBuy(entry.asset, entry.priceUsd)}
+                        >
+                          Купить
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          className="h-8 px-3 text-xs"
+                          onClick={() => onManual?.(entry.asset, entry.priceUsd)}
+                          disabled={!onManual}
+                          title="Токен не входит в разрешённый список — доступна только ручная запись"
+                        >
+                          Вручную
+                        </Button>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
                       {formatPrice(entry.priceUsd)}
                     </td>
@@ -126,32 +155,8 @@ export function TokenBuyList({
                     <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                       {position ? formatTokenAmount(position.amount, 8) : '—'}
                     </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                    <td className="py-2 text-right font-mono tabular-nums text-zinc-700">
                       {position ? formatUsd(position.valueUsd) : '—'}
-                    </td>
-                    <td className="py-2 text-right">
-                      {config.isPending ? (
-                        <Button className="h-8 px-3 text-xs" disabled>
-                          Проверяю…
-                        </Button>
-                      ) : isOnchainAllowed(entry.asset, config.data) ? (
-                        <Button
-                          className="h-8 px-3 text-xs"
-                          onClick={() => onBuy(entry.asset, entry.priceUsd)}
-                        >
-                          Купить
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => onManual?.(entry.asset, entry.priceUsd)}
-                          disabled={!onManual}
-                          title="Токен не входит в on-chain allowlist — доступна только ручная запись"
-                        >
-                          Только вручную
-                        </Button>
-                      )}
                     </td>
                   </tr>
                 );

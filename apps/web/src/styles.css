@@ -252,6 +252,31 @@ button:focus-visible,
   }
 }
 
+@keyframes live-flash {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.live-flash {
+  position: relative;
+}
+
+.live-flash::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 2px solid rgb(52 211 153);
+  border-radius: inherit;
+  background: rgb(16 185 129 / 0.08);
+  pointer-events: none;
+  content: '';
+  animation: live-flash 1000ms ease-out forwards;
+}
+
 .page-enter {
   animation: page-in 180ms ease-out both;
 }
@@ -277,7 +302,13 @@ button:focus-visible,
   .dialog-overlay-enter,
   .dialog-panel-enter,
   .drawer-panel-enter,
-  .image-enter {
+  .image-enter,
+  .live-flash {
     animation: none;
+  }
+
+  .live-flash::after {
+    animation: none;
+    opacity: 0;
   }
 }

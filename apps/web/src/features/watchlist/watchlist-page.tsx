@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { ChainToggle } from '@/components/chain-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
@@ -22,6 +23,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatUsd, pnlTone } from '@/lib/format';
+import { useLiveFlash } from '@/lib/use-live-flash';
 import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -81,28 +83,6 @@ function isValidIconValue(value: string): boolean {
   }
 }
 
-function ChainIcon({ chain }: { chain: 'bsc' | 'ethereum' }) {
-  if (chain === 'bsc') {
-    return (
-      <svg viewBox="0 0 32 32" aria-hidden="true" className="h-7 w-7">
-        <path d="M16 4.5 20.5 9 16 13.5 11.5 9Z" fill="#1f2329" />
-        <path d="M7.5 13 12 17.5 7.5 22 3 17.5Z" fill="#1f2329" />
-        <path d="M24.5 13 29 17.5 24.5 22 20 17.5Z" fill="#1f2329" />
-        <path d="M16 15.5 20.5 20 16 24.5 11.5 20Z" fill="#1f2329" />
-        <path d="M16 27.5 20.5 23 16 25.8 11.5 23Z" fill="#1f2329" opacity=".55" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 32 32" aria-hidden="true" className="h-7 w-7">
-      <path d="M16 4.5 23 16l-7 4.2L9 16Z" fill="#ffffff" opacity=".95" />
-      <path d="M16 22.2 23 18l-7 9.5L9 18Z" fill="#ffffff" opacity=".7" />
-      <path d="M16 4.5 16 20.2 9 16Z" fill="#dfe3ff" opacity=".8" />
-    </svg>
-  );
-}
-
 export function WatchlistPage() {
   const queryClient = useQueryClient();
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -146,6 +126,7 @@ export function WatchlistPage() {
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
+  const listFlash = useLiveFlash(watchlist.dataUpdatedAt);
 
   useEffect(() => {
     if (!searchGroupId && defaultGroup) setSearchGroupId(defaultGroup.id);
@@ -423,30 +404,13 @@ export function WatchlistPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-[auto_1fr_auto]">
           <div>
             <span className="block text-sm text-zinc-600">Сеть</span>
-            <div className="mt-1 flex gap-2" role="group" aria-label="Сеть токена">
-              {(
-                [
-                  ['bsc', 'BNB Smart Chain', 'bg-[#f3ba2f]'],
-                  ['ethereum', 'Ethereum', 'bg-indigo-500'],
-                ] as const
-              ).map(([chain, label, tone]) => (
-                <button
-                  key={chain}
-                  type="button"
-                  aria-label={label}
-                  aria-pressed={searchChain === chain}
-                  title={label}
-                  onClick={() => setSearchChain(chain)}
-                  className={`flex h-11 w-11 items-center justify-center rounded-xl border-2 transition ${
-                    searchChain === chain
-                      ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-                      : 'border-zinc-200 hover:border-zinc-300'
-                  } ${tone}`}
-                >
-                  <ChainIcon chain={chain} />
-                </button>
-              ))}
-            </div>
+            <ChainToggle
+              className="mt-1"
+              value={searchChain}
+              onChange={setSearchChain}
+              ariaLabel="Сеть токена"
+              labelClassName="inline"
+            />
           </div>
           <label className="block text-sm text-zinc-600">
             Адрес контракта
@@ -563,75 +527,62 @@ export function WatchlistPage() {
             </Button>
           </Card>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2">
             {entries.map((entry) => {
               const group = entry.groupId ? groupById.get(entry.groupId) : null;
               return (
                 <Card
                   key={entry.id}
-                  className={`relative p-0 transition-colors hover:border-emerald-300 ${
+                  className={`p-0 transition-colors hover:border-emerald-300 ${
                     entry.archivedAt ? 'opacity-60' : ''
-                  }`}
+                  } ${listFlash ? 'live-flash' : ''}`}
                 >
                   <button
                     type="button"
-                    aria-label={`Открыть ${entry.asset.symbol}`}
-                    className="absolute inset-0 rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
+                    className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                     onClick={() => setDrawerEntryId(entry.id)}
-                  />
-                  <div className="pointer-events-none p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <TokenIcon
-                          logoUrl={entry.logoUrl}
-                          symbol={entry.asset.symbol}
-                          className="h-9 w-9 text-xs"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="truncate text-lg font-semibold text-zinc-900">
-                              {entry.asset.symbol}
-                            </span>
-                            {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                            {group ? <Badge tone="info">{group.name}</Badge> : null}
-                          </div>
-                          <div className="truncate text-xs text-zinc-500">
+                  >
+                    <span className="flex min-w-0 flex-1 items-center gap-3">
+                      <TokenIcon
+                        logoUrl={entry.logoUrl}
+                        symbol={entry.asset.symbol}
+                        className="h-10 w-10 text-xs"
+                      />
+                      <span className="block min-w-0">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-base font-semibold text-zinc-900">
+                            {entry.asset.symbol}
+                          </span>
+                          {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
+                          {group ? <Badge tone="info">{group.name}</Badge> : null}
+                        </span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
+                          <span className="truncate">
                             {entry.asset.name} · {entry.asset.chainCode}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <div className="font-mono text-lg font-semibold text-zinc-900">
-                          {formatPrice(entry.priceUsd)}
-                        </div>
-                        <div className={`text-xs ${pnlTone(entry.change24hPct)}`}>
-                          {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="mt-3 line-clamp-3 text-sm text-zinc-600">
-                      {entry.thesis ?? 'Описание не заполнено.'}
-                    </p>
-
-                    {entry.tags.length > 0 ? (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {entry.tags.slice(0, 4).map((tag) => (
-                          <Badge key={tag} tone="info">
-                            {tag}
-                          </Badge>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
-                      <span>Инвесторов: {entry.investors.length}</span>
-                      <span className="flex gap-2">
-                        {entry.twitterUrl ? <span>Twitter / X</span> : null}
-                        {entry.websiteUrl ? <span>Сайт</span> : null}
+                          </span>
+                          {entry.tags.slice(0, 4).map((tag) => (
+                            <Badge key={tag} tone="info">
+                              {tag}
+                            </Badge>
+                          ))}
+                        </span>
                       </span>
-                    </div>
-                  </div>
+                    </span>
+
+                    <span className="flex shrink-0 items-center gap-4">
+                      <span className="block text-right">
+                        <span className="block font-mono text-base font-semibold text-zinc-900">
+                          {formatPrice(entry.priceUsd)}
+                        </span>
+                        <span className={`block text-xs ${pnlTone(entry.change24hPct)}`}>
+                          {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
+                        </span>
+                      </span>
+                      <span aria-hidden="true" className="text-lg text-zinc-300">
+                        ›
+                      </span>
+                    </span>
+                  </button>
                 </Card>
               );
             })}

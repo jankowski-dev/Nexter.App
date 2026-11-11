@@ -8,6 +8,7 @@ import { TokenIcon } from '@/components/token-icon';
 import { fetchAssets, fetchTradeGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
+import { useLiveFlash } from '@/lib/use-live-flash';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useDeferredValue, useState } from 'react';
 import type { TradeGroupSummary, TradeGroupView } from '@nexter/contracts';
@@ -75,6 +76,7 @@ export function TradesPanel({
   });
 
   const groupRows = groups.data?.pages.flatMap((page) => page.data) ?? [];
+  const flashing = useLiveFlash(groups.dataUpdatedAt);
 
   return (
     <div className="space-y-4">
@@ -141,7 +143,7 @@ export function TradesPanel({
       ) : null}
 
       {!groups.isPending && !groups.isError ? (
-        <Card>
+        <Card className={flashing ? 'live-flash' : ''}>
           <CardTitle>{viewLabels[view]} сделки</CardTitle>
           <CardDescription>
             {groupRows.length === 0

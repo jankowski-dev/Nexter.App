@@ -87,6 +87,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     await page.getByRole('button', { name: 'Ручная сделка' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
+    await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('hidden');
     return dialog;
   }
 
@@ -113,6 +114,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await dialog.getByLabel('Сумма покупки').fill('100');
   await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('');
 
   // Income and adjustment live in the manual operation dialog.
   dialog = await openOperation('Доход');
