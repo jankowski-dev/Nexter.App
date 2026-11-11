@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
-import { assets, chains, watchlist, type Asset, type Database } from '@nexter/db';
+import { and, eq, isNull, or } from 'drizzle-orm';
+import { assets, chains, marketQuotes, watchlist, type Asset, type Database } from '@nexter/db';
 import type { WatchlistTokenSearchResult } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { AssetsService } from '../accounting/assets.service';
@@ -48,21 +48,36 @@ export class MarketDataService {
 
     const market = await this.coingecko.getTokenByContract(chain, normalized);
     const [assetRow] = await this.db
-      .select({ id: assets.id })
+      .select()
       .from(assets)
       .innerJoin(chains, eq(assets.chainId, chains.id))
-      .where(and(eq(chains.code, chain), eq(assets.contractAddress, normalized)))
+      .where(
+        and(
+          eq(chains.code, chain),
+          or(
+            eq(assets.contractAddress, normalized),
+            and(isNull(assets.contractAddress), eq(assets.symbol, metadata.symbol)),
+          ),
+        ),
+      )
       .limit(1);
 
     let alreadyInWatchlist = false;
+    let quote: typeof marketQuotes.$inferSelect | undefined;
 
     if (assetRow) {
       const [entry] = await this.db
         .select({ id: watchlist.id })
         .from(watchlist)
-        .where(and(eq(watchlist.userId, userId), eq(watchlist.assetId, assetRow.id)))
+        .where(and(eq(watchlist.userId, userId), eq(watchlist.assetId, assetRow.assets.id)))
         .limit(1);
       alreadyInWatchlist = Boolean(entry);
+
+      [quote] = await this.db
+        .select()
+        .from(marketQuotes)
+        .where(eq(marketQuotes.assetId, assetRow.assets.id))
+        .limit(1);
     }
 
     return {
@@ -71,13 +86,13 @@ export class MarketDataService {
       name: metadata.name,
       symbol: metadata.symbol,
       decimals: metadata.decimals,
-      coingeckoId: market?.coingeckoId ?? null,
-      logoUrl: market?.logoUrl ?? null,
-      priceUsd: market?.priceUsd ?? null,
-      change24hPct: market?.change24hPct ?? null,
-      marketCapUsd: market?.marketCapUsd ?? null,
+      coingeckoId: market?.coingeckoId ?? assetRow?.assets.coingeckoId ?? null,
+      logoUrl: market?.logoUrl ?? assetRow?.assets.logoUrl ?? null,
+      priceUsd: quote?.priceUsd ?? market?.priceUsd ?? null,
+      change24hPct: quote?.change24hPct ?? market?.change24hPct ?? null,
+      marketCapUsd: quote?.marketCapUsd ?? market?.marketCapUsd ?? null,
       volume24hUsd: market?.volume24hUsd ?? null,
-      assetId: assetRow?.id ?? null,
+      assetId: assetRow?.assets.id ?? null,
       alreadyInWatchlist,
     };
   }
