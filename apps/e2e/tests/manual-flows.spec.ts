@@ -193,7 +193,8 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByText('50 BASED', { exact: true }).first()).toBeVisible();
-  await sellDrawer.getByRole('button', { name: 'Готово' }).click();
+  await sellDrawer.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   // Manual exchange records a swap operation and appears in the journal.
   await page.goto('/operations');

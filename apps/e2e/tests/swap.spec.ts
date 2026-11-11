@@ -186,7 +186,7 @@ test('buy drawer preview and on-chain exchange UI', async ({ page }) => {
   await expect(buyDrawer.getByText('KyberSwap')).toBeVisible();
   await expect(buyDrawer.getByText('Записать покупку вручную')).toBeVisible();
   await expect(buyDrawer.getByRole('button', { name: 'Купить BASED' })).toBeDisabled();
-  await buyDrawer.getByRole('button', { name: 'Готово' }).click();
+  await buyDrawer.getByRole('button', { name: 'Закрыть' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/operations');
@@ -199,7 +199,7 @@ test('buy drawer preview and on-chain exchange UI', async ({ page }) => {
   await expect(exchangeDrawer.getByText('KyberSwap', { exact: true })).toBeVisible();
   await expect(exchangeDrawer.getByText('Рынок', { exact: true })).toBeVisible();
   await expect(exchangeDrawer.getByRole('button', { name: 'Обменять' })).toBeDisabled();
-  await exchangeDrawer.getByRole('button', { name: 'Готово' }).click();
+  await exchangeDrawer.getByRole('button', { name: 'Закрыть' }).click();
 
   swapsEnabled = false;
   await page.reload();
