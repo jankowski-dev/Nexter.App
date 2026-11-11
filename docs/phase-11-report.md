@@ -104,6 +104,14 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Three-month history is intentionally omitted; the UI never labels a different period as three months.
 - The icon proxy caches images in memory for 24 hours with in-flight coalescing and an 8 MB/200-entry bound. The global API no-store hook exempts exactly `/api/v1/watchlist/icon`, so the existing public 24-hour browser cache header survives.
 - Migration `0029` is additive. See ADR 0031.
+- Production: PR #79 deployed on 2026-11-11, bundle `assets/index-DzNzolEf.js`, `/ready` green. Migration `0029` applied; `market_quotes` has 45 rows, 45 with 7d, 45 with 30d, 39 with 1y, and 41 with market cap. XNY position returned 24h `-0.73%`, 7d `-11.97%`, 30d `-8.71%`, 1y `+9.43%`. Token-base sorting and the icon `public` header were verified in production; icon errors return `no-store`. Backup `nexter-2026-11-11-ui16.dump.enc` was restore-verified (counts and lot sum matched) before merge.
+
+## UI-17 incremental Notion refresh (2026-11-11)
+
+- The Phase 4 parser's 429-order control is now scoped to numeric order ids up to 466. The original 431-order export still runs the full control; later exports get a warning instead of a blocking error.
+- The current Notion export has 436 orders (417 closed, 19 active), 36 source assets, and 9 transactions. It adds orders 467–471 and closes 458, 461, 462, 465, and 466.
+- The refresh uses the existing incremental import. `detectExisting` verifies every existing lot, group, and amount; existing transactions are skipped. Full rollback-and-reimport remains blocked by later ledger activity and stays part of the ADR 0014 clean cutover.
+- No migration. See ADR 0032.
 
 ## Database
 
