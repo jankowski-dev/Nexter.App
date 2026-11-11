@@ -18,7 +18,7 @@ test.beforeAll(async () => {
   await client.connect();
   try {
     await client.query(
-      'truncate table prices, audit_log, sessions, settings, rate_limits, users restart identity cascade',
+      'truncate table prices, market_quotes, audit_log, sessions, settings, rate_limits, users restart identity cascade',
     );
   } finally {
     await client.end();
@@ -197,7 +197,7 @@ test('buy drawer preview and on-chain exchange UI', async ({ page }) => {
   await expect(exchangeDrawer.getByText('Получите BASED')).toBeVisible();
   await expect(exchangeDrawer.getByText('2', { exact: true }).first()).toBeVisible();
   await expect(exchangeDrawer.getByText('KyberSwap', { exact: true })).toBeVisible();
-  await expect(exchangeDrawer.getByText('CoinGecko', { exact: true })).toBeVisible();
+  await expect(exchangeDrawer.getByText('Рынок', { exact: true })).toBeVisible();
   await expect(exchangeDrawer.getByRole('button', { name: 'Обменять' })).toBeDisabled();
   await exchangeDrawer.getByRole('button', { name: 'Готово' }).click();
 

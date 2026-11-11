@@ -1,11 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { LiveValue } from '@/components/ui/live-value';
+import { PriceFreshness } from '@/components/ui/price-freshness';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatTokenAmount, formatUsd, pnlTone } from '@/lib/format';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import { useQuery } from '@tanstack/react-query';
 import type { Asset, Position, SwapConfigResponse } from '@nexter/contracts';
 
@@ -41,7 +42,6 @@ export function TokenBuyList({
     enabled: Boolean(defaultGroup?.id),
     refetchInterval: 15_000,
   });
-  const flashing = useLiveFlash(watchlist.dataUpdatedAt);
 
   if (groups.isPending || watchlist.isPending) {
     return <LoadingRows rows={8} />;
@@ -66,7 +66,7 @@ export function TokenBuyList({
   const positionByAsset = new Map(positions.map((position) => [position.asset.id, position]));
 
   return (
-    <Card className={flashing ? 'live-flash' : ''}>
+    <Card>
       {showHeading ? <CardTitle>Основной список</CardTitle> : null}
       <CardDescription>
         Токены из группы «Основная». On-chain покупка доступна только для токенов из разрешённого
@@ -89,7 +89,8 @@ export function TokenBuyList({
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                 <th className="py-2 pr-3 font-medium">Токен</th>
                 <th className="py-2 pr-3 font-medium">Действие</th>
-                <th className="py-2 pr-3 text-right font-medium">Цена CoinGecko</th>
+                <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                <th className="py-2 pr-3 font-medium">Обновлено</th>
                 <th className="py-2 pr-3 text-right font-medium">24ч</th>
                 <th className="py-2 pr-3 text-right font-medium">В портфеле</th>
                 <th className="py-2 text-right font-medium">Стоимость</th>
@@ -143,20 +144,33 @@ export function TokenBuyList({
                       )}
                     </td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
-                      {formatPrice(entry.priceUsd)}
+                      <LiveValue value={formatPrice(entry.priceUsd)}>
+                        {formatPrice(entry.priceUsd)}
+                      </LiveValue>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <PriceFreshness
+                        updatedAt={entry.priceUpdatedAt}
+                        fetchedAt={entry.priceFetchedAt}
+                        source={entry.priceSource}
+                      />
                     </td>
                     <td
                       className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
                         entry.change24hPct,
                       )}`}
                     >
-                      {entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
+                      <LiveValue value={entry.change24hPct ? formatPct(entry.change24hPct) : '—'}>
+                        {entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
+                      </LiveValue>
                     </td>
                     <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                       {position ? formatTokenAmount(position.amount, 8) : '—'}
                     </td>
                     <td className="py-2 text-right font-mono tabular-nums text-zinc-700">
-                      {position ? formatUsd(position.valueUsd) : '—'}
+                      <LiveValue value={position ? formatUsd(position.valueUsd) : '—'}>
+                        {position ? formatUsd(position.valueUsd) : '—'}
+                      </LiveValue>
                     </td>
                   </tr>
                 );

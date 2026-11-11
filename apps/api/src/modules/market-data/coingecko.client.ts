@@ -95,7 +95,7 @@ export class CoinGeckoClient {
 
   async getMarkets(ids: string[]): Promise<Map<string, CoinGeckoMarket>> {
     if (env.NODE_ENV === 'test') return new Map();
-    const unique = [...new Set(ids.filter(Boolean))].slice(0, 50);
+    const unique = [...new Set(ids.filter(Boolean))];
     const result = new Map<string, CoinGeckoMarket>();
     const missing: string[] = [];
 
@@ -107,41 +107,45 @@ export class CoinGeckoClient {
 
     if (missing.length === 0) return result;
 
-    const body = await this.fetchJson(
-      `/coins/markets?vs_currency=usd&ids=${encodeURIComponent(missing.join(','))}&price_change_percentage=24h`,
-    );
-    if (!Array.isArray(body)) {
-      for (const id of missing) this.write(`market:${id}`, null);
-      return result;
+    const found = new Set<string>();
+    const chunks: string[][] = [];
+    for (let index = 0; index < missing.length; index += 50) {
+      chunks.push(missing.slice(index, index + 50));
     }
 
-    const found = new Set<string>();
+    for (const chunk of chunks) {
+      const body = await this.fetchJson(
+        `/coins/markets?vs_currency=usd&ids=${encodeURIComponent(chunk.join(','))}&price_change_percentage=24h`,
+      );
 
-    for (const item of body) {
-      if (!item || typeof item !== 'object') continue;
-      const row = item as {
-        id?: unknown;
-        current_price?: unknown;
-        price_change_percentage_24h?: unknown;
-        image?: unknown;
-        market_cap?: unknown;
-        total_volume?: unknown;
-      };
-      if (typeof row.id !== 'string') continue;
+      if (!Array.isArray(body)) continue;
 
-      const price = optionalNumber(row.current_price);
-      if (!price) continue;
+      for (const item of body) {
+        if (!item || typeof item !== 'object') continue;
+        const row = item as {
+          id?: unknown;
+          current_price?: unknown;
+          price_change_percentage_24h?: unknown;
+          image?: unknown;
+          market_cap?: unknown;
+          total_volume?: unknown;
+        };
+        if (typeof row.id !== 'string') continue;
 
-      const market: CoinGeckoMarket = {
-        priceUsd: price,
-        change24hPct: optionalPercent(row.price_change_percentage_24h),
-        logoUrl: typeof row.image === 'string' ? row.image : null,
-        marketCapUsd: optionalNumber(row.market_cap),
-        volume24hUsd: optionalNumber(row.total_volume),
-      };
-      result.set(row.id, market);
-      this.write(`market:${row.id}`, market);
-      found.add(row.id);
+        const price = optionalNumber(row.current_price);
+        if (!price || decimal(price).lte(0)) continue;
+
+        const market: CoinGeckoMarket = {
+          priceUsd: price,
+          change24hPct: optionalPercent(row.price_change_percentage_24h),
+          logoUrl: typeof row.image === 'string' ? row.image : null,
+          marketCapUsd: optionalNumber(row.market_cap),
+          volume24hUsd: optionalNumber(row.total_volume),
+        };
+        result.set(row.id, market);
+        this.write(`market:${row.id}`, market);
+        found.add(row.id);
+      }
     }
 
     for (const id of missing) {

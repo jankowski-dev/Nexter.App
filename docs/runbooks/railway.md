@@ -250,3 +250,13 @@ The personal-finance module creates six tables. The migration conditionally gran
 2. If `nexter_app` was provisioned before this migration, re-run `db:provision-app` or verify the finance tables are accessible to the app role.
 3. Smoke-check `GET /api/v1/finance/accounts` and `GET /api/v1/finance/summary` as the owner.
 4. Do not run the Notion finance import until the owner has reviewed the preview counts and totals.
+
+## UI-14 market quotes rollout (`0028`)
+
+1. Take a verified encrypted backup and run `node packages/db/dist/migrate.js`; migration `0028` is additive (`market_quotes` one row per asset).
+2. Re-run `db:provision-app` (or verify default privileges) so `nexter_app` has `SELECT/INSERT/UPDATE` on `market_quotes` and no `DELETE`. The migration also revokes DELETE, but the provisioning script is the authoritative check.
+3. Deploy with `MARKET_QUOTES_ENABLED=true`. `MarketQuoteRefreshService` starts 3 seconds after boot and refreshes DEX quotes every 60 seconds; CoinGecko fallback refreshes every 10 minutes.
+4. Verify `GET /ready`, then check the portfolio/dashboard prices and `market_quotes` rows (`source`, `fetched_at`, `changed_at`). XNY should be near the DexScreener price, not the old manual price.
+5. Verify `nexter_app` cannot delete from `market_quotes`:
+   `select has_table_privilege('nexter_app', 'market_quotes', 'DELETE');` must return `false`.
+6. Rollback: redeploy the previous image. Setting `MARKET_QUOTES_ENABLED=false` only stops the refresher; `PricingService` still reads existing `market_quotes` rows. For a true manual-price fallback, take a backup and clear `market_quotes` (or revert the previous image). The table is additive and may remain.

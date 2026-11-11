@@ -338,7 +338,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     env.SWAP_ROUTER_ALLOWLIST = router;
     env.SWAP_EXECUTOR_ALLOWLIST = executor;
     env.SWAP_SELECTOR_ALLOWLIST = selectorAllowlist;
-    await db.execute(sql`truncate table users restart identity cascade`);
+    await db.execute(sql`truncate table market_quotes, users restart identity cascade`);
     await db.execute(sql`truncate table indexed_transfers restart identity`);
     await db.execute(
       sql`delete from postings where asset_id in (select id from assets where symbol = 'TESTNULL')`,

@@ -103,11 +103,11 @@ function WalletControls() {
         <Button
           className="h-8 gap-1.5 px-2.5 text-xs"
           onClick={() => void wallet.connect()}
-          disabled={wallet.connecting || !wallet.projectId}
+          disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
           title={!wallet.projectId ? 'WalletConnect не настроен на сервере' : undefined}
         >
           <WalletIcon />
-          {wallet.connecting ? 'Подключаю…' : 'Подключить'}
+          {wallet.restoring ? 'Восстанавливаю…' : wallet.connecting ? 'Подключаю…' : 'Подключить'}
         </Button>
       )}
 

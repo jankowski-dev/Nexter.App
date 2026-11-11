@@ -74,16 +74,29 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - No migration. See ADR 0029.
 - Production: PR #74 deployed on 2026-11-11, bundle `assets/index-Dzy6ybJW.js`, `/ready` green. Verified on production: menu order, portfolio sub-tabs, Buy column placement, token-base rows/chain switch, header countdown, body scroll lock (`overflow: hidden` while open, restored after close), and no console errors.
 
+## UI-14 unified market quotes and live values (2026-11-11)
+
+- Root cause fixed: portfolio/dashboard/trades/reports used manual `prices` rows while the token base used CoinGecko, so XNY showed 0.00571055 vs 0.00502655 and the dashboard could stay stale.
+- Added `market_quotes` (one row per asset) with `price_usd`, `change_24h_pct`, `source`, `liquidity_usd`, `fetched_at`, `changed_at`. `PricingService` now prefers quotes and falls back to manual prices only when no quote exists.
+- DexScreener is primary for BSC/Ethereum contract tokens with at least $25k liquidity, refreshed every 60 seconds. CoinGecko is fallback for native/low-liquidity tokens every 10 minutes. Cash equivalents are fixed at $1.
+- Dashboard, positions, trades, reports, and watchlist share the same quote source. Positions/trades/main list/token base show relative last-update times with exact change/check/source tooltips; the dashboard shows the newest position quote time.
+- Whole-card flashing is removed. `LiveValue` flashes only the displayed value that changed.
+- Header countdown is replaced by a small fan that spins while live queries are fetching and stops when idle or failing.
+- WalletConnect now restores an existing session silently on page load and persists the selected chain; header and drawers share the same provider. Session expiry still requires one reconnect.
+- Monthly net profit remains realized Net P&L by design; unrealized P&L and capital are price-driven.
+- Migration `0028` is additive. Pending signature cancellation remains unchanged per owner decision.
+- See ADR 0030.
+
 ## Database
 
-Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), and `0027` (habits) are additive. `0019` adds:
+Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), `0027` (habits), and `0028` (market quotes) are additive. `0019` adds:
 
 - `vault_configs` (unique per user).
 - `vault_items` (owner-scoped ciphertext).
 - `tasks`.
 - `notes`.
 
-`0027` adds `habits` (`name`, `started_on`, `archived_at`) with a partial unique index on active names per user and a conditional DML grant for `nexter_app`.
+`0027` adds `habits` (`name`, `started_on`, `archived_at`) with a partial unique index on active names per user and a conditional DML grant for `nexter_app`. `0028` adds `market_quotes` (one row per asset: price, 24h change, source, liquidity, fetched/changed timestamps) and conditionally grants SELECT/INSERT/UPDATE plus revokes DELETE for `nexter_app`.
 
 All tables are additive; no existing table or ledger row is changed.
 

@@ -129,7 +129,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
   }, 30_000);
 
   beforeEach(async () => {
-    await db.execute(sql`truncate table prices, users restart identity cascade`);
+    await db.execute(sql`truncate table prices, market_quotes, users restart identity cascade`);
   });
 
   afterAll(async () => {

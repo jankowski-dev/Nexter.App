@@ -54,6 +54,9 @@ export const tradeGroupSummarySchema = z.object({
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string().nullable(),
   totalPnlUsd: z.string().nullable(),
+  priceUpdatedAt: z.iso.datetime().nullable(),
+  priceFetchedAt: z.iso.datetime().nullable(),
+  priceSource: z.string().nullable(),
   gasUsd: z.string(),
   remainingAmount: z.string(),
   costBasisUsd: z.string(),
@@ -140,9 +143,18 @@ export const transactionsListQuerySchema = z.object({
   search: z.string().max(100).optional(),
 });
 
+export const portfolioQuoteSchema = z.object({
+  priceUsd: z.string(),
+  change24hPct: z.string().nullable(),
+  priceUpdatedAt: z.iso.datetime().nullable(),
+  priceFetchedAt: z.iso.datetime().nullable(),
+  priceSource: z.string().nullable(),
+});
+
 export const portfolioAssetDetailSchema = z.object({
   asset: assetSchema,
   position: positionSchema.nullable(),
+  quote: portfolioQuoteSchema.nullable(),
   thesis: z.string().nullable(),
   tags: z.array(z.string()),
   lots: z.array(lotSchema),
@@ -243,6 +255,7 @@ export type TradeGroupView = NonNullable<z.infer<typeof tradeGroupListQuerySchem
 export type TradeGroupListQuery = z.infer<typeof tradeGroupListQuerySchema>;
 export type TransactionsListQuery = z.infer<typeof transactionsListQuerySchema>;
 export type TransactionsPageResponse = z.infer<typeof transactionsPageResponseSchema>;
+export type PortfolioQuote = z.infer<typeof portfolioQuoteSchema>;
 export type PortfolioAssetDetail = z.infer<typeof portfolioAssetDetailSchema>;
 export type AllocationSlice = z.infer<typeof allocationSliceSchema>;
 export type DashboardAllocation = z.infer<typeof dashboardAllocationSchema>;

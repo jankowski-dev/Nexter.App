@@ -593,7 +593,9 @@ export function ExchangeDrawer({
               </div>
             </div>
             <div className="rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs text-zinc-500">CoinGecko</div>
+              <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
+                Рынок
+              </div>
               <div className="font-mono text-zinc-800">
                 {marketRate ? formatPrice(marketRate) : '—'}
               </div>
@@ -642,9 +644,13 @@ export function ExchangeDrawer({
                 className="ml-2"
                 variant="secondary"
                 onClick={() => void wallet.connect()}
-                disabled={wallet.connecting || !wallet.projectId}
+                disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
               >
-                {wallet.connecting ? 'Подключаю…' : 'Подключить'}
+                {wallet.restoring
+                  ? 'Восстанавливаю…'
+                  : wallet.connecting
+                    ? 'Подключаю…'
+                    : 'Подключить'}
               </Button>
             </div>
           ) : null}

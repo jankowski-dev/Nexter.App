@@ -2,6 +2,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { LiveValue } from '@/components/ui/live-value';
+import { PriceFreshness } from '@/components/ui/price-freshness';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -17,7 +19,6 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useCallback, useState } from 'react';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
 import { ManualTradeDialog } from '../trade/manual-trade-dialog';
@@ -58,7 +59,6 @@ export function PortfolioPage() {
     queryFn: fetchPositions,
     refetchInterval: 15_000,
   });
-  const positionsFlash = useLiveFlash(positions.dataUpdatedAt);
   const refetchPositions = useCallback(() => {
     void positions.refetch();
   }, [positions.refetch]);
@@ -214,7 +214,7 @@ export function PortfolioPage() {
           </div>
 
           {portfolioView === 'positions' ? (
-            <Card className={positionsFlash ? 'live-flash' : ''}>
+            <Card>
               <CardDescription>
                 Нажми на токен, чтобы открыть статистику, лоты и сделки в боковой панели.
               </CardDescription>
@@ -228,6 +228,7 @@ export function PortfolioPage() {
                         <th className="py-2 pr-3 font-medium">Актив</th>
                         <th className="py-2 pr-3 text-right font-medium">Количество</th>
                         <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                        <th className="py-2 pr-3 font-medium">Обновлено</th>
                         <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
                         <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
                         <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
@@ -278,13 +279,24 @@ export function PortfolioPage() {
                               {formatTokenAmount(position.amount, 8)}
                             </td>
                             <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                              {formatPrice(position.priceUsd)}
+                              <LiveValue value={formatPrice(position.priceUsd)}>
+                                {formatPrice(position.priceUsd)}
+                              </LiveValue>
+                            </td>
+                            <td className="py-2 pr-3">
+                              <PriceFreshness
+                                updatedAt={position.priceUpdatedAt}
+                                fetchedAt={position.priceFetchedAt}
+                                source={position.priceSource}
+                              />
                             </td>
                             <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                               {formatPrice(position.avgCostUsd)}
                             </td>
                             <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
-                              {formatUsd(position.valueUsd)}
+                              <LiveValue value={formatUsd(position.valueUsd)}>
+                                {formatUsd(position.valueUsd)}
+                              </LiveValue>
                             </td>
                             <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
                               {formatUsd(position.costBasisUsd)}
@@ -294,10 +306,16 @@ export function PortfolioPage() {
                                 position.unrealizedPnlUsd,
                               )}`}
                             >
-                              {formatSignedUsd(position.unrealizedPnlUsd)}
+                              <LiveValue value={formatSignedUsd(position.unrealizedPnlUsd)}>
+                                {formatSignedUsd(position.unrealizedPnlUsd)}
+                              </LiveValue>
                             </td>
                             <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                              {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
+                              <LiveValue
+                                value={share === null ? '—' : `${formatPct(share.toFixed(2))}`}
+                              >
+                                {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
+                              </LiveValue>
                             </td>
                             <td className="py-2 text-right">
                               <Button

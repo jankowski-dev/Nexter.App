@@ -119,6 +119,18 @@ export const envSchema = z.object({
   COINGECKO_BASE_URL: z.url().default('https://api.coingecko.com/api/v3'),
   COINGECKO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   COINGECKO_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
+  DEXSCREENER_BASE_URL: z.url().default('https://api.dexscreener.com'),
+  DEXSCREENER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
+  MARKET_QUOTES_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  MARKET_QUOTE_INTERVAL_SECONDS: z.coerce.number().int().min(30).max(3600).default(60),
+  MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(600),
+  MARKET_QUOTE_MIN_LIQUIDITY_USD: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/)
+    .default('25000'),
   KYBERSWAP_CLIENT_ID: z.string().min(1).default('nexter'),
   WALLETCONNECT_PROJECT_ID: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   BSC_RPC_URL: z.preprocess(emptyToUndefined, z.url().optional()),

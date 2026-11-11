@@ -197,6 +197,13 @@
       "when": 1794348224180,
       "tag": "0027_rare_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1794400822853,
+      "tag": "0028_gray_toad",
+      "breakpoints": true
     }
   ]
 }

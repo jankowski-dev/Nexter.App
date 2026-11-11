@@ -24,6 +24,7 @@ interface WalletContextValue {
   address: string | null;
   chainId: number | null;
   connecting: boolean;
+  restoring: boolean;
   connected: boolean;
   error: string | null;
   projectId: string | null;
@@ -47,31 +48,45 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   });
   const projectId = config.data?.walletConnectProjectId ?? null;
   const wallet = useWalletConnect(projectId);
-  const [chain, setChain] = useState<WalletChain>('bsc');
-  const wasConnected = useRef(false);
+  const [chain, setChain] = useState<WalletChain>(() => {
+    try {
+      return localStorage.getItem('nexter-wallet-chain') === 'ethereum' ? 'ethereum' : 'bsc';
+    } catch {
+      return 'bsc';
+    }
+  });
+  const switchingChain = useRef(false);
 
   useEffect(() => {
-    if (wallet.connected && !wasConnected.current) {
-      const target = CHAIN_IDS[chain];
-      if (wallet.chainId !== target) {
-        void wallet.switchToChain(target).then((switched) => {
-          if (!switched) setChain('bsc');
-        });
-      }
-    }
-    wasConnected.current = wallet.connected;
-  }, [wallet.connected, wallet.chainId, wallet.switchToChain, chain]);
+    if (!wallet.connected || !wallet.chainId || switchingChain.current) return;
+    const actual =
+      wallet.chainId === CHAIN_IDS.ethereum
+        ? 'ethereum'
+        : wallet.chainId === CHAIN_IDS.bsc
+          ? 'bsc'
+          : null;
+    if (actual && actual !== chain) setChain(actual);
+  }, [wallet.connected, wallet.chainId, chain]);
 
   const selectChain = useCallback(
     (next: WalletChain) => {
       const previous = chain;
+      switchingChain.current = true;
       setChain(next);
+      try {
+        localStorage.setItem('nexter-wallet-chain', next);
+      } catch {
+        // Storage may be unavailable; the current session still uses the chain.
+      }
       if (wallet.connected && wallet.chainId !== CHAIN_IDS[next]) {
         void wallet.switchToChain(CHAIN_IDS[next]).then((switched) => {
+          switchingChain.current = false;
           if (!switched) {
             setChain((current) => (current === next ? previous : current));
           }
         });
+      } else {
+        switchingChain.current = false;
       }
     },
     [chain, wallet.connected, wallet.chainId, wallet.switchToChain],
@@ -82,6 +97,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address: wallet.address,
       chainId: wallet.chainId,
       connecting: wallet.connecting,
+      restoring: wallet.restoring,
       connected: wallet.connected,
       error: wallet.error,
       projectId,
@@ -97,6 +113,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       wallet.address,
       wallet.chainId,
       wallet.connecting,
+      wallet.restoring,
       wallet.connected,
       wallet.error,
       projectId,

@@ -6,7 +6,6 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchAccounts, fetchAssets, fetchTransactions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
-import { useLiveFlash } from '@/lib/use-live-flash';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { ExchangeDrawer } from '../trade/exchange-drawer';
@@ -66,7 +65,6 @@ export function OperationsPage() {
   });
 
   const rows = transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
-  const operationsFlash = useLiveFlash(transactions.dataUpdatedAt);
   const refreshOperations = useCallback(() => {
     void transactions.refetch();
   }, [transactions.refetch]);
@@ -123,7 +121,7 @@ export function OperationsPage() {
       ) : null}
 
       {!transactions.isPending && !transactions.isError ? (
-        <Card className={operationsFlash ? 'live-flash' : ''}>
+        <Card>
           <CardTitle>Журнал операций</CardTitle>
           <CardDescription>
             Все движения по кошелькам. Сделки открываются из Портфеля.

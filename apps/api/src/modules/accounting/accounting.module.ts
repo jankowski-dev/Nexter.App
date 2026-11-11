@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MarketDataCoreModule } from '../market-data/market-data-core.module';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
@@ -23,6 +24,7 @@ import { TradeGroupsService } from './trade-groups.service';
 import { TransactionsController } from './transactions.controller';
 
 @Module({
+  imports: [MarketDataCoreModule],
   controllers: [
     AccountsController,
     AssetsController,
@@ -49,6 +51,12 @@ import { TransactionsController } from './transactions.controller';
     ReportsService,
     TradeGroupsService,
   ],
-  exports: [AccountingBootstrapService, AccountsService, AssetsService, LedgerService],
+  exports: [
+    AccountingBootstrapService,
+    AccountsService,
+    AssetsService,
+    LedgerService,
+    PricingService,
+  ],
 })
 export class AccountingModule {}

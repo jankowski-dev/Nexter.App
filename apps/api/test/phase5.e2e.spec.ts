@@ -98,7 +98,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
   }, 30_000);
 
   beforeEach(async () => {
-    await db.execute(sql`truncate table prices, users restart identity cascade`);
+    await db.execute(sql`truncate table prices, market_quotes, users restart identity cascade`);
     await db.execute(
       sql`delete from assets where chain_id = (select id from chains where code = 'bsc') and symbol not in ('USDC', 'XNY', 'BASED', 'APR', 'POP', 'LINK', 'BNB', 'USDT')`,
     );

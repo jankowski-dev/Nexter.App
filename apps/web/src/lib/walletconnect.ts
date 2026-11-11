@@ -1,5 +1,5 @@
 import { EthereumProvider } from '@walletconnect/ethereum-provider';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SUPPORTED_CHAIN_IDS = [56, 1] as const;
 const BSC_CHAIN_ID = 56;
@@ -28,12 +28,125 @@ function chainIdFrom(value: unknown): number | null {
   return null;
 }
 
+function sessionExpired(provider: WalletProvider): boolean {
+  const expiry = (provider.session as { expiry?: number } | undefined)?.expiry;
+  return Boolean(expiry && expiry * 1000 <= Date.now());
+}
+
 export function useWalletConnect(projectId: string | null) {
   const providerRef = useRef<WalletProvider | null>(null);
+  const initPromiseRef = useRef<Promise<WalletProvider> | null>(null);
+  const listenersBoundRef = useRef(false);
   const [address, setAddress] = useState<string | null>(null);
   const [chainId, setChainId] = useState<number | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const bindProvider = useCallback((provider: WalletProvider) => {
+    if (listenersBoundRef.current) return;
+    listenersBoundRef.current = true;
+
+    provider.on('accountsChanged', (accounts: string[]) => {
+      const next = accounts[0] ?? null;
+      setAddress(next);
+      if (!next) {
+        setChainId(null);
+        providerRef.current = null;
+        initPromiseRef.current = null;
+        listenersBoundRef.current = false;
+        void provider.disconnect().catch(() => undefined);
+      }
+    });
+    provider.on('chainChanged', (value: string) => {
+      setChainId(chainIdFrom(value));
+    });
+    provider.on('disconnect', () => {
+      setAddress(null);
+      setChainId(null);
+    });
+  }, []);
+
+  const ensureProvider = useCallback(async (): Promise<WalletProvider> => {
+    if (!projectId) {
+      throw new Error('WalletConnect Project ID не настроен');
+    }
+    if (providerRef.current) return providerRef.current;
+    if (initPromiseRef.current) return initPromiseRef.current;
+
+    const promise = EthereumProvider.init({
+      projectId,
+      chains: [...SUPPORTED_CHAIN_IDS],
+      optionalChains: [...SUPPORTED_CHAIN_IDS],
+      showQrModal: true,
+      qrModalOptions: { themeMode: 'light' },
+      metadata: {
+        name: 'Nexter',
+        description: 'Личный финансовый учёт',
+        url: window.location.origin,
+        icons: [],
+      },
+    });
+
+    initPromiseRef.current = promise;
+
+    try {
+      const provider = await promise;
+      providerRef.current = provider;
+      bindProvider(provider);
+      return provider;
+    } finally {
+      initPromiseRef.current = null;
+    }
+  }, [bindProvider, projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+
+    let cancelled = false;
+    setRestoring(true);
+
+    void ensureProvider()
+      .then(async (provider) => {
+        if (cancelled || !provider.session) return;
+
+        if (sessionExpired(provider)) {
+          await provider.disconnect().catch(() => undefined);
+          providerRef.current = null;
+          initPromiseRef.current = null;
+          listenersBoundRef.current = false;
+          return;
+        }
+
+        const accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
+        const currentChain = (await provider.request({ method: 'eth_chainId' })) as string;
+
+        if (cancelled) return;
+
+        if (!accounts[0]) {
+          await provider.disconnect().catch(() => undefined);
+          providerRef.current = null;
+          initPromiseRef.current = null;
+          listenersBoundRef.current = false;
+          setAddress(null);
+          setChainId(null);
+          return;
+        }
+
+        setAddress(accounts[0]);
+        setChainId(chainIdFrom(currentChain));
+      })
+      .catch(() => {
+        // A missing or expired session is not an error; the user can connect manually.
+      })
+      .finally(() => {
+        if (!cancelled) setRestoring(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureProvider, projectId]);
 
   const connect = useCallback(async () => {
     if (!projectId) {
@@ -45,40 +158,25 @@ export function useWalletConnect(projectId: string | null) {
     setError(null);
 
     try {
-      const provider =
-        providerRef.current ??
-        (await EthereumProvider.init({
-          projectId,
-          chains: [...SUPPORTED_CHAIN_IDS],
-          optionalChains: [...SUPPORTED_CHAIN_IDS],
-          showQrModal: true,
-          qrModalOptions: { themeMode: 'light' },
-          metadata: {
-            name: 'Nexter',
-            description: 'Личный финансовый учёт',
-            url: window.location.origin,
-            icons: [],
-          },
-        }));
+      let provider = await ensureProvider();
+      let accounts = provider.session
+        ? ((await provider.request({ method: 'eth_accounts' })) as string[])
+        : [];
 
-      providerRef.current = provider;
-
-      provider.on('accountsChanged', (accounts: string[]) => {
-        setAddress(accounts[0] ?? null);
-      });
-      provider.on('chainChanged', (value: string) => {
-        setChainId(chainIdFrom(value));
-      });
-      provider.on('disconnect', () => {
-        setAddress(null);
-        setChainId(null);
-      });
-
-      if (!provider.session) {
-        await provider.connect();
+      if (provider.session && (sessionExpired(provider) || !accounts[0])) {
+        await provider.disconnect().catch(() => undefined);
+        providerRef.current = null;
+        initPromiseRef.current = null;
+        listenersBoundRef.current = false;
+        provider = await ensureProvider();
+        accounts = [];
       }
 
-      const accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
+      if (!provider.session || !accounts[0]) {
+        await provider.connect();
+        accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
+      }
+
       const currentChain = (await provider.request({ method: 'eth_chainId' })) as string;
       setAddress(accounts[0] ?? null);
       setChainId(chainIdFrom(currentChain));
@@ -87,7 +185,7 @@ export function useWalletConnect(projectId: string | null) {
     } finally {
       setConnecting(false);
     }
-  }, [projectId]);
+  }, [ensureProvider, projectId]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -96,9 +194,12 @@ export function useWalletConnect(projectId: string | null) {
       await providerRef.current?.disconnect();
     } finally {
       providerRef.current = null;
+      initPromiseRef.current = null;
+      listenersBoundRef.current = false;
       setAddress(null);
       setChainId(null);
       setError(null);
+      setRestoring(false);
     }
   }, []);
 
@@ -199,6 +300,7 @@ export function useWalletConnect(projectId: string | null) {
     address,
     chainId,
     connecting,
+    restoring,
     error,
     clearError,
     connected: Boolean(address),

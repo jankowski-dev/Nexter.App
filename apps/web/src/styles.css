@@ -252,29 +252,24 @@ button:focus-visible,
   }
 }
 
-@keyframes live-flash {
+@keyframes live-value-flash {
   0% {
-    opacity: 1;
+    background-color: rgb(16 185 129 / 0.22);
   }
   100% {
-    opacity: 0;
+    background-color: transparent;
   }
 }
 
-.live-flash {
-  position: relative;
+.live-value {
+  display: inline-block;
+  margin: 0 -2px;
+  padding: 0 2px;
+  border-radius: 4px;
 }
 
-.live-flash::after {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  border: 2px solid rgb(52 211 153);
-  border-radius: inherit;
-  background: rgb(16 185 129 / 0.08);
-  pointer-events: none;
-  content: '';
-  animation: live-flash 1000ms ease-out forwards;
+.live-value-flash {
+  animation: live-value-flash 900ms ease-out;
 }
 
 .page-enter {
@@ -303,12 +298,7 @@ button:focus-visible,
   .dialog-panel-enter,
   .drawer-panel-enter,
   .image-enter,
-  .live-flash {
+  .live-value-flash {
     animation: none;
-  }
-
-  .live-flash::after {
-    animation: none;
-    opacity: 0;
   }
 }

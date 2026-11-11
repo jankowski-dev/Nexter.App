@@ -5,14 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, inArray, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import {
   assets,
   auditLog,
   chains,
   importRows,
   imports,
-  prices,
   watchlist,
   watchlistGroups,
   type Database,
@@ -35,8 +34,8 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
-import type { CoinGeckoMarket } from '../market-data/coingecko.client';
 import { MarketDataService } from '../market-data/market-data.service';
+import { PricingService, type PriceQuote } from '../accounting/pricing.service';
 
 interface WatchlistMeta {
   ip?: string;
@@ -66,6 +65,7 @@ export class WatchlistService {
     @Inject(DB) private readonly db: Database,
     private readonly audit: AuditService,
     private readonly marketData: MarketDataService,
+    private readonly pricing: PricingService,
   ) {}
 
   async listGroups(userId: string): Promise<WatchlistGroupsResponse> {
@@ -401,19 +401,12 @@ export class WatchlistService {
         id: row.entry.id,
       }),
     );
-    const priceByAsset = await this.priceContext(page.data.map((row) => row.entry.assetId));
-    const marketByCoingeckoId = await this.marketData.getMarkets(
-      page.data.map((row) => row.asset.coingeckoId).filter((id): id is string => Boolean(id)),
-    );
+    const priceByAsset = await this.pricing.latestForAssets([
+      ...new Set(page.data.map((row) => row.entry.assetId)),
+    ]);
 
     return {
-      data: page.data.map((row) =>
-        this.toContract(
-          row,
-          priceByAsset.get(row.entry.assetId),
-          row.asset.coingeckoId ? marketByCoingeckoId.get(row.asset.coingeckoId) : undefined,
-        ),
-      ),
+      data: page.data.map((row) => this.toContract(row, priceByAsset.get(row.entry.assetId))),
       page: { nextCursor: page.nextCursor, hasMore: page.hasMore },
     };
   }
@@ -722,59 +715,9 @@ export class WatchlistService {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist entry not found' });
     }
 
-    const priceByAsset = await this.priceContext([row.entry.assetId]);
-    const marketByCoingeckoId = row.asset.coingeckoId
-      ? await this.marketData.getMarkets([row.asset.coingeckoId])
-      : new Map<string, CoinGeckoMarket>();
+    const priceByAsset = await this.pricing.latestForAssets([row.entry.assetId]);
 
-    return this.toContract(
-      row,
-      priceByAsset.get(row.entry.assetId),
-      row.asset.coingeckoId ? marketByCoingeckoId.get(row.asset.coingeckoId) : undefined,
-    );
-  }
-
-  private async priceContext(
-    assetIds: string[],
-  ): Promise<
-    Map<string, { latest: string | null; latestObservedAt: Date | null; previous: string | null }>
-  > {
-    if (assetIds.length === 0) return new Map();
-
-    const rows = await this.db
-      .select()
-      .from(prices)
-      .where(inArray(prices.assetId, [...new Set(assetIds)]))
-      .orderBy(desc(prices.observedAt));
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    const result = new Map<
-      string,
-      { latest: string | null; latestObservedAt: Date | null; previous: string | null }
-    >();
-
-    for (const row of rows) {
-      const current = result.get(row.assetId) ?? {
-        latest: null,
-        latestObservedAt: null,
-        previous: null,
-      };
-
-      if (!current.latest) {
-        current.latest = row.priceUsd;
-        current.latestObservedAt = row.observedAt;
-      } else if (
-        current.latestObservedAt &&
-        current.latestObservedAt.getTime() >= cutoff &&
-        !current.previous &&
-        row.observedAt.getTime() <= current.latestObservedAt.getTime() - 24 * 60 * 60 * 1000
-      ) {
-        current.previous = row.priceUsd;
-      }
-
-      result.set(row.assetId, current);
-    }
-
-    return result;
+    return this.toContract(row, priceByAsset.get(row.entry.assetId));
   }
 
   private toGroupContract(
@@ -798,27 +741,16 @@ export class WatchlistService {
       asset: typeof assets.$inferSelect;
       chainCode: string;
     },
-    price?: {
-      latest: string | null;
-      latestObservedAt: Date | null;
-      previous: string | null;
-    },
-    market?: CoinGeckoMarket,
+    quote?: PriceQuote,
   ): WatchlistEntry {
-    const latest = market?.priceUsd ?? price?.latest ?? null;
-    const previous = price?.previous ?? null;
-    const change =
-      market?.change24hPct ??
-      (latest && previous && decimal(previous).gt(0)
-        ? decimal(latest).minus(previous).div(previous).mul(100).toFixed(2)
-        : null);
+    const latest = quote?.priceUsd ?? null;
+    const change = quote?.change24hPct ?? null;
     const derivedPrevious =
-      previous ??
-      (latest && change && decimal(change).gt(-100)
+      latest && change && decimal(change).gt(-100)
         ? decimal(latest)
             .div(decimal('1').plus(decimal(change).div(100)))
             .toFixed(8)
-        : null);
+        : null;
 
     return {
       id: row.entry.id,
@@ -837,7 +769,7 @@ export class WatchlistService {
         isVerified: row.asset.isVerified,
       },
       groupId: row.entry.groupId,
-      logoUrl: row.asset.logoUrl ?? market?.logoUrl ?? null,
+      logoUrl: row.asset.logoUrl,
       thesis: row.entry.thesis,
       tags: row.entry.tags,
       twitterUrl: row.entry.twitterUrl,
@@ -850,6 +782,9 @@ export class WatchlistService {
       priceUsd: latest,
       price24hAgoUsd: derivedPrevious,
       change24hPct: change,
+      priceUpdatedAt: quote?.changedAt.toISOString() ?? null,
+      priceFetchedAt: quote?.fetchedAt.toISOString() ?? null,
+      priceSource: quote?.source ?? null,
     };
   }
 }

@@ -45,15 +45,26 @@ export class PortfolioService {
       .from(watchlist)
       .where(and(eq(watchlist.userId, userId), eq(watchlist.assetId, assetId)))
       .limit(1);
-    const [allGroups, allTransactions, prices] = await Promise.all([
+    const [allGroups, allTransactions, prices, priceByAsset] = await Promise.all([
       this.allTradeGroups(userId, assetId),
       this.allTransactions(userId, assetId),
       this.pricing.list(assetId),
+      this.pricing.latestForAssets([assetId]),
     ]);
+    const quote = priceByAsset.get(assetId);
 
     return {
       asset,
       position,
+      quote: quote
+        ? {
+            priceUsd: quote.priceUsd,
+            change24hPct: quote.change24hPct,
+            priceUpdatedAt: quote.changedAt.toISOString(),
+            priceFetchedAt: quote.fetchedAt.toISOString(),
+            priceSource: quote.source,
+          }
+        : null,
       thesis: watched?.thesis ?? null,
       tags: watched?.tags ?? [],
       lots: lotRows.map((lot) => ({

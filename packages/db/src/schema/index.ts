@@ -553,6 +553,23 @@ export const prices = pgTable(
   ],
 );
 
+export const marketQuotes = pgTable(
+  'market_quotes',
+  {
+    assetId: uuid('asset_id')
+      .primaryKey()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    priceUsd: numeric('price_usd', { precision: 36, scale: 18 }).notNull(),
+    change24hPct: numeric('change_24h_pct', { precision: 12, scale: 4 }),
+    source: text('source').notNull(),
+    liquidityUsd: numeric('liquidity_usd', { precision: 24, scale: 2 }),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('market_quotes_fetched_idx').on(table.fetchedAt)],
+);
+
 export const portfolioSnapshots = pgTable(
   'portfolio_snapshots',
   {
@@ -1097,6 +1114,7 @@ export type TradeDetail = typeof tradeDetails.$inferSelect;
 export type Lot = typeof lots.$inferSelect;
 export type LotConsumption = typeof lotConsumptions.$inferSelect;
 export type Price = typeof prices.$inferSelect;
+export type MarketQuote = typeof marketQuotes.$inferSelect;
 export type Import = typeof imports.$inferSelect;
 export type ImportRow = typeof importRows.$inferSelect;
 export type SwapOrder = typeof swapOrders.$inferSelect;
