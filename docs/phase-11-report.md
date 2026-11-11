@@ -52,6 +52,16 @@ Status: implemented locally on 2026-11-09. Independent security review: PASS WIT
 - Background asset-logo backfill fills missing `assets.logo_url` from CoinGecko.
 - `habits` table, API, dashboard form and streak cards; migration `0027`.
 
+## UI-12 production release (2026-11-11)
+
+- PR #70 merged to `main` as `c1839c7`; API deployment succeeded (healthcheck `/ready`), worker stayed online (its deployment was skipped because no worker-specific code changed).
+- Live SPA bundle: `assets/index-BFRB8_I4.js`. `/health` and `/ready` return 200 with `database: "ok"`.
+- Backup: encrypted PostgreSQL custom dump, 862,557 bytes. Plaintext SHA-256 `0ed88af6cb631d41d4c75739d9efbafcd776ced0bb26c20221d64387b20000bc`; encrypted SHA-256 `747ea86b52f3f438d2e4ab6441cddd834e90662e0fd414d03f6ec5cb763f5b6a`.
+- Restore check: restored into a scratch database on the production Postgres instance; counts matched (856 transactions, 3,406 postings, 433 lots, 431 trade groups, 45 assets, 249 finance transactions), realized P&L `55.61024691`, lot remaining `9001602.010317392293953545`, fees `0.19681704`, and zero orphan postings/lots/consumptions. Scratch database was dropped.
+- Backup storage: the encrypted dump is kept outside the repository at `~/.nexter/backups/nexter-2026-11-11-ui12.dump.enc`; the encryption key is at `~/.nexter/backup-key` (mode 600). The plaintext dump was deleted after verification.
+- Migration `0027`: applied through a Railway SSH tunnel using the owner connection. Verified `habits` exists, `habits_user_name_unique` is partial on `archived_at IS NULL`, `nexter_app` has SELECT/INSERT/UPDATE/DELETE, and 28 migrations are recorded.
+- Asset logo backfill filled 38 assets (including BNB, ETH, BASED, POP, APR, XNY, USDC, USDT). Production dashboard, portfolio, `Основной список`, buy drawer, Статистика, Operations, Tasks, Notes, and Vault were opened; no console errors. Habits API returned `{"data":[]}` and the create form rendered.
+
 ## Database
 
 Migrations `0019_remarkable_songbird.sql` (vault/tasks/notes), `0020` (token base), `0021` (task recurrence), `0022` (task tags/images), `0023`–`0025` (personal finance), `0026` (note images), and `0027` (habits) are additive. `0019` adds:

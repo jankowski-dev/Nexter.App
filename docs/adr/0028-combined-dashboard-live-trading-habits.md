@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for the crypto/habits feedback batch (2026-11-11).
+Accepted and deployed on 2026-11-11. Migration `0027` was applied to production after a verified encrypted backup and restore check.
 
 ## Context
 
