@@ -346,7 +346,9 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     const found = await agent.get('/api/v1/notes?search=корреляцию').expect(200);
     expect(found.body.data).toHaveLength(1);
     expect(found.body.data[0].id).toBe(note.body.id);
-    expect(found.body.data[0].images).toHaveLength(1);
+    expect(found.body.data[0].attachmentCount).toBe(1);
+    const noteDetail = await agent.get(`/api/v1/notes/${note.body.id}`).expect(200);
+    expect(noteDetail.body.images).toHaveLength(1);
 
     const updatedNote = await agent
       .patch(`/api/v1/notes/${note.body.id}`)

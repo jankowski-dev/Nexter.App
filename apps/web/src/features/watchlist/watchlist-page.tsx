@@ -84,28 +84,16 @@ function isValidIconValue(value: string): boolean {
   }
 }
 
-type TokenSortKey = 'default' | 'marketCap' | 'change24h' | 'change7d' | 'change30d' | 'change1y';
+type TokenSortKey = 'default' | 'marketCap' | 'change24h';
 
 const TOKEN_SORT_LABELS: Record<TokenSortKey, string> = {
   default: 'По умолчанию',
   marketCap: 'Капитализация',
-  change24h: 'Изменение 24ч',
-  change7d: 'Изменение 7д',
-  change30d: 'Изменение 30д',
-  change1y: 'Изменение 1г',
+  change24h: '24ч',
 };
 
 function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>): number | null {
-  const raw =
-    key === 'marketCap'
-      ? entry.marketCapUsd
-      : key === 'change24h'
-        ? entry.change24hPct
-        : key === 'change7d'
-          ? entry.change7dPct
-          : key === 'change30d'
-            ? entry.change30dPct
-            : entry.change1yPct;
+  const raw = key === 'marketCap' ? entry.marketCapUsd : entry.change24hPct;
   if (raw === null) return null;
   const value = Number(raw);
   return Number.isFinite(value) ? value : null;

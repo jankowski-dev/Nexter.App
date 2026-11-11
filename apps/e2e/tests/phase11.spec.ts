@@ -201,16 +201,11 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   const listTaskRow = page.locator('[data-task-id]').filter({ hasText: 'Задача для списка' });
   await listTaskRow.getByRole('button', { name: 'Удалить задачу' }).click();
-  const deleteTaskDrawer = page.getByRole('dialog');
   await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toHaveCount(0);
-  await expect(deleteTaskDrawer).toBeVisible();
-  await deleteTaskDrawer.getByRole('button', { name: 'Удалить' }).click();
-  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Изменить задачу' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Отменить удаление задачи' }).click();
-  await expect(page.getByRole('heading', { name: 'Удалить задачу?' })).toHaveCount(0);
-  await deleteTaskDrawer.getByRole('button', { name: 'Удалить' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await listTaskRow.getByRole('button', { name: 'Удалить задачу' }).click();
   await page.getByRole('button', { name: 'Подтвердить удаление задачи' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('Задача для списка')).toHaveCount(0);

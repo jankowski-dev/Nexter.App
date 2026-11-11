@@ -45,6 +45,14 @@ export class NotesController {
     return this.notes.list(auth.user.id, query);
   }
 
+  @Get(':id')
+  get(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Note> {
+    return this.notes.get(auth.user.id, id);
+  }
+
   @Post()
   create(
     @CurrentAuth() auth: AuthContext,

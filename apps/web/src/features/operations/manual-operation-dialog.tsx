@@ -56,6 +56,7 @@ export function ManualOperationDialog({
   const lastPayloadSignature = useRef<string | null>(null);
   const wasOpen = useRef(false);
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [chainCode, setChainCode] = useState<string>(wallet.chain);
   const [accountId, setAccountId] = useState('');
   const [assetId, setAssetId] = useState('');
   const [assetInId, setAssetInId] = useState('');
@@ -77,8 +78,9 @@ export function ManualOperationDialog({
   const allAssets = assets.data?.assets ?? [];
   const walletAccounts =
     accounts.data?.accounts.filter((account) => account.type === 'wallet') ?? [];
-  const chainAssets = allAssets.filter((asset) => asset.chainCode === wallet.chain);
-  const chainAccounts = walletAccounts.filter((account) => account.chainCode === wallet.chain);
+  const chainAssets = allAssets.filter((asset) => asset.chainCode === chainCode);
+  const chainAccounts = walletAccounts.filter((account) => account.chainCode === chainCode);
+  const chainOptions = [...new Set(allAssets.map((asset) => asset.chainCode))].sort();
   const selectedAsset = allAssets.find((asset) => asset.id === assetId);
   const selectedIn = allAssets.find((asset) => asset.id === assetInId);
   const selectedOut = allAssets.find((asset) => asset.id === assetOutId);
@@ -104,6 +106,7 @@ export function ManualOperationDialog({
     idempotencyKey.current = crypto.randomUUID();
     lastPayloadSignature.current = null;
     setMode(initialMode);
+    setChainCode(wallet.chain);
     setAccountId('');
     setAssetId('');
     setAssetInId('');
@@ -319,6 +322,35 @@ export function ManualOperationDialog({
             </button>
           ))}
         </div>
+
+        <label className="block text-sm text-zinc-600">
+          Сеть
+          <Select
+            className="mt-1"
+            value={chainCode}
+            onChange={(event) => {
+              setChainCode(event.target.value);
+              setAccountId('');
+              setAssetId('');
+              setAssetInId('');
+              setAssetOutId('');
+            }}
+          >
+            {chainOptions.map((code) => (
+              <option key={code} value={code}>
+                {code === 'bsc'
+                  ? 'BNB Smart Chain'
+                  : code === 'ethereum'
+                    ? 'Ethereum'
+                    : code === 'tron'
+                      ? 'TRON'
+                      : code === 'solana'
+                        ? 'Solana'
+                        : code}
+              </option>
+            ))}
+          </Select>
+        </label>
 
         <label className="block text-sm text-zinc-600">
           Кошелёк

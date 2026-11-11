@@ -594,6 +594,12 @@ export function TaskDialog({
                       />
                     </label>
                   ) : null}
+                  {recurrence !== 'none' ? (
+                    <p className="text-xs text-zinc-500 sm:col-span-2">
+                      Изменения и удаление применятся ко всей серии; «выполнено» отмечается отдельно
+                      в каждом дне.
+                    </p>
+                  ) : null}
                 </div>
               )}
 
@@ -685,7 +691,11 @@ export function TaskDialog({
       <ConfirmDialog
         open={confirmDelete}
         title="Удалить задачу?"
-        description="Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть."
+        description={
+          effectiveRecurrence
+            ? 'Все задачи серии переместятся в архив; вернуть можно будет всю серию.'
+            : 'Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть.'
+        }
         confirmAriaLabel="Подтвердить удаление задачи"
         cancelAriaLabel="Отменить удаление задачи"
         busy={deleting}

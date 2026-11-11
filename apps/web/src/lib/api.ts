@@ -727,6 +727,10 @@ export async function fetchNotes(params: Partial<NoteListQuery> = {}): Promise<N
   return apiFetch(`/api/v1/notes${queryString(params)}`, {}, notesResponseSchema);
 }
 
+export async function fetchNote(id: string): Promise<Note> {
+  return apiFetch(`/api/v1/notes/${id}`, {}, noteSchema);
+}
+
 export async function createNote(body: NoteCreateRequest): Promise<Note> {
   return apiPost('/api/v1/notes', body, noteSchema);
 }

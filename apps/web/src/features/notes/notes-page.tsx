@@ -167,13 +167,13 @@ export function NotesPage() {
                       </span>
                       {note.pinned ? <Badge tone="info">Закреплена</Badge> : null}
                       {note.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
-                      {note.images.length > 0 ? (
+                      {note.attachmentCount > 0 ? (
                         <span
                           className="inline-flex items-center gap-1 text-xs text-zinc-500"
-                          title={`Вложений: ${note.images.length}`}
+                          title={`Вложений: ${note.attachmentCount}`}
                         >
                           <PaperclipIcon className="h-3.5 w-3.5" />
-                          {note.images.length}
+                          {note.attachmentCount}
                         </span>
                       ) : null}
                     </div>

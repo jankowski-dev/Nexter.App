@@ -31,6 +31,7 @@ export const noteSchema = z.object({
   body: z.string(),
   tags: z.array(z.string()),
   images: z.array(noteImageSchema),
+  attachmentCount: z.number().int().nonnegative(),
   pinned: z.boolean(),
   relatedAssetId: z.uuid().nullable(),
   relatedTradeGroupId: z.uuid().nullable(),
@@ -58,7 +59,7 @@ export const noteImageCreateRequestSchema = z.object({
   mimeType: noteImageMimeSchema,
   dataUrl: z
     .string()
-    .max(2_000_000)
+    .max(2_100_000)
     .regex(/^data:[a-z0-9.+-]+\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=]+$/i),
 });
 

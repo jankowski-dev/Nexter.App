@@ -298,7 +298,11 @@ export function TasksPage() {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Удалить задачу?"
-        description="Задача переместится в архив, откуда её можно вернуть."
+        description={
+          deleteTarget?.seriesId
+            ? 'Все задачи этой серии переместятся в архив; вернуть можно будет всю серию.'
+            : 'Задача переместится в архив, откуда её можно вернуть.'
+        }
         confirmAriaLabel="Подтвердить удаление задачи"
         cancelAriaLabel="Отменить удаление задачи"
         busy={deleteMutation.isPending}

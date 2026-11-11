@@ -15,6 +15,7 @@ interface AccountSeed {
   type: AccountType;
   chainCode?: string;
   isSystem: boolean;
+  optional?: boolean;
 }
 
 const ACCOUNT_SEEDS: AccountSeed[] = [
@@ -24,8 +25,8 @@ const ACCOUNT_SEEDS: AccountSeed[] = [
   { name: 'Equity', type: 'equity', isSystem: true },
   { name: 'Tangem BSC', type: 'wallet', chainCode: 'bsc', isSystem: false },
   { name: 'Tangem Ethereum', type: 'wallet', chainCode: 'ethereum', isSystem: false },
-  { name: 'TRON wallet', type: 'wallet', chainCode: 'tron', isSystem: false },
-  { name: 'Solana wallet', type: 'wallet', chainCode: 'solana', isSystem: false },
+  { name: 'TRON wallet', type: 'wallet', chainCode: 'tron', isSystem: false, optional: true },
+  { name: 'Solana wallet', type: 'wallet', chainCode: 'solana', isSystem: false, optional: true },
 ];
 
 @Injectable()
@@ -62,6 +63,7 @@ export class AccountingBootstrapService implements OnApplicationBootstrap {
       const chainId = seed.chainCode ? chainByCode.get(seed.chainCode) : undefined;
 
       if (seed.chainCode && !chainId) {
+        if (seed.optional) continue;
         throw new Error(`Chain ${seed.chainCode} is not seeded`);
       }
 

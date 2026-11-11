@@ -64,13 +64,18 @@ async function loadImages(
   return byNote;
 }
 
-function toContract(row: NoteRecord, images: NoteImage[] = []): Note {
+function toContract(
+  row: NoteRecord,
+  images: NoteImage[] = [],
+  attachmentCount = images.length,
+): Note {
   return {
     id: row.id,
     title: row.title,
     body: row.body,
     tags: row.tags,
     images,
+    attachmentCount,
     pinned: row.pinned,
     relatedAssetId: row.relatedAssetId,
     relatedTradeGroupId: row.relatedTradeGroupId,
@@ -113,16 +118,46 @@ export class NotesService {
 
     const hasMore = rows.length > query.limit;
     const page = hasMore ? rows.slice(0, query.limit) : rows;
-    const images = await loadImages(
-      this.db,
-      userId,
-      page.map((row) => row.id),
-    );
+    const countRows =
+      page.length === 0
+        ? []
+        : await this.db
+            .select({
+              noteId: noteImages.noteId,
+              count: sql<number>`count(*)::int`,
+            })
+            .from(noteImages)
+            .where(
+              and(
+                eq(noteImages.userId, userId),
+                inArray(
+                  noteImages.noteId,
+                  page.map((row) => row.id),
+                ),
+              ),
+            )
+            .groupBy(noteImages.noteId);
+    const countByNote = new Map(countRows.map((row) => [row.noteId, Number(row.count)]));
 
     return {
-      data: page.map((row) => toContract(row, images.get(row.id) ?? [])),
+      data: page.map((row) => toContract(row, [], countByNote.get(row.id) ?? 0)),
       hasMore,
     };
+  }
+
+  async get(userId: string, id: string): Promise<Note> {
+    const [row] = await this.db
+      .select()
+      .from(notes)
+      .where(and(eq(notes.id, id), eq(notes.userId, userId)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Note not found' });
+    }
+
+    const images = await loadImages(this.db, userId, [id]);
+    return toContract(row, images.get(id) ?? []);
   }
 
   async create(userId: string, input: NoteCreateRequest, meta: NoteMeta): Promise<Note> {

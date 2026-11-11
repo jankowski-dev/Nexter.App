@@ -272,6 +272,18 @@ export class TasksService {
     const seriesId = existing.seriesId as string;
 
     if (applyToSeries && seriesId) {
+      if (input.dueAt === null) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'A recurring series must keep a due date',
+        });
+      }
+      if (input.dueAt !== undefined && !existing.dueAt) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'The recurring series has no anchor due date to shift',
+        });
+      }
       const updated = await this.db.transaction(async (tx) => {
         const rows = await tx
           .select()
@@ -298,11 +310,12 @@ export class TasksService {
               ...(input.dueAt !== undefined
                 ? {
                     dueAt:
-                      input.dueAt === null
-                        ? null
-                        : row.dueAt && deltaMs !== null
-                          ? new Date(row.dueAt.getTime() + deltaMs)
-                          : new Date(input.dueAt as string),
+                      row.dueAt && deltaMs !== null
+                        ? new Date(row.dueAt.getTime() + deltaMs)
+                        : new Date(input.dueAt as string),
+                    ...(row.recurrenceEndsAt && deltaMs !== null
+                      ? { recurrenceEndsAt: new Date(row.recurrenceEndsAt.getTime() + deltaMs) }
+                      : {}),
                   }
                 : {}),
               ...(input.archived !== undefined

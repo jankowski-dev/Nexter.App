@@ -38,6 +38,16 @@ export function TokenDrawer({
 }) {
   if (!entry) return null;
 
+  const chainLabel =
+    entry.asset.chainCode === 'bsc'
+      ? 'BNB Smart Chain'
+      : entry.asset.chainCode === 'ethereum'
+        ? 'Ethereum'
+        : entry.asset.chainCode === 'tron'
+          ? 'TRON'
+          : entry.asset.chainCode === 'solana'
+            ? 'Solana'
+            : entry.asset.chainCode;
   const twitterUrl = safeExternalUrl(entry.twitterUrl);
   const websiteUrl = safeExternalUrl(entry.websiteUrl);
   const bscAddress =
@@ -52,7 +62,7 @@ export function TokenDrawer({
       open
       onClose={onClose}
       title={entry.asset.symbol}
-      description={`${entry.asset.name} · ${entry.asset.chainCode === 'ethereum' ? 'Ethereum' : 'BNB Smart Chain'}`}
+      description={`${entry.asset.name} · ${chainLabel}`}
       wide
       footer={
         <>

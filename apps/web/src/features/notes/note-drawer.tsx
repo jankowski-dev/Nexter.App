@@ -4,10 +4,11 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
 import { FileIcon, NotebookIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
-import { addNoteImage, createNote, removeNoteImage, updateNote } from '@/lib/api';
+import { addNoteImage, createNote, fetchNote, removeNoteImage, updateNote } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useSaveFlash } from '@/lib/use-save-flash';
 import type { Note, NoteImage } from '@nexter/contracts';
@@ -129,6 +130,11 @@ export function NoteDrawer({
   const [pinned] = useState(note?.pinned ?? false);
   const [archived, setArchived] = useState(Boolean(note?.archivedAt));
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
+  const attachments = useQuery({
+    queryKey: ['note-attachments', note?.id],
+    queryFn: () => fetchNote(note!.id),
+    enabled: Boolean(note?.id && note.images.length === 0 && note.attachmentCount > 0),
+  });
   const viewerImages = images.filter((image) => isImageAttachment(image.mimeType));
   const [createdAt, setCreatedAt] = useState<string | null>(note?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(note?.updatedAt ?? null);
@@ -140,6 +146,10 @@ export function NoteDrawer({
   const [uploading, setUploading] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (attachments.data) setImages(attachments.data.images);
+  }, [attachments.data]);
 
   const noteIdRef = useRef<string | null>(note?.id ?? null);
   const savedSignatureRef = useRef<string | null>(

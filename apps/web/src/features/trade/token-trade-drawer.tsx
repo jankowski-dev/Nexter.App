@@ -567,8 +567,10 @@ export function TokenTradeDrawer({
   const previewData = preview.data;
   const kyberPrice = previewData ? orderPrice(previewData, mode) : null;
   const difference = priceDifference(effectiveMarketPrice, kyberPrice);
-  const amountOut = sellExceedsRemaining ? undefined : previewData?.amountOut;
-  const minimumOut = sellExceedsRemaining ? undefined : previewData?.minOut;
+  const previewStale = previewAmount !== amount;
+  const showPreview = !sellExceedsRemaining && !previewStale;
+  const amountOut = showPreview ? previewData?.amountOut : undefined;
+  const minimumOut = showPreview ? previewData?.minOut : undefined;
   const sellCostBasis =
     remainingForSell && enteredAmount && remainingForSell.gt(0) && trade
       ? new Decimal(trade.group.remainingCostBasisUsd).mul(enteredAmount).div(remainingForSell)
@@ -717,7 +719,8 @@ export function TokenTradeDrawer({
                   {sellPnl ? formatSignedUsd(sellPnl.toFixed(2)) : '—'}
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
-                  Вложено: {sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
+                  Вложено:{' '}
+                  {showPreview && sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
                 </div>
               </div>
             ) : null}
