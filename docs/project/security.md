@@ -14,20 +14,20 @@
 
 ## 2. Ключевые меры
 
-| Область | Меры |
-|---|---|
-| Auth | Argon2, TOTP, HttpOnly cookie, CSRF, rate limit, session rotation, recovery codes |
-| Swap | allowlist кошельков/роутеров/executor/selectors, calldata decode, exact approvals, simulation, minOut, deadline, price impact cap, step-up TOTP, kill switch |
-| Private keys | никогда не попадают на сервер; подпись только в кошельке |
-| Money | `numeric`/Decimal, без float, проверка decimals/positive |
-| Audit | каждая мутация, strict audit для критичных |
-| Import | preview/commit/rollback, sourceHash, owner-scoped staging, no secrets in logs |
-| Vault | E2E AES-256-GCM, PBKDF2 600k, мастер-пароль не сохраняется |
-| Notes | Markdown subset без HTML, ссылки http/https, attachments allowlist + лимиты |
-| Icons | SSRF allowlist CoinGecko hosts, timeout, content-type/size check |
-| Logs | pino redaction, URLs без query, no bodies/secrets |
-| Headers | Helmet, CSP, Permissions-Policy, no-store для API |
-| CORS | same-origin SPA/API |
+| Область      | Меры                                                                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Auth         | Argon2, TOTP, HttpOnly cookie, CSRF, rate limit, session rotation, recovery codes                                                                            |
+| Swap         | allowlist кошельков/роутеров/executor/selectors, calldata decode, exact approvals, simulation, minOut, deadline, price impact cap, step-up TOTP, kill switch |
+| Private keys | никогда не попадают на сервер; подпись только в кошельке                                                                                                     |
+| Money        | `numeric`/Decimal, без float, проверка decimals/positive                                                                                                     |
+| Audit        | каждая мутация, strict audit для критичных                                                                                                                   |
+| Import       | preview/commit/rollback, sourceHash, owner-scoped staging, no secrets in logs                                                                                |
+| Vault        | E2E AES-256-GCM, PBKDF2 600k, мастер-пароль не сохраняется                                                                                                   |
+| Notes        | Markdown subset без HTML, ссылки http/https, attachments allowlist + лимиты                                                                                  |
+| Icons        | SSRF allowlist CoinGecko hosts, timeout, content-type/size check                                                                                             |
+| Logs         | pino redaction, URLs без query, no bodies/secrets                                                                                                            |
+| Headers      | Helmet, CSP, Permissions-Policy, no-store для API                                                                                                            |
+| CORS         | same-origin SPA/API                                                                                                                                          |
 
 ## 3. Swap security gates
 
@@ -69,6 +69,16 @@
 - Внешние URL карточек проверяются http/https; `javascript:`/`data:` отклоняются.
 - Notion import body ограничен 10 MB и content-type.
 - SQL только через Drizzle/параметры; raw SQL — с параметрами.
+
+## 6.1. Trading bots (paper)
+
+- Боты не имеют доступа к приватным ключам, WalletConnect, swap build/submit и реальному ledger.
+- Paper execution пишет только в `bot_*` таблицы; `transactions`, `postings`, `lots`, `trade_groups` не меняются.
+- Все CRUD-мутации owner-scoped и аудируются (`bot.*`). Running-боты нельзя редактировать; стратегию с running-ботами нельзя архивировать.
+- Параметры стратегий валидируются Zod; пользовательские скрипты не исполняются.
+- Токены бота должны быть активными записями Базы токенов; котировки старше 5 минут игнорируются.
+- Runner защищён Postgres advisory lock от двойного тика; `BOT_RUNNER_ENABLED=false` — аварийный стоп.
+- Реальный live-режим требует отдельного подписанта/session key/AA и security review; правило «no private keys on server» остаётся в силе.
 
 ## 7. Секреты
 

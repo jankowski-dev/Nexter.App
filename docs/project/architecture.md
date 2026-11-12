@@ -211,7 +211,7 @@ flowchart LR
 - Sentry — только safe error context.
 - `/health` — liveness; `/ready` — DB readiness.
 
-## 13. Будущие торговые боты (см. `trading-bots.md`)
+## 13. Бумажные торговые боты (см. `trading-bots.md`)
 
 ```mermaid
 flowchart LR
@@ -225,4 +225,8 @@ flowchart LR
   Future[Future live venue] -.-> Swap[SwapService]
 ```
 
-Ключевое ограничение: реальная автоторговля не может использовать WalletConnect/Tangem без ручного подтверждения. Для live нужен отдельный подписант/session key/AA и отдельный security review; сервер не должен хранить приватные ключи.
+- `BotRunnerService` просыпается каждые 60 секунд, берёт advisory lock `nexter:bot-runner` на отдельном соединении и обрабатывает всех `running` ботов.
+- Стратегии — код-реестр; параметры валидируются Zod. Paper execution считает комиссию/проскальзывание и пишет только в `bot_*` таблицы.
+- `bot_quote_samples` даёт минутную историю для индикаторов; retention 30 дней.
+- UI `/testing` показывает full-width карточки, статистику, позиции, сделки и события.
+- Ключевое ограничение: реальная автоторговля не может использовать WalletConnect/Tangem без ручного подтверждения. Для live нужен отдельный подписант/session key/AA и отдельный security review; сервер не должен хранить приватные ключи.

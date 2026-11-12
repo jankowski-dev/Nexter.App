@@ -1,117 +1,122 @@
-# Trading bots — архитектура тестовой системы (proposed)
+# Trading bots — бумажная торговля (UI-24)
 
-> Статус: **design for approval**, не реализовано. Владелец подтвердил: v1 — только бумажная торговля, минутный тик по `market_quotes`, стратегии — встроенный registry с параметрами, бюджет — доля + лимит позиций, токены — из Базы токенов с ценой, без исторического бэктеста.
+> Статус: **реализовано 2026-11-12**. Миграция `0032` (аддитивная) добавляет изолированные таблицы ботов. Production-миграция и деплой выполняются отдельным шагом после проверки.
 >
-> Следующий шаг после approval: ADR + migration + backend + UI + tests.
+> Это paper-only система. Реальные свопы, подписи и приватные ключи не используются. Бумажные сделки не пишут в `transactions`/`postings` и не влияют на реальный ledger, отчёты и налоги.
 
-## 1. Цель
+## 1. Что умеет система
 
-Дать владельцу полигон для проверки торговых идей без риска и без ручной торговли:
-
-- много ботов, каждый со своей стратегией, бюджетом, списком токенов и риск-параметрами;
-- боты работают на сервере по расписанию, даже когда браузер закрыт;
-- виртуальные сделки, позиции, P&L, win rate, profit factor, equity curve, события;
-- изоляция от реального ledger и реальных свопов;
-- архитектурный шов для будущего live execution без переписывания стратегий.
+- Несколько независимых ботов; у каждого своя стратегия, бюджет, список токенов и риск-параметры.
+- Боты работают на сервере по минутному тику, даже когда браузер закрыт.
+- Виртуальные покупки/продажи по последним `market_quotes` с симулированными комиссией и проскальзыванием.
+- Открытые позиции, история сделок, журнал событий, equity curve.
+- Статистика: realized/unrealized/total P&L, cash/equity, profit factor, win rate, wins/losses, число сделок, max drawdown.
+- Запуск/остановка, сброс бумажного состояния, архивирование.
+- Стратегии — встроенный реестр алгоритмов; владелец создаёт экземпляр с названием, описанием и параметрами.
 
 ## 2. Границы v1
 
-- **Paper only.** Никаких реальных транзакций, подписей, приватных ключей.
+- **Paper only.** Нет реальных транзакций и подписей.
 - **Long-only spot.** Без шортов, плеча, маржи и деривативов.
-- **Minute tick.** Решения раз в 60 секунд по последним `market_quotes`; исполнение по этой же цене с симулированной комиссией/проскальзыванием.
-- **No backtest.** История начинается с запуска бота; исторический бэктест — отдельный будущий этап.
-- **No arbitrary scripts.** Алгоритмы — код-определённый registry; владелец создаёт экземпляр стратегии с параметрами. Новая стратегия = код + deploy.
-- **Isolated tables.** Бумажные сделки не пишут в `transactions`, `postings`, `lots`, `trade_groups` реального ledger.
+- **Minute tick.** Решение раз в 60 секунд по `market_quotes`; цена исполнения — последняя котировка с симулированным slippage.
+- **No backtest.** История начинается с первого запуска; исторический бэктест — отдельный будущий этап.
+- **No arbitrary scripts.** Алгоритмы только в коде; параметры валидируются Zod-схемой стратегии.
+- **Isolated tables.** `trading_bots`, `bot_*` не связаны с реальным ledger, кроме ссылок на `assets` и `users`.
+- **Single tick source.** Цены берутся только из `market_quotes`; отдельного источника цен у ботов нет.
 
 ## 3. Компоненты
 
 ```mermaid
 flowchart TB
   UI[Testing UI] --> API[TradingBots API]
-  API --> StrategyRepo[strategies/bots tables]
+  API --> StrategyRepo[bot_strategies / trading_bots]
   Runner[BotRunnerService 60s] --> StrategyRepo
   Runner --> Quotes[market_quotes]
   Runner --> Registry[Strategy registry]
-  Registry --> Signal[Signal + risk]
-  Signal --> Paper[PaperExecutionVenue]
-  Paper --> BotLedger[bot_positions/bot_trades]
-  BotLedger --> Stats[stats/equity]
+  Registry --> Signal[StrategyDecision]
+  Signal --> Paper[Paper execution in runner]
+  Paper --> BotLedger[bot_positions / bot_trades]
+  BotLedger --> Stats[stats / bot_equity_snapshots]
   Runner --> Events[bot_events]
   Runner --> Samples[bot_quote_samples]
-  Future[Future live venue] -.-> Swap[SwapService]
+  UI --> Stats
 ```
 
-- `BotRunnerService` — интервальный сервис API (60с), с Postgres advisory lock, чтобы не запускать два тика одновременно.
-- `StrategyRegistry` — код-реестр стратегий; каждая стратегия имеет `key`, `version`, Zod-схему параметров и `evaluate(context)`.
-- `PaperExecutionVenue` — исполнение: цена, slippage, fee, обновление cash/position/trade.
-- `BotStatsService` — realized/unrealized, win rate, profit factor, drawdown, equity.
-- `BotQuoteSampler` — сохраняет минутные точки только по токенам активных ботов для индикаторов; retention 30 дней.
-- `BotEventService` — сигналы/сделки/ошибки/старт/стоп; UI-журнал.
+- `TradingBotsService` — CRUD, статистика, сброс/архив, аудит.
+- `BotRunnerService` — интервальный сервис API; advisory lock, минутный тик, paper execution, snapshots, retention.
+- `strategies/` — реестр из пяти алгоритмов и общие индикаторы.
+- `market_quotes` — единственный источник цены и 24h change.
+- `bot_quote_samples` — минутные точки для индикаторов; общие для всех ботов.
 
-## 4. Данные
+## 4. Модель данных
 
-### `strategies`
+Все таблицы owner-scoped через `trading_bots.user_id`; дочерние таблицы каскадно удаляются вместе с ботом. `bot_strategies` удаляются только soft archive (`archived_at`).
 
-| Поле | Тип | Смысл |
-|---|---|---|
-| id | uuid | PK |
-| userId | uuid | owner |
-| key | text | код-ключ (`momentum_breakout`, ...) |
-| name | text | имя экземпляра |
-| description | text | описание |
-| version | int | версия алгоритма |
-| params | jsonb | типизированные параметры |
-| createdAt/updatedAt | timestamptz | |
+### `bot_strategies`
 
-`key` должен существовать в registry. `params` валидируется Zod-схемой стратегии. Удаление — soft archive; боты, ссылающиеся на стратегию, блокируются.
+| Поле                    | Тип         | Смысл                                   |
+| ----------------------- | ----------- | --------------------------------------- |
+| `id`                    | uuid        | PK                                      |
+| `user_id`               | uuid        | owner                                   |
+| `key`                   | text        | ключ алгоритма из registry              |
+| `name`                  | text        | имя экземпляра, unique среди неархивных |
+| `description`           | text        | описание                                |
+| `version`               | int         | версия алгоритма                        |
+| `params`                | jsonb       | валидированные параметры                |
+| `archived_at`           | timestamptz | soft archive                            |
+| `created_at/updated_at` | timestamptz |                                         |
 
-### `bots`
+`key` обязан существовать в registry на момент создания и запуска. Параметры проверяются Zod-схемой; неизвестный ключ или невалидные параметры дают `VALIDATION_ERROR`.
 
-| Поле | Тип | Смысл |
-|---|---|---|
-| id | uuid | PK |
-| userId | uuid | owner |
-| strategyId | uuid | → strategies |
-| name | text | имя |
-| description | text | краткое описание |
-| status | text | `draft`, `running`, `paused`, `stopped` |
-| budgetUsd | numeric | стартовый бюджет |
-| cashUsd | numeric | свободный paper cash |
-| maxPositions | int | максимум открытых позиций |
-| positionSizePct | numeric | % бюджета на сделку |
-| feeBps | int | симулированная комиссия |
-| slippageBps | int | симулированное проскальзывание |
-| maxDailyLossPct | numeric | дневной лимит убытка |
-| cooldownMinutes | int | пауза между сделками по токену |
-| startedAt/stoppedAt | timestamptz | |
-| lastTickAt | timestamptz | |
-| createdAt/updatedAt | timestamptz | |
+### `trading_bots`
 
-`budgetUsd` неизменяем после первого запуска (или меняется только через reset с подтверждением). `cashUsd` — текущий paper cash. `status` управляет runner.
+| Поле                                 | Тип           | Смысл                                         |
+| ------------------------------------ | ------------- | --------------------------------------------- |
+| `id`                                 | uuid          | PK                                            |
+| `user_id`                            | uuid          | owner                                         |
+| `strategy_id`                        | uuid          | → `bot_strategies`                            |
+| `name`                               | text          | unique среди неархивных                       |
+| `description`                        | text          |                                               |
+| `status`                             | text          | `draft`, `running`, `stopped`                 |
+| `budget_usd`                         | numeric(24,8) | стартовый бюджет, неизменяемый после создания |
+| `cash_usd`                           | numeric(24,8) | свободный бумажный кэш                        |
+| `max_positions`                      | int           | максимум одновременно открытых позиций        |
+| `position_size_pct`                  | numeric(5,2)  | % бюджета на одну покупку                     |
+| `fee_bps`                            | int           | симулированная комиссия (25 = 25 bps)         |
+| `slippage_bps`                       | int           | симулированное проскальзывание (10 = 10 bps)  |
+| `max_daily_loss_pct`                 | numeric(5,2)  | дневной лимит реализованного убытка           |
+| `cooldown_minutes`                   | int           | пауза между покупками по токену               |
+| `peak_equity_usd`                    | numeric(24,8) | пик equity для max drawdown                   |
+| `max_drawdown_pct`                   | numeric(5,2)  | максимальная просадка, обновляется runner     |
+| `started_at/stopped_at/last_tick_at` | timestamptz   |                                               |
+| `archived_at`                        | timestamptz   | soft delete                                   |
+| `created_at/updated_at`              | timestamptz   |                                               |
+
+Бюджет — от $100 и кратен $100 (шаг $100). `position_size_pct` — доля **бюджета** на одну покупку, а не доля свободного кэша; DCA/grid могут делать несколько покупок, пока хватает кэша и не достигнут `maxAdds` стратегии. Один экземпляр стратегии может использоваться несколькими ботами; изменение её параметров влияет на всех этих ботов.
 
 ### `bot_tokens`
 
-`botId`, `assetId`, `enabled`, `maxWeightPct` (optional), `createdAt`. Уникальность `(botId, assetId)`. Токены выбираются из Базы токенов; нужен `market_quotes` с ценой.
+`bot_id`, `asset_id`, `enabled`, `created_at`. `(bot_id, asset_id)` unique. Токены выбираются только из активной Базы токенов (`watchlist`); дубликаты отклоняются. Один токен может быть у нескольких ботов; paper-портфели независимы.
 
 ### `bot_positions`
 
-`botId`, `assetId`, `amount`, `avgCostUsd`, `costBasisUsd`, `openedAt`, `updatedAt`. Уникальность `(botId, assetId)`. Для v1 — average cost (не FIFO); это paper-учёт, отдельный от реального ledger. Реализованная прибыль считается при sell: `proceeds - costBasis * sold/amount`.
+`bot_id`, `asset_id`, `amount numeric(36,18)`, `avg_cost_usd`, `cost_basis_usd`, `opened_at`, `updated_at`. `(bot_id, asset_id)` unique. Учёт по средней цене (average cost), не FIFO. `cost_basis_usd` включает комиссию покупки.
 
 ### `bot_trades`
 
-`id`, `botId`, `assetId`, `side` (`buy`/`sell`), `amount`, `priceUsd`, `usdValue`, `feeUsd`, `slippageUsd`, `realizedPnlUsd` (для sell), `reason`, `strategyKey`, `signal` jsonb, `executedAt`.
+`bot_id`, `asset_id`, `side` (`buy`/`sell`), `amount`, `price_usd`, `usd_value`, `fee_usd`, `slippage_usd`, `realized_pnl_usd`, `reason`, `signal jsonb`, `executed_at`. `price_usd` — фактическая fill-цена с slippage. Для sell `realized_pnl_usd = net proceeds − cost_basis_usd`.
 
 ### `bot_equity_snapshots`
 
-`botId`, `capturedAt`, `cashUsd`, `positionsValueUsd`, `equityUsd`, `realizedPnlUsd`, `unrealizedPnlUsd`. Каждые 5 минут и на каждую сделку; retention 1 год.
+`bot_id`, `captured_at`, `cash_usd`, `positions_value_usd`, `equity_usd`, `realized_pnl_usd`, `unrealized_pnl_usd`. Снимок при каждой сделке и не реже одного раза в 5 минут. Retention — 1 год.
 
 ### `bot_events`
 
-`botId`, `type` (`started`, `stopped`, `signal`, `buy`, `sell`, `skipped`, `error`, `reset`), `message`, `payload` jsonb, `createdAt`. Retention 90 дней.
+`bot_id`, `type` (`created`, `started`, `stopped`, `buy`, `sell`, `error`, `reset`, `archived`), `message`, `payload jsonb`, `created_at`. Retention — 90 дней.
 
 ### `bot_quote_samples`
 
-`assetId`, `priceUsd`, `change24hPct`, `capturedAt`. Только токены активных ботов; 60с; retention 30 дней; индекс `(assetId, capturedAt)`. Нужен для SMA/RSI/ATR/rolling high.
+`asset_id`, `price_usd`, `change_24h_pct`, `captured_at`. Одна точка на токен за тик (не чаще 55 секунд), общая для всех ботов. Retention — `BOT_SAMPLE_RETENTION_DAYS` (30 дней по умолчанию). Индексы: `(asset_id, captured_at)` и `(captured_at)` для очистки.
 
 ## 5. Стратегии
 
@@ -121,155 +126,144 @@ flowchart TB
 interface StrategyContext {
   now: Date;
   params: Record<string, unknown>;
-  token: { assetId: string; symbol: string; priceUsd: string; change24hPct: string | null };
-  history: QuoteSample[];        // 1m samples, oldest → newest
-  position: BotPosition | null;
-  cashUsd: string;
-  budgetUsd: string;
-  openPositions: number;
-  maxPositions: number;
+  priceUsd: string;
+  change24hPct: string | null;
+  history: Array<{ priceUsd: string; capturedAt: Date }>;
+  position: { amount: string; avgCostUsd: string; costBasisUsd: string } | null;
+  buyCount: number; // покупок после последней продажи по этому токену
 }
 
 interface StrategyDecision {
   action: 'buy' | 'sell' | 'hold';
   reason: string;
-  sizePct?: string;              // override positionSizePct
-  stopLossPct?: string;          // risk overlay
-  takeProfitPct?: string;
 }
-```
 
-`StrategyRegistry`:
-
-```ts
 interface StrategyDefinition {
   key: string;
   version: number;
   name: string;
   description: string;
-  paramsSchema: ZodType;
+  defaultParams: Record<string, unknown>;
+  parseParams(value: Record<string, unknown>): Record<string, unknown>;
   evaluate(ctx: StrategyContext): StrategyDecision;
 }
 ```
 
-Новая стратегия добавляется в `apps/api/src/modules/trading-bots/strategies/<key>.ts`, регистрируется в registry, получает тесты и deploy. UI сразу видит её в списке шаблонов.
+Новая стратегия: файл в `apps/api/src/modules/trading-bots/strategies/`, Zod-схема параметров, регистрация в `strategyDefinitions`, unit-тесты и deploy. UI автоматически показывает новый шаблон.
 
-### 5.2. Стартовый набор (предложение)
+### 5.2. Встроенные стратегии
 
-| key | Идея | Buy | Sell | Параметры |
-|---|---|---|---|---|
-| `momentum_breakout` | Пробой/импульс | цена выше SMA(fast), SMA(fast)>SMA(slow), 24h change > threshold | trailing stop / take profit / SMA cross down | fast, slow, minChange24h, takeProfit, stopLoss, trailing |
-| `mean_reversion` | Откат к среднему | цена ниже MA/нижней полосы на X%, RSI < oversold | возврат к MA / take profit / stop | lookback, entryDropPct, exitMaPct, stopLoss |
-| `grid_range` | Сетка в боковике | цена ниже anchor на N grid steps | цена выше следующего уровня | gridStepPct, levels, rangeFilterPct, maxPositions |
-| `trend_pullback` | Покупка отката в тренде | uptrend (fast>slow), pullback к MA, rebound | trailing stop / trend break | fast, slow, pullbackPct, stopLoss |
-| `dca_dip` | Докупка на просадке | цена ниже средней/последней покупки на X%, интервал | take profit / stop | dipPct, intervalHours, maxAdds, takeProfit |
+| key                 | Название            | Логика входа                               | Логика выхода                                          | Параметры по умолчанию                                  |
+| ------------------- | ------------------- | ------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------- |
+| `momentum_breakout` | Импульсный пробой   | fast SMA > slow SMA и 24h change ≥ порога  | тейк-профит, стоп-лосс, fast SMA ниже slow SMA         | fast 5, slow 20, minChange24h 1%, TP 5%, SL 3%          |
+| `mean_reversion`    | Возврат к среднему  | цена ниже SMA на `entryDropPct`            | возврат к SMA, TP, SL                                  | lookback 20, entryDrop 3%, exitAbove 0.5%, TP 5%, SL 5% |
+| `grid_range`        | Сетка в диапазоне   | цена ниже rolling high на шаг сетки        | шаг вверх от средней, SL; докупка на следующей ступени | anchor 20, gridStep 1.5%, maxAdds 4, TP 1.5%, SL 6%     |
+| `trend_pullback`    | Откат в тренде      | fast > slow и откат к fast SMA             | TP, SL, пробой тренда                                  | fast 8, slow 30, pullback 1%, TP 5%, SL 3%              |
+| `dca_dip`           | Докупка на просадке | цена ниже rolling high/средней на `dipPct` | TP, SL; докупка до `maxAdds`                           | anchor 20, dip 3%, maxAdds 3, TP 5%, SL 8%              |
 
-Общий risk overlay для всех: stop-loss, take-profit, trailing stop, max daily loss, cooldown, max position %, max open positions, min quote freshness, min liquidity (optional).
+Все стратегии long-only и работают по одному токену независимо. Общий risk layer в runner: max positions, position size, cash, cooldown, daily loss limit, freshness quote (≤5 минут).
 
-### 5.3. Сигналы и исполнение
+### 5.3. Как добавить новую стратегию
 
-- На каждом тике для каждого токена бота: получить quote, проверить свежесть (≤5 мин), историю, позицию.
-- `evaluate` возвращает `buy/sell/hold`.
-- Risk layer может отклонить сигнал (лимиты/cooldown/daily loss).
-- Buy: размер = `min(cash, budget * positionSizePct/100, budget/maxPositions)`; цена = quote * (1 + slippage); fee = usd * feeBps/10000; проверить cash.
-- Sell: количество = вся позиция или заданная стратегией; цена = quote * (1 - slippage); fee; realized P&L = proceeds - cost basis sold.
-- Записывать trade + event + snapshot; обновить cash/position.
-- `bot_quote_samples` пишется каждый тик для активных токенов.
+1. Создать `apps/api/src/modules/trading-bots/strategies/<key>.ts`.
+2. Описать Zod-схему параметров с безопасными default-значениями и `evaluate(ctx): StrategyDecision`.
+3. Добавить стратегию в `strategyDefinitions` в `strategies/index.ts`.
+4. Добавить unit-тесты на buy/sell/hold и граничные параметры.
+5. Прогнать `format`, `typecheck`, `lint`, `test`, `build`.
+6. Задеплоить API. UI автоматически покажет новый шаблон в разделе `Стратегии`.
+7. Создать экземпляр стратегии и бота. Существующие боты не меняются.
 
-## 6. API (proposed)
+`key` — стабильный контракт. `version` фиксируется при создании экземпляра, но runner исполняет текущий код registry; обратно несовместимое изменение поведения лучше выпускать новым `key` или отдельной миграцией экземпляров. Любое изменение смысла параметров описывается в ADR/`docs/decisions.md`.
 
-| Метод | Путь | Описание |
-|---|---|---|
-| GET | `/trading-bots/strategies` | доступные шаблоны + параметры |
-| GET | `/trading-bots/strategies/instances` | созданные стратегии |
-| POST | `/trading-bots/strategies` | создать экземпляр (key/name/description/params) |
-| PATCH | `/trading-bots/strategies/:id` | изменить |
-| DELETE | `/trading-bots/strategies/:id` | архив (если нет running bots) |
-| GET | `/trading-bots` | список ботов + summary |
-| POST | `/trading-bots` | создать |
-| PATCH | `/trading-bots/:id` | настройки (только draft/paused) |
-| POST | `/trading-bots/:id/start` | запуск |
-| POST | `/trading-bots/:id/stop` | пауза/стоп (сохраняет позиции) |
-| POST | `/trading-bots/:id/reset` | сброс paper-состояния (с подтверждением) |
-| GET | `/trading-bots/:id` | детали |
-| GET | `/trading-bots/:id/positions` | открытые позиции |
-| GET | `/trading-bots/:id/trades` | сделки |
-| GET | `/trading-bots/:id/equity` | equity curve |
-| GET | `/trading-bots/:id/events` | журнал |
+### 5.4. Paper execution
 
-Все мутации аудируются (`bot.created`, `bot.started`, `bot.stopped`, `bot.updated`, `bot.reset`). Trades/events — отдельные таблицы, не audit.
+- **Buy:** `usd = min(budget * positionSizePct / 100, cash)`; `fillPrice = quote * (1 + slippageBps/10000)`; `amount = usd / fillPrice`; `fee = usd * feeBps/10000`; `debit = usd + fee`; cost basis увеличивается на `debit`. Позиция открывается только если `openPositions < maxPositions`; докупка существующей позиции не увеличивает счётчик позиций.
+- **Sell:** продаётся вся позиция; `fillPrice = quote * (1 - slippageBps/10000)`; `gross = amount * fillPrice`; `fee = gross * feeBps/10000`; `net = gross - fee`; `realized = net - costBasis`; кэш увеличивается на `net`.
+- **Cooldown:** блокирует только покупки по токену в течение `cooldownMinutes` после последней покупки; продажи не блокируются.
+- **Daily loss:** если реализованный убыток за локальный день ≥ `budget * maxDailyLossPct / 100`, новые покупки блокируются до следующих суток; продажи/стопы продолжают работать.
+- **Quote freshness:** котировка старше 5 минут или цена ≤ 0 — токен пропускается на этом тике.
+- **No quote:** токен пропускается; событие `error` не создаётся, чтобы не засорять журнал.
+- **Fee/slippage** записываются в сделку; `slippage_usd` — разница между ценой без slippage и фактической fill-ценой.
 
-## 7. UI
+### 5.5. Статистика
 
-- Новый top-level пункт **Тестирование** (иконка робота/графика).
-- Внутри два таба: **Боты** и **Стратегии**.
-- Боты — full-width cards (как База токенов): name, strategy, status chip, fan while running, budget/equity/P&L, open positions, win rate/profit factor, start/stop.
-- Клик по карточке — боковой drawer (third width) или страница: summary, equity chart, open positions, trades, events, settings.
-- Создание: name, description, strategy instance, tokens from База токенов (multi-select), budget, max positions, position size %, fee/slippage, risk limits.
-- Стратегии: cards with name/description/parameters; create from template; edit params; archive.
-- Fan: same `LiveRefreshIndicator` visual language; spins while bot runner is ticking/query fetching.
-- Russian copy, USD.
+- `realizedPnlUsd` — сумма `realized_pnl_usd` по sell-сделкам.
+- `unrealizedPnlUsd` — сумма `(currentPrice * amount − costBasis)` по открытым позициям; без котировки позиция даёт `null`, в сумму входит 0.
+- `equityUsd = cashUsd + positionsValueUsd`.
+- `totalPnlUsd = equityUsd − budgetUsd`.
+- `grossProfitUsd`/`grossLossUsd` — только по sell-сделкам.
+- `profitFactor = grossProfit / grossLoss`; `null`, если убытков не было.
+- `winRate = wins / (wins + losses) * 100`; сделки с нулевым P&L не считаются ни победой, ни убытком.
+- `maxDrawdownPct` — максимальная просадка; runner обновляет `peak_equity_usd`/`max_drawdown_pct` при каждом snapshot, поэтому статистика не зависит от лимита выборки.
+- `tradesCount` включает buy и sell.
 
-## 8. Scheduler и надёжность
+## 6. Runner и надёжность
 
-- `BotRunnerService` запускается через 5с после boot, затем каждые 60с.
-- Глобальный Postgres advisory lock `nexter:bot-runner`; если lock занят — пропустить тик.
-- Per-bot advisory lock или `FOR UPDATE SKIP LOCKED` при обработке.
-- `BOT_RUNNER_ENABLED` (default true) и `BOT_RUNNER_INTERVAL_SECONDS` (60).
-- Ошибка одного бота не останавливает остальных; писать `bot_events.error` и продолжать.
-- Если quote отсутствует/старше 5 мин — skip с событием.
-- Если bot.status != running — skip.
-- Runtime guard: если тик занял > interval, следующий пропускается (in-process flag + advisory lock).
-- При нескольких API-репликах advisory lock предотвращает дубли; для per-bot обработки использовать `SELECT ... FOR UPDATE SKIP LOCKED`.
+- `BotRunnerService` стартует через 5 секунд после boot API и затем каждые `BOT_RUNNER_INTERVAL_SECONDS` (60). Для индикаторов загружаются последние 300 минутных samples (покрывает максимальные окна стратегий).
+- `BOT_RUNNER_ENABLED=true` по умолчанию; `NODE_ENV=test` отключает интервал.
+- Тик защищён session-level Postgres advisory lock `nexter:bot-runner` на отдельном соединении из пула; вторая реплика/второй процесс пропускает тик. Unlock выполняется в `finally`; при ошибке соединение возвращается в пул после попытки unlock.
+- Внутрипроцессный guard `running` предотвращает наложение тиков.
+- Ошибка одного бота не останавливает остальных; пишется `bot_events.error`.
+- `runOnce()` — публичный метод для тестов/ручного запуска; интервал вызывает его же.
+- Retention: samples — `BOT_SAMPLE_RETENTION_DAYS` (30), events — 90 дней, equity — 365 дней. Очистка выполняется на каждом тике.
+- При нескольких API-репликах advisory lock предотвращает дубли; per-bot lock не нужен, пока тик один.
 
-## 9. Live execution (future)
+## 7. API
 
-`ExecutionVenue`:
+Базовый путь: `/api/v1/trading-bots`. Все мутации требуют CSRF и аудируются.
 
-```ts
-interface ExecutionVenue {
-  kind: 'paper' | 'live';
-  buy(input): Promise<ExecutionFill>;
-  sell(input): Promise<ExecutionFill>;
-}
-```
+| Метод  | Путь                      | Описание                                                   |
+| ------ | ------------------------- | ---------------------------------------------------------- |
+| GET    | `/strategies`             | шаблоны registry + созданные экземпляры                    |
+| POST   | `/strategies`             | создать экземпляр (`key`, `name`, `description`, `params`) |
+| PATCH  | `/strategies/:id`         | изменить имя/описание/параметры/архив                      |
+| GET    | `/bots?includeArchived=`  | список ботов + статистика                                  |
+| POST   | `/bots`                   | создать бота                                               |
+| GET    | `/bots/:id`               | детали: бот, стратегия, токены, позиции                    |
+| PATCH  | `/bots/:id`               | настройки; только не-running                               |
+| POST   | `/bots/:id/start`         | запуск                                                     |
+| POST   | `/bots/:id/stop`          | остановка (позиции сохраняются)                            |
+| POST   | `/bots/:id/reset`         | сброс paper-состояния к бюджету                            |
+| DELETE | `/bots/:id`               | soft archive                                               |
+| GET    | `/bots/:id/positions`     | не отдельный endpoint; позиции в `/bots/:id`               |
+| GET    | `/bots/:id/trades?limit=` | сделки                                                     |
+| GET    | `/bots/:id/events?limit=` | журнал                                                     |
+| GET    | `/bots/:id/equity?limit=` | equity curve                                               |
 
-v1 — `PaperExecutionVenue`. Future live — adapter to `SwapService`/Kyber, но **WalletConnect/Tangem требует ручного подтверждения каждой транзакции**. Полная автоторговля невозможна без:
+Ошибки: `VALIDATION_ERROR`, `CONFLICT`, `NOT_FOUND`. Уникальность имени бота/стратегии — `CONFLICT`. Running-бот нельзя редактировать; стратегию с running-ботами нельзя архивировать. Архивированную/недоступную стратегию нельзя запустить.
 
-- локального подписанта на машине владельца;
-- smart-account/session key с ограниченными правами;
-- отдельного кастодиального signer-сервиса (противоречит правилу «no private keys on server»).
+Аудит: `bot.strategy_created`, `bot.strategy_updated`, `bot.created`, `bot.updated`, `bot.started`, `bot.stopped`, `bot.reset`, `bot.archived`. Бумажные сделки и события живут в `bot_trades`/`bot_events`, а не в `audit_log`.
 
-Поэтому live-режим — отдельный security review и ADR. До него боты остаются paper.
+## 8. UI
 
-## 10. Статистика
+- Top-level пункт **Тестирование** (`/testing`).
+- Табы **Роботы** и **Стратегии**.
+- Роботы — full-width карточки: имя, статус, стратегия, описание, бюджет, equity, P&L, profit factor, win rate, число сделок, открытые позиции; fan крутится у running-ботов.
+- Создание/редактирование: имя, описание, стратегия, токены из Базы токенов, бюджет $1000 с шагом $100, max positions, position size %, fee/slippage bps, daily loss %, cooldown.
+- Drawer бота: equity chart, открытые позиции с текущей ценой/P&L, сделки, журнал событий, start/stop/reset/archive.
+- Стратегии: шаблоны registry и созданные экземпляры; создание из шаблона, редактирование параметров JSON, архив.
+- Fan в шапке раздела и на карточках; live-refresh индикатор учитывает ключи `trading-bot*`.
 
-Для каждого бота:
+## 9. Безопасность и границы
 
-- equity, cash, positions value;
-- realized/unrealized/total P&L;
-- total profit, total loss, profit factor;
-- win rate, wins/losses, trade count;
-- max drawdown, best/worst trade;
-- per-token P&L и exposure;
-- equity curve (5-минутные snapshots + сделки);
-- active positions с текущей ценой и P&L.
+- Нет приватных ключей, seed, подписи, WalletConnect и реальных свопов.
+- Paper-сделки не создают `transactions`, `postings`, `lots`, `trade_groups`; реальный ledger и налоги не меняются.
+- Все запросы owner-scoped; чужие боты/стратегии недоступны.
+- Токены бота должны быть активными записями Базы токенов.
+- Стратегии — только код; никакого исполнения пользовательских скриптов.
+- Реальная автоторговля невозможна через WalletConnect/Tangem без ручного подтверждения каждой подписи. Для live нужен отдельный подписант/session key/AA, отдельный security review и ADR; сервер не должен хранить приватные ключи.
 
-## 11. Ограничения и риски
+## 10. Ограничения и будущее
 
-- Minute tick по `market_quotes` — не HFT; стоп-лосс сработает с задержкой до 60с.
-- Paper fill по последней цене не учитывает реальную глубину стакана; slippage фиксированный.
-- Токены без ликвидности/цены пропускаются.
-- `bot_quote_samples` растут; retention/prune обязателен.
-- Стратегии — код; новые идеи требуют deploy.
-- Live-торговля требует отдельного подписанта; не добавлять приватные ключи на сервер.
-- Боты не влияют на реальный ledger/налоги/отчёты.
+- Минутный тик — не HFT; стоп-лосс срабатывает с задержкой до 60 секунд.
+- Paper fill не учитывает глубину пула; slippage фиксированный.
+- Токены без котировки/свежести пропускаются.
+- Нет исторического бэктеста; equity curve начинается с запуска.
+- Нет уведомлений вне приложения; журнал событий внутри drawer.
+- Будущий live-режим: отдельный `ExecutionVenue` adapter, allowlist, симуляция, лимиты, kill switch, аудит и подписант на стороне владельца. До этого боты остаются paper.
 
-## 12. Что нужно подтвердить перед реализацией
+## 11. Проверка
 
-1. Стартовый набор стратегий (5 выше) — ок или добавить/убрать?
-2. Размер бюджета по умолчанию (предлагаю $1,000 на бота) и минимальный шаг.
-3. Комиссия/проскальзывание по умолчанию (предлагаю 25 bps fee + 10 bps slippage).
-4. Разрешать ли несколько ботов на один токен (да, независимые paper-портфели).
-5. Нужен ли `reset` paper-состояния (обнулить историю/бюджет) или только stop/start.
-6. Нужны ли уведомления о сделках/ошибках в интерфейсе (badge/журнал) — предлагаю журнал событий.
+- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, параметры, buy/sell/hold для пяти стратегий.
+- E2E: `apps/api/test/trading-bots.e2e.spec.ts` — создание стратегии/бота, валидация бюджета, buy/sell по котировкам, статистика, reset, archive.
+- Перед production: format, typecheck, lint, test, build; backup + restore check; миграция `0032`; проверка `/ready` и грантов `nexter_app`.

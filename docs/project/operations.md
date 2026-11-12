@@ -13,31 +13,34 @@
 
 Основные (см. `apps/api/src/shared/config/env.ts`):
 
-| Переменная | Назначение |
-|---|---|
-| `DATABASE_URL` | подключение API к БД |
-| `MIGRATION_DATABASE_URL` | pre-deploy миграции (owner/DDL) |
-| `SETUP_TOKEN` | первичная настройка owner |
-| `AUTH_ENCRYPTION_KEY` | шифрование TOTP/recovery/сессий |
-| `APP_URL` | origin для cookie/CSRF/CORS |
-| `SESSION_TTL_DAYS` | срок сессии |
-| `ENABLE_DOCS` | Swagger |
-| `SWAP_ENABLED` | включить swap-модуль |
-| `SWAP_EXECUTION_ENABLED` | разрешить execution (BSC) |
-| `SWAP_ETHEREUM_EXECUTION_ENABLED` | разрешить execution Ethereum |
-| `SWAP_KILL_SWITCH` | аварийный стоп |
-| `SWAP_STEP_UP_THRESHOLD_USD` | порог step-up TOTP |
-| `SWAP_WALLET_ALLOWLIST` | разрешённые wallet addresses |
-| `SWAP_ROUTER_ALLOWLIST` / `SWAP_EXECUTOR_ALLOWLIST` | allowlist контрактов |
-| `MARKET_QUOTES_ENABLED` | фоновые котировки |
-| `MARKET_QUOTE_INTERVAL_SECONDS` | DEX refresh (60) |
-| `MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS` | CoinGecko refresh (600) |
-| `COINGECKO_API_KEY` | optional demo/pro key |
-| `BSC_RPC_URL` / `ETHEREUM_RPC_URL` | RPC |
-| `WALLETCONNECT_PROJECT_ID` | WalletConnect |
-| `RECONCILIATION_ENABLED` | on-chain indexer |
-| `PORTFOLIO_SNAPSHOTS_ENABLED` | daily snapshots |
-| `BACKUP_ENCRYPTION_KEY` | только для backup/restore, не в API |
+| Переменная                                          | Назначение                          |
+| --------------------------------------------------- | ----------------------------------- |
+| `DATABASE_URL`                                      | подключение API к БД                |
+| `MIGRATION_DATABASE_URL`                            | pre-deploy миграции (owner/DDL)     |
+| `SETUP_TOKEN`                                       | первичная настройка owner           |
+| `AUTH_ENCRYPTION_KEY`                               | шифрование TOTP/recovery/сессий     |
+| `APP_URL`                                           | origin для cookie/CSRF/CORS         |
+| `SESSION_TTL_DAYS`                                  | срок сессии                         |
+| `ENABLE_DOCS`                                       | Swagger                             |
+| `SWAP_ENABLED`                                      | включить swap-модуль                |
+| `SWAP_EXECUTION_ENABLED`                            | разрешить execution (BSC)           |
+| `SWAP_ETHEREUM_EXECUTION_ENABLED`                   | разрешить execution Ethereum        |
+| `SWAP_KILL_SWITCH`                                  | аварийный стоп                      |
+| `SWAP_STEP_UP_THRESHOLD_USD`                        | порог step-up TOTP                  |
+| `SWAP_WALLET_ALLOWLIST`                             | разрешённые wallet addresses        |
+| `SWAP_ROUTER_ALLOWLIST` / `SWAP_EXECUTOR_ALLOWLIST` | allowlist контрактов                |
+| `MARKET_QUOTES_ENABLED`                             | фоновые котировки                   |
+| `MARKET_QUOTE_INTERVAL_SECONDS`                     | DEX refresh (60)                    |
+| `MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS`           | CoinGecko refresh (600)             |
+| `COINGECKO_API_KEY`                                 | optional demo/pro key               |
+| `BSC_RPC_URL` / `ETHEREUM_RPC_URL`                  | RPC                                 |
+| `WALLETCONNECT_PROJECT_ID`                          | WalletConnect                       |
+| `RECONCILIATION_ENABLED`                            | on-chain indexer                    |
+| `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots                     |
+| `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)   |
+| `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)          |
+| `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)      |
+| `BACKUP_ENCRYPTION_KEY`                             | только для backup/restore, не в API |
 
 Секреты хранятся в Railway Variables и локальном `.env`, не в репозитории.
 
@@ -89,6 +92,9 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 - `MARKET_QUOTES_ENABLED=false` — остановить refresher (котировки останутся последними).
 - `RECONCILIATION_ENABLED=false` — остановить indexer.
 - `PORTFOLIO_SNAPSHOTS_ENABLED=false` — остановить snapshots.
+- `BOT_RUNNER_ENABLED=false` — остановить paper-ботов без остановки API. Позиции и история сохраняются; боты остаются `running`, но не тикают. Для полного стопа лучше остановить каждого бота в UI.
+- `BOT_RUNNER_INTERVAL_SECONDS` — увеличить при нагрузке; стратегии увидят более редкие тики.
+- `BOT_SAMPLE_RETENTION_DAYS` — уменьшить при росте `bot_quote_samples`.
 
 ## 7. Rollback
 
@@ -110,3 +116,6 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 - In-memory rate limit/quote guard не масштабируется на несколько API-реплик; при масштабировании нужен Redis/Postgres advisory lock.
 - Reconciliation не исправляет ledger автоматически.
 - Native TRON/Solana — manual-only, не входят в swap/indexer.
+- Paper-боты работают только при живом API; worker их не запускает. Один тик защищён advisory lock, но при нескольких репликах все они должны иметь доступ к одной БД.
+- `bot_quote_samples`, `bot_events` и `bot_equity_snapshots` очищаются по retention на каждом тике; при остановленном runner очистка не выполняется.
+- Боты не влияют на реальный ledger; их P&L нельзя использовать для налогов или отчётов.

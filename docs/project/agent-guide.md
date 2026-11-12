@@ -169,12 +169,15 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - **Swap preview**: Do not poll Kyber too aggressively; 500ms debounce/15s poll/5s server cache.
 - **Order footer**: technical IDs belong in audit/logs, not the primary UI.
 
-## 15. Trading bots (future, see `trading-bots.md`)
+## 15. Trading bots (implemented, see `trading-bots.md`)
 
-- Paper-only v1; no real swaps/signing.
-- Strategy algorithms are code-defined registry + typed params; new strategy = code + deploy (no arbitrary user scripts).
-- Minute tick from `market_quotes`; budget fraction + max positions; all watchlist tokens with a quote.
-- Isolated bot tables; never write paper trades into `transactions`/`postings`.
+- Paper-only v1; no real swaps/signing. Tables are `bot_strategies`, `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples` (migration `0032`).
+- Strategy algorithms live in `apps/api/src/modules/trading-bots/strategies/` as a code registry with Zod params. New strategy = code + unit tests + deploy; never execute user scripts.
+- `BotRunnerService` ticks every `BOT_RUNNER_INTERVAL_SECONDS` (60) under Postgres advisory lock `nexter:bot-runner`; `runOnce()` is used by tests. Quotes come only from `market_quotes`; stale (>5 min) or missing quotes are skipped.
+- Sizing: `min(budget * positionSizePct / 100, cash)` per buy; no per-asset cap, so DCA/grid can add until strategy `maxAdds` or cash runs out. Max positions applies only to new positions.
+- P&L is average-cost: buy cost basis includes fee; sell realized = net proceeds − cost basis. Never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
+- All user mutations are audited (`bot.*`); paper trades/events are their own journals. Strategy archive is blocked while a bot is running; running bots cannot be edited and archived strategies cannot be started.
+- API under `/api/v1/trading-bots`; UI at `/testing` with full-width bot cards, fan, drawer stats, strategies tab.
 - Real automated trading is blocked by WalletConnect/Tangem manual signing. A future live venue needs an owner-approved signer/session-key/AA design and a separate security review; no server private keys.
 
 ## 16. Definition of Done

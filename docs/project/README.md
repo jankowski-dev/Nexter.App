@@ -16,23 +16,23 @@ Nexter — личный финансовый учёт владельца. Оди
 - задачи, заметки, привычки;
 - end-to-end зашифрованное хранилище паролей;
 - импорт исторических данных из Notion;
-- будущий модуль бумажной торговли ботами (`Тестирование`).
+- модуль бумажной торговли ботами (`Тестирование`) с изолированным paper-ledger.
 
 Приложение не является биржей, кастодиальным сервисом или налоговым калькулятором. Оно не хранит приватные ключи и seed-фразы. Все подписи выполняются в кошельке владельца.
 
 ## 2. Технологический стек
 
-| Слой | Технологии |
-|---|---|
-| Монорепозиторий | pnpm 10.20, TypeScript strict |
-| API | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry |
-| Web | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite |
-| Worker | Node.js + pg-boss |
-| Тесты | Vitest (unit/integration), Supertest, Playwright (E2E) |
-| Деньги | PostgreSQL `numeric`, `decimal.js`, строки в API |
+| Слой                   | Технологии                                                                   |
+| ---------------------- | ---------------------------------------------------------------------------- |
+| Монорепозиторий        | pnpm 10.20, TypeScript strict                                                |
+| API                    | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry       |
+| Web                    | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite              |
+| Worker                 | Node.js + pg-boss                                                            |
+| Тесты                  | Vitest (unit/integration), Supertest, Playwright (E2E)                       |
+| Деньги                 | PostgreSQL `numeric`, `decimal.js`, строки в API                             |
 | Очереди/фоновые задачи | pg-boss (worker), интервальные сервисы API (котировки, снапшоты, индексатор) |
-| Деплой | Railway (API + worker + Postgres), Dockerfile |
-| Бэкапы | `pg_dump` custom format + AES-256-GCM, restore drill |
+| Деплой                 | Railway (API + worker + Postgres), Dockerfile                                |
+| Бэкапы                 | `pg_dump` custom format + AES-256-GCM, restore drill                         |
 
 ## 3. Структура репозитория
 
@@ -68,22 +68,22 @@ SPA и API живут на одном origin в production. Cookie-сессия 
 
 ## 4. Основные подсистемы
 
-| Подсистема | Назначение | Ключевые таблицы |
-|---|---|---|
-| Auth | Вход, TOTP, сессии, CSRF, rate limit | `users`, `sessions`, `rate_limits` |
-| Accounting | Счета, транзакции, проводки, FIFO-лоты, сделки | `accounts`, `transactions`, `postings`, `lots`, `lot_consumptions`, `trade_groups`, `trade_details` |
-| Portfolio/Dashboard | Позиции, оценка, P&L, снапшоты, графики | `assets`, `market_quotes`, `portfolio_snapshots` |
-| Market data | DexScreener/CoinGecko, кэш иконок, refresh | `market_quotes`, `assets` |
-| Watchlist | База токенов, группы, контракты, метаданные | `watchlist`, `watchlist_groups`, `assets` |
-| Swap | KyberSwap quote/build/simulate, WalletConnect, трекинг | `swap_orders`, `swap_order_close_groups`, `swap_events`, `token_approvals` |
-| Imports | Notion legacy import, staging, preview/commit/rollback | `imports`, `import_rows` |
-| Reports | Периоды, realized P&L, статистика, CSV | вычисляется из accounting |
-| Finance | BYN-модуль: счета, категории, операции, переводы | `finance_accounts`, `finance_categories`, `finance_transactions`, `finance_transfers` |
-| Tasks/Notes/Habits | Личные задачи, журнал, привычки | `tasks`, `task_images`, `notes`, `note_images`, `habits` |
-| Vault | E2E-шифрование паролей в браузере | `vault_configs`, `vault_items` |
-| Reconciliation | Read-only сверка с on-chain | `watched_addresses`, `indexed_transfers`, `reconciliation_runs/items` |
-| Audit | Журнал всех мутаций | `audit_log` |
-| Trading bots (future) | Бумажная торговля стратегиями | проектируется в `trading-bots.md` |
+| Подсистема          | Назначение                                             | Ключевые таблицы                                                                                                                         |
+| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth                | Вход, TOTP, сессии, CSRF, rate limit                   | `users`, `sessions`, `rate_limits`                                                                                                       |
+| Accounting          | Счета, транзакции, проводки, FIFO-лоты, сделки         | `accounts`, `transactions`, `postings`, `lots`, `lot_consumptions`, `trade_groups`, `trade_details`                                      |
+| Portfolio/Dashboard | Позиции, оценка, P&L, снапшоты, графики                | `assets`, `market_quotes`, `portfolio_snapshots`                                                                                         |
+| Market data         | DexScreener/CoinGecko, кэш иконок, refresh             | `market_quotes`, `assets`                                                                                                                |
+| Watchlist           | База токенов, группы, контракты, метаданные            | `watchlist`, `watchlist_groups`, `assets`                                                                                                |
+| Swap                | KyberSwap quote/build/simulate, WalletConnect, трекинг | `swap_orders`, `swap_order_close_groups`, `swap_events`, `token_approvals`                                                               |
+| Imports             | Notion legacy import, staging, preview/commit/rollback | `imports`, `import_rows`                                                                                                                 |
+| Reports             | Периоды, realized P&L, статистика, CSV                 | вычисляется из accounting                                                                                                                |
+| Finance             | BYN-модуль: счета, категории, операции, переводы       | `finance_accounts`, `finance_categories`, `finance_transactions`, `finance_transfers`                                                    |
+| Tasks/Notes/Habits  | Личные задачи, журнал, привычки                        | `tasks`, `task_images`, `notes`, `note_images`, `habits`                                                                                 |
+| Vault               | E2E-шифрование паролей в браузере                      | `vault_configs`, `vault_items`                                                                                                           |
+| Reconciliation      | Read-only сверка с on-chain                            | `watched_addresses`, `indexed_transfers`, `reconciliation_runs/items`                                                                    |
+| Audit               | Журнал всех мутаций                                    | `audit_log`                                                                                                                              |
+| Trading bots        | Бумажная торговля стратегиями                          | `bot_strategies`, `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples` |
 
 ## 5. Ключевые принципы
 
@@ -119,13 +119,13 @@ npx pnpm@10.20.0 build
 
 ## 7. Где искать ответы
 
-| Вопрос | Документ |
-|---|---|
-| Как устроены модули и потоки данных | [`architecture.md`](architecture.md) |
-| Какие таблицы и связи | [`data-model.md`](data-model.md) |
-| Какие есть API-эндпоинты | [`api.md`](api.md) |
-| Как деплоить, бэкапить, восстанавливать | [`operations.md`](operations.md) |
-| Модель угроз и ограничения | [`security.md`](security.md) |
-| Что делать при типовых ошибках | [`troubleshooting.md`](troubleshooting.md) |
-| Как агенту безопасно менять код | [`agent-guide.md`](agent-guide.md) |
-| Архитектура торговых ботов | [`trading-bots.md`](trading-bots.md) |
+| Вопрос                                  | Документ                                   |
+| --------------------------------------- | ------------------------------------------ |
+| Как устроены модули и потоки данных     | [`architecture.md`](architecture.md)       |
+| Какие таблицы и связи                   | [`data-model.md`](data-model.md)           |
+| Какие есть API-эндпоинты                | [`api.md`](api.md)                         |
+| Как деплоить, бэкапить, восстанавливать | [`operations.md`](operations.md)           |
+| Модель угроз и ограничения              | [`security.md`](security.md)               |
+| Что делать при типовых ошибках          | [`troubleshooting.md`](troubleshooting.md) |
+| Как агенту безопасно менять код         | [`agent-guide.md`](agent-guide.md)         |
+| Архитектура торговых ботов              | [`trading-bots.md`](trading-bots.md)       |
