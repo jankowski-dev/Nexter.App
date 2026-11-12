@@ -139,6 +139,7 @@ export function TestingPage() {
   const [strategyError, setStrategyError] = useState<string | null>(null);
   const [botError, setBotError] = useState<string | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
+  const [pendingBotAfterStrategy, setPendingBotAfterStrategy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState(false);
 
@@ -238,11 +239,18 @@ export function TestingPage() {
 
   const createStrategyMutation = useMutation({
     mutationFn: createBotStrategy,
-    onSuccess: () => {
+    onSuccess: async (created) => {
       setStrategyDialogOpen(false);
       setStrategyError(null);
+      await queryClient.refetchQueries({ queryKey: ['trading-bot-strategies'] });
       notify('Стратегия создана.');
-      void queryClient.invalidateQueries({ queryKey: ['trading-bot-strategies'] });
+      if (pendingBotAfterStrategy) {
+        setPendingBotAfterStrategy(false);
+        setEditingBot(null);
+        setBotForm(emptyBotForm(created.id));
+        setBotError(null);
+        setBotDialogOpen(true);
+      }
     },
     onError: (err) => {
       const message = toRussianError(err, 'Не удалось создать стратегию');
@@ -274,6 +282,21 @@ export function TestingPage() {
   }
 
   function openCreateBot() {
+    if (strategies.isPending) {
+      notify('Загружаю стратегии…');
+      return;
+    }
+    if (strategies.isError) {
+      notify(toRussianError(strategies.error, 'Не удалось загрузить стратегии'), true);
+      return;
+    }
+    if (strategyInstances.length === 0) {
+      notify(
+        'Сначала создайте стратегию: выберите шаблон и задайте название. После сохранения откроется форма робота.',
+      );
+      openCreateStrategy(undefined, true);
+      return;
+    }
     setEditingBot(null);
     setBotForm(emptyBotForm(strategyInstances[0]?.id ?? ''));
     setBotError(null);
@@ -307,15 +330,21 @@ export function TestingPage() {
     setBotDialogOpen(true);
   }
 
-  function openCreateStrategy(template?: BotStrategyTemplate) {
+  function openCreateStrategy(template?: BotStrategyTemplate, continueToBot = false) {
+    setPendingBotAfterStrategy(continueToBot);
     const selected = template ?? templates[0];
     setEditingStrategy(null);
     setStrategyKey(selected?.key ?? 'momentum_breakout');
-    setStrategyName('');
+    setStrategyName(continueToBot ? (selected?.name ?? '') : '');
     setStrategyDescription(selected?.description ?? '');
     setStrategyParams(jsonParams(selected?.defaultParams ?? {}));
     setStrategyError(null);
     setStrategyDialogOpen(true);
+  }
+
+  function closeStrategyDialog() {
+    setStrategyDialogOpen(false);
+    setPendingBotAfterStrategy(false);
   }
 
   function openEditStrategy(strategy: BotStrategy) {
@@ -333,6 +362,10 @@ export function TestingPage() {
     const strategyId = botForm.strategyId;
     if (!strategyId) {
       setBotError('Сначала создайте стратегию.');
+      return;
+    }
+    if (!strategyInstances.some((strategy) => strategy.id === strategyId)) {
+      setBotError('Выберите активную стратегию.');
       return;
     }
     if (botForm.tokenAssetIds.length === 0) {
@@ -487,7 +520,7 @@ export function TestingPage() {
               Создайте стратегию, затем добавьте робота, выберите токены и бюджет.
             </CardDescription>
             <Button className="mt-4" onClick={openCreateBot}>
-              Добавить робота
+              {strategyInstances.length === 0 ? 'Создать стратегию' : 'Добавить робота'}
             </Button>
           </Card>
         ) : (
@@ -685,12 +718,21 @@ export function TestingPage() {
                 value={botForm.strategyId}
                 onChange={(event) => setBotForm({ ...botForm, strategyId: event.target.value })}
               >
-                {strategyInstances.map((strategy) => (
-                  <option key={strategy.id} value={strategy.id}>
-                    {strategy.name} · {strategy.key}
-                  </option>
-                ))}
+                {strategyInstances.length === 0 ? (
+                  <option value="">Сначала создайте стратегию</option>
+                ) : (
+                  strategyInstances.map((strategy) => (
+                    <option key={strategy.id} value={strategy.id}>
+                      {strategy.name} · {strategy.key}
+                    </option>
+                  ))
+                )}
               </Select>
+              {strategyInstances.length === 0 ? (
+                <p className="mt-1 text-xs text-amber-700">
+                  Без стратегии робот не сможет торговать.
+                </p>
+              ) : null}
             </label>
           </div>
           <label className="block text-sm text-zinc-600">
@@ -838,13 +880,13 @@ export function TestingPage() {
 
       <Dialog
         open={strategyDialogOpen}
-        onClose={() => setStrategyDialogOpen(false)}
+        onClose={closeStrategyDialog}
         title={editingStrategy ? 'Изменить стратегию' : 'Новая стратегия'}
         description="Выберите встроенный алгоритм. Параметры можно поправить в JSON."
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStrategyDialogOpen(false)}>
+            <Button variant="ghost" onClick={closeStrategyDialog}>
               Отмена
             </Button>
             <Button
@@ -861,6 +903,11 @@ export function TestingPage() {
         }
       >
         <div className="space-y-3">
+          {pendingBotAfterStrategy ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Сначала создайте стратегию. После сохранения сразу откроется форма нового робота.
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block text-sm text-zinc-600">
               Название
