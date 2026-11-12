@@ -163,6 +163,7 @@ export function TokenTradeDrawer({
   const mountedRef = useRef(true);
   const onCompletedRef = useRef(onCompleted);
   const handledOrderRef = useRef<string | null>(null);
+  const cancelWaitRef = useRef(false);
 
   useEffect(() => {
     onCompletedRef.current = onCompleted;
@@ -416,6 +417,7 @@ export function TokenTradeDrawer({
     }
 
     handledOrderRef.current = null;
+    cancelWaitRef.current = false;
     setError(null);
     setPhase('quoting');
     setBuild(null);
@@ -461,6 +463,7 @@ export function TokenTradeDrawer({
             throw err;
           }
 
+          cancelWaitRef.current = false;
           await submitSwapApproval(prepared.approval.id, approvalHash);
           await wallet.waitForReceipt(approvalHash);
           if (!mountedRef.current) return;
@@ -501,6 +504,7 @@ export function TokenTradeDrawer({
         throw err;
       }
 
+      cancelWaitRef.current = false;
       if (!mountedRef.current) return;
       broadcastHash = hash;
       setTxHash(hash);
@@ -519,6 +523,27 @@ export function TokenTradeDrawer({
       }
       setPhase(nextPhase);
       setError(toRussianError(err, 'Не удалось выполнить обмен'));
+    }
+  }
+
+  async function cancelWalletWait(): Promise<void> {
+    if (
+      !window.confirm(
+        'Вы отклонили запрос в кошельке? Если транзакция уже подписана, не отменяйте ожидание.',
+      )
+    ) {
+      return;
+    }
+
+    cancelWaitRef.current = true;
+    setPhase('idle');
+    setError('Ожидание ответа кошелька отменено. Если запрос ещё висит в кошельке, отклоните его.');
+
+    // A signature request has not broadcast anything yet, so it is safe to put the
+    // order back to READY. An approval request may already be broadcast; leave it
+    // alone and let the wallet response (or expiry/supersede) decide.
+    if (order && phase === 'signing') {
+      await cancelSwapSigning(order.id).catch(() => undefined);
     }
   }
 
@@ -813,9 +838,16 @@ export function TokenTradeDrawer({
           ) : null}
 
           {phase === 'signing' || phase === 'approval' ? (
-            <p className="text-xs text-zinc-500">
-              Ожидаю ответ кошелька. Чтобы отменить, отклоните запрос в приложении кошелька.
-            </p>
+            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p>Ожидаю ответ кошелька. Если вы отклонили запрос, нажмите «Отменить ожидание».</p>
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                onClick={() => void cancelWalletWait()}
+              >
+                Отменить ожидание
+              </Button>
+            </div>
           ) : null}
 
           {phase === 'success' ? (
@@ -882,13 +914,6 @@ export function TokenTradeDrawer({
               >
                 Записать {isBuy ? 'покупку' : 'продажу'} вручную
               </Button>
-            ) : null}
-
-            {order ? (
-              <p className="mt-2 break-all text-xs text-zinc-500">
-                Ордер {order.id.slice(0, 8)} · {order.status}
-                {txHash ? ` · tx ${txHash.slice(0, 12)}…` : ''}
-              </p>
             ) : null}
           </div>
         </div>
