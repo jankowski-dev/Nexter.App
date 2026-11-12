@@ -114,7 +114,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - New task autosave must not create the task before recurrence is chosen (UI keeps recurrence visible until explicit save).
 - Notes: Markdown is a safe subset; no HTML. List responses return attachment count, not full data URLs; detail endpoint returns full attachments.
 - Vault: E2E encryption in browser; server only ciphertext. Never log/decrypt on server.
-- Finance is isolated from crypto ledger; credit is liability; cancelled operations are soft-cancelled.
+- Finance is isolated from crypto ledger; credit is liability; cancelled operations are soft-cancelled. A transfer from an asset account to a credit account is a principal repayment: it counts in `expenseBase`/`netBase` and appears as the synthetic category `Погашение кредита`, but it does not change net worth. Credit drawdowns are not income.
 
 ## 10. Database/migrations
 

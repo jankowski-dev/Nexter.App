@@ -115,24 +115,24 @@
 
 ## 8. Finance (BYN)
 
-| Метод | Путь                                | Описание                          |
-| ----- | ----------------------------------- | --------------------------------- |
-| GET   | `/finance/accounts`                 | счета                             |
-| POST  | `/finance/accounts`                 | создать счёт                      |
-| PATCH | `/finance/accounts/:id`             | изменить/архивировать             |
-| GET   | `/finance/categories`               | категории                         |
-| POST  | `/finance/categories`               | создать                           |
-| PATCH | `/finance/categories/:id`           | изменить                          |
-| GET   | `/finance/transactions`             | журнал (period, cancelled)        |
-| POST  | `/finance/transactions`             | операция                          |
-| PATCH | `/finance/transactions/:id/cancel`  | отменить                          |
-| PATCH | `/finance/transactions/:id/restore` | вернуть                           |
-| GET   | `/finance/transfers`                | переводы                          |
-| POST  | `/finance/transfers`                | перевод                           |
-| GET   | `/finance/summary`                  | сводка (`from/to` или `all=true`) |
-| POST  | `/finance/import/preview`           | preview                           |
-| POST  | `/finance/import/commit`            | commit                            |
-| POST  | `/finance/import/rollback`          | rollback                          |
+| Метод | Путь                                | Описание                                                              |
+| ----- | ----------------------------------- | --------------------------------------------------------------------- |
+| GET   | `/finance/accounts`                 | счета                                                                 |
+| POST  | `/finance/accounts`                 | создать счёт                                                          |
+| PATCH | `/finance/accounts/:id`             | изменить/архивировать                                                 |
+| GET   | `/finance/categories`               | категории                                                             |
+| POST  | `/finance/categories`               | создать                                                               |
+| PATCH | `/finance/categories/:id`           | изменить                                                              |
+| GET   | `/finance/transactions`             | журнал (period, cancelled)                                            |
+| POST  | `/finance/transactions`             | операция                                                              |
+| PATCH | `/finance/transactions/:id/cancel`  | отменить                                                              |
+| PATCH | `/finance/transactions/:id/restore` | вернуть                                                               |
+| GET   | `/finance/transfers`                | переводы                                                              |
+| POST  | `/finance/transfers`                | перевод                                                               |
+| GET   | `/finance/summary`                  | сводка (`from/to` или `all=true`); погашение кредита входит в расходы |
+| POST  | `/finance/import/preview`           | preview                                                               |
+| POST  | `/finance/import/commit`            | commit                                                                |
+| POST  | `/finance/import/rollback`          | rollback                                                              |
 
 ## 9. Tasks / Notes / Habits
 

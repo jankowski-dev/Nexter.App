@@ -68,7 +68,7 @@ const accountKindLabels: Record<FinanceAccountKind, string> = {
 const transferKindLabels: Record<FinanceTransferKind, string> = {
   exchange: 'Обмен валют',
   card_topup: 'Пополнение карты',
-  credit: 'Кредит',
+  credit: 'Кредит / погашение',
   other: 'Другое',
 };
 
@@ -524,6 +524,10 @@ export function FinancePage() {
               hint={`Активы ${money(summary.data?.assetsBase, 'BYN')} · кредит ${money(summary.data?.liabilitiesBase, 'BYN')}`}
             />
           </div>
+          <p className="text-xs text-zinc-500">
+            Погашение кредита уменьшает долг и входит в расходы; итоговый капитал при этом не
+            меняется. Сама операция — во вкладке «Переводы».
+          </p>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
@@ -572,7 +576,7 @@ export function FinancePage() {
                       1,
                     );
                     return (
-                      <div key={`${category.categoryId ?? 'none'}-${category.kind}`}>
+                      <div key={`${category.categoryId ?? category.name}-${category.kind}`}>
                         <div className="flex items-center justify-between gap-2 text-sm">
                           <span className="flex items-center gap-2 text-zinc-700">
                             <span
@@ -610,7 +614,9 @@ export function FinancePage() {
 
           <Card>
             <CardTitle>Последние 12 месяцев</CardTitle>
-            <CardDescription>Доходы, расходы и чистый поток в BYN.</CardDescription>
+            <CardDescription>
+              Доходы, расходы (включая погашение кредита) и чистый поток в BYN.
+            </CardDescription>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

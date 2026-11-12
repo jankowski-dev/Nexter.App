@@ -40,7 +40,7 @@ const accountKindLabels: Record<FinanceAccountKind, string> = {
 const transferKindLabels: Record<FinanceTransferKind, string> = {
   exchange: 'Обмен валют',
   card_topup: 'Пополнение карты',
-  credit: 'Кредит',
+  credit: 'Кредит / погашение',
   other: 'Другое',
 };
 
@@ -300,7 +300,7 @@ export function FinanceTransferDialog({
       open
       onClose={onClose}
       title={transfer ? 'Изменить перевод' : 'Новый перевод'}
-      description="Перевод не влияет на доходы и расходы."
+      description="Перевод между счетами не меняет баланс. Погашение кредита учитывается в расходах; итоговый капитал не меняется."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
