@@ -1109,6 +1109,194 @@ export const externalApiCalls = pgTable(
   (table) => [index('external_api_calls_created_idx').on(table.createdAt)],
 );
 
+export const botStrategies = pgTable(
+  'bot_strategies',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    key: text('key').notNull(),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    version: integer('version').notNull().default(1),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('bot_strategies_user_name_unique')
+      .on(table.userId, table.name)
+      .where(sql`${table.archivedAt} is null`),
+    index('bot_strategies_user_idx').on(table.userId),
+  ],
+);
+
+export const tradingBots = pgTable(
+  'trading_bots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    strategyId: uuid('strategy_id')
+      .notNull()
+      .references(() => botStrategies.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    description: text('description').notNull().default(''),
+    status: text('status').notNull().default('draft'),
+    budgetUsd: numeric('budget_usd', { precision: 24, scale: 8 }).notNull(),
+    cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),
+    maxPositions: integer('max_positions').notNull().default(5),
+    positionSizePct: numeric('position_size_pct', { precision: 5, scale: 2 })
+      .notNull()
+      .default('20'),
+    feeBps: integer('fee_bps').notNull().default(25),
+    slippageBps: integer('slippage_bps').notNull().default(10),
+    maxDailyLossPct: numeric('max_daily_loss_pct', { precision: 5, scale: 2 })
+      .notNull()
+      .default('10'),
+    cooldownMinutes: integer('cooldown_minutes').notNull().default(15),
+    peakEquityUsd: numeric('peak_equity_usd', { precision: 24, scale: 8 }).notNull().default('0'),
+    maxDrawdownPct: numeric('max_drawdown_pct', { precision: 5, scale: 2 }).notNull().default('0'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    lastTickAt: timestamp('last_tick_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('trading_bots_user_name_unique')
+      .on(table.userId, table.name)
+      .where(sql`${table.archivedAt} is null`),
+    index('trading_bots_user_idx').on(table.userId),
+    index('trading_bots_status_idx').on(table.status),
+  ],
+);
+
+export const botTokens = pgTable(
+  'bot_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('bot_tokens_bot_asset_unique').on(table.botId, table.assetId),
+    index('bot_tokens_asset_idx').on(table.assetId),
+  ],
+);
+
+export const botPositions = pgTable(
+  'bot_positions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+    avgCostUsd: numeric('avg_cost_usd', { precision: 24, scale: 8 }).notNull(),
+    costBasisUsd: numeric('cost_basis_usd', { precision: 24, scale: 8 }).notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('bot_positions_bot_asset_unique').on(table.botId, table.assetId),
+    index('bot_positions_bot_idx').on(table.botId),
+  ],
+);
+
+export const botTrades = pgTable(
+  'bot_trades',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    side: text('side').notNull(),
+    amount: numeric('amount', { precision: 36, scale: 18 }).notNull(),
+    priceUsd: numeric('price_usd', { precision: 36, scale: 18 }).notNull(),
+    usdValue: numeric('usd_value', { precision: 24, scale: 8 }).notNull(),
+    feeUsd: numeric('fee_usd', { precision: 24, scale: 8 }).notNull(),
+    slippageUsd: numeric('slippage_usd', { precision: 24, scale: 8 }).notNull(),
+    realizedPnlUsd: numeric('realized_pnl_usd', { precision: 24, scale: 8 }).notNull().default('0'),
+    reason: text('reason').notNull().default(''),
+    signal: jsonb('signal').$type<Record<string, unknown>>().notNull().default({}),
+    executedAt: timestamp('executed_at', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('bot_trades_bot_time_idx').on(table.botId, table.executedAt)],
+);
+
+export const botEquitySnapshots = pgTable(
+  'bot_equity_snapshots',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+    cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),
+    positionsValueUsd: numeric('positions_value_usd', { precision: 24, scale: 8 }).notNull(),
+    equityUsd: numeric('equity_usd', { precision: 24, scale: 8 }).notNull(),
+    realizedPnlUsd: numeric('realized_pnl_usd', { precision: 24, scale: 8 }).notNull(),
+    unrealizedPnlUsd: numeric('unrealized_pnl_usd', { precision: 24, scale: 8 }).notNull(),
+  },
+  (table) => [
+    index('bot_equity_bot_time_idx').on(table.botId, table.capturedAt),
+    index('bot_equity_time_idx').on(table.capturedAt),
+  ],
+);
+
+export const botEvents = pgTable(
+  'bot_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    message: text('message').notNull().default(''),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('bot_events_bot_time_idx').on(table.botId, table.createdAt),
+    index('bot_events_time_idx').on(table.createdAt),
+  ],
+);
+
+export const botQuoteSamples = pgTable(
+  'bot_quote_samples',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    priceUsd: numeric('price_usd', { precision: 36, scale: 18 }).notNull(),
+    change24hPct: numeric('change_24h_pct', { precision: 12, scale: 4 }),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('bot_quote_samples_asset_time_idx').on(table.assetId, table.capturedAt),
+    index('bot_quote_samples_time_idx').on(table.capturedAt),
+  ],
+);
+
 export type Chain = typeof chains.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
@@ -1126,6 +1314,14 @@ export type ImportRow = typeof importRows.$inferSelect;
 export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
+export type BotStrategyRecord = typeof botStrategies.$inferSelect;
+export type TradingBotRecord = typeof tradingBots.$inferSelect;
+export type BotTokenRecord = typeof botTokens.$inferSelect;
+export type BotPositionRecord = typeof botPositions.$inferSelect;
+export type BotTradeRecord = typeof botTrades.$inferSelect;
+export type BotEquitySnapshotRecord = typeof botEquitySnapshots.$inferSelect;
+export type BotEventRecord = typeof botEvents.$inferSelect;
+export type BotQuoteSampleRecord = typeof botQuoteSamples.$inferSelect;
 export type TokenApproval = typeof tokenApprovals.$inferSelect;
 export type VaultConfig = typeof vaultConfigs.$inferSelect;
 export type VaultItem = typeof vaultItems.$inferSelect;

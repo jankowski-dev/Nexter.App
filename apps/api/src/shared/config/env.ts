@@ -121,6 +121,12 @@ export const envSchema = z.object({
   COINGECKO_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
   DEXSCREENER_BASE_URL: z.url().default('https://api.dexscreener.com'),
   DEXSCREENER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
+  BOT_RUNNER_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
+  BOT_RUNNER_INTERVAL_SECONDS: z.coerce.number().int().min(15).max(3600).default(60),
+  BOT_SAMPLE_RETENTION_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   MARKET_QUOTES_ENABLED: z
     .enum(['true', 'false'])
     .default('true')

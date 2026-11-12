@@ -19,6 +19,7 @@ const cryptoNavigation = [
 const topNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard },
   { to: '/tasks', label: messages.nav.tasks },
+  { to: '/testing', label: messages.nav.testing },
 ] as const;
 
 const afterCryptoNavigation = [

@@ -15,6 +15,7 @@ import { OperationsPage } from '@/features/operations/operations-page';
 import { ReportsPage } from '@/features/reports/reports-page';
 import { NotesPage } from '@/features/notes/notes-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
+import { TestingPage } from '@/features/testing/testing-page';
 import { VaultPage } from '@/features/vault/vault-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
@@ -181,6 +182,12 @@ const tasksRoute = createRoute({
   component: TasksPage,
 });
 
+const testingRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/testing',
+  component: TestingPage,
+});
+
 const notesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/notes',
@@ -264,6 +271,7 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     vaultRoute,
     tasksRoute,
+    testingRoute,
     notesRoute,
     importRoute,
     financeRoute,

@@ -13,6 +13,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { VaultModule } from './modules/vault/vault.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
+import { TradingBotsModule } from './modules/trading-bots/trading-bots.module';
 import { SwapModule } from './modules/swap/swap.module';
 import { WatchlistModule } from './modules/watchlist/watchlist.module';
 import { ApiNotFoundController } from './shared/errors/api-not-found.controller';
@@ -41,6 +42,7 @@ import { loggerModule } from './shared/logging/logger.module';
     AuditLogModule,
     SwapModule,
     ReconciliationModule,
+    TradingBotsModule,
   ],
   controllers: [ApiNotFoundController],
   providers: [
