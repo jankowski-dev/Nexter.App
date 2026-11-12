@@ -526,7 +526,7 @@ export function FinancePage() {
           </div>
           <p className="text-xs text-zinc-500">
             Погашение кредита уменьшает долг и входит в расходы; чистый капитал при этом не
-            меняется.
+            меняется. Сама операция — во вкладке «Переводы».
           </p>
 
           <div className="grid gap-4 lg:grid-cols-2">
