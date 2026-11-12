@@ -173,6 +173,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   );
 
   await page.getByRole('tab', { name: 'Список' }).click();
+  await page.getByRole('tab', { name: 'Открытые' }).click();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const listTaskDialog = page.getByRole('dialog');
   await listTaskDialog.getByLabel('Название').fill('Задача для списка');
