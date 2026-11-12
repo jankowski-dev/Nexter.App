@@ -176,7 +176,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - `BotRunnerService` ticks every `BOT_RUNNER_INTERVAL_SECONDS` (60) under Postgres advisory lock `nexter:bot-runner`; `runOnce()` is used by tests. Quotes come only from `market_quotes`; stale (>5 min) or missing quotes are skipped.
 - Sizing: `min(budget * positionSizePct / 100, cash)` per buy; no per-asset cap, so DCA/grid can add until strategy `maxAdds` or cash runs out. Max positions applies only to new positions.
 - P&L is average-cost: buy cost basis includes fee; sell realized = net proceeds − cost basis. Never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
-- All user mutations are audited (`bot.*`); paper trades/events are their own journals. Strategy archive is blocked while a bot is running; running bots cannot be edited and archived strategies cannot be started.
+- All user mutations are audited (`bot.*`); paper trades/events are their own journals. Strategy archive is blocked while a bot is running; running bots cannot be edited and archived strategies cannot be started. `POST /bots/:id/close-positions` force-closes all paper positions at the latest quotes, preserves trade history and stops the bot; archiving is blocked while positions remain.
 - API under `/api/v1/trading-bots`; UI at `/testing` with full-width bot cards, fan, drawer stats, strategies tab.
 - Real automated trading is blocked by WalletConnect/Tangem manual signing. A future live venue needs an owner-approved signer/session-key/AA design and a separate security review; no server private keys.
 

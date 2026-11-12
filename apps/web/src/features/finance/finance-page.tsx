@@ -21,6 +21,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useMemo, useRef, useState } from 'react';
 import type {
   FinanceAccount,
@@ -162,6 +163,8 @@ export function FinancePage() {
   const [customMonth, setCustomMonth] = useState(currentMonth);
   const [journalFilter, setJournalFilter] = useState<JournalFilter>('all');
   const [notice, setNotice] = useState<string | null>(null);
+
+  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [transactionDialog, setTransactionDialog] = useState<{
     transaction?: FinanceTransaction;
     kind?: FinanceTransactionKind;

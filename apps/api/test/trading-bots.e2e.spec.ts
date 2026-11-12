@@ -232,6 +232,70 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(201);
 
+    const closeBot = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'Close positions bot',
+        description: 'E2E forced close',
+        strategyId: strategy.body.id,
+        tokenAssetIds: [asset.id],
+        budgetUsd: '1000',
+        maxPositions: 5,
+        positionSizePct: 20,
+        feeBps: 25,
+        slippageBps: 10,
+        maxDailyLossPct: 10,
+        cooldownMinutes: 0,
+      })
+      .expect(201);
+    const closeBotId = closeBot.body.bot.id as string;
+
+    await db
+      .update(marketQuotes)
+      .set({
+        priceUsd: '1.78000000',
+        change24hPct: '5.0000',
+        fetchedAt: new Date(),
+        changedAt: new Date(),
+      })
+      .where(eq(marketQuotes.assetId, asset.id));
+
+    await agent
+      .post(`/api/v1/trading-bots/bots/${closeBotId}/start`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    await runner.runOnce();
+
+    const closeBotDetail = await agent.get(`/api/v1/trading-bots/bots/${closeBotId}`).expect(200);
+    expect(closeBotDetail.body.positions).toHaveLength(1);
+
+    await agent
+      .delete(`/api/v1/trading-bots/bots/${closeBotId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+
+    const closed = await agent
+      .post(`/api/v1/trading-bots/bots/${closeBotId}/close-positions`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    expect(closed.body.bot.status).toBe('stopped');
+    expect(closed.body.positions).toHaveLength(0);
+    expect(closed.body.bot.stats.tradesCount).toBe(2);
+    expect(closed.body.bot.stats.cashUsd).not.toBe('1000.00000000');
+
+    const closeEvents = await agent
+      .get(`/api/v1/trading-bots/bots/${closeBotId}/events`)
+      .expect(200);
+    expect(closeEvents.body.data.map((event: { type: string }) => event.type)).toEqual(
+      expect.arrayContaining(['buy', 'sell', 'closed_all']),
+    );
+
+    await agent
+      .delete(`/api/v1/trading-bots/bots/${closeBotId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
     const reset = await agent
       .post(`/api/v1/trading-bots/bots/${botId}/reset`)
       .set('x-csrf-token', owner.csrf)

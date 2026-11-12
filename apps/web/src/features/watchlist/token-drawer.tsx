@@ -124,6 +124,12 @@ export function TokenDrawer({
           </div>
         </div>
 
+        {entry.archivedAt ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            Токен скрыт из активной Базы. Транзакции, лоты и сделки с ним сохранены и продолжают
+            отображаться в Портфеле и Статистике.
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Группа</div>

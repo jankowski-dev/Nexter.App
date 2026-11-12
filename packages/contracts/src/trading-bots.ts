@@ -19,6 +19,7 @@ export const botStrategyTemplateSchema = z.object({
   key: botStrategyKeySchema,
   name: z.string(),
   description: z.string(),
+  icon: z.string(),
   defaultParams: paramsSchema,
 });
 
@@ -27,6 +28,7 @@ export const botStrategySchema = z.object({
   key: botStrategyKeySchema,
   name: z.string(),
   description: z.string(),
+  icon: z.string(),
   version: z.number().int().positive(),
   params: paramsSchema,
   archivedAt: z.iso.datetime().nullable(),
@@ -85,6 +87,7 @@ export const botSummarySchema = z.object({
     id: z.uuid(),
     key: botStrategyKeySchema,
     name: z.string(),
+    icon: z.string(),
   }),
   budgetUsd: z.string(),
   cashUsd: z.string(),

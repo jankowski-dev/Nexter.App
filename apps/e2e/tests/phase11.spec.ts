@@ -129,15 +129,19 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   await nav.getByRole('link', { name: 'Задачи' }).click();
   await expect(page.getByRole('heading', { name: 'Задачи', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Календарь' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(page.getByRole('tab', { name: 'Список' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'Календарь' })).toBeVisible();
+
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
+    today.getDate(),
+  ).padStart(2, '0')}`;
 
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const taskDialog = page.getByRole('dialog');
   await taskDialog.getByLabel('Название').fill('Проверить BASED');
   await taskDialog.getByLabel('Описание').fill('Пересмотреть тезис');
+  await taskDialog.getByLabel('Срок').fill(todayKey);
   await taskDialog.getByLabel('Теги (через запятую)').fill('риск, портфель');
   await taskDialog.locator('input[type="file"]').setInputFiles({
     name: 'dot.png',
@@ -155,11 +159,8 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(taskDialog.getByAltText('dot.jpg')).toBeVisible();
   await taskDialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Календарь' }).click();
 
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-    today.getDate(),
-  ).padStart(2, '0')}`;
   const todayCell = page.locator(`[data-date="${todayKey}"]`);
   await expect(todayCell.getByRole('button', { name: /Проверить BASED/ })).toBeVisible();
   await todayCell.getByRole('button', { name: /Проверить BASED/ }).click();
@@ -223,6 +224,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   const secondDate = `${today.getFullYear()}-${monthValue}-11`;
   const lastDate = `${today.getFullYear()}-${monthValue}-24`;
 
+  await page.getByRole('button', { name: 'Актуальные' }).click();
   await page.getByRole('tab', { name: 'Календарь' }).click();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const recurringDialog = page.getByRole('dialog');

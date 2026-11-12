@@ -62,6 +62,7 @@ function toStrategy(row: BotStrategyRecord): BotStrategy {
     key: row.key as BotStrategy['key'],
     name: row.name,
     description: row.description,
+    icon: strategyByKey.get(row.key)?.icon ?? 'beaker',
     version: row.version,
     params: row.params,
     archivedAt: row.archivedAt?.toISOString() ?? null,
@@ -711,8 +712,159 @@ export class TradingBotsService {
     return this.getBot(userId, id);
   }
 
+  async closePositions(userId: string, id: string, meta: BotMeta): Promise<BotDetailResponse> {
+    const bot = await this.requireBot(userId, id);
+    if (bot.archivedAt) {
+      throw new ConflictException({ code: 'CONFLICT', message: 'Bot is archived' });
+    }
+
+    const positions = await this.db.select().from(botPositions).where(eq(botPositions.botId, id));
+    if (positions.length === 0) return this.getBot(userId, id);
+
+    const assetRows = await this.db
+      .select({ id: assets.id, symbol: assets.symbol })
+      .from(assets)
+      .where(
+        inArray(
+          assets.id,
+          positions.map((position) => position.assetId),
+        ),
+      );
+    const symbolById = new Map(assetRows.map((asset) => [asset.id, asset.symbol]));
+    const quoteMap = await this.quotes.getQuotes(positions.map((position) => position.assetId));
+    const missing = positions.filter((position) => {
+      const quote = quoteMap.get(position.assetId);
+      return !quote || decimal(quote.priceUsd).lte(0);
+    });
+    if (missing.length > 0) {
+      throw new ConflictException({
+        code: 'CONFLICT',
+        message: 'No current quote for one or more positions',
+        details: {
+          symbols: missing.map((position) => symbolById.get(position.assetId) ?? position.assetId),
+        },
+      });
+    }
+
+    const now = new Date();
+    let cash = decimal(bot.cashUsd);
+    let realizedTotal = new Decimal(0);
+
+    await this.db.transaction(async (tx) => {
+      for (const position of positions) {
+        const quote = quoteMap.get(position.assetId);
+        if (!quote) continue;
+        const amount = decimal(position.amount);
+        const rawPrice = decimal(quote.priceUsd);
+        const fillPrice = rawPrice.mul(
+          new Decimal(1).minus(decimal(String(bot.slippageBps)).div(10_000)),
+        );
+        const gross = amount.mul(fillPrice);
+        const slippage = amount.mul(rawPrice).minus(gross);
+        const fee = gross.mul(decimal(String(bot.feeBps))).div(10_000);
+        const net = gross.minus(fee);
+        const realized = net.minus(decimal(position.costBasisUsd));
+        cash = cash.plus(net);
+        realizedTotal = realizedTotal.plus(realized);
+
+        await tx.delete(botPositions).where(eq(botPositions.id, position.id));
+        await tx.insert(botTrades).values({
+          botId: id,
+          assetId: position.assetId,
+          side: 'sell',
+          amount: position.amount,
+          priceUsd: fillPrice.toFixed(18),
+          usdValue: usdString(gross),
+          feeUsd: usdString(fee),
+          slippageUsd: usdString(slippage),
+          realizedPnlUsd: usdString(realized),
+          reason: 'принудительное закрытие',
+          signal: { strategy: bot.strategyId, price: quote.priceUsd, forced: true },
+          executedAt: now,
+        });
+        await tx.insert(botEvents).values({
+          botId: id,
+          type: 'sell',
+          message: `${symbolById.get(position.assetId) ?? position.assetId}: принудительное закрытие`,
+          payload: {
+            assetId: position.assetId,
+            amount: position.amount,
+            realizedPnlUsd: usdString(realized),
+          },
+        });
+      }
+
+      const peak = Decimal.max(decimal(bot.peakEquityUsd), cash);
+      const drawdown = peak.gt(0) ? peak.minus(cash).div(peak).mul(100) : new Decimal(0);
+      const maxDrawdown = Decimal.max(decimal(bot.maxDrawdownPct), drawdown);
+
+      await tx
+        .update(tradingBots)
+        .set({
+          cashUsd: usdString(cash),
+          status: 'stopped',
+          stoppedAt: now,
+          lastTickAt: now,
+          peakEquityUsd: usdString(peak),
+          maxDrawdownPct: maxDrawdown.toFixed(2),
+          updatedAt: now,
+        })
+        .where(eq(tradingBots.id, id));
+
+      await tx.insert(botEvents).values({
+        botId: id,
+        type: 'closed_all',
+        message: `Закрыто позиций: ${positions.length}`,
+        payload: { positions: positions.length, realizedPnlUsd: usdString(realizedTotal) },
+      });
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'bot.positions_closed',
+          entityType: 'trading_bot',
+          entityId: id,
+          before: { positions: positions.length, cashUsd: bot.cashUsd, status: bot.status },
+          after: {
+            positions: 0,
+            cashUsd: usdString(cash),
+            realizedPnlUsd: usdString(realizedTotal),
+            status: 'stopped',
+          },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
+
+    const tradeStats = await this.loadTradeStats(id);
+    await this.db.insert(botEquitySnapshots).values({
+      botId: id,
+      capturedAt: now,
+      cashUsd: usdString(cash),
+      positionsValueUsd: '0.00000000',
+      equityUsd: usdString(cash),
+      realizedPnlUsd: usdString(tradeStats.realizedPnl),
+      unrealizedPnlUsd: '0.00000000',
+    });
+
+    return this.getBot(userId, id);
+  }
+
   async archiveBot(userId: string, id: string, meta: BotMeta): Promise<void> {
     const bot = await this.requireBot(userId, id);
+    const [openPosition] = await this.db
+      .select({ id: botPositions.id })
+      .from(botPositions)
+      .where(eq(botPositions.botId, id))
+      .limit(1);
+    if (openPosition) {
+      throw new ConflictException({
+        code: 'CONFLICT',
+        message: 'Close all positions before archiving the bot',
+      });
+    }
     await this.db.transaction(async (tx) => {
       const now = new Date();
       await tx
@@ -809,6 +961,7 @@ export class TradingBotsService {
         id: strategy.id,
         key: strategy.key as BotSummary['strategy']['key'],
         name: strategy.name,
+        icon: strategyByKey.get(strategy.key)?.icon ?? 'beaker',
       },
       budgetUsd: bot.budgetUsd,
       cashUsd: bot.cashUsd,

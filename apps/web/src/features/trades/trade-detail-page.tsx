@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
@@ -407,7 +407,7 @@ export function TradeDetailPage() {
         )}
       </Card>
 
-      <Dialog
+      <Drawer
         open={sellOpen}
         onClose={() => setSellOpen(false)}
         title="Добавить продажу"
@@ -500,9 +500,9 @@ export function TradeDetailPage() {
           )}
           {sellError ? <p className="text-sm text-red-700">{sellError}</p> : null}
         </div>
-      </Dialog>
+      </Drawer>
 
-      <Dialog
+      <Drawer
         open={notesOpen}
         onClose={() => setNotesOpen(false)}
         title="Заметка к сделке"
@@ -520,7 +520,7 @@ export function TradeDetailPage() {
       >
         <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
         {notesError ? <p className="mt-2 text-sm text-red-700">{notesError}</p> : null}
-      </Dialog>
+      </Drawer>
     </div>
   );
 }

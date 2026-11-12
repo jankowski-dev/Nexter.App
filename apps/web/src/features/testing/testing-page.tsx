@@ -1,16 +1,18 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
 import { FanIcon } from '@/components/live-refresh-indicator';
+import { NavIcon } from '@/components/nav-icon';
 import { TokenIcon } from '@/components/token-icon';
 import {
   archiveTradingBot,
+  closeTradingBotPositions,
   createBotStrategy,
   createTradingBot,
   fetchBotStrategies,
@@ -25,6 +27,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import type {
@@ -35,6 +38,7 @@ import type {
   BotUpdateRequest,
 } from '@nexter/contracts';
 import { BotDetailDrawer } from './bot-detail-drawer';
+import { StrategyIcon } from './strategy-icon';
 
 type Tab = 'bots' | 'strategies';
 type BotFormState = {
@@ -143,6 +147,15 @@ export function TestingPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [noticeError, setNoticeError] = useState(false);
 
+  useAutoDismissNotice(
+    notice,
+    () => {
+      setNotice(null);
+      setNoticeError(false);
+    },
+    noticeError ? 8000 : 5000,
+  );
+
   const strategies = useQuery({
     queryKey: ['trading-bot-strategies'],
     queryFn: fetchBotStrategies,
@@ -162,6 +175,10 @@ export function TestingPage() {
   const templates = strategies.data?.templates ?? [];
   const strategyInstances = strategies.data?.data ?? [];
   const tokenEntries = watchlist.data?.data ?? [];
+  const strategyFormIcon =
+    editingStrategy?.icon ??
+    templates.find((template) => template.key === strategyKey)?.icon ??
+    'beaker';
   const runningBots = (bots.data?.data ?? []).filter((bot) => bot.status === 'running').length;
 
   useEffect(() => {
@@ -226,6 +243,14 @@ export function TestingPage() {
       invalidate();
     },
     onError: (err) => notify(toRussianError(err, 'Не удалось сбросить бота'), true),
+  });
+  const closePositionsMutation = useMutation({
+    mutationFn: closeTradingBotPositions,
+    onSuccess: () => {
+      notify('Все позиции закрыты, бот остановлен.');
+      invalidate();
+    },
+    onError: (err) => notify(toRussianError(err, 'Не удалось закрыть позиции'), true),
   });
   const archiveMutation = useMutation({
     mutationFn: archiveTradingBot,
@@ -442,6 +467,7 @@ export function TestingPage() {
     startMutation.isPending ||
     stopMutation.isPending ||
     resetMutation.isPending ||
+    closePositionsMutation.isPending ||
     archiveMutation.isPending;
 
   return (
@@ -530,24 +556,29 @@ export function TestingPage() {
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <button
                     type="button"
-                    className="min-w-0 flex-1 text-left"
+                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
                     onClick={() => setDetailBotId(bot.id)}
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-base font-semibold text-zinc-900">{bot.name}</span>
-                      <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
-                        {bot.status === 'running'
-                          ? 'Работает'
-                          : bot.status === 'draft'
-                            ? 'Черновик'
-                            : 'Остановлен'}
-                      </Badge>
-                      <Badge tone="info">{bot.strategy.name}</Badge>
-                      {bot.status === 'running' ? <FanIcon spinning /> : null}
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}
-                      {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
+                      <NavIcon name="testing" className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {bot.status === 'running' ? <FanIcon spinning /> : null}
+                        <span className="text-base font-semibold text-zinc-900">{bot.name}</span>
+                        <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
+                          {bot.status === 'running'
+                            ? 'Работает'
+                            : bot.status === 'draft'
+                              ? 'Черновик'
+                              : 'Остановлен'}
+                        </Badge>
+                        <Badge tone="info">{bot.strategy.name}</Badge>
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-500">
+                        {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}
+                        {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
+                      </div>
                     </div>
                   </button>
                   <div className="flex shrink-0 flex-wrap gap-1">
@@ -600,16 +631,6 @@ export function TestingPage() {
         />
       ) : (
         <div className="space-y-4">
-          <Card className="border-sky-200 bg-sky-50/60">
-            <CardTitle>Шаблон и стратегия — в чём разница</CardTitle>
-            <CardDescription>
-              Шаблон — это встроенный в код алгоритм, например «Импульсный пробой». Стратегия —
-              сохранённый экземпляр шаблона с названием и параметрами. Робот использует стратегию,
-              поэтому один алгоритм можно запускать в нескольких ботах с разными параметрами,
-              бюджетами и списками токенов.
-            </CardDescription>
-          </Card>
-
           <Card>
             <CardTitle>Шаблоны стратегий</CardTitle>
             <CardDescription>
@@ -618,11 +639,16 @@ export function TestingPage() {
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {templates.map((template) => (
                 <div key={template.key} className="rounded-xl border border-zinc-200 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-zinc-900">{template.name}</span>
-                    <Badge tone="info">{template.key}</Badge>
+                  <div className="flex items-start gap-3">
+                    <StrategyIcon icon={template.icon} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-zinc-900">{template.name}</span>
+                        <Badge tone="info">{template.key}</Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
+                    </div>
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
                   <Button
                     variant="secondary"
                     className="mt-3 h-8 px-2 text-xs"
@@ -642,22 +668,27 @@ export function TestingPage() {
             ) : (
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {strategyInstances.map((strategy) => (
-                  <div key={strategy.id} className="rounded-xl border border-zinc-200 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-medium text-zinc-900">{strategy.name}</span>
-                      <Badge tone="neutral">{strategy.key}</Badge>
-                    </div>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      {strategy.description || 'Без описания'}
-                    </p>
+                  <div
+                    key={strategy.id}
+                    className="rounded-xl border border-zinc-200 p-3 transition-colors hover:border-emerald-300"
+                  >
+                    <button
+                      type="button"
+                      className="flex w-full items-start gap-3 text-left"
+                      onClick={() => openEditStrategy(strategy)}
+                    >
+                      <StrategyIcon icon={strategy.icon} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-zinc-900">{strategy.name}</span>
+                          <Badge tone="neutral">{strategy.key}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {strategy.description || 'Без описания'}
+                        </p>
+                      </div>
+                    </button>
                     <div className="mt-3 flex gap-1">
-                      <Button
-                        variant="secondary"
-                        className="h-8 px-2 text-xs"
-                        onClick={() => openEditStrategy(strategy)}
-                      >
-                        Изменить
-                      </Button>
                       <Button
                         variant="ghost"
                         className="h-8 px-2 text-xs text-red-700"
@@ -685,7 +716,7 @@ export function TestingPage() {
         </div>
       )}
 
-      <Dialog
+      <Drawer
         open={botDialogOpen}
         onClose={() => setBotDialogOpen(false)}
         title={editingBot ? 'Настройки робота' : 'Новый робот'}
@@ -742,11 +773,7 @@ export function TestingPage() {
                 <p className="mt-1 text-xs text-amber-700">
                   Без стратегии робот не сможет торговать.
                 </p>
-              ) : (
-                <p className="mt-1 text-xs text-zinc-500">
-                  Стратегия — это шаблон с сохранёнными параметрами.
-                </p>
-              )}
+              ) : null}
             </label>
           </div>
           <label className="block text-sm text-zinc-600">
@@ -840,7 +867,7 @@ export function TestingPage() {
               />
             </label>
             <label className="block text-sm text-zinc-600">
-              Кулдаун, мин
+              Пауза после покупки, мин
               <Input
                 className="mt-1"
                 type="number"
@@ -851,6 +878,9 @@ export function TestingPage() {
                   setBotForm({ ...botForm, cooldownMinutes: event.target.value })
                 }
               />
+              <p className="mt-1 text-[11px] leading-4 text-zinc-500">
+                Не даёт докупать токен чаще указанного времени. Продажи не блокирует.
+              </p>
             </label>
             <label className="block text-sm text-zinc-600">
               Комиссия, bps
@@ -890,14 +920,15 @@ export function TestingPage() {
           </div>
           {botError ? <p className="text-sm text-red-700">{botError}</p> : null}
         </div>
-      </Dialog>
+      </Drawer>
 
-      <Dialog
+      <Drawer
         open={strategyDialogOpen}
         onClose={closeStrategyDialog}
         title={editingStrategy ? 'Изменить стратегию' : 'Новая стратегия'}
-        description="Стратегия — это экземпляр встроенного шаблона с сохранёнными параметрами."
-        size="lg"
+        titleIcon={<StrategyIcon icon={strategyFormIcon} className="h-8 w-8" />}
+        description="Настройки экземпляра стратегии."
+        size="third"
         footer={
           <>
             <Button variant="ghost" onClick={closeStrategyDialog}>
@@ -970,7 +1001,7 @@ export function TestingPage() {
           </label>
           {strategyError ? <p className="text-sm text-red-700">{strategyError}</p> : null}
         </div>
-      </Dialog>
+      </Drawer>
 
       <BotDetailDrawer
         botId={detailBotId}
@@ -980,6 +1011,15 @@ export function TestingPage() {
         onReset={(id) => {
           if (window.confirm('Сбросить бумажное состояние бота? Сделки и позиции будут удалены.')) {
             resetMutation.mutate(id);
+          }
+        }}
+        onClosePositions={(id) => {
+          if (
+            window.confirm(
+              'Закрыть все открытые позиции по текущим котировкам? Бот будет остановлен, сделки сохранятся.',
+            )
+          ) {
+            closePositionsMutation.mutate(id);
           }
         }}
         onArchive={(id) => {

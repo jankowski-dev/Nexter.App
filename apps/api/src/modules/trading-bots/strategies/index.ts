@@ -18,6 +18,7 @@ const momentumParamsSchema = z
 export const momentumBreakout: StrategyDefinition = {
   key: 'momentum_breakout',
   version: 1,
+  icon: 'rocket',
   name: 'Импульсный пробой',
   description:
     'Покупает импульс, когда быстрая SMA выше медленной, а изменение за 24 часа положительное.',
@@ -60,6 +61,7 @@ const meanReversionParamsSchema = z.object({
 export const meanReversion: StrategyDefinition = {
   key: 'mean_reversion',
   version: 1,
+  icon: 'refresh',
   name: 'Возврат к среднему',
   description: 'Покупает просадку ниже средней и продаёт при возврате к средней.',
   defaultParams: meanReversionParamsSchema.parse({}),
@@ -94,6 +96,7 @@ const gridRangeParamsSchema = z.object({
 export const gridRange: StrategyDefinition = {
   key: 'grid_range',
   version: 1,
+  icon: 'grid',
   name: 'Сетка в диапазоне',
   description: 'Покупает ступени ниже якоря и продаёт ступень выше средней.',
   defaultParams: gridRangeParamsSchema.parse({}),
@@ -135,6 +138,7 @@ const trendPullbackParamsSchema = z
 export const trendPullback: StrategyDefinition = {
   key: 'trend_pullback',
   version: 1,
+  icon: 'trend',
   name: 'Откат в тренде',
   description: 'Покупает откат к быстрой SMA в восходящем тренде.',
   defaultParams: trendPullbackParamsSchema.parse({}),
@@ -171,6 +175,7 @@ const dcaDipParamsSchema = z.object({
 export const dcaDip: StrategyDefinition = {
   key: 'dca_dip',
   version: 1,
+  icon: 'layers',
   name: 'Докупка на просадке',
   description: 'Докупает на просадке от якоря или средней с ограничением числа докупок.',
   defaultParams: dcaDipParamsSchema.parse({}),
@@ -211,6 +216,7 @@ export function strategyTemplates() {
     key: item.key,
     name: item.name,
     description: item.description,
+    icon: item.icon,
     defaultParams: item.defaultParams,
   }));
 }

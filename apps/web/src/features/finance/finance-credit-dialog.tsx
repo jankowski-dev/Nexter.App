@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createFinanceCreditDrawdown } from '@/lib/api';
@@ -94,7 +94,7 @@ export function FinanceCreditDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title="Получить кредит"
@@ -266,6 +266,6 @@ export function FinanceCreditDialog({
           </div>
         ) : null}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

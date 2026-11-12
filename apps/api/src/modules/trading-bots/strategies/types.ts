@@ -31,6 +31,7 @@ export interface StrategyDefinition {
   version: number;
   name: string;
   description: string;
+  icon: string;
   defaultParams: Record<string, unknown>;
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;
   evaluate: (ctx: StrategyContext) => StrategyDecision;

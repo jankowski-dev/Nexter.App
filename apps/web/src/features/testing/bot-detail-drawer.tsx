@@ -6,6 +6,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { FanIcon } from '@/components/live-refresh-indicator';
 import { LineChart } from '@/components/charts/line-chart';
 import { TokenIcon } from '@/components/token-icon';
+import { StrategyIcon } from './strategy-icon';
 import { fetchBotEquity, fetchBotEvents, fetchBotTrades, fetchTradingBot } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
@@ -34,6 +35,7 @@ const eventLabels: Record<string, string> = {
   error: 'ошибка',
   reset: 'сброс',
   archived: 'архив',
+  closed_all: 'закрытие позиций',
 };
 
 export function BotDetailDrawer({
@@ -42,6 +44,7 @@ export function BotDetailDrawer({
   onStart,
   onStop,
   onReset,
+  onClosePositions,
   onArchive,
   busy,
 }: {
@@ -50,6 +53,7 @@ export function BotDetailDrawer({
   onStart: (id: string) => void;
   onStop: (id: string) => void;
   onReset: (id: string) => void;
+  onClosePositions: (id: string) => void;
   onArchive: (id: string) => void;
   busy: boolean;
 }) {
@@ -109,6 +113,7 @@ export function BotDetailDrawer({
       open
       onClose={onClose}
       title={bot.name}
+      titleIcon={<StrategyIcon icon={strategy.icon} className="h-8 w-8" />}
       description={`${strategy.name} · ${statusLabels[bot.status]}`}
       size="lg"
       footer={
@@ -117,11 +122,17 @@ export function BotDetailDrawer({
             variant="ghost"
             className="text-red-700"
             onClick={() => onArchive(bot.id)}
-            disabled={busy}
+            disabled={busy || positions.length > 0}
+            title={positions.length > 0 ? 'Сначала закройте позиции' : undefined}
           >
             Удалить
           </Button>
           <div className="flex flex-wrap gap-2">
+            {positions.length > 0 ? (
+              <Button variant="secondary" onClick={() => onClosePositions(bot.id)} disabled={busy}>
+                Закрыть позиции
+              </Button>
+            ) : null}
             <Button variant="secondary" onClick={() => onReset(bot.id)} disabled={busy}>
               Сбросить
             </Button>
@@ -247,7 +258,7 @@ export function BotDetailDrawer({
               <div className="font-mono text-zinc-900">{bot.positionSizePct}%</div>
             </div>
             <div>
-              <div className="text-zinc-500">Кулдаун</div>
+              <div className="text-zinc-500">Пауза после покупки</div>
               <div className="font-mono text-zinc-900">{bot.cooldownMinutes} мин</div>
             </div>
             <div>
