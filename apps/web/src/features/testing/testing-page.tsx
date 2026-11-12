@@ -140,6 +140,7 @@ export function TestingPage() {
   const [botError, setBotError] = useState<string | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeError, setNoticeError] = useState(false);
 
   const strategies = useQuery({
     queryKey: ['trading-bot-strategies'],
@@ -181,7 +182,7 @@ export function TestingPage() {
     onSuccess: (created) => {
       setBotDialogOpen(false);
       setBotError(null);
-      setNotice('Бот создан. Запустите его, чтобы начать бумажную торговлю.');
+      notify('Бот создан. Запустите его, чтобы начать бумажную торговлю.');
       setDetailBotId(created.bot.id);
       invalidate();
     },
@@ -195,7 +196,7 @@ export function TestingPage() {
       setBotDialogOpen(false);
       setEditingBot(null);
       setBotError(null);
-      setNotice('Настройки бота сохранены.');
+      notify('Настройки бота сохранены.');
       invalidate();
     },
     onError: (err) => setBotError(toRussianError(err, 'Не удалось сохранить бота')),
@@ -204,35 +205,35 @@ export function TestingPage() {
   const startMutation = useMutation({
     mutationFn: startTradingBot,
     onSuccess: () => {
-      setNotice('Бот запущен.');
+      notify('Бот запущен.');
       invalidate();
     },
-    onError: (err) => setNotice(toRussianError(err, 'Не удалось запустить бота')),
+    onError: (err) => notify(toRussianError(err, 'Не удалось запустить бота'), true),
   });
   const stopMutation = useMutation({
     mutationFn: stopTradingBot,
     onSuccess: () => {
-      setNotice('Бот остановлен.');
+      notify('Бот остановлен.');
       invalidate();
     },
-    onError: (err) => setNotice(toRussianError(err, 'Не удалось остановить бота')),
+    onError: (err) => notify(toRussianError(err, 'Не удалось остановить бота'), true),
   });
   const resetMutation = useMutation({
     mutationFn: resetTradingBot,
     onSuccess: () => {
-      setNotice('Бумажное состояние сброшено.');
+      notify('Бумажное состояние сброшено.');
       invalidate();
     },
-    onError: (err) => setNotice(toRussianError(err, 'Не удалось сбросить бота')),
+    onError: (err) => notify(toRussianError(err, 'Не удалось сбросить бота'), true),
   });
   const archiveMutation = useMutation({
     mutationFn: archiveTradingBot,
     onSuccess: () => {
       setDetailBotId(null);
-      setNotice('Бот удалён в архив.');
+      notify('Бот удалён в архив.');
       invalidate();
     },
-    onError: (err) => setNotice(toRussianError(err, 'Не удалось удалить бота')),
+    onError: (err) => notify(toRussianError(err, 'Не удалось удалить бота'), true),
   });
 
   const createStrategyMutation = useMutation({
@@ -240,10 +241,14 @@ export function TestingPage() {
     onSuccess: () => {
       setStrategyDialogOpen(false);
       setStrategyError(null);
-      setNotice('Стратегия создана.');
+      notify('Стратегия создана.');
       void queryClient.invalidateQueries({ queryKey: ['trading-bot-strategies'] });
     },
-    onError: (err) => setStrategyError(toRussianError(err, 'Не удалось создать стратегию')),
+    onError: (err) => {
+      const message = toRussianError(err, 'Не удалось создать стратегию');
+      setStrategyError(message);
+      notify(message, true);
+    },
   });
 
   const updateStrategyMutation = useMutation({
@@ -253,11 +258,20 @@ export function TestingPage() {
       setStrategyDialogOpen(false);
       setEditingStrategy(null);
       setStrategyError(null);
-      setNotice('Стратегия сохранена.');
+      notify('Стратегия сохранена.');
       void queryClient.invalidateQueries({ queryKey: ['trading-bot-strategies'] });
     },
-    onError: (err) => setStrategyError(toRussianError(err, 'Не удалось сохранить стратегию')),
+    onError: (err) => {
+      const message = toRussianError(err, 'Не удалось сохранить стратегию');
+      setStrategyError(message);
+      notify(message, true);
+    },
   });
+
+  function notify(message: string, isError = false) {
+    setNotice(message);
+    setNoticeError(isError);
+  }
 
   function openCreateBot() {
     setEditingBot(null);
@@ -272,7 +286,7 @@ export function TestingPage() {
       const detail = await fetchTradingBot(bot.id);
       tokenAssetIds = detail.tokens.map((token) => token.assetId);
     } catch (error) {
-      setNotice(toRussianError(error, 'Не удалось загрузить настройки бота'));
+      notify(toRussianError(error, 'Не удалось загрузить настройки бота'), true);
       return;
     }
     setEditingBot(bot);
@@ -413,7 +427,13 @@ export function TestingPage() {
       />
 
       {notice ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            noticeError
+              ? 'border-red-200 bg-red-50 text-red-800'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
+          }`}
+        >
           {notice}
         </div>
       ) : null}

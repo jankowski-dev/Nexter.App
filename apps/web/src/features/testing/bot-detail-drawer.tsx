@@ -202,7 +202,13 @@ export function BotDetailDrawer({
 
         <Card>
           <CardTitle>Капитал</CardTitle>
-          <LineChart points={equityPoints} height={180} />
+          {equity.isError ? (
+            <p className="py-6 text-sm text-red-700">
+              {toRussianError(equity.error, 'Не удалось загрузить equity')}
+            </p>
+          ) : (
+            <LineChart points={equityPoints} height={180} />
+          )}
         </Card>
 
         <Card>
@@ -321,7 +327,11 @@ export function BotDetailDrawer({
 
         <Card>
           <CardTitle>Сделки</CardTitle>
-          {!trades.data || trades.data.data.length === 0 ? (
+          {trades.isError ? (
+            <p className="text-sm text-red-700">
+              {toRussianError(trades.error, 'Не удалось загрузить сделки')}
+            </p>
+          ) : !trades.data || trades.data.data.length === 0 ? (
             <CardDescription>Сделок пока нет.</CardDescription>
           ) : (
             <div className="mt-3 overflow-x-auto">
@@ -373,7 +383,11 @@ export function BotDetailDrawer({
 
         <Card>
           <CardTitle>Журнал бота</CardTitle>
-          {!events.data || events.data.data.length === 0 ? (
+          {events.isError ? (
+            <p className="text-sm text-red-700">
+              {toRussianError(events.error, 'Не удалось загрузить журнал')}
+            </p>
+          ) : !events.data || events.data.data.length === 0 ? (
             <CardDescription>Событий нет.</CardDescription>
           ) : (
             <div className="mt-2 space-y-1.5">
