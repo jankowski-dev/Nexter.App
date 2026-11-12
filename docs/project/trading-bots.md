@@ -1,6 +1,6 @@
 # Trading bots — бумажная торговля (UI-24)
 
-> Статус: **реализовано 2026-11-12**. Миграция `0032` (аддитивная) добавляет изолированные таблицы ботов. Production-миграция и деплой выполняются отдельным шагом после проверки.
+> Статус: **реализовано и развёрнуто в production 2026-11-12**. Миграция `0032` применена после encrypted backup и restore-check. API live, bundle `assets/index-CJwbitFy.js`; paper-runner включён. Ботов пока не создано.
 >
 > Это paper-only система. Реальные свопы, подписи и приватные ключи не используются. Бумажные сделки не пишут в `transactions`/`postings` и не влияют на реальный ledger, отчёты и налоги.
 
@@ -19,6 +19,7 @@
 - **Paper only.** Нет реальных транзакций и подписей.
 - **Long-only spot.** Без шортов, плеча, маржи и деривативов.
 - **Minute tick.** Решение раз в 60 секунд по `market_quotes`; цена исполнения — последняя котировка с симулированным slippage.
+- **Warm-up.** Индикаторам нужна история `bot_quote_samples`; при первом запуске первые сигналы обычно появляются через 20–30 минут (зависит от окон стратегии).
 - **No backtest.** История начинается с первого запуска; исторический бэктест — отдельный будущий этап.
 - **No arbitrary scripts.** Алгоритмы только в коде; параметры валидируются Zod-схемой стратегии.
 - **Isolated tables.** `trading_bots`, `bot_*` не связаны с реальным ledger, кроме ссылок на `assets` и `users`.
@@ -161,7 +162,7 @@ interface StrategyDefinition {
 | `trend_pullback`    | Откат в тренде      | fast > slow и откат к fast SMA             | TP, SL, пробой тренда                                  | fast 8, slow 30, pullback 1%, TP 5%, SL 3%              |
 | `dca_dip`           | Докупка на просадке | цена ниже rolling high/средней на `dipPct` | TP, SL; докупка до `maxAdds`                           | anchor 20, dip 3%, maxAdds 3, TP 5%, SL 8%              |
 
-Все стратегии long-only и работают по одному токену независимо. Общий risk layer в runner: max positions, position size, cash, cooldown, daily loss limit, freshness quote (≤5 минут).
+Все стратегии long-only и работают по одному токену независимо. Общий risk layer в runner: max positions, position size, cash, cooldown, daily loss limit, freshness quote (≤5 минут). В `grid_range` и `dca_dip` параметр `maxAdds` ограничивает общее число покупок в цикле, включая первую.
 
 ### 5.3. Как добавить новую стратегию
 
@@ -195,6 +196,7 @@ interface StrategyDefinition {
 - `profitFactor = grossProfit / grossLoss`; `null`, если убытков не было.
 - `winRate = wins / (wins + losses) * 100`; сделки с нулевым P&L не считаются ни победой, ни убытком.
 - `maxDrawdownPct` — максимальная просадка; runner обновляет `peak_equity_usd`/`max_drawdown_pct` при каждом snapshot, поэтому статистика не зависит от лимита выборки.
+- Equity chart в UI запрашивает последние 500 снимков (около 1,7 суток при 5-минутном интервале); all-time P&L и max drawdown при этом сохраняются.
 - `tradesCount` включает buy и sell.
 
 ## 6. Runner и надёжность
@@ -267,3 +269,10 @@ interface StrategyDefinition {
 - Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, параметры, buy/sell/hold для пяти стратегий.
 - E2E: `apps/api/test/trading-bots.e2e.spec.ts` — создание стратегии/бота, валидация бюджета, buy/sell по котировкам, статистика, reset, archive.
 - Перед production: format, typecheck, lint, test, build; backup + restore check; миграция `0032`; проверка `/ready` и грантов `nexter_app`.
+
+## 12. Production release (2026-11-12)
+
+- Encrypted backup: `nexter-2026-11-12-ui24.dump.enc` (plaintext SHA-256 `ce8bd1a4…abe37`, encrypted SHA-256 `a17895a9…f64ac`), restore-check exact match on 28 metrics in `nexter_restore_check_ui24`; temporary DB dropped.
+- PR #88 merged as `f4e806d`; deployment `d2e037be-d146-48d3-829a-61860c2512d2`; migration `0032` applied (33 migrations).
+- Verification: `/ready` 200, `assets/index-CJwbitFy.js`, bot tables present, `nexter_app` CRUD on child tables, DELETE revoked on `bot_strategies`/`trading_bots`, authenticated `/testing` API requests return 200.
+- `BOT_RUNNER_ENABLED` remains true; no bots created yet, so the runner has no trades to execute.
