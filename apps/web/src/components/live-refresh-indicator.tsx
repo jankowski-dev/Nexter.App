@@ -8,6 +8,7 @@ const LIVE_ROUTES: Array<{ path: string; keyPrefixes: string[] }> = [
   { path: '/statistics', keyPrefixes: ['reports'] },
   { path: '/watchlist', keyPrefixes: ['watchlist'] },
   { path: '/operations', keyPrefixes: ['operations'] },
+  { path: '/testing', keyPrefixes: ['trading-bot'] },
 ];
 
 function routeFor(pathname: string) {
@@ -20,7 +21,7 @@ function queryMatches(route: { keyPrefixes: string[] }, queryKey: readonly unkno
   return route.keyPrefixes.some((prefix) => first === prefix || first.startsWith(`${prefix}-`));
 }
 
-function FanIcon({ spinning }: { spinning: boolean }) {
+export function FanIcon({ spinning }: { spinning: boolean }) {
   return (
     <svg
       viewBox="0 0 24 24"

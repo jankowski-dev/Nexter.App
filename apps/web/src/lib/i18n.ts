@@ -13,6 +13,7 @@ export const messages = {
     reports: 'Статистика',
     vault: 'Хранилище',
     tasks: 'Задачи',
+    testing: 'Тестирование',
     notes: 'Заметки',
     settings: 'Настройки',
   },

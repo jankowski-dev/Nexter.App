@@ -4,6 +4,13 @@ import {
   assetsResponseSchema,
   auditLogResponseSchema,
   authMeResponseSchema,
+  botDetailResponseSchema,
+  botEquityResponseSchema,
+  botEventsResponseSchema,
+  botStrategiesResponseSchema,
+  botStrategySchema,
+  botTradesResponseSchema,
+  tradingBotsResponseSchema,
   dashboardActivePositionsSchema,
   dashboardAllocationSchema,
   dashboardDataQualitySchema,
@@ -60,6 +67,17 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
+  type BotCreateRequest,
+  type BotDetailResponse,
+  type BotEquityResponse,
+  type BotEventsResponse,
+  type BotStrategiesResponse,
+  type BotStrategy,
+  type BotStrategyCreateRequest,
+  type BotStrategyUpdateRequest,
+  type BotTradesResponse,
+  type BotUpdateRequest,
+  type TradingBotsResponse,
   type DashboardActivePositions,
   type DashboardAllocation,
   type DashboardDataQuality,
@@ -896,4 +914,82 @@ export async function addNoteImage(
 
 export async function removeNoteImage(noteId: string, imageId: string): Promise<void> {
   await apiDelete(`/api/v1/notes/${noteId}/images/${imageId}`);
+}
+
+export async function fetchBotStrategies(): Promise<BotStrategiesResponse> {
+  return apiFetch('/api/v1/trading-bots/strategies', {}, botStrategiesResponseSchema);
+}
+
+export async function createBotStrategy(body: BotStrategyCreateRequest): Promise<BotStrategy> {
+  return apiPost('/api/v1/trading-bots/strategies', body, botStrategySchema);
+}
+
+export async function updateBotStrategy(
+  id: string,
+  body: BotStrategyUpdateRequest,
+): Promise<BotStrategy> {
+  return apiPatch(`/api/v1/trading-bots/strategies/${id}`, body, botStrategySchema);
+}
+
+export async function fetchTradingBots(includeArchived = false): Promise<TradingBotsResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots?includeArchived=${includeArchived ? 'true' : 'false'}`,
+    {},
+    tradingBotsResponseSchema,
+  );
+}
+
+export async function fetchTradingBot(id: string): Promise<BotDetailResponse> {
+  return apiFetch(`/api/v1/trading-bots/bots/${id}`, {}, botDetailResponseSchema);
+}
+
+export async function createTradingBot(body: BotCreateRequest): Promise<BotDetailResponse> {
+  return apiPost('/api/v1/trading-bots/bots', body, botDetailResponseSchema);
+}
+
+export async function updateTradingBot(
+  id: string,
+  body: BotUpdateRequest,
+): Promise<BotDetailResponse> {
+  return apiPatch(`/api/v1/trading-bots/bots/${id}`, body, botDetailResponseSchema);
+}
+
+export async function startTradingBot(id: string): Promise<BotDetailResponse> {
+  return apiPost(`/api/v1/trading-bots/bots/${id}/start`, {}, botDetailResponseSchema);
+}
+
+export async function stopTradingBot(id: string): Promise<BotDetailResponse> {
+  return apiPost(`/api/v1/trading-bots/bots/${id}/stop`, {}, botDetailResponseSchema);
+}
+
+export async function resetTradingBot(id: string): Promise<BotDetailResponse> {
+  return apiPost(`/api/v1/trading-bots/bots/${id}/reset`, {}, botDetailResponseSchema);
+}
+
+export async function archiveTradingBot(id: string): Promise<void> {
+  await apiDelete(`/api/v1/trading-bots/bots/${id}`);
+}
+
+export async function fetchBotTrades(id: string, limit = 100): Promise<BotTradesResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots/${id}/trades?limit=${limit}`,
+    {},
+    botTradesResponseSchema,
+  );
+}
+
+export async function fetchBotEvents(id: string, limit = 100): Promise<BotEventsResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots/${id}/events?limit=${limit}`,
+    {},
+    botEventsResponseSchema,
+  );
+}
+
+export async function fetchBotEquity(id: string, limit = 500): Promise<BotEquityResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots/${id}/equity?limit=${limit}`,
+    {},
+    botEquityResponseSchema,
+  );
 }
