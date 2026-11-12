@@ -1,10 +1,11 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
+import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
 import { formatPct, formatPrice, pnlTone } from '@/lib/format';
 import { Link } from '@tanstack/react-router';
-import type { WatchlistEntry } from '@nexter/contracts';
+import type { WatchlistEntry, WatchlistGroup } from '@nexter/contracts';
 
 function safeExternalUrl(value: string | null): string | null {
   if (!value) return null;
@@ -20,6 +21,10 @@ function safeExternalUrl(value: string | null): string | null {
 export function TokenDrawer({
   entry,
   groupName,
+  groups,
+  defaultGroupId,
+  onGroupChange,
+  groupBusy,
   onClose,
   onEdit,
   onArchive,
@@ -29,6 +34,10 @@ export function TokenDrawer({
 }: {
   entry: WatchlistEntry | null;
   groupName: string | null;
+  groups: WatchlistGroup[];
+  defaultGroupId: string | null;
+  onGroupChange: (entry: WatchlistEntry, groupId: string) => void;
+  groupBusy: boolean;
   onClose: () => void;
   onEdit: (entry: WatchlistEntry) => void;
   onArchive: (entry: WatchlistEntry) => void;
@@ -113,6 +122,26 @@ export function TokenDrawer({
               {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
             </div>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Группа</div>
+            <div className="text-sm text-zinc-700">Можно перенести токен в другую группу</div>
+          </div>
+          <Select
+            aria-label="Группа токена"
+            className="w-56"
+            value={entry.groupId ?? defaultGroupId ?? groups[0]?.id ?? ''}
+            onChange={(event) => onGroupChange(entry, event.target.value)}
+            disabled={groupBusy || Boolean(entry.archivedAt) || groups.length === 0}
+          >
+            {groups.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </Select>
         </div>
 
         <div>

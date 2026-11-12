@@ -269,6 +269,16 @@ export function WatchlistPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось удалить группу')),
   });
 
+  const changeGroupMutation = useMutation({
+    mutationFn: ({ id, groupId }: { id: string; groupId: string }) =>
+      updateWatchlist(id, { groupId }),
+    onSuccess: () => {
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось сменить группу')),
+  });
+
   const archiveMutation = useMutation({
     mutationFn: (id: string) => archiveWatchlist(id),
     onSuccess: () => {
@@ -706,6 +716,10 @@ export function WatchlistPage() {
       <TokenDrawer
         entry={drawerEntry}
         groupName={drawerGroup?.name ?? null}
+        groups={groupsToRender}
+        defaultGroupId={defaultGroup?.id ?? null}
+        onGroupChange={(entry, groupId) => changeGroupMutation.mutate({ id: entry.id, groupId })}
+        groupBusy={changeGroupMutation.isPending}
         onClose={() => setDrawerEntryId(null)}
         onEdit={openEdit}
         onArchive={(entry) => {

@@ -600,6 +600,16 @@ export function TestingPage() {
         />
       ) : (
         <div className="space-y-4">
+          <Card className="border-sky-200 bg-sky-50/60">
+            <CardTitle>Шаблон и стратегия — в чём разница</CardTitle>
+            <CardDescription>
+              Шаблон — это встроенный в код алгоритм, например «Импульсный пробой». Стратегия —
+              сохранённый экземпляр шаблона с названием и параметрами. Робот использует стратегию,
+              поэтому один алгоритм можно запускать в нескольких ботах с разными параметрами,
+              бюджетами и списками токенов.
+            </CardDescription>
+          </Card>
+
           <Card>
             <CardTitle>Шаблоны стратегий</CardTitle>
             <CardDescription>
@@ -626,7 +636,7 @@ export function TestingPage() {
           </Card>
 
           <Card>
-            <CardTitle>Мои стратегии</CardTitle>
+            <CardTitle>Мои стратегии (экземпляры)</CardTitle>
             {strategyInstances.length === 0 ? (
               <CardDescription>Создайте экземпляр стратегии из шаблона.</CardDescription>
             ) : (
@@ -732,7 +742,11 @@ export function TestingPage() {
                 <p className="mt-1 text-xs text-amber-700">
                   Без стратегии робот не сможет торговать.
                 </p>
-              ) : null}
+              ) : (
+                <p className="mt-1 text-xs text-zinc-500">
+                  Стратегия — это шаблон с сохранёнными параметрами.
+                </p>
+              )}
             </label>
           </div>
           <label className="block text-sm text-zinc-600">
@@ -882,7 +896,7 @@ export function TestingPage() {
         open={strategyDialogOpen}
         onClose={closeStrategyDialog}
         title={editingStrategy ? 'Изменить стратегию' : 'Новая стратегия'}
-        description="Выберите встроенный алгоритм. Параметры можно поправить в JSON."
+        description="Стратегия — это экземпляр встроенного шаблона с сохранёнными параметрами."
         size="lg"
         footer={
           <>
