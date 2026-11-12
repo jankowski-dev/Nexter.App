@@ -300,7 +300,7 @@ export function FinanceTransferDialog({
       open
       onClose={onClose}
       title={transfer ? 'Изменить перевод' : 'Новый перевод'}
-      description="Перевод между счетами не меняет чистый капитал. Погашение кредита учитывается в расходах."
+      description="Перевод между счетами не меняет баланс. Погашение кредита учитывается в расходах; итоговый капитал не меняется."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
