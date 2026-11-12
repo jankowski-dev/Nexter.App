@@ -82,7 +82,7 @@
 | `finance_transfers`                       | Переводы между счетами (card_topup, credit, ...)                          |
 | `finance_imports` / `finance_import_rows` | Preview/commit/rollback импорта                                           |
 
-Модуль изолирован от крипто-ledger. Кредит — liability; net worth = assets − debt.
+Модуль изолирован от крипто-ledger. Кредит — liability; net worth = assets − debt. Перевод с asset-счёта на credit-счёт считается погашением кредита и входит в расходы cash-flow, но не меняет net worth; получение кредита доходом не считается.
 
 ## 8. Задачи, заметки, привычки
 

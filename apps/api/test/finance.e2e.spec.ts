@@ -201,14 +201,15 @@ describe.runIf(canRun)('Finance API', () => {
     expect(summary.body).toMatchObject({
       month: '2026-11',
       incomeBase: '1296.50',
-      expenseBase: '200.00',
-      netBase: '1096.50',
+      expenseBase: '300.00',
+      netBase: '996.50',
     });
     expect(summary.body.months).toHaveLength(2);
     expect(summary.body.categories).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ name: 'Отделка', amountBase: '1296.50' }),
         expect.objectContaining({ name: 'Продукты', amountBase: '200.00' }),
+        expect.objectContaining({ name: 'Погашение кредита', amountBase: '100.00' }),
       ]),
     );
 
@@ -218,13 +219,13 @@ describe.runIf(canRun)('Finance API', () => {
     expect(ranged.body).toMatchObject({
       month: '2026-11',
       incomeBase: '1296.50',
-      expenseBase: '200.00',
-      netBase: '1096.50',
+      expenseBase: '300.00',
+      netBase: '996.50',
     });
 
     const allTime = await agent.get('/api/v1/finance/summary?all=true&months=2').expect(200);
     expect(Number(allTime.body.incomeBase)).toBeGreaterThanOrEqual(1296.5);
-    expect(Number(allTime.body.expenseBase)).toBeGreaterThanOrEqual(200);
+    expect(Number(allTime.body.expenseBase)).toBeGreaterThanOrEqual(300);
     expect(allTime.body.categories.length).toBeGreaterThan(0);
 
     await agent.get('/api/v1/finance/summary?from=2026-12-01&to=2026-11-01').expect(400);
@@ -739,6 +740,27 @@ describe.runIf(canRun)('Finance API', () => {
     expect(summary.body.incomeBase).toBe('0.00');
     expect(summary.body.expenseBase).toBe('0.00');
     expect(summary.body.netWorthBase).toBe('0.00');
+
+    await post('/api/v1/finance/transfers', {
+      kind: 'credit',
+      occurredOn: '2026-11-10',
+      fromAccountId: card.body.id,
+      toAccountId: drawdown.body.account.id,
+      fromAmount: '100',
+      toAmount: '100',
+      description: 'Платёж по кредиту',
+    }).expect(201);
+
+    const afterRepayment = await agent.get('/api/v1/finance/summary?month=2026-11').expect(200);
+    expect(afterRepayment.body.incomeBase).toBe('0.00');
+    expect(afterRepayment.body.expenseBase).toBe('100.00');
+    expect(afterRepayment.body.netBase).toBe('-100.00');
+    expect(afterRepayment.body.netWorthBase).toBe('0.00');
+    expect(afterRepayment.body.categories).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: 'Погашение кредита', amountBase: '100.00' }),
+      ]),
+    );
 
     const debtOnly = await post('/api/v1/finance/credits/drawdown', {
       name: 'Кредит без зачисления',

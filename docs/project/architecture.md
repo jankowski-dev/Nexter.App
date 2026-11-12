@@ -176,6 +176,7 @@ flowchart LR
 - Отдельный модуль, не влияет на крипто-ledger.
 - Базовая валюта BYN; USD/EUR счета хранят native balance и курс.
 - `credit` — liability; net worth = assets − debt.
+- Погашение кредита — перевод с asset-счёта на credit-счёт: уменьшает и актив, и долг, поэтому не меняет net worth, но входит в `expenseBase`/`netBase` как cash-flow расход. Получение кредита доходом не считается.
 - Операции отменяются (soft cancel), не удаляются; отменённые исключены из статистики.
 - Импорт — preview/commit/rollback, staging в `finance_import_rows`.
 

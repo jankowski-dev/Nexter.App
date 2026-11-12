@@ -835,24 +835,43 @@ export class FinanceService {
     };
 
     const balances = await this.balances(userId);
-    const transactions = await this.db
-      .select()
-      .from(financeTransactions)
-      .where(and(eq(financeTransactions.userId, userId), isNull(financeTransactions.archivedAt)));
+    const accountById = new Map(balances.map((row) => [row.account.id, row.account]));
+    const [transactions, transfers] = await Promise.all([
+      this.db
+        .select()
+        .from(financeTransactions)
+        .where(and(eq(financeTransactions.userId, userId), isNull(financeTransactions.archivedAt))),
+      this.db
+        .select()
+        .from(financeTransfers)
+        .where(and(eq(financeTransfers.userId, userId), isNull(financeTransfers.archivedAt))),
+    ]);
+    // A transfer into a credit account from an asset account is a principal repayment.
+    // It is a cash-flow expense even though the liability reduction keeps net worth unchanged.
+    const creditRepayments = transfers.filter((transfer) => {
+      const from = accountById.get(transfer.fromAccountId);
+      const to = accountById.get(transfer.toAccountId);
+      return Boolean(from && to && to.kind === 'credit' && from.kind !== 'credit');
+    });
 
     const monthTotals = new Map<string, FinanceMonthTotal>();
+    const ensureMonth = (key: string): FinanceMonthTotal => {
+      const existing = monthTotals.get(key);
+      if (existing) return existing;
+      const row: FinanceMonthTotal = {
+        month: key,
+        incomeBase: '0.00',
+        expenseBase: '0.00',
+        netBase: '0.00',
+        incomeCount: 0,
+        expenseCount: 0,
+      };
+      monthTotals.set(key, row);
+      return row;
+    };
+
     for (const transaction of transactions) {
-      const key = monthOf(transaction.occurredOn);
-      const row =
-        monthTotals.get(key) ??
-        ({
-          month: key,
-          incomeBase: '0.00',
-          expenseBase: '0.00',
-          netBase: '0.00',
-          incomeCount: 0,
-          expenseCount: 0,
-        } satisfies FinanceMonthTotal);
+      const row = ensureMonth(monthOf(transaction.occurredOn));
       if (transaction.kind === 'income') {
         row.incomeBase = decimal(row.incomeBase).plus(transaction.baseAmount).toFixed(2);
         row.incomeCount += 1;
@@ -861,7 +880,13 @@ export class FinanceService {
         row.expenseCount += 1;
       }
       row.netBase = decimal(row.incomeBase).minus(row.expenseBase).toFixed(2);
-      monthTotals.set(key, row);
+    }
+
+    for (const transfer of creditRepayments) {
+      const row = ensureMonth(monthOf(transfer.occurredOn));
+      row.expenseBase = decimal(row.expenseBase).plus(transfer.fromBaseAmount).toFixed(2);
+      row.expenseCount += 1;
+      row.netBase = decimal(row.incomeBase).minus(row.expenseBase).toFixed(2);
     }
 
     const months: FinanceMonthTotal[] = [];
@@ -899,6 +924,11 @@ export class FinanceService {
         selected.expenseCount += 1;
       }
     }
+    for (const transfer of creditRepayments) {
+      if (!inSelectedRange(transfer.occurredOn)) continue;
+      selected.expenseBase = decimal(selected.expenseBase).plus(transfer.fromBaseAmount).toFixed(2);
+      selected.expenseCount += 1;
+    }
     selected.netBase = decimal(selected.incomeBase).minus(selected.expenseBase).toFixed(2);
 
     const categoryTotals = new Map<string, FinanceCategoryTotal>();
@@ -923,6 +953,23 @@ export class FinanceService {
       row.amountBase = decimal(row.amountBase).plus(transaction.baseAmount).toFixed(2);
       row.count += 1;
       categoryTotals.set(key, row);
+    }
+
+    const selectedRepayments = creditRepayments.filter((transfer) =>
+      inSelectedRange(transfer.occurredOn),
+    );
+    if (selectedRepayments.length > 0) {
+      const amountBase = selectedRepayments.reduce(
+        (total, transfer) => total.plus(decimal(transfer.fromBaseAmount)),
+        new Decimal(0),
+      );
+      categoryTotals.set('credit_repayment', {
+        categoryId: null,
+        name: 'Погашение кредита',
+        kind: 'expense',
+        amountBase: amountBase.toFixed(2),
+        count: selectedRepayments.length,
+      });
     }
 
     let assetsBase = new Decimal(0);
