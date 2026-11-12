@@ -492,7 +492,7 @@ export class TradingBotsService {
     const tokenAssetIds =
       input.tokenAssetIds !== undefined ? uniqueAssetIds(input.tokenAssetIds) : undefined;
     if (tokenAssetIds !== undefined) {
-      await this.assertTokens(userId, tokenAssetIds);
+      await this.assertTokens(userId, tokenAssetIds, id);
       const openPositionRows = await this.db
         .select({ assetId: botPositions.assetId })
         .from(botPositions)
@@ -957,7 +957,11 @@ export class TradingBotsService {
     return strategy;
   }
 
-  private async assertTokens(userId: string, assetIds: string[]): Promise<void> {
+  private async assertTokens(
+    userId: string,
+    assetIds: string[],
+    existingBotId?: string,
+  ): Promise<void> {
     const rows = await this.db
       .select({ assetId: watchlist.assetId })
       .from(watchlist)
@@ -969,6 +973,17 @@ export class TradingBotsService {
         ),
       );
     const found = new Set(rows.map((row) => row.assetId));
+
+    if (existingBotId) {
+      const existing = await this.db
+        .select({ assetId: botTokens.assetId })
+        .from(botTokens)
+        .where(eq(botTokens.botId, existingBotId));
+      for (const row of existing) {
+        if (assetIds.includes(row.assetId)) found.add(row.assetId);
+      }
+    }
+
     const missing = assetIds.filter((id) => !found.has(id));
     if (missing.length > 0) {
       throw new BadRequestException({
