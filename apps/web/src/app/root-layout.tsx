@@ -1,4 +1,5 @@
 import { ChainToggle } from '@/components/chain-toggle';
+import { NavIcon } from '@/components/nav-icon';
 import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost } from '@/lib/api';
@@ -10,32 +11,32 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { useEffect, useRef, useState } from 'react';
 
 const cryptoNavigation = [
-  { to: '/portfolio', label: messages.nav.portfolio },
-  { to: '/operations', label: messages.nav.operations },
-  { to: '/watchlist', label: messages.nav.watchlist },
-  { to: '/statistics', label: messages.nav.reports },
+  { to: '/portfolio', label: messages.nav.portfolio, icon: 'portfolio' },
+  { to: '/operations', label: messages.nav.operations, icon: 'operations' },
+  { to: '/watchlist', label: messages.nav.watchlist, icon: 'watchlist' },
+  { to: '/statistics', label: messages.nav.reports, icon: 'statistics' },
 ] as const;
 
 const topNavigation = [
-  { to: '/dashboard', label: messages.nav.dashboard },
-  { to: '/tasks', label: messages.nav.tasks },
-  { to: '/testing', label: messages.nav.testing },
+  { to: '/dashboard', label: messages.nav.dashboard, icon: 'dashboard' },
+  { to: '/tasks', label: messages.nav.tasks, icon: 'tasks' },
+  { to: '/testing', label: messages.nav.testing, icon: 'testing' },
 ] as const;
 
 const afterCryptoNavigation = [
-  { to: '/finance', label: messages.nav.finance },
-  { to: '/notes', label: messages.nav.notes },
-  { to: '/vault', label: messages.nav.vault },
-  { to: '/settings', label: messages.nav.settings },
+  { to: '/finance', label: messages.nav.finance, icon: 'finance' },
+  { to: '/notes', label: messages.nav.notes, icon: 'notes' },
+  { to: '/vault', label: messages.nav.vault, icon: 'vault' },
+  { to: '/settings', label: messages.nav.settings, icon: 'settings' },
 ] as const;
 
 const activeLinkProps = {
-  className: 'bg-emerald-50 font-medium text-emerald-700',
+  className: 'bg-emerald-500/15 font-medium text-emerald-200',
   'aria-current': 'page' as const,
 };
 
 const inactiveLinkProps = {
-  className: 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900',
+  className: 'text-zinc-300 hover:bg-white/5 hover:text-white',
 };
 
 function SunIcon() {
@@ -204,12 +205,12 @@ function RootLayoutContent() {
       </a>
 
       <div className="flex min-h-dvh w-full">
-        <aside className="hidden w-56 shrink-0 border-r border-zinc-200 bg-white p-4 md:flex md:flex-col">
+        <aside className="hidden w-56 shrink-0 border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
           <Link to="/dashboard" className="mb-8 block px-2">
-            <div className="text-lg font-semibold tracking-tight text-zinc-900">
+            <div className="text-lg font-semibold tracking-tight text-white">
               {messages.app.name}
             </div>
-            <div className="text-xs text-zinc-500">{messages.app.tagline}</div>
+            <div className="text-xs text-zinc-400">{messages.app.tagline}</div>
           </Link>
 
           <nav aria-label="Основная навигация" className="flex flex-col gap-1">
@@ -219,35 +220,40 @@ function RootLayoutContent() {
                 to={item.to}
                 activeProps={activeLinkProps}
                 inactiveProps={inactiveLinkProps}
-                className="rounded-xl px-3 py-2 text-sm transition-colors"
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors"
               >
-                {item.label}
+                <NavIcon name={item.icon} className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
               </Link>
             ))}
             <button
               type="button"
               onClick={() => setCryptoOpen((value) => !value)}
               aria-expanded={cryptoOpen}
-              className={`flex items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors ${
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
                 cryptoActive
-                  ? 'bg-emerald-50 font-medium text-emerald-700'
-                  : 'text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900'
+                  ? 'bg-emerald-500/15 font-medium text-emerald-200'
+                  : 'text-zinc-300 hover:bg-white/5 hover:text-white'
               }`}
             >
-              <span>Крипта</span>
+              <span className="flex items-center gap-2.5">
+                <NavIcon name="crypto" className="h-4 w-4 shrink-0" />
+                <span>Крипта</span>
+              </span>
               <span aria-hidden="true">{cryptoOpen ? '▾' : '▸'}</span>
             </button>
             {cryptoOpen ? (
-              <div className="ml-2 flex flex-col gap-1 border-l border-zinc-200 pl-2">
+              <div className="ml-2 flex flex-col gap-1 border-l border-zinc-800 pl-2">
                 {cryptoNavigation.map((item) => (
                   <Link
                     key={item.to}
                     to={item.to}
                     activeProps={activeLinkProps}
                     inactiveProps={inactiveLinkProps}
-                    className="rounded-xl px-3 py-2 text-sm transition-colors"
+                    className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors"
                   >
-                    {item.label}
+                    <NavIcon name={item.icon} className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
                   </Link>
                 ))}
               </div>
@@ -258,15 +264,20 @@ function RootLayoutContent() {
                 to={item.to}
                 activeProps={activeLinkProps}
                 inactiveProps={inactiveLinkProps}
-                className="rounded-xl px-3 py-2 text-sm transition-colors"
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors"
               >
-                {item.label}
+                <NavIcon name={item.icon} className="h-4 w-4 shrink-0" />
+                <span>{item.label}</span>
               </Link>
             ))}
           </nav>
 
           <div className="mt-auto">
-            <Button className="w-full" variant="ghost" onClick={() => void logout()}>
+            <Button
+              className="w-full justify-start text-zinc-300 hover:bg-white/5 hover:text-white"
+              variant="ghost"
+              onClick={() => void logout()}
+            >
               Выйти
             </Button>
           </div>
@@ -344,7 +355,7 @@ function RootLayoutContent() {
 
           <nav
             aria-label="Мобильная навигация"
-            className="flex flex-col gap-1 border-b border-zinc-200 bg-white px-2 py-2 md:hidden"
+            className="flex flex-col gap-1 border-b border-zinc-800 bg-[#202329] px-2 py-2 md:hidden"
           >
             <div className="flex gap-1 overflow-x-auto">
               {topNavigation.map((item) => (
@@ -352,45 +363,49 @@ function RootLayoutContent() {
                   key={item.to}
                   to={item.to}
                   activeProps={activeLinkProps}
-                  inactiveProps={{ className: 'text-zinc-600' }}
-                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
+                  inactiveProps={{ className: 'text-zinc-300' }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                 >
-                  {item.label}
+                  <NavIcon name={item.icon} className="h-3.5 w-3.5 shrink-0" />
+                  <span>{item.label}</span>
                 </Link>
               ))}
               <button
                 type="button"
                 onClick={() => setCryptoOpen((value) => !value)}
                 aria-expanded={cryptoOpen}
-                className={`shrink-0 rounded-lg px-3 py-1.5 text-xs ${
-                  cryptoActive ? 'bg-emerald-50 font-medium text-emerald-700' : 'text-zinc-600'
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs ${
+                  cryptoActive ? 'bg-emerald-500/15 font-medium text-emerald-200' : 'text-zinc-300'
                 }`}
               >
-                Крипта {cryptoOpen ? '▾' : '▸'}
+                <NavIcon name="crypto" className="h-3.5 w-3.5 shrink-0" />
+                <span>Крипта {cryptoOpen ? '▾' : '▸'}</span>
               </button>
               {afterCryptoNavigation.map((item) => (
                 <Link
                   key={item.to}
                   to={item.to}
                   activeProps={activeLinkProps}
-                  inactiveProps={{ className: 'text-zinc-600' }}
-                  className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
+                  inactiveProps={{ className: 'text-zinc-300' }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                 >
-                  {item.label}
+                  <NavIcon name={item.icon} className="h-3.5 w-3.5 shrink-0" />
+                  <span>{item.label}</span>
                 </Link>
               ))}
             </div>
             {cryptoOpen ? (
-              <div className="flex gap-1 overflow-x-auto border-t border-zinc-100 pt-1">
+              <div className="flex gap-1 overflow-x-auto border-t border-zinc-800 pt-1">
                 {cryptoNavigation.map((item) => (
                   <Link
                     key={item.to}
                     to={item.to}
                     activeProps={activeLinkProps}
-                    inactiveProps={{ className: 'text-zinc-600' }}
-                    className="shrink-0 rounded-lg px-3 py-1.5 text-xs"
+                    inactiveProps={{ className: 'text-zinc-300' }}
+                    className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
                   >
-                    {item.label}
+                    <NavIcon name={item.icon} className="h-3.5 w-3.5 shrink-0" />
+                    <span>{item.label}</span>
                   </Link>
                 ))}
               </div>
