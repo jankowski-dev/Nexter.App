@@ -1,7 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
 import { botQuoteSamples, createDb, marketQuotes, type Database } from '@nexter/db';
@@ -203,7 +203,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
         fetchedAt: new Date(),
         changedAt: new Date(),
       })
-      .where(sql`asset_id = ${asset.id}`);
+      .where(eq(marketQuotes.assetId, asset.id));
 
     await runner.runOnce();
 
