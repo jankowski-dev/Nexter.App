@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -23,12 +23,55 @@ import {
   type VaultItemData,
 } from '@/lib/vault-crypto';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useEffect, useState } from 'react';
 import type { VaultItem } from '@nexter/contracts';
 
 interface DecryptedItem {
   item: VaultItem;
   data: VaultItemData;
+}
+
+function SafeIcon({ className = 'h-5 w-5' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3.5" y="3.5" width="17" height="17" rx="3" />
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 8v1.2M12 14.8V16M8 12h1.2M14.8 12H16M6 20.5v1.5M18 20.5v1.5" />
+    </svg>
+  );
+}
+
+function VaultAuthShell({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center px-2 py-6">
+      <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-gradient-to-br from-[#202329] via-[#252932] to-[#1b1e23] p-7 shadow-2xl">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30">
+          <SafeIcon className="h-8 w-8" />
+        </div>
+        <h2 className="mt-5 text-center text-2xl font-semibold text-white">{title}</h2>
+        <p className="mt-2 text-center text-sm leading-6 text-zinc-400">{description}</p>
+        <div className="mt-6">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 function safeUrl(value: string): string | null {
@@ -51,10 +94,13 @@ export function VaultPage() {
   const [decrypted, setDecrypted] = useState<DecryptedItem[]>([]);
   const [decryptFailures, setDecryptFailures] = useState(0);
   const [masterPassword, setMasterPassword] = useState('');
+  const [showMasterPassword, setShowMasterPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DecryptedItem | null>(null);
@@ -354,65 +400,86 @@ export function VaultPage() {
       ) : null}
 
       {!config ? (
-        <Card>
-          <CardTitle>Создать хранилище</CardTitle>
-          <CardDescription>
-            Придумайте мастер-пароль. Он не отправляется на сервер и не сохраняется. При потере
-            пароля восстановить записи невозможно — это цена end-to-end шифрования.
-          </CardDescription>
-          <div className="mt-4 grid max-w-md gap-3">
-            <label className="block text-sm text-zinc-600">
+        <VaultAuthShell
+          title="Создать хранилище"
+          description="Придумайте мастер-пароль. Он не отправляется на сервер и не сохраняется. При потере пароля восстановить записи невозможно — это цена end-to-end шифрования."
+        >
+          <div className="space-y-3">
+            <label className="block text-sm text-zinc-300">
               Мастер-пароль
-              <Input
-                className="mt-1"
-                type="password"
-                autoComplete="new-password"
-                value={masterPassword}
-                onChange={(event) => setMasterPassword(event.target.value)}
-              />
+              <div className="relative mt-1">
+                <Input
+                  className="border-zinc-700 bg-zinc-900/80 pr-10 text-white placeholder:text-zinc-500"
+                  type={showMasterPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  value={masterPassword}
+                  onChange={(event) => setMasterPassword(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:text-white"
+                  onClick={() => setShowMasterPassword((value) => !value)}
+                  aria-label={showMasterPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                >
+                  <EyeIcon />
+                </button>
+              </div>
             </label>
-            <label className="block text-sm text-zinc-600">
+            <label className="block text-sm text-zinc-300">
               Повторите пароль
               <Input
-                className="mt-1"
-                type="password"
+                className="mt-1 border-zinc-700 bg-zinc-900/80 text-white placeholder:text-zinc-500"
+                type={showMasterPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
               />
             </label>
-            {unlockError ? <p className="text-sm text-red-700">{unlockError}</p> : null}
-            <Button onClick={() => void setupVault()} disabled={busy}>
+            {unlockError ? <p className="text-sm text-red-300">{unlockError}</p> : null}
+            <Button className="w-full" onClick={() => void setupVault()} disabled={busy}>
               {busy ? 'Создаю хранилище…' : 'Создать хранилище'}
             </Button>
           </div>
-        </Card>
+        </VaultAuthShell>
       ) : !unlocked ? (
-        <Card>
-          <CardTitle>Хранилище заблокировано</CardTitle>
-          <CardDescription>
-            Введите мастер-пароль, чтобы расшифровать записи в этом браузере.
-          </CardDescription>
-          <div className="mt-4 grid max-w-md gap-3">
-            <label className="block text-sm text-zinc-600">
+        <VaultAuthShell
+          title="Хранилище заблокировано"
+          description="Введите мастер-пароль, чтобы расшифровать записи в этом браузере."
+        >
+          <div className="space-y-3">
+            <label className="block text-sm text-zinc-300">
               Мастер-пароль
-              <Input
-                className="mt-1"
-                type="password"
-                autoComplete="current-password"
-                value={masterPassword}
-                onChange={(event) => setMasterPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void unlockVault();
-                }}
-              />
+              <div className="relative mt-1">
+                <Input
+                  className="border-zinc-700 bg-zinc-900/80 pr-10 text-white placeholder:text-zinc-500"
+                  type={showMasterPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={masterPassword}
+                  onChange={(event) => setMasterPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void unlockVault();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:text-white"
+                  onClick={() => setShowMasterPassword((value) => !value)}
+                  aria-label={showMasterPassword ? 'Скрыть пароль' : 'Показать пароль'}
+                >
+                  <EyeIcon />
+                </button>
+              </div>
             </label>
-            {unlockError ? <p className="text-sm text-red-700">{unlockError}</p> : null}
-            <Button onClick={() => void unlockVault()} disabled={busy || !masterPassword}>
+            {unlockError ? <p className="text-sm text-red-300">{unlockError}</p> : null}
+            <Button
+              className="w-full"
+              onClick={() => void unlockVault()}
+              disabled={busy || !masterPassword}
+            >
               {busy ? 'Расшифровываю…' : 'Разблокировать'}
             </Button>
           </div>
-        </Card>
+        </VaultAuthShell>
       ) : (
         <>
           <div className="relative">
@@ -453,6 +520,9 @@ export function VaultPage() {
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-3">
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
+                      <SafeIcon className="h-5 w-5" />
+                    </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="truncate text-base font-semibold text-zinc-900">
@@ -461,11 +531,7 @@ export function VaultPage() {
                         {row.item.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
-                        {row.data.username ? (
-                          <span className="truncate font-mono text-zinc-600">
-                            {row.data.username}
-                          </span>
-                        ) : null}
+                        <span>{formatDateTime(row.item.updatedAt)}</span>
                         {row.data.url ? (
                           safeUrl(row.data.url) ? (
                             <a
@@ -480,7 +546,6 @@ export function VaultPage() {
                             <span className="truncate text-zinc-600">{row.data.url}</span>
                           )
                         ) : null}
-                        <span>{formatDateTime(row.item.updatedAt)}</span>
                       </div>
                       {row.data.notes ? (
                         <p className="mt-1 line-clamp-1 text-xs text-zinc-600">{row.data.notes}</p>
@@ -488,6 +553,14 @@ export function VaultPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
+                      {row.data.username ? (
+                        <span
+                          className="max-w-48 truncate font-mono text-xs text-zinc-600"
+                          title={row.data.username}
+                        >
+                          {row.data.username}
+                        </span>
+                      ) : null}
                       <code className="rounded-lg border border-zinc-200 bg-zinc-50 px-2 py-1 font-mono text-xs text-zinc-700">
                         {revealed === row.item.id ? row.data.password : '••••••••••••'}
                       </code>
@@ -548,12 +621,13 @@ export function VaultPage() {
         </>
       )}
 
-      <Dialog
+      <Drawer
         open={dialogOpen}
         onClose={closeItemDialog}
         title={editing ? 'Изменить запись' : 'Новая запись'}
+        titleIcon={<SafeIcon className="h-8 w-8 rounded-lg bg-emerald-50 p-1 text-emerald-700" />}
         description="Поля шифруются в браузере. Сервер получает только шифротекст."
-        size="lg"
+        size="third"
         footer={
           <>
             <Button variant="ghost" onClick={closeItemDialog}>
@@ -631,7 +705,7 @@ export function VaultPage() {
           </label>
           {itemError ? <p className="text-sm text-red-700">{itemError}</p> : null}
         </div>
-      </Dialog>
+      </Drawer>
     </div>
   );
 }

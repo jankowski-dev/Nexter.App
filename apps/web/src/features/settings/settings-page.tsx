@@ -7,6 +7,7 @@ import { downloadExport, fetchSettings, updateSettings } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
@@ -16,6 +17,8 @@ export function SettingsPage() {
   const [timezone, setTimezone] = useState('Europe/Minsk');
   const [includeGas, setIncludeGas] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {

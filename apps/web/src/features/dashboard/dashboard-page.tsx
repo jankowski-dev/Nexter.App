@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -457,7 +457,7 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      <Dialog
+      <Drawer
         open={Boolean(habitForm)}
         onClose={() => setHabitForm(null)}
         title={habitForm?.habit ? 'Изменить привычку' : 'Новая привычка'}
@@ -497,7 +497,7 @@ export function DashboardPage() {
             />
           </label>
         </div>
-      </Dialog>
+      </Drawer>
 
       <ConfirmDialog
         open={Boolean(habitToDelete)}

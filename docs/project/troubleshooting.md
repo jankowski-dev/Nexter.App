@@ -68,6 +68,8 @@
 - **All bot tokens must be active entries in the token base:** токен архивирован/удалён из Базы токенов; верните его или измените список токенов бота.
 - **`Bot strategy is archived or missing` / `not available in this deployment`:** стратегия архивирована или её key удалён из registry. Остановите бота, создайте новую стратегию/версию.
 - **`Stop running bots before archiving their strategy`:** сначала остановите всех ботов на этой стратегии.
+- **`Close all positions before archiving the bot`:** нажмите «Закрыть позиции» в карточке бота; после этого архив станет доступен.
+- **`No current quote for one or more positions`:** нет котировки для одного из токенов; дождитесь обновления `market_quotes` и повторите закрытие.
 - **`A bot with this name already exists` / `A strategy with this name already exists`:** имена unique per user.
 - **`Budget must be a multiple of 100 USD`:** бюджет от $100 и кратен $100.
 - **Изменить настройки running-бота нельзя:** остановите бота; бюджет после создания не меняется, для нового бюджета создайте нового бота или reset (reset возвращает текущий бюджет).

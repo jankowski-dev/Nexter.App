@@ -23,12 +23,6 @@ interface TaskDrawerState {
   startWithDelete?: boolean;
 }
 
-const filterLabels: Record<TaskFilter, string> = {
-  all: 'Все',
-  open: 'Открытые',
-  done: 'Выполненные',
-};
-
 function dateInputValue(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -45,7 +39,7 @@ function monthRange(month: Date): { from: string; to: string } {
 
 export function TasksPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<TaskView>('calendar');
+  const [view, setView] = useState<TaskView>('list');
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -71,6 +65,7 @@ export function TasksPage() {
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    void queryClient.invalidateQueries({ queryKey: ['dashboard-tasks'] });
   };
 
   const statusMutation = useMutation({
@@ -144,8 +139,8 @@ export function TasksPage() {
             >
               {(
                 [
-                  ['calendar', 'Календарь'],
                   ['list', 'Список'],
+                  ['calendar', 'Календарь'],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -153,7 +148,10 @@ export function TasksPage() {
                   type="button"
                   role="tab"
                   aria-selected={view === value}
-                  onClick={() => setView(value)}
+                  onClick={() => {
+                    setView(value);
+                    if (value === 'calendar' && !archivedOnly) setFilter('all');
+                  }}
                   className={`rounded-md px-3 py-1.5 text-sm ${
                     view === value
                       ? 'bg-white text-zinc-900 shadow-sm'
@@ -176,26 +174,68 @@ export function TasksPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        {view === 'list' && !archivedOnly ? (
-          <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-            {(Object.keys(filterLabels) as TaskFilter[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setFilter(item)}
-                className={`rounded-md px-3 py-1.5 text-sm ${
-                  filter === item
-                    ? 'bg-white text-zinc-900 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-                aria-selected={filter === item}
-                role="tab"
-              >
-                {filterLabels[item]}
-              </button>
-            ))}
+        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+          {view === 'list' ? (
+            <div className="flex gap-1" role="tablist" aria-label="Статус задач">
+              {(
+                [
+                  ['open', 'Открытые'],
+                  ['done', 'Выполненные'],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={!archivedOnly && filter === value}
+                  onClick={() => {
+                    setArchivedOnly(false);
+                    setFilter(value);
+                  }}
+                  className={`rounded-md px-3 py-1.5 text-sm ${
+                    !archivedOnly && filter === value
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex gap-1 border-l border-zinc-200 pl-1">
+            <button
+              type="button"
+              onClick={() => {
+                setArchivedOnly(false);
+                setFilter('all');
+              }}
+              aria-pressed={!archivedOnly && (view === 'calendar' || filter === 'all')}
+              className={`rounded-md px-3 py-1.5 text-sm ${
+                !archivedOnly && (view === 'calendar' || filter === 'all')
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Актуальные
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setArchivedOnly(true);
+                setFilter('all');
+              }}
+              aria-pressed={archivedOnly}
+              className={`rounded-md px-3 py-1.5 text-sm ${
+                archivedOnly
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900'
+              }`}
+            >
+              Архивные
+            </button>
           </div>
-        ) : null}
+        </div>
         <Input
           className="max-w-xs"
           placeholder="Поиск по задачам"
@@ -203,32 +243,6 @@ export function TasksPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        <div className="ml-auto flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
-          <button
-            type="button"
-            onClick={() => setArchivedOnly(false)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              !archivedOnly
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900'
-            }`}
-            aria-pressed={!archivedOnly}
-          >
-            Актуальные
-          </button>
-          <button
-            type="button"
-            onClick={() => setArchivedOnly(true)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              archivedOnly
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900'
-            }`}
-            aria-pressed={archivedOnly}
-          >
-            Архивные
-          </button>
-        </div>
       </div>
 
       {error ? (

@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChainToggle } from '@/components/chain-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
@@ -121,6 +121,7 @@ export function WatchlistPage() {
   const [iconUploading, setIconUploading] = useState(false);
   const iconFileRef = useRef<HTMLInputElement>(null);
   const [drawerEntryId, setDrawerEntryId] = useState<string | null>(null);
+  const [drawerSnapshot, setDrawerSnapshot] = useState<WatchlistEntry | null>(null);
   const [editGroupId, setEditGroupId] = useState('');
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -272,7 +273,8 @@ export function WatchlistPage() {
   const changeGroupMutation = useMutation({
     mutationFn: ({ id, groupId }: { id: string; groupId: string }) =>
       updateWatchlist(id, { groupId }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      setDrawerSnapshot(updated);
       setError(null);
       invalidate();
     },
@@ -282,7 +284,7 @@ export function WatchlistPage() {
   const archiveMutation = useMutation({
     mutationFn: (id: string) => archiveWatchlist(id),
     onSuccess: () => {
-      setDrawerEntryId(null);
+      closeDrawer();
       setError(null);
       invalidate();
     },
@@ -314,8 +316,18 @@ export function WatchlistPage() {
     setDialogOpen(true);
   }
 
-  function openEdit(entry: WatchlistEntry) {
+  function openDrawer(entry: WatchlistEntry) {
+    setDrawerEntryId(entry.id);
+    setDrawerSnapshot(entry);
+  }
+
+  function closeDrawer() {
     setDrawerEntryId(null);
+    setDrawerSnapshot(null);
+  }
+
+  function openEdit(entry: WatchlistEntry) {
+    closeDrawer();
     setEditing(entry);
     setAssetId(entry.asset.id);
     setThesis(entry.thesis ?? '');
@@ -352,7 +364,8 @@ export function WatchlistPage() {
   const groupById = new Map(groupsToRender.map((group) => [group.id, group]));
   const canSearch = /^0x[0-9a-fA-F]{40}$/.test(searchAddress.trim()) && !searchMutation.isPending;
   const drawerEntry = drawerEntryId
-    ? (entries.find((entry) => entry.id === drawerEntryId) ?? null)
+    ? (entries.find((entry) => entry.id === drawerEntryId) ??
+      (drawerSnapshot?.id === drawerEntryId ? drawerSnapshot : null))
     : null;
   const drawerGroup = drawerEntry?.groupId ? groupById.get(drawerEntry.groupId) : null;
   const investorValues = investorsFromInput(investors);
@@ -631,7 +644,7 @@ export function WatchlistPage() {
                   <button
                     type="button"
                     className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
-                    onClick={() => setDrawerEntryId(entry.id)}
+                    onClick={() => openDrawer(entry)}
                   >
                     <span className="flex min-w-0 flex-1 items-center gap-3">
                       <TokenIcon
@@ -720,10 +733,14 @@ export function WatchlistPage() {
         defaultGroupId={defaultGroup?.id ?? null}
         onGroupChange={(entry, groupId) => changeGroupMutation.mutate({ id: entry.id, groupId })}
         groupBusy={changeGroupMutation.isPending}
-        onClose={() => setDrawerEntryId(null)}
+        onClose={closeDrawer}
         onEdit={openEdit}
         onArchive={(entry) => {
-          if (window.confirm(`Архивировать ${entry.asset.symbol}?`)) {
+          if (
+            window.confirm(
+              `Архивировать ${entry.asset.symbol}? Токен скроется из Базы, но транзакции и сделки останутся в Портфеле и Статистике.`,
+            )
+          ) {
             archiveMutation.mutate(entry.id);
           }
         }}
@@ -732,7 +749,7 @@ export function WatchlistPage() {
         error={error}
       />
 
-      <Dialog
+      <Drawer
         open={groupDialogOpen}
         onClose={() => setGroupDialogOpen(false)}
         title="Новая группа"
@@ -761,9 +778,9 @@ export function WatchlistPage() {
           />
         </label>
         {groupError ? <p className="mt-2 text-sm text-red-700">{groupError}</p> : null}
-      </Dialog>
+      </Drawer>
 
-      <Dialog
+      <Drawer
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         title={editing ? 'Изменить токен' : 'Добавить токен'}
@@ -988,7 +1005,7 @@ export function WatchlistPage() {
           </label>
           {error ? <p className="text-sm text-red-700">{error}</p> : null}
         </div>
-      </Dialog>
+      </Drawer>
     </div>
   );
 }

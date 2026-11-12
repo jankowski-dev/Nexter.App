@@ -12,6 +12,7 @@ import {
 } from '@/lib/api';
 import type { ImportSummary } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { Link } from '@tanstack/react-router';
 import { useState, type ChangeEvent } from 'react';
 
@@ -449,6 +450,8 @@ export function ImportPage() {
   });
   const [preview, setPreview] = useState<ImportResponse | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [localError, setLocalError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 

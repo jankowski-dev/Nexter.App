@@ -177,21 +177,22 @@
 
 ## 12. Trading bots (paper)
 
-| Метод  | Путь                                   | Описание                                                |
-| ------ | -------------------------------------- | ------------------------------------------------------- |
-| GET    | `/trading-bots/strategies`             | шаблоны registry + созданные стратегии                  |
-| POST   | `/trading-bots/strategies`             | создать стратегию (`key`,`name`,`description`,`params`) |
-| PATCH  | `/trading-bots/strategies/:id`         | изменить/архивировать                                   |
-| GET    | `/trading-bots/bots`                   | список ботов + статистика (`includeArchived`)           |
-| POST   | `/trading-bots/bots`                   | создать бота                                            |
-| GET    | `/trading-bots/bots/:id`               | бот + стратегия + токены + позиции                      |
-| PATCH  | `/trading-bots/bots/:id`               | настройки (только не-running)                           |
-| POST   | `/trading-bots/bots/:id/start`         | запуск                                                  |
-| POST   | `/trading-bots/bots/:id/stop`          | остановка                                               |
-| POST   | `/trading-bots/bots/:id/reset`         | сброс paper-состояния                                   |
-| DELETE | `/trading-bots/bots/:id`               | soft archive                                            |
-| GET    | `/trading-bots/bots/:id/trades?limit=` | сделки                                                  |
-| GET    | `/trading-bots/bots/:id/events?limit=` | события                                                 |
-| GET    | `/trading-bots/bots/:id/equity?limit=` | equity curve                                            |
+| Метод  | Путь                                     | Описание                                                |
+| ------ | ---------------------------------------- | ------------------------------------------------------- |
+| GET    | `/trading-bots/strategies`               | шаблоны registry + созданные стратегии                  |
+| POST   | `/trading-bots/strategies`               | создать стратегию (`key`,`name`,`description`,`params`) |
+| PATCH  | `/trading-bots/strategies/:id`           | изменить/архивировать                                   |
+| GET    | `/trading-bots/bots`                     | список ботов + статистика (`includeArchived`)           |
+| POST   | `/trading-bots/bots`                     | создать бота                                            |
+| GET    | `/trading-bots/bots/:id`                 | бот + стратегия + токены + позиции                      |
+| PATCH  | `/trading-bots/bots/:id`                 | настройки (только не-running)                           |
+| POST   | `/trading-bots/bots/:id/start`           | запуск                                                  |
+| POST   | `/trading-bots/bots/:id/stop`            | остановка                                               |
+| POST   | `/trading-bots/bots/:id/close-positions` | принудительное закрытие всех позиций                    |
+| POST   | `/trading-bots/bots/:id/reset`           | сброс paper-состояния                                   |
+| DELETE | `/trading-bots/bots/:id`                 | soft archive                                            |
+| GET    | `/trading-bots/bots/:id/trades?limit=`   | сделки                                                  |
+| GET    | `/trading-bots/bots/:id/events?limit=`   | события                                                 |
+| GET    | `/trading-bots/bots/:id/equity?limit=`   | equity curve                                            |
 
 Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются; стратегию с running-ботами нельзя архивировать. Подробности — в `trading-bots.md`.

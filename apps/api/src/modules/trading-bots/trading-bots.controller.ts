@@ -133,6 +133,15 @@ export class TradingBotsController {
     return this.bots.resetBot(auth.user.id, id, meta(request));
   }
 
+  @Post('bots/:id/close-positions')
+  closePositions(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<BotDetailResponse> {
+    return this.bots.closePositions(auth.user.id, id, meta(request));
+  }
+
   @Delete('bots/:id')
   archive(
     @CurrentAuth() auth: AuthContext,

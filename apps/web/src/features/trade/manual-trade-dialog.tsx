@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createManualTransaction, fetchAccounts, fetchAssets, fetchTradeGroups } from '@/lib/api';
@@ -195,7 +195,7 @@ export function ManualTradeDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open={open}
       onClose={onClose}
       title="Ручная сделка"
@@ -359,6 +359,6 @@ export function ManualTradeDialog({
           </div>
         ) : null}
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

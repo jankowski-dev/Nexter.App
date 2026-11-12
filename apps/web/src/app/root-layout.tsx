@@ -15,17 +15,17 @@ const cryptoNavigation = [
   { to: '/operations', label: messages.nav.operations, icon: 'operations' },
   { to: '/watchlist', label: messages.nav.watchlist, icon: 'watchlist' },
   { to: '/statistics', label: messages.nav.reports, icon: 'statistics' },
+  { to: '/testing', label: messages.nav.testing, icon: 'testing' },
 ] as const;
 
 const topNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard, icon: 'dashboard' },
   { to: '/tasks', label: messages.nav.tasks, icon: 'tasks' },
-  { to: '/testing', label: messages.nav.testing, icon: 'testing' },
+  { to: '/notes', label: messages.nav.notes, icon: 'notes' },
 ] as const;
 
 const afterCryptoNavigation = [
   { to: '/finance', label: messages.nav.finance, icon: 'finance' },
-  { to: '/notes', label: messages.nav.notes, icon: 'notes' },
   { to: '/vault', label: messages.nav.vault, icon: 'vault' },
   { to: '/settings', label: messages.nav.settings, icon: 'settings' },
 ] as const;

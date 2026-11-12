@@ -180,7 +180,7 @@ interface StrategyDefinition {
 
 - **Buy:** `usd = min(budget * positionSizePct / 100, cash)`; `fillPrice = quote * (1 + slippageBps/10000)`; `amount = usd / fillPrice`; `fee = usd * feeBps/10000`; `debit = usd + fee`; cost basis увеличивается на `debit`. Позиция открывается только если `openPositions < maxPositions`; докупка существующей позиции не увеличивает счётчик позиций.
 - **Sell:** продаётся вся позиция; `fillPrice = quote * (1 - slippageBps/10000)`; `gross = amount * fillPrice`; `fee = gross * feeBps/10000`; `net = gross - fee`; `realized = net - costBasis`; кэш увеличивается на `net`.
-- **Cooldown:** блокирует только покупки по токену в течение `cooldownMinutes` после последней покупки; продажи не блокируются.
+- **Cooldown / пауза после покупки:** блокирует только покупки по токену в течение `cooldownMinutes` после последней покупки; продажи и принудительное закрытие не блокируются.
 - **Daily loss:** если реализованный убыток за локальный день ≥ `budget * maxDailyLossPct / 100`, новые покупки блокируются до следующих суток; продажи/стопы продолжают работать.
 - **Quote freshness:** котировка старше 5 минут или цена ≤ 0 — токен пропускается на этом тике.
 - **No quote:** токен пропускается; событие `error` не создаётся, чтобы не засорять журнал.
@@ -199,6 +199,14 @@ interface StrategyDefinition {
 - Equity chart в UI запрашивает последние 500 снимков (около 1,7 суток при 5-минутном интервале); all-time P&L и max drawdown при этом сохраняются.
 - `tradesCount` включает buy и sell.
 
+### 5.6. Отказ от бота
+
+- **Остановить** — бот перестаёт тикать, открытые позиции и история сохраняются; можно запустить снова.
+- **Закрыть позиции** — принудительно продаёт все открытые paper-позиции по последним известным котировкам с учётом комиссии и проскальзывания, фиксирует realized P&L, пишет сделки/события и останавливает бота. История сохраняется.
+- **Сбросить** — удаляет paper-позиции, сделки и equity-снимки, возвращает кэш к бюджету. Это «начать заново», а не выход из позиций.
+- **Архивировать** — скрывает бота; сервер не разрешает архив, пока есть открытые позиции. Сначала закройте их.
+- Бумажные сделки при любом варианте не влияют на реальный ledger.
+
 ## 6. Runner и надёжность
 
 - `BotRunnerService` стартует через 5 секунд после boot API и затем каждые `BOT_RUNNER_INTERVAL_SECONDS` (60). Для индикаторов загружаются последние 300 минутных samples (покрывает максимальные окна стратегий).
@@ -214,27 +222,27 @@ interface StrategyDefinition {
 
 Базовый путь: `/api/v1/trading-bots`. Все мутации требуют CSRF и аудируются.
 
-| Метод  | Путь                      | Описание                                                   |
-| ------ | ------------------------- | ---------------------------------------------------------- |
-| GET    | `/strategies`             | шаблоны registry + созданные экземпляры                    |
-| POST   | `/strategies`             | создать экземпляр (`key`, `name`, `description`, `params`) |
-| PATCH  | `/strategies/:id`         | изменить имя/описание/параметры/архив                      |
-| GET    | `/bots?includeArchived=`  | список ботов + статистика                                  |
-| POST   | `/bots`                   | создать бота                                               |
-| GET    | `/bots/:id`               | детали: бот, стратегия, токены, позиции                    |
-| PATCH  | `/bots/:id`               | настройки; только не-running                               |
-| POST   | `/bots/:id/start`         | запуск                                                     |
-| POST   | `/bots/:id/stop`          | остановка (позиции сохраняются)                            |
-| POST   | `/bots/:id/reset`         | сброс paper-состояния к бюджету                            |
-| DELETE | `/bots/:id`               | soft archive                                               |
-| GET    | `/bots/:id/positions`     | не отдельный endpoint; позиции в `/bots/:id`               |
-| GET    | `/bots/:id/trades?limit=` | сделки                                                     |
-| GET    | `/bots/:id/events?limit=` | журнал                                                     |
-| GET    | `/bots/:id/equity?limit=` | equity curve                                               |
+| Метод  | Путь                        | Описание                                                   |
+| ------ | --------------------------- | ---------------------------------------------------------- |
+| GET    | `/strategies`               | шаблоны registry + созданные экземпляры                    |
+| POST   | `/strategies`               | создать экземпляр (`key`, `name`, `description`, `params`) |
+| PATCH  | `/strategies/:id`           | изменить имя/описание/параметры/архив                      |
+| GET    | `/bots?includeArchived=`    | список ботов + статистика                                  |
+| POST   | `/bots`                     | создать бота                                               |
+| GET    | `/bots/:id`                 | детали: бот, стратегия, токены, позиции                    |
+| PATCH  | `/bots/:id`                 | настройки; только не-running                               |
+| POST   | `/bots/:id/start`           | запуск                                                     |
+| POST   | `/bots/:id/stop`            | остановка (позиции сохраняются)                            |
+| POST   | `/bots/:id/close-positions` | закрыть все позиции по текущим котировкам и остановить     |
+| POST   | `/bots/:id/reset`           | сброс paper-состояния к бюджету (история удаляется)        |
+| DELETE | `/bots/:id`                 | soft archive (только без открытых позиций)                 |
+| GET    | `/bots/:id/trades?limit=`   | сделки                                                     |
+| GET    | `/bots/:id/events?limit=`   | журнал                                                     |
+| GET    | `/bots/:id/equity?limit=`   | equity curve                                               |
 
 Ошибки: `VALIDATION_ERROR`, `CONFLICT`, `NOT_FOUND`. Уникальность имени бота/стратегии — `CONFLICT`. Running-бот нельзя редактировать; стратегию с running-ботами нельзя архивировать. Архивированную/недоступную стратегию нельзя запустить.
 
-Аудит: `bot.strategy_created`, `bot.strategy_updated`, `bot.created`, `bot.updated`, `bot.started`, `bot.stopped`, `bot.reset`, `bot.archived`. Бумажные сделки и события живут в `bot_trades`/`bot_events`, а не в `audit_log`.
+Аудит: `bot.strategy_created`, `bot.strategy_updated`, `bot.created`, `bot.updated`, `bot.started`, `bot.stopped`, `bot.positions_closed`, `bot.reset`, `bot.archived`. Бумажные сделки и события живут в `bot_trades`/`bot_events`, а не в `audit_log`.
 
 ## 8. UI
 

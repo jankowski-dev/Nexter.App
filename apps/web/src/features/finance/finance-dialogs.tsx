@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Dialog } from '@/components/ui/dialog';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
@@ -127,7 +127,7 @@ export function FinanceTransactionDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={transaction ? 'Изменить операцию' : 'Новая операция'}
@@ -230,7 +230,7 @@ export function FinanceTransactionDialog({
         </label>
         <DialogError error={error} />
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -296,7 +296,7 @@ export function FinanceTransferDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={transfer ? 'Изменить перевод' : 'Новый перевод'}
@@ -401,7 +401,7 @@ export function FinanceTransferDialog({
         </label>
         <DialogError error={error} />
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -455,7 +455,7 @@ export function FinanceAccountDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={account ? 'Изменить счёт' : 'Новый счёт'}
@@ -552,7 +552,7 @@ export function FinanceAccountDialog({
         </div>
         <DialogError error={error} />
       </div>
-    </Dialog>
+    </Drawer>
   );
 }
 
@@ -608,7 +608,7 @@ export function FinanceCategoryDialog({
   }
 
   return (
-    <Dialog
+    <Drawer
       open
       onClose={onClose}
       title={category ? 'Изменить категорию' : 'Новая категория'}
@@ -655,6 +655,6 @@ export function FinanceCategoryDialog({
         </div>
         <DialogError error={error} />
       </div>
-    </Dialog>
+    </Drawer>
   );
 }

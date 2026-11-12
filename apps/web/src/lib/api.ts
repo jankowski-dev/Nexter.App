@@ -966,6 +966,10 @@ export async function resetTradingBot(id: string): Promise<BotDetailResponse> {
   return apiPost(`/api/v1/trading-bots/bots/${id}/reset`, {}, botDetailResponseSchema);
 }
 
+export async function closeTradingBotPositions(id: string): Promise<BotDetailResponse> {
+  return apiPost(`/api/v1/trading-bots/bots/${id}/close-positions`, {}, botDetailResponseSchema);
+}
+
 export async function archiveTradingBot(id: string): Promise<void> {
   await apiDelete(`/api/v1/trading-bots/bots/${id}`);
 }
