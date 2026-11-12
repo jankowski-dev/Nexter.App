@@ -434,7 +434,8 @@ describe.runIf(canRun)('Finance API', () => {
         { income: 0, expense: 0 },
       );
       expect(totals.income).toBeCloseTo(13719.22, 1);
-      expect(totals.expense).toBeCloseTo(8922.17, 1);
+      // Includes 16 principal repayments (1,707.47 BYN) in the import window.
+      expect(totals.expense).toBeCloseTo(10629.64, 1);
     },
     60_000,
   );
