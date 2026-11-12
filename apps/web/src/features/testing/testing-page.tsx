@@ -364,6 +364,10 @@ export function TestingPage() {
       setBotError('Сначала создайте стратегию.');
       return;
     }
+    if (!strategyInstances.some((strategy) => strategy.id === strategyId)) {
+      setBotError('Выберите активную стратегию.');
+      return;
+    }
     if (botForm.tokenAssetIds.length === 0) {
       setBotError('Выберите хотя бы один токен.');
       return;
