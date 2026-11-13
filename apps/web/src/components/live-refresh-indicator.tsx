@@ -70,19 +70,17 @@ export function LiveRefreshIndicator() {
     return () => window.clearTimeout(timer);
   }, [fetching, route, spinning]);
 
-  if (!route) return null;
+  if (!route || !spinning) return null;
 
   return (
     <div
-      className="flex h-9 w-9 items-center justify-center text-zinc-500"
-      title="Обновление данных"
-      aria-label={spinning ? 'Данные обновляются' : 'Данные не обновляются'}
-      aria-busy={spinning}
+      className="flex h-9 items-center gap-2 whitespace-nowrap text-xs text-zinc-500"
+      role="status"
+      aria-live="polite"
+      aria-label="Синхронизация данных"
     >
-      <FanIcon spinning={spinning} />
-      <span className="sr-only" role="status">
-        {spinning ? 'Данные обновляются' : ''}
-      </span>
+      <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+      <span>Синхронизация данных</span>
     </div>
   );
 }
