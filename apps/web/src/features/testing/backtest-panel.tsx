@@ -86,7 +86,7 @@ export function BacktestPanel({
 
   const journal = useQuery({
     queryKey: ['trading-bot-backtests', template.key],
-    queryFn: () => fetchBotBacktests({ strategyKey: template.key, limit: 20 }),
+    queryFn: () => fetchBotBacktests({ strategyKey: template.key, limit: 50 }),
   });
 
   const previewMutation = useMutation({
