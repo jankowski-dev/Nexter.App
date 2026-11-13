@@ -263,12 +263,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   page.on('dialog', (dialog) => {
     void dialog.accept();
   });
-  await page.getByRole('button', { name: /BASED/ }).first().click();
-  const drawerToArchive = page.getByRole('dialog');
-  await expect(drawerToArchive.getByText('Updated Playwright thesis')).toBeVisible();
-  await drawerToArchive.getByRole('button', { name: 'Удалить' }).click();
-  await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
-  await expect(page.getByRole('switch', { name: 'Показать архивные токены' })).toHaveCount(0);
 
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
@@ -306,4 +300,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await page.getByRole('tab', { name: 'Ордера' }).click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
+
+  await page.goto('/watchlist');
+  await page.getByRole('button', { name: /BASED/ }).first().click();
+  const drawerToDelete = page.getByRole('dialog');
+  await expect(drawerToDelete.getByText('Updated Playwright thesis')).toBeVisible();
+  await drawerToDelete.getByRole('button', { name: 'Удалить' }).click();
+  await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'Показать архивные токены' })).toHaveCount(0);
 });
