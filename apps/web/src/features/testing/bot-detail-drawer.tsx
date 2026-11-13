@@ -47,6 +47,7 @@ const eventLabels: Record<string, string> = {
 
 export function BotDetailDrawer({
   botId,
+  open,
   onClose,
   onEdit,
   onStart,
@@ -57,6 +58,7 @@ export function BotDetailDrawer({
   busy,
 }: {
   botId: string | null;
+  open: boolean;
   onClose: () => void;
   onEdit: (bot: BotSummary) => void;
   onStart: (id: string) => void;
@@ -69,45 +71,45 @@ export function BotDetailDrawer({
   const detail = useQuery({
     queryKey: ['trading-bot', botId],
     queryFn: () => fetchTradingBot(botId as string),
-    enabled: Boolean(botId),
+    enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
   const trades = useQuery({
     queryKey: ['trading-bot-trades', botId],
     queryFn: () => fetchBotTrades(botId as string),
-    enabled: Boolean(botId),
+    enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
   const events = useQuery({
     queryKey: ['trading-bot-events', botId],
     queryFn: () => fetchBotEvents(botId as string),
-    enabled: Boolean(botId),
+    enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
   const equity = useQuery({
     queryKey: ['trading-bot-equity', botId],
     queryFn: () => fetchBotEquity(botId as string),
-    enabled: Boolean(botId),
+    enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
   const signals = useQuery({
     queryKey: ['trading-bot-signals', botId],
     queryFn: () => fetchBotSignals(botId as string),
-    enabled: Boolean(botId),
+    enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
 
   if (!botId) return null;
   if (detail.isPending) {
     return (
-      <Drawer open onClose={onClose} title="Бот" size="lg">
+      <Drawer open={open} onClose={onClose} title="Бот" size="lg">
         <LoadingRows rows={8} />
       </Drawer>
     );
   }
   if (detail.isError || !detail.data) {
     return (
-      <Drawer open onClose={onClose} title="Бот" size="lg">
+      <Drawer open={open} onClose={onClose} title="Бот" size="lg">
         <ErrorState
           message={toRussianError(detail.error, 'Не удалось загрузить бота')}
           onRetry={() => void detail.refetch()}
@@ -125,7 +127,7 @@ export function BotDetailDrawer({
 
   return (
     <Drawer
-      open
+      open={open}
       onClose={onClose}
       title={bot.name}
       titleIcon={<StrategyIcon icon={strategy.icon} className="h-8 w-8" />}

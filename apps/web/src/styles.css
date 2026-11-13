@@ -329,3 +329,38 @@ button:focus-visible,
     animation: none;
   }
 }
+
+@keyframes drawer-panel-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+@keyframes overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.dialog-overlay-exit {
+  animation: overlay-out 180ms ease-in both;
+}
+
+.drawer-panel-exit {
+  animation: drawer-panel-out 240ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog-overlay-exit,
+  .drawer-panel-exit {
+    animation: none;
+  }
+}

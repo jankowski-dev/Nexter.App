@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 export function Drawer({
   open,
@@ -30,8 +30,23 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   const closeDisabledRef = useRef(closeDisabled);
+  const [mounted, setMounted] = useState(open);
+  const [visible, setVisible] = useState(open);
 
-  useBodyScrollLock(open);
+  useBodyScrollLock(mounted);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const frame = window.requestAnimationFrame(() => setVisible(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    if (!mounted) return;
+    setVisible(false);
+    const timer = window.setTimeout(() => setMounted(false), 240);
+    return () => window.clearTimeout(timer);
+  }, [open, mounted]);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -55,18 +70,20 @@ export function Drawer({
     };
   }, [open]);
 
-  if (!open) return null;
+  if (!mounted) return null;
 
   const resolvedSize = size ?? (wide ? 'lg' : 'md');
 
   return (
     <div
-      className="dialog-overlay-enter fixed inset-0 z-50 bg-zinc-900/30"
+      className={`fixed inset-0 z-50 bg-zinc-900/30 ${
+        visible ? 'dialog-overlay-enter' : 'dialog-overlay-exit pointer-events-none'
+      }`}
       role="presentation"
-      aria-hidden={inert || undefined}
-      inert={inert || undefined}
+      aria-hidden={inert || !visible || undefined}
+      inert={inert || !visible || undefined}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !closeDisabled) onClose();
+        if (visible && event.target === event.currentTarget && !closeDisabled) onClose();
       }}
     >
       <div
@@ -76,7 +93,8 @@ export function Drawer({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'drawer-panel-enter ml-auto flex h-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
+          'ml-auto flex h-full flex-col border-l border-zinc-200 bg-white shadow-2xl outline-none',
+          visible ? 'drawer-panel-enter' : 'drawer-panel-exit',
           resolvedSize === 'md' && 'w-full max-w-xl',
           resolvedSize === 'lg' && 'w-full max-w-3xl',
           resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',

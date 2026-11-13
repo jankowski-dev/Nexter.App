@@ -15,6 +15,9 @@ export interface BacktestOptions {
   initialCapitalUsd?: string;
   feeBps?: number;
   slippageBps?: number;
+  useStopLoss?: boolean;
+  useTakeProfit?: boolean;
+  reinvestProfit?: boolean;
 }
 
 export interface BacktestResult {
@@ -43,7 +46,6 @@ export function runBacktest(
   const slippageRate = decimal(String(options.slippageBps ?? DEFAULT_SLIPPAGE_BPS)).div(10_000);
   const maxAddsRaw = Number(params.maxAdds);
   const maxAdds = Number.isFinite(maxAddsRaw) && maxAddsRaw >= 1 ? Math.floor(maxAddsRaw) : 1;
-  const allocationPerBuy = initialCapital.div(maxAdds);
 
   let cash = initialCapital;
   let position: OpenPosition | null = null;
@@ -73,7 +75,8 @@ export function runBacktest(
 
   const executeBuy = (date: string, close: Decimal, reason: string) => {
     const spendable = cash.div(new Decimal(1).plus(feeRate));
-    const usd = Decimal.min(allocationPerBuy, spendable);
+    const allocationBase = options.reinvestProfit ? equityAt(close) : initialCapital;
+    const usd = Decimal.min(allocationBase.div(maxAdds), spendable);
     if (usd.lt(1)) return false;
 
     const fillPrice = close.mul(new Decimal(1).plus(slippageRate));
@@ -172,7 +175,7 @@ export function runBacktest(
       let exitPrice: Decimal | null = null;
       let exitReason = '';
 
-      if (stopLossPct !== null) {
+      if (stopLossPct !== null && options.useStopLoss !== false) {
         const stopPrice = avgCost.mul(new Decimal(1).minus(stopLossPct / 100));
         if (open.lte(stopPrice)) {
           exitPrice = open;
@@ -183,7 +186,7 @@ export function runBacktest(
         }
       }
 
-      if (exitPrice === null && takeProfitPct !== null) {
+      if (exitPrice === null && takeProfitPct !== null && options.useTakeProfit !== false) {
         const takeProfitPrice = avgCost.mul(new Decimal(1).plus(takeProfitPct / 100));
         if (open.gte(takeProfitPrice)) {
           exitPrice = open;
@@ -219,7 +222,11 @@ export function runBacktest(
 
     if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
       executeBuy(candle.date, close, decision.reason);
-    } else if (decision.action === 'sell' && position) {
+    } else if (
+      decision.action === 'sell' &&
+      position &&
+      !isExitDisabled(decision.reason, options)
+    ) {
       executeSell(candle.date, close, decision.reason);
     }
 
@@ -275,4 +282,11 @@ export function runBacktest(
 
 function positiveNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function isExitDisabled(reason: string, options: BacktestOptions): boolean {
+  const normalized = reason.toLowerCase();
+  if (options.useStopLoss === false && normalized.includes('стоп-лосс')) return true;
+  if (options.useTakeProfit === false && normalized.includes('тейк-профит')) return true;
+  return false;
 }

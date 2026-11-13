@@ -412,11 +412,17 @@ describe.runIf(canRun)('Trading bots e2e', () => {
           takeProfitPct: 5,
           stopLossPct: 10,
         },
+        useStopLoss: true,
+        useTakeProfit: true,
+        reinvestProfit: false,
       })
       .expect(201);
 
     const runId = run.body.id as string;
     expect(run.body.strategyName).toBe('Возврат к среднему');
+    expect(run.body.useStopLoss).toBe(true);
+    expect(run.body.useTakeProfit).toBe(true);
+    expect(run.body.reinvestProfit).toBe(false);
     expect(run.body.candles).toHaveLength(90);
     expect(run.body.stats.tradesCount).toBeGreaterThan(0);
     expect(run.body.trades.length).toBe(run.body.stats.tradesCount);
@@ -447,5 +453,48 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .send({ assetId: '00000000-0000-4000-8000-000000000000', days: 30 })
       .expect(404);
+
+    const deleted = await agent
+      .delete(`/api/v1/trading-bots/backtests/${runId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(deleted.body.deleted).toBe(1);
+
+    const emptyList = await agent
+      .get('/api/v1/trading-bots/backtests?strategyKey=mean_reversion')
+      .expect(200);
+    expect(emptyList.body.data).toHaveLength(0);
+
+    for (let index = 0; index < 2; index += 1) {
+      await agent
+        .post('/api/v1/trading-bots/backtests')
+        .set('x-csrf-token', owner.csrf)
+        .send({
+          assetId: asset.id,
+          days: 90,
+          strategyKey: 'mean_reversion',
+          strategyParams: {
+            lookback: 5,
+            entryDropPct: 1,
+            exitAbovePct: 0.2,
+            takeProfitPct: 5,
+            stopLossPct: 10,
+          },
+          useStopLoss: false,
+          reinvestProfit: index === 0,
+        })
+        .expect(201);
+    }
+
+    const cleared = await agent
+      .delete('/api/v1/trading-bots/backtests?strategyKey=mean_reversion')
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(cleared.body.deleted).toBe(2);
+
+    const clearedList = await agent
+      .get('/api/v1/trading-bots/backtests?strategyKey=mean_reversion')
+      .expect(200);
+    expect(clearedList.body.data).toHaveLength(0);
   }, 60_000);
 });

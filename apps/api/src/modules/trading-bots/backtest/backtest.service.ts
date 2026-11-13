@@ -9,6 +9,7 @@ import {
   type Database,
 } from '@nexter/db';
 import type {
+  BotBacktestClearResponse,
   BotBacktestListQuery,
   BotBacktestRequest,
   BotBacktestRun,
@@ -61,7 +62,11 @@ export class BacktestService {
     );
     const asset = await this.historical.requireAsset(userId, input.assetId);
     const series = await this.historical.getSeries(asset, input.days);
-    const result = runBacktest(definition, params, series.candles);
+    const result = runBacktest(definition, params, series.candles, {
+      useStopLoss: input.useStopLoss,
+      useTakeProfit: input.useTakeProfit,
+      reinvestProfit: input.reinvestProfit,
+    });
 
     const id = await this.db.transaction(async (tx) => {
       const [created] = await tx
@@ -73,6 +78,9 @@ export class BacktestService {
           assetId: asset.id,
           days: input.days,
           source: series.source,
+          useStopLoss: input.useStopLoss,
+          useTakeProfit: input.useTakeProfit,
+          reinvestProfit: input.reinvestProfit,
           initialCapitalUsd: result.stats.initialCapitalUsd,
           finalEquityUsd: result.stats.finalEquityUsd,
           totalPnlUsd: result.stats.totalPnlUsd,
@@ -105,6 +113,9 @@ export class BacktestService {
             strategyParams: params,
             assetId: asset.id,
             days: input.days,
+            useStopLoss: input.useStopLoss,
+            useTakeProfit: input.useTakeProfit,
+            reinvestProfit: input.reinvestProfit,
             totalPnlUsd: result.stats.totalPnlUsd,
             tradesCount: result.stats.tradesCount,
           },
@@ -166,11 +177,82 @@ export class BacktestService {
   async report(userId: string, id: string): Promise<{ buffer: Buffer; filename: string }> {
     const run = await this.get(userId, id);
     const strategy = templateFor(run.strategyKey);
-    const buffer = await this.reports.build(run, strategy.guide);
+    const buffer = await this.reports.build(run, strategy);
     return {
       buffer,
       filename: `nexter-backtest-${run.asset.symbol.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}-${run.createdAt.slice(0, 10)}.pdf`,
     };
+  }
+
+  async deleteRun(userId: string, id: string, meta: BotMeta): Promise<BotBacktestClearResponse> {
+    const [row] = await this.db
+      .select()
+      .from(botBacktestRuns)
+      .where(and(eq(botBacktestRuns.id, id), eq(botBacktestRuns.userId, userId)))
+      .limit(1);
+    if (!row) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Backtest run not found' });
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(botBacktestRuns)
+        .where(and(eq(botBacktestRuns.id, id), eq(botBacktestRuns.userId, userId)));
+      await this.audit.log(
+        {
+          userId,
+          action: 'bot.backtest_deleted',
+          entityType: 'bot_backtest',
+          entityId: id,
+          before: {
+            strategyKey: row.strategyKey,
+            assetId: row.assetId,
+            days: row.days,
+            totalPnlUsd: row.totalPnlUsd,
+            tradesCount: row.tradesCount,
+          },
+          after: { deleted: true },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
+
+    return { deleted: 1 };
+  }
+
+  async clear(
+    userId: string,
+    strategyKey: string | undefined,
+    meta: BotMeta,
+  ): Promise<BotBacktestClearResponse> {
+    const where = and(
+      eq(botBacktestRuns.userId, userId),
+      strategyKey ? eq(botBacktestRuns.strategyKey, strategyKey) : undefined,
+    );
+
+    const deleted = await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(botBacktestRuns)
+        .where(where)
+        .returning({ id: botBacktestRuns.id });
+      await this.audit.log(
+        {
+          userId,
+          action: 'bot.backtest_deleted',
+          entityType: 'bot_backtest',
+          entityId: null,
+          after: { deleted: rows.length, strategyKey: strategyKey ?? null },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+      return rows.length;
+    });
+
+    return { deleted };
   }
 }
 
@@ -211,6 +293,9 @@ function toSummary(row: RunRow): BotBacktestRunSummary {
     },
     days: row.run.days,
     source: row.run.source,
+    useStopLoss: row.run.useStopLoss,
+    useTakeProfit: row.run.useTakeProfit,
+    reinvestProfit: row.run.reinvestProfit,
     stats: statsFromRow(row.run),
     createdAt: row.run.createdAt.toISOString(),
   };

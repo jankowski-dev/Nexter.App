@@ -4,6 +4,7 @@ import {
   assetsResponseSchema,
   auditLogResponseSchema,
   authMeResponseSchema,
+  botBacktestClearResponseSchema,
   botBacktestPreviewResponseSchema,
   botBacktestRunSchema,
   botBacktestsResponseSchema,
@@ -73,6 +74,7 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
+  type BotBacktestClearResponse,
   type BotBacktestListQuery,
   type BotBacktestPreviewRequest,
   type BotBacktestPreviewResponse,
@@ -1034,6 +1036,17 @@ export async function fetchBotBacktest(id: string): Promise<BotBacktestRun> {
 
 export function botBacktestReportUrl(id: string): string {
   return `/api/v1/trading-bots/backtests/${id}/report.pdf`;
+}
+
+export async function deleteBotBacktest(id: string): Promise<BotBacktestClearResponse> {
+  return apiDelete(`/api/v1/trading-bots/backtests/${id}`, botBacktestClearResponseSchema);
+}
+
+export async function clearBotBacktests(strategyKey?: string): Promise<BotBacktestClearResponse> {
+  return apiDelete(
+    `/api/v1/trading-bots/backtests${queryString({ strategyKey })}`,
+    botBacktestClearResponseSchema,
+  );
 }
 
 export async function fetchNotifications(limit = 100): Promise<NotificationsResponse> {
