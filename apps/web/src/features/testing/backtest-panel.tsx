@@ -174,8 +174,8 @@ export function BacktestPanel({
         candles: data.candles,
       });
       setRun(data);
-      setVisibleTrades(data.trades.length);
-      setAnimating(false);
+      setVisibleTrades(0);
+      setAnimating(data.trades.length > 0);
     } catch (err) {
       setError(toRussianError(err, 'Не удалось загрузить прогон'));
     } finally {
