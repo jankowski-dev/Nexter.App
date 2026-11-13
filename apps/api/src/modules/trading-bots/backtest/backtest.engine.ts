@@ -161,6 +161,46 @@ export function runBacktest(
     });
 
     const openPosition = position as OpenPosition | null;
+    if (openPosition) {
+      const avgCost = openPosition.costBasisUsd.div(openPosition.amount);
+      const open = decimal(candle.openUsd);
+      const high = decimal(candle.highUsd);
+      const low = decimal(candle.lowUsd);
+      const stopLossPct = positiveNumber(params.stopLossPct);
+      const takeProfitPct = positiveNumber(params.takeProfitPct);
+
+      let exitPrice: Decimal | null = null;
+      let exitReason = '';
+
+      if (stopLossPct !== null) {
+        const stopPrice = avgCost.mul(new Decimal(1).minus(stopLossPct / 100));
+        if (open.lte(stopPrice)) {
+          exitPrice = open;
+          exitReason = 'стоп-лосс (гэп)';
+        } else if (low.lte(stopPrice)) {
+          exitPrice = stopPrice;
+          exitReason = 'стоп-лосс (внутри дня)';
+        }
+      }
+
+      if (exitPrice === null && takeProfitPct !== null) {
+        const takeProfitPrice = avgCost.mul(new Decimal(1).plus(takeProfitPct / 100));
+        if (open.gte(takeProfitPrice)) {
+          exitPrice = open;
+          exitReason = 'тейк-профит (гэп)';
+        } else if (high.gte(takeProfitPrice)) {
+          exitPrice = takeProfitPrice;
+          exitReason = 'тейк-профит (внутри дня)';
+        }
+      }
+
+      if (exitPrice !== null) {
+        executeSell(candle.date, exitPrice, exitReason);
+        pushEquity(candle.date, close);
+        continue;
+      }
+    }
+
     const decision = definition.evaluate({
       now: new Date(`${candle.date}T23:59:59.999Z`),
       params,
@@ -231,4 +271,8 @@ export function runBacktest(
     trades,
     equityCurve,
   };
+}
+
+function positiveNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }

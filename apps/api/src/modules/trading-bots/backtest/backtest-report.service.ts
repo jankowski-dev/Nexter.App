@@ -19,6 +19,7 @@ export class BacktestReportService {
     const stats = run.stats;
     const created = new Date(run.createdAt);
     const createdLabel = created.toLocaleString('ru-RU', { timeZone: 'UTC' });
+    const missingDays = countMissingDays(run.candles);
 
     const definition: TDocumentDefinitions = {
       pageSize: 'A4',
@@ -80,10 +81,20 @@ export class BacktestReportService {
         paramsTable(run),
         sectionTitle('Гайд по стратегии'),
         { text: strategyGuide, color: '#52525b', margin: [0, 0, 0, 14] },
+        ...(missingDays > 0
+          ? [
+              {
+                text: `В данных ${missingDays} пропущенных дн. Для низколиквидных токенов источник может отдавать неполный ряд: стоп/тейк могут сработать с задержкой, а гэп — исполниться по цене открытия.`,
+                color: '#b45309',
+                fontSize: 8,
+                margin: [0, 0, 0, 12] as [number, number, number, number],
+              },
+            ]
+          : []),
         sectionTitle(`Сделки (${run.trades.length})`),
         tradesTable(run),
         {
-          text: 'Бэктест исполняется по цене закрытия дневной свечи с комиссией 25 bps и проскальзыванием 10 bps. Открытая позиция принудительно закрывается в последний день периода. Прошлые результаты не гарантируют будущую доходность.',
+          text: 'Вход и выход по стратегии исполняются по цене закрытия дневной свечи; стоп-лосс и тейк-профит проверяются внутри дня по high/low и исполняются по порогу, а при гэпе — по цене открытия. Комиссия 25 bps и проскальзывание 10 bps. Открытая позиция принудительно закрывается в последний день периода. Прошлые результаты не гарантируют будущую доходность.',
           fontSize: 7.5,
           color: '#71717a',
           margin: [0, 12, 0, 0],
@@ -282,4 +293,17 @@ function formatPrice(value: string): string {
 function formatAmount(value: string): string {
   const parsed = decimal(value);
   return parsed.gte(1) ? parsed.toFixed(4) : parsed.toFixed(8);
+}
+
+function countMissingDays(candles: Array<{ date: string }>): number {
+  const dayMs = 86_400_000;
+  let missing = 0;
+  for (let index = 1; index < candles.length; index += 1) {
+    const previous = Date.parse(`${candles[index - 1]?.date}T00:00:00.000Z`);
+    const current = Date.parse(`${candles[index]?.date}T00:00:00.000Z`);
+    if (!Number.isFinite(previous) || !Number.isFinite(current)) continue;
+    const gap = Math.round((current - previous) / dayMs) - 1;
+    if (gap > 0) missing += gap;
+  }
+  return missing;
 }
