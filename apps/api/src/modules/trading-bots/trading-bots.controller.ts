@@ -16,10 +16,8 @@ import type {
   BotDetailResponse,
   BotEquityResponse,
   BotEventsResponse,
+  BotSignalsResponse,
   BotStrategiesResponse,
-  BotStrategy,
-  BotStrategyCreateRequest,
-  BotStrategyUpdateRequest,
   BotTradesResponse,
   BotUpdateRequest,
   TradingBotsResponse,
@@ -28,8 +26,6 @@ import {
   botCreateRequestSchema,
   botHistoryQuerySchema,
   botListQuerySchema,
-  botStrategyCreateRequestSchema,
-  botStrategyUpdateRequestSchema,
   botUpdateRequestSchema,
 } from '@nexter/contracts';
 import type { FastifyRequest } from 'fastify';
@@ -48,27 +44,8 @@ export class TradingBotsController {
   constructor(private readonly bots: TradingBotsService) {}
 
   @Get('strategies')
-  strategies(@CurrentAuth() auth: AuthContext): Promise<BotStrategiesResponse> {
-    return this.bots.listStrategies(auth.user.id);
-  }
-
-  @Post('strategies')
-  createStrategy(
-    @CurrentAuth() auth: AuthContext,
-    @Body(new ZodValidationPipe(botStrategyCreateRequestSchema)) body: BotStrategyCreateRequest,
-    @Req() request: FastifyRequest,
-  ): Promise<BotStrategy> {
-    return this.bots.createStrategy(auth.user.id, body, meta(request));
-  }
-
-  @Patch('strategies/:id')
-  updateStrategy(
-    @CurrentAuth() auth: AuthContext,
-    @Param('id', new ParseUUIDPipe()) id: string,
-    @Body(new ZodValidationPipe(botStrategyUpdateRequestSchema)) body: BotStrategyUpdateRequest,
-    @Req() request: FastifyRequest,
-  ): Promise<BotStrategy> {
-    return this.bots.updateStrategy(auth.user.id, id, body, meta(request));
+  strategies(): Promise<BotStrategiesResponse> {
+    return this.bots.listStrategies();
   }
 
   @Get('bots')
@@ -176,5 +153,13 @@ export class TradingBotsController {
     @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number },
   ): Promise<BotEquityResponse> {
     return this.bots.equity(auth.user.id, id, query.limit);
+  }
+
+  @Get('bots/:id/signals')
+  signals(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<BotSignalsResponse> {
+    return this.bots.signals(auth.user.id, id);
   }
 }

@@ -26,13 +26,27 @@ export interface StrategyDecision {
   reason: string;
 }
 
+export interface StrategyParamField {
+  key: string;
+  label: string;
+  hint?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  integer?: boolean;
+}
+
 export interface StrategyDefinition {
   key: string;
   version: number;
   name: string;
   description: string;
+  guide: string;
   icon: string;
+  kind: 'system' | 'custom';
   defaultParams: Record<string, unknown>;
+  paramFields: StrategyParamField[];
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;
   evaluate: (ctx: StrategyContext) => StrategyDecision;
 }

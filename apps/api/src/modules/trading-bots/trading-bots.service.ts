@@ -12,7 +12,7 @@ import {
   botEquitySnapshots,
   botEvents,
   botPositions,
-  botStrategies,
+  botSignals,
   botTokens,
   botTrades,
   chains,
@@ -20,7 +20,6 @@ import {
   watchlist,
   type BotEquitySnapshotRecord,
   type BotEventRecord,
-  type BotStrategyRecord,
   type BotTradeRecord,
   type Database,
   type TradingBotRecord,
@@ -33,10 +32,9 @@ import type {
   BotEvent,
   BotEventsResponse,
   BotPosition,
-  BotStrategy,
-  BotStrategyCreateRequest,
+  BotSignal,
+  BotSignalsResponse,
   BotStrategyTemplate,
-  BotStrategyUpdateRequest,
   BotStrategiesResponse,
   BotSummary,
   BotToken,
@@ -55,21 +53,6 @@ import { strategyByKey, strategyTemplates } from './strategies';
 interface BotMeta {
   ip?: string;
   userAgent?: string;
-}
-
-function toStrategy(row: BotStrategyRecord): BotStrategy {
-  return {
-    id: row.id,
-    key: row.key as BotStrategy['key'],
-    name: row.name,
-    description: row.description,
-    icon: strategyByKey.get(row.key)?.icon ?? 'beaker',
-    version: row.version,
-    params: row.params,
-    archivedAt: row.archivedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
 }
 
 function toEvent(row: BotEventRecord): BotEvent {
@@ -186,167 +169,8 @@ export class TradingBotsService {
     return strategyTemplates() as BotStrategyTemplate[];
   }
 
-  async listStrategies(userId: string): Promise<BotStrategiesResponse> {
-    const rows = await this.db
-      .select()
-      .from(botStrategies)
-      .where(and(eq(botStrategies.userId, userId), isNull(botStrategies.archivedAt)))
-      .orderBy(desc(botStrategies.updatedAt));
-
-    return { templates: this.templates(), data: rows.map(toStrategy) };
-  }
-
-  async createStrategy(
-    userId: string,
-    input: BotStrategyCreateRequest,
-    meta: BotMeta,
-  ): Promise<BotStrategy> {
-    const definition = strategyByKey.get(input.key);
-    if (!definition) {
-      throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown strategy' });
-    }
-
-    const params = parseStrategyParams(definition, input.params ?? definition.defaultParams);
-    let created: BotStrategyRecord | undefined;
-
-    try {
-      created = await this.db.transaction(async (tx) => {
-        const [row] = await tx
-          .insert(botStrategies)
-          .values({
-            userId,
-            key: definition.key,
-            name: input.name,
-            description: input.description ?? '',
-            version: definition.version,
-            params,
-          })
-          .returning();
-
-        if (!row) throw new Error('Failed to create strategy');
-
-        await this.audit.log(
-          {
-            userId,
-            action: 'bot.strategy_created',
-            entityType: 'bot_strategy',
-            entityId: row.id,
-            after: { key: row.key, name: row.name },
-            ip: meta.ip,
-            userAgent: meta.userAgent,
-          },
-          { executor: tx, strict: true },
-        );
-
-        return row;
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw new ConflictException({
-          code: 'CONFLICT',
-          message: 'A strategy with this name already exists',
-        });
-      }
-      throw error;
-    }
-
-    if (!created) throw new Error('Failed to create strategy');
-
-    return toStrategy(created);
-  }
-
-  async updateStrategy(
-    userId: string,
-    id: string,
-    input: BotStrategyUpdateRequest,
-    meta: BotMeta,
-  ): Promise<BotStrategy> {
-    const [existing] = await this.db
-      .select()
-      .from(botStrategies)
-      .where(and(eq(botStrategies.id, id), eq(botStrategies.userId, userId)))
-      .limit(1);
-
-    if (!existing) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Strategy not found' });
-    }
-
-    if (input.archived === true) {
-      const [running] = await this.db
-        .select({ id: tradingBots.id })
-        .from(tradingBots)
-        .where(
-          and(
-            eq(tradingBots.userId, userId),
-            eq(tradingBots.strategyId, id),
-            eq(tradingBots.status, 'running'),
-          ),
-        )
-        .limit(1);
-      if (running) {
-        throw new ConflictException({
-          code: 'CONFLICT',
-          message: 'Stop running bots before archiving their strategy',
-        });
-      }
-    }
-
-    const definition = strategyByKey.get(existing.key);
-    if (!definition) {
-      throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown strategy' });
-    }
-
-    let updated: BotStrategyRecord | undefined;
-
-    try {
-      updated = await this.db.transaction(async (tx) => {
-        const [row] = await tx
-          .update(botStrategies)
-          .set({
-            ...(input.name !== undefined ? { name: input.name } : {}),
-            ...(input.description !== undefined ? { description: input.description } : {}),
-            ...(input.params !== undefined
-              ? { params: parseStrategyParams(definition, input.params) }
-              : {}),
-            ...(input.archived !== undefined
-              ? { archivedAt: input.archived ? new Date() : null }
-              : {}),
-            updatedAt: new Date(),
-          })
-          .where(eq(botStrategies.id, id))
-          .returning();
-
-        if (!row) throw new Error('Failed to update strategy');
-
-        await this.audit.log(
-          {
-            userId,
-            action: 'bot.strategy_updated',
-            entityType: 'bot_strategy',
-            entityId: id,
-            before: { name: existing.name, params: existing.params },
-            after: { name: row.name, params: row.params },
-            ip: meta.ip,
-            userAgent: meta.userAgent,
-          },
-          { executor: tx, strict: true },
-        );
-
-        return row;
-      });
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw new ConflictException({
-          code: 'CONFLICT',
-          message: 'A strategy with this name already exists',
-        });
-      }
-      throw error;
-    }
-
-    if (!updated) throw new Error('Failed to update strategy');
-
-    return toStrategy(updated);
+  async listStrategies(): Promise<BotStrategiesResponse> {
+    return { data: this.templates() };
   }
 
   async listBots(userId: string, includeArchived = false): Promise<TradingBotsResponse> {
@@ -355,36 +179,29 @@ export class TradingBotsService {
       : and(eq(tradingBots.userId, userId), isNull(tradingBots.archivedAt));
 
     const rows = await this.db
-      .select({ bot: tradingBots, strategy: botStrategies })
+      .select()
       .from(tradingBots)
-      .innerJoin(botStrategies, eq(tradingBots.strategyId, botStrategies.id))
       .where(where)
       .orderBy(desc(tradingBots.createdAt));
 
-    const data = await Promise.all(rows.map((row) => this.toSummary(row.bot, row.strategy)));
+    const data = await Promise.all(rows.map((row) => this.toSummary(row)));
 
     return { data };
   }
 
   async getBot(userId: string, id: string): Promise<BotDetailResponse> {
-    const [row] = await this.db
-      .select({ bot: tradingBots, strategy: botStrategies })
-      .from(tradingBots)
-      .innerJoin(botStrategies, eq(tradingBots.strategyId, botStrategies.id))
-      .where(and(eq(tradingBots.id, id), eq(tradingBots.userId, userId)))
-      .limit(1);
-
-    if (!row) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Bot not found' });
+    const bot = await this.requireBot(userId, id);
 
     const [tokens, positions, summary] = await Promise.all([
       this.loadTokens(id),
       this.loadPositions(id),
-      this.toSummary(row.bot, row.strategy),
+      this.toSummary(bot),
     ]);
 
     return {
       bot: summary,
-      strategy: toStrategy(row.strategy),
+      strategy: this.template(bot.strategyKey),
+      strategyParams: bot.strategyParams,
       tokens,
       positions,
     };
@@ -395,7 +212,11 @@ export class TradingBotsService {
     input: BotCreateRequest,
     meta: BotMeta,
   ): Promise<BotDetailResponse> {
-    const strategy = await this.requireStrategy(userId, input.strategyId);
+    const definition = this.requireDefinition(input.strategyKey);
+    const strategyParams = parseStrategyParams(
+      definition,
+      input.strategyParams ?? definition.defaultParams,
+    );
     const tokenAssetIds = uniqueAssetIds(input.tokenAssetIds);
     await this.assertTokens(userId, tokenAssetIds);
     this.assertBudget(input.budgetUsd);
@@ -409,7 +230,8 @@ export class TradingBotsService {
           .insert(tradingBots)
           .values({
             userId,
-            strategyId: strategy.id,
+            strategyKey: definition.key,
+            strategyParams,
             name: input.name,
             description: input.description ?? '',
             status: 'draft',
@@ -439,7 +261,7 @@ export class TradingBotsService {
           botId: created.id,
           type: 'created',
           message: 'Бот создан',
-          payload: { strategyId: strategy.id },
+          payload: { strategyKey: definition.key },
         });
 
         await this.audit.log(
@@ -450,7 +272,8 @@ export class TradingBotsService {
             entityId: created.id,
             after: {
               name: input.name,
-              strategyId: strategy.id,
+              strategyKey: definition.key,
+              strategyParams,
               budgetUsd: cash,
               tokenAssetIds,
             },
@@ -489,8 +312,18 @@ export class TradingBotsService {
       });
     }
 
-    if (input.strategyId !== undefined) {
-      await this.requireStrategy(userId, input.strategyId);
+    let nextStrategyKey: string | undefined;
+    let nextStrategyParams: Record<string, unknown> | undefined;
+    if (input.strategyKey !== undefined) {
+      const definition = this.requireDefinition(input.strategyKey);
+      nextStrategyKey = definition.key;
+      nextStrategyParams = parseStrategyParams(
+        definition,
+        input.strategyParams ?? definition.defaultParams,
+      );
+    } else if (input.strategyParams !== undefined) {
+      const definition = this.requireDefinition(bot.strategyKey);
+      nextStrategyParams = parseStrategyParams(definition, input.strategyParams);
     }
     const tokenAssetIds =
       input.tokenAssetIds !== undefined ? uniqueAssetIds(input.tokenAssetIds) : undefined;
@@ -520,7 +353,8 @@ export class TradingBotsService {
           .set({
             ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.description !== undefined ? { description: input.description } : {}),
-            ...(input.strategyId !== undefined ? { strategyId: input.strategyId } : {}),
+            ...(nextStrategyKey !== undefined ? { strategyKey: nextStrategyKey } : {}),
+            ...(nextStrategyParams !== undefined ? { strategyParams: nextStrategyParams } : {}),
             ...(input.maxPositions !== undefined ? { maxPositions: input.maxPositions } : {}),
             ...(input.positionSizePct !== undefined
               ? { positionSizePct: pctString(input.positionSizePct) }
@@ -587,23 +421,14 @@ export class TradingBotsService {
       throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Bot has no budget' });
     }
 
-    const [strategy] = await this.db
-      .select()
-      .from(botStrategies)
-      .where(and(eq(botStrategies.id, bot.strategyId), eq(botStrategies.userId, userId)))
-      .limit(1);
-    if (!strategy || strategy.archivedAt) {
-      throw new ConflictException({
-        code: 'CONFLICT',
-        message: 'Bot strategy is archived or missing',
-      });
-    }
-    if (!strategyByKey.has(strategy.key)) {
+    const definition = strategyByKey.get(bot.strategyKey);
+    if (!definition) {
       throw new ConflictException({
         code: 'CONFLICT',
         message: 'Bot strategy is not available in this deployment',
       });
     }
+    parseStrategyParams(definition, bot.strategyParams);
 
     await this.db.transaction(async (tx) => {
       await tx
@@ -791,7 +616,7 @@ export class TradingBotsService {
           slippageUsd: usdString(slippage),
           realizedPnlUsd: usdString(realized),
           reason: 'принудительное закрытие',
-          signal: { strategy: bot.strategyId, price: quote.priceUsd, forced: true },
+          signal: { strategy: bot.strategyKey, price: quote.priceUsd, forced: true },
           executedAt: now,
         });
         await tx.insert(botEvents).values({
@@ -953,7 +778,35 @@ export class TradingBotsService {
     return { data: rows.reverse().map(toEquityPoint) };
   }
 
-  private async toSummary(bot: TradingBotRecord, strategy: BotStrategyRecord): Promise<BotSummary> {
+  async signals(userId: string, id: string): Promise<BotSignalsResponse> {
+    await this.requireBot(userId, id);
+    const [tokens, rows] = await Promise.all([
+      this.loadTokens(id),
+      this.db.select().from(botSignals).where(eq(botSignals.botId, id)),
+    ]);
+    const byAsset = new Map(rows.map((row) => [row.assetId, row]));
+
+    return {
+      data: tokens.map((token) => {
+        const signal = byAsset.get(token.assetId);
+        return {
+          assetId: token.assetId,
+          symbol: token.symbol,
+          name: token.name,
+          chainCode: token.chainCode,
+          logoUrl: token.logoUrl,
+          priceUsd: signal?.priceUsd ?? null,
+          change24hPct: signal?.change24hPct ?? null,
+          action: (signal?.action ?? 'hold') as BotSignal['action'],
+          reason: signal?.reason ?? 'Ожидает первого тика',
+          hasPosition: signal?.hasPosition ?? false,
+          updatedAt: signal?.updatedAt.toISOString() ?? null,
+        };
+      }),
+    };
+  }
+
+  private async toSummary(bot: TradingBotRecord): Promise<BotSummary> {
     const [positions, tradeStats] = await Promise.all([
       this.loadPositions(bot.id),
       this.loadTradeStats(bot.id),
@@ -980,10 +833,10 @@ export class TradingBotsService {
       description: bot.description,
       status: bot.status as BotSummary['status'],
       strategy: {
-        id: strategy.id,
-        key: strategy.key as BotSummary['strategy']['key'],
-        name: strategy.name,
-        icon: strategyByKey.get(strategy.key)?.icon ?? 'beaker',
+        key: bot.strategyKey as BotSummary['strategy']['key'],
+        name: strategyByKey.get(bot.strategyKey)?.name ?? bot.strategyKey,
+        icon: strategyByKey.get(bot.strategyKey)?.icon ?? 'beaker',
+        kind: strategyByKey.get(bot.strategyKey)?.kind ?? 'system',
       },
       budgetUsd: bot.budgetUsd,
       cashUsd: bot.cashUsd,
@@ -1108,28 +961,27 @@ export class TradingBotsService {
     return bot;
   }
 
-  private async requireStrategy(userId: string, id: string): Promise<BotStrategyRecord> {
-    const [strategy] = await this.db
-      .select()
-      .from(botStrategies)
-      .where(
-        and(
-          eq(botStrategies.id, id),
-          eq(botStrategies.userId, userId),
-          isNull(botStrategies.archivedAt),
-        ),
-      )
-      .limit(1);
-    if (!strategy) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Strategy not found' });
-    }
-    if (!strategyByKey.has(strategy.key)) {
+  private requireDefinition(key: string) {
+    const definition = strategyByKey.get(key);
+    if (!definition) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: 'Strategy is not available in this deployment',
+        message: 'Unknown strategy',
       });
     }
-    return strategy;
+    return definition;
+  }
+
+  private template(key: string): BotStrategyTemplate {
+    const definition = strategyByKey.get(key);
+    const template = strategyTemplates().find((item) => item.key === key);
+    if (!definition || !template) {
+      throw new ConflictException({
+        code: 'CONFLICT',
+        message: 'Bot strategy is not available in this deployment',
+      });
+    }
+    return template as BotStrategyTemplate;
   }
 
   private async assertTokens(

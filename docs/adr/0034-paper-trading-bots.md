@@ -4,6 +4,8 @@
 
 Accepted for UI-24 on 2026-11-12. Migration `0032` is additive and not yet applied to production at the time of the decision. Production rollout requires a verified backup and restore check.
 
+> Superseded in part by [ADR 0036](0036-strategy-simplification.md): strategy instances and `bot_strategies` are removed in UI-37; bots store `strategyKey`/`strategyParams` directly.
+
 ## Context
 
 The owner wants to test trading strategies without the speed and risk limits of manual execution. The long-term goal is automated non-custodial DEX trading from the same interface. The first version must be safe, auditable, and useful without exposing private keys or real funds.

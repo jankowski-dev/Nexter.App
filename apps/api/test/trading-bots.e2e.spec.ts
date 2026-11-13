@@ -101,16 +101,13 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .send({ assetId: asset.id })
       .expect(201);
 
-    const strategy = await agent
-      .post('/api/v1/trading-bots/strategies')
-      .set('x-csrf-token', owner.csrf)
-      .send({
-        key: 'momentum_breakout',
-        name: 'Momentum test',
-        description: 'E2E strategy instance',
-      })
-      .expect(201);
-    expect(strategy.body.params).toMatchObject({ fastPeriod: 5, slowPeriod: 20 });
+    const strategies = await agent.get('/api/v1/trading-bots/strategies').expect(200);
+    const momentum = strategies.body.data.find(
+      (item: { key: string }) => item.key === 'momentum_breakout',
+    );
+    expect(momentum).toMatchObject({ kind: 'system' });
+    expect(momentum.defaultParams).toMatchObject({ fastPeriod: 5, slowPeriod: 20 });
+    expect(Array.isArray(momentum.paramFields)).toBe(true);
 
     const created = await agent
       .post('/api/v1/trading-bots/bots')
@@ -118,7 +115,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .send({
         name: 'Momentum paper bot',
         description: 'E2E paper bot',
-        strategyId: strategy.body.id,
+        strategyKey: 'momentum_breakout',
         tokenAssetIds: [asset.id],
         budgetUsd: '1000',
         maxPositions: 5,
@@ -138,7 +135,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .send({
         name: 'Invalid budget bot',
-        strategyId: strategy.body.id,
+        strategyKey: 'momentum_breakout',
         tokenAssetIds: [asset.id],
         budgetUsd: '150',
       })
@@ -172,13 +169,6 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(201);
 
-    const archiveConflict = await agent
-      .patch(`/api/v1/trading-bots/strategies/${strategy.body.id}`)
-      .set('x-csrf-token', owner.csrf)
-      .send({ archived: true })
-      .expect(409);
-    expect(archiveConflict.body.error.message).toContain('Stop running bots');
-
     const runner = app.get(BotRunnerService);
     await runner.runOnce();
 
@@ -188,12 +178,26 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(detail.body.bot.stats.cashUsd).not.toBe('1000.00000000');
     expect(detail.body.bot.stats.totalPnlUsd).not.toBe('0.00000000');
 
+    expect(detail.body.strategy).toMatchObject({ key: 'momentum_breakout', kind: 'system' });
+    expect(detail.body.strategyParams).toMatchObject({ fastPeriod: 5, slowPeriod: 20 });
+
     const tradesAfterBuy = await agent.get(`/api/v1/trading-bots/bots/${botId}/trades`).expect(200);
     expect(tradesAfterBuy.body.data).toHaveLength(1);
     expect(tradesAfterBuy.body.data[0]).toMatchObject({
       side: 'buy',
       asset: { id: asset.id },
     });
+
+    const signalsAfterBuy = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/signals`)
+      .expect(200);
+    expect(signalsAfterBuy.body.data).toHaveLength(1);
+    expect(signalsAfterBuy.body.data[0]).toMatchObject({
+      assetId: asset.id,
+      action: 'buy',
+      hasPosition: true,
+    });
+    expect(signalsAfterBuy.body.data[0].reason.length).toBeGreaterThan(0);
 
     await db
       .update(marketQuotes)
@@ -258,7 +262,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .send({
         name: 'Close positions bot',
         description: 'E2E forced close',
-        strategyId: strategy.body.id,
+        strategyKey: 'momentum_breakout',
         tokenAssetIds: [asset.id],
         budgetUsd: '1000',
         maxPositions: 5,
@@ -326,11 +330,22 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(reset.body.positions).toHaveLength(0);
     expect(reset.body.bot.stats.equityUsd).toBe('1000.00000000');
 
-    await agent
-      .patch(`/api/v1/trading-bots/strategies/${strategy.body.id}`)
+    const updated = await agent
+      .patch(`/api/v1/trading-bots/bots/${botId}`)
       .set('x-csrf-token', owner.csrf)
-      .send({ archived: true })
+      .send({
+        strategyKey: 'mean_reversion',
+        strategyParams: {
+          lookback: 30,
+          entryDropPct: 2,
+          exitAbovePct: 0.5,
+          takeProfitPct: 5,
+          stopLossPct: 5,
+        },
+      })
       .expect(200);
+    expect(updated.body.bot.strategy.key).toBe('mean_reversion');
+    expect(updated.body.strategyParams).toMatchObject({ lookback: 30, entryDropPct: 2 });
 
     await agent
       .delete(`/api/v1/trading-bots/bots/${botId}`)

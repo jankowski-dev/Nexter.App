@@ -68,22 +68,22 @@ SPA и API живут на одном origin в production. Cookie-сессия 
 
 ## 4. Основные подсистемы
 
-| Подсистема          | Назначение                                             | Ключевые таблицы                                                                                                                         |
-| ------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Auth                | Вход, TOTP, сессии, CSRF, rate limit                   | `users`, `sessions`, `rate_limits`                                                                                                       |
-| Accounting          | Счета, транзакции, проводки, FIFO-лоты, сделки         | `accounts`, `transactions`, `postings`, `lots`, `lot_consumptions`, `trade_groups`, `trade_details`                                      |
-| Portfolio/Dashboard | Позиции, оценка, P&L, снапшоты, графики                | `assets`, `market_quotes`, `portfolio_snapshots`                                                                                         |
-| Market data         | DexScreener/CoinGecko, кэш иконок, refresh             | `market_quotes`, `assets`                                                                                                                |
-| Watchlist           | База токенов, группы, контракты, метаданные            | `watchlist`, `watchlist_groups`, `assets`                                                                                                |
-| Swap                | KyberSwap quote/build/simulate, WalletConnect, трекинг | `swap_orders`, `swap_order_close_groups`, `swap_events`, `token_approvals`                                                               |
-| Imports             | Notion legacy import, staging, preview/commit/rollback | `imports`, `import_rows`                                                                                                                 |
-| Reports             | Периоды, realized P&L, статистика, CSV                 | вычисляется из accounting                                                                                                                |
-| Finance             | BYN-модуль: счета, категории, операции, переводы       | `finance_accounts`, `finance_categories`, `finance_transactions`, `finance_transfers`                                                    |
-| Tasks/Notes/Habits  | Личные задачи, журнал, привычки                        | `tasks`, `task_images`, `notes`, `note_images`, `habits`                                                                                 |
-| Vault               | E2E-шифрование паролей в браузере                      | `vault_configs`, `vault_items`                                                                                                           |
-| Reconciliation      | Read-only сверка с on-chain                            | `watched_addresses`, `indexed_transfers`, `reconciliation_runs/items`                                                                    |
-| Audit               | Журнал всех мутаций                                    | `audit_log`                                                                                                                              |
-| Trading bots        | Бумажная торговля стратегиями                          | `bot_strategies`, `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples` |
+| Подсистема          | Назначение                                             | Ключевые таблицы                                                                                                                      |
+| ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Auth                | Вход, TOTP, сессии, CSRF, rate limit                   | `users`, `sessions`, `rate_limits`                                                                                                    |
+| Accounting          | Счета, транзакции, проводки, FIFO-лоты, сделки         | `accounts`, `transactions`, `postings`, `lots`, `lot_consumptions`, `trade_groups`, `trade_details`                                   |
+| Portfolio/Dashboard | Позиции, оценка, P&L, снапшоты, графики                | `assets`, `market_quotes`, `portfolio_snapshots`                                                                                      |
+| Market data         | DexScreener/CoinGecko, кэш иконок, refresh             | `market_quotes`, `assets`                                                                                                             |
+| Watchlist           | База токенов, группы, контракты, метаданные            | `watchlist`, `watchlist_groups`, `assets`                                                                                             |
+| Swap                | KyberSwap quote/build/simulate, WalletConnect, трекинг | `swap_orders`, `swap_order_close_groups`, `swap_events`, `token_approvals`                                                            |
+| Imports             | Notion legacy import, staging, preview/commit/rollback | `imports`, `import_rows`                                                                                                              |
+| Reports             | Периоды, realized P&L, статистика, CSV                 | вычисляется из accounting                                                                                                             |
+| Finance             | BYN-модуль: счета, категории, операции, переводы       | `finance_accounts`, `finance_categories`, `finance_transactions`, `finance_transfers`                                                 |
+| Tasks/Notes/Habits  | Личные задачи, журнал, привычки                        | `tasks`, `task_images`, `notes`, `note_images`, `habits`                                                                              |
+| Vault               | E2E-шифрование паролей в браузере                      | `vault_configs`, `vault_items`                                                                                                        |
+| Reconciliation      | Read-only сверка с on-chain                            | `watched_addresses`, `indexed_transfers`, `reconciliation_runs/items`                                                                 |
+| Audit               | Журнал всех мутаций                                    | `audit_log`                                                                                                                           |
+| Trading bots        | Бумажная торговля встроенными стратегиями              | `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, `bot_signals` |
 
 ## 5. Ключевые принципы
 

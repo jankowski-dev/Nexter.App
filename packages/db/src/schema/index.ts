@@ -1130,30 +1130,6 @@ export const notifications = pgTable(
   ],
 );
 
-export const botStrategies = pgTable(
-  'bot_strategies',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    key: text('key').notNull(),
-    name: text('name').notNull(),
-    description: text('description').notNull().default(''),
-    version: integer('version').notNull().default(1),
-    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
-    archivedAt: timestamp('archived_at', { withTimezone: true }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex('bot_strategies_user_name_unique')
-      .on(table.userId, table.name)
-      .where(sql`${table.archivedAt} is null`),
-    index('bot_strategies_user_idx').on(table.userId),
-  ],
-);
-
 export const tradingBots = pgTable(
   'trading_bots',
   {
@@ -1161,9 +1137,8 @@ export const tradingBots = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    strategyId: uuid('strategy_id')
-      .notNull()
-      .references(() => botStrategies.id, { onDelete: 'restrict' }),
+    strategyKey: text('strategy_key').notNull(),
+    strategyParams: jsonb('strategy_params').$type<Record<string, unknown>>().notNull().default({}),
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     status: text('status').notNull().default('draft'),
@@ -1301,6 +1276,29 @@ export const botEvents = pgTable(
   ],
 );
 
+export const botSignals = pgTable(
+  'bot_signals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    botId: uuid('bot_id')
+      .notNull()
+      .references(() => tradingBots.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    priceUsd: numeric('price_usd', { precision: 36, scale: 18 }),
+    change24hPct: numeric('change_24h_pct', { precision: 12, scale: 4 }),
+    action: text('action').notNull().default('hold'),
+    reason: text('reason').notNull().default(''),
+    hasPosition: boolean('has_position').notNull().default(false),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('bot_signals_bot_asset_unique').on(table.botId, table.assetId),
+    index('bot_signals_bot_idx').on(table.botId),
+  ],
+);
+
 export const botQuoteSamples = pgTable(
   'bot_quote_samples',
   {
@@ -1336,13 +1334,13 @@ export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
 export type NotificationRecord = typeof notifications.$inferSelect;
-export type BotStrategyRecord = typeof botStrategies.$inferSelect;
 export type TradingBotRecord = typeof tradingBots.$inferSelect;
 export type BotTokenRecord = typeof botTokens.$inferSelect;
 export type BotPositionRecord = typeof botPositions.$inferSelect;
 export type BotTradeRecord = typeof botTrades.$inferSelect;
 export type BotEquitySnapshotRecord = typeof botEquitySnapshots.$inferSelect;
 export type BotEventRecord = typeof botEvents.$inferSelect;
+export type BotSignalRecord = typeof botSignals.$inferSelect;
 export type BotQuoteSampleRecord = typeof botQuoteSamples.$inferSelect;
 export type TokenApproval = typeof tokenApprovals.$inferSelect;
 export type VaultConfig = typeof vaultConfigs.$inferSelect;

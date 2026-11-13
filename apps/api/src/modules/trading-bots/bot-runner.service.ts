@@ -12,11 +12,10 @@ import {
   botEvents,
   botPositions,
   botQuoteSamples,
-  botStrategies,
+  botSignals,
   botTokens,
   botTrades,
   tradingBots,
-  type BotStrategyRecord,
   type Database,
   type TradingBotRecord,
 } from '@nexter/db';
@@ -90,25 +89,18 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       if (!locked) return;
 
       const bots = await this.db
-        .select({ bot: tradingBots, strategy: botStrategies })
+        .select()
         .from(tradingBots)
-        .innerJoin(botStrategies, eq(tradingBots.strategyId, botStrategies.id))
-        .where(
-          and(
-            eq(tradingBots.status, 'running'),
-            isNull(tradingBots.archivedAt),
-            isNull(botStrategies.archivedAt),
-          ),
-        );
+        .where(and(eq(tradingBots.status, 'running'), isNull(tradingBots.archivedAt)));
 
-      for (const row of bots) {
+      for (const bot of bots) {
         try {
-          await this.processBot(row.bot, row.strategy);
+          await this.processBot(bot);
         } catch (error) {
           this.logger.warn(
-            `Bot ${row.bot.id} tick failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+            `Bot ${bot.id} tick failed: ${error instanceof Error ? error.message : 'unknown error'}`,
           );
-          await this.recordError(row.bot.id, error);
+          await this.recordError(bot.id, error);
         }
       }
 
@@ -130,12 +122,12 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     }
   }
 
-  private async processBot(bot: TradingBotRecord, strategyRow: BotStrategyRecord): Promise<void> {
-    const definition = strategyByKey.get(strategyRow.key);
+  private async processBot(bot: TradingBotRecord): Promise<void> {
+    const definition = strategyByKey.get(bot.strategyKey);
     if (!definition) {
       await this.recordError(
         bot.id,
-        new Error(`Strategy ${strategyRow.key} is not available in this deployment`),
+        new Error(`Strategy ${bot.strategyKey} is not available in this deployment`),
       );
       const now = new Date();
       await this.db
@@ -157,12 +149,12 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
     let params: Record<string, unknown>;
     try {
-      params = definition.parseParams(strategyRow.params);
+      params = definition.parseParams(bot.strategyParams);
     } catch (error) {
       await this.recordError(
         bot.id,
         new Error(
-          `Strategy ${strategyRow.key} has invalid parameters: ${
+          `Strategy ${bot.strategyKey} has invalid parameters: ${
             error instanceof Error ? error.message : 'unknown error'
           }`,
         ),
@@ -229,8 +221,40 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
     for (const row of tokenRows) {
       const quote = quoteMap.get(row.asset.id);
-      if (!quote || now.getTime() - quote.fetchedAt.getTime() > 5 * 60_000) continue;
-      if (decimal(quote.priceUsd).lte(0)) continue;
+      const existingPosition = positionByAsset.get(row.asset.id) ?? null;
+      if (!quote) {
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          null,
+          'hold',
+          'Нет котировки от источника данных',
+          Boolean(existingPosition),
+        );
+        continue;
+      }
+      if (now.getTime() - quote.fetchedAt.getTime() > 5 * 60_000) {
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          quote,
+          'hold',
+          'Котировка устарела (старше 5 минут)',
+          Boolean(existingPosition),
+        );
+        continue;
+      }
+      if (decimal(quote.priceUsd).lte(0)) {
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          quote,
+          'hold',
+          'Некорректная цена в котировке',
+          Boolean(existingPosition),
+        );
+        continue;
+      }
 
       await this.sampleQuote(row.asset.id, quote, now);
       const history = await this.loadHistory(row.asset.id);
@@ -265,22 +289,62 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         await this.recordError(
           bot.id,
           new Error(
-            `Strategy ${strategyRow.key} failed: ${
+            `Strategy ${bot.strategyKey} failed: ${
               error instanceof Error ? error.message : 'unknown error'
             }`,
           ),
           row.asset.id,
         );
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          quote,
+          'hold',
+          `Ошибка стратегии: ${error instanceof Error ? error.message : 'unknown error'}`,
+          Boolean(position),
+        );
         continue;
       }
 
       if (decision.action === 'buy') {
-        if (dailyLossBlocked || inCooldown) continue;
-        if (!position && openPositions >= bot.maxPositions) continue;
+        if (dailyLossBlocked || inCooldown) {
+          await this.recordSignal(
+            bot.id,
+            row.asset.id,
+            quote,
+            'hold',
+            dailyLossBlocked
+              ? 'Сигнал на покупку, но дневной лимит убытка исчерпан'
+              : 'Сигнал на покупку, но действует пауза после покупки',
+            Boolean(position),
+          );
+          continue;
+        }
+        if (!position && openPositions >= bot.maxPositions) {
+          await this.recordSignal(
+            bot.id,
+            row.asset.id,
+            quote,
+            'hold',
+            'Сигнал на покупку, но достигнут лимит открытых позиций',
+            false,
+          );
+          continue;
+        }
 
         const target = budget.mul(decimal(bot.positionSizePct)).div(100);
         const usd = Decimal.min(target, cash);
-        if (usd.lt(1)) continue;
+        if (usd.lt(1)) {
+          await this.recordSignal(
+            bot.id,
+            row.asset.id,
+            quote,
+            'hold',
+            'Сигнал на покупку, но недостаточно свободного кэша',
+            Boolean(position),
+          );
+          continue;
+        }
 
         const rawPrice = decimal(quote.priceUsd);
         const fillPrice = rawPrice.mul(
@@ -288,7 +352,17 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         );
         const fee = usd.mul(decimal(String(bot.feeBps))).div(10_000);
         const debit = usd.plus(fee);
-        if (debit.gt(cash)) continue;
+        if (debit.gt(cash)) {
+          await this.recordSignal(
+            bot.id,
+            row.asset.id,
+            quote,
+            'hold',
+            'Сигнал на покупку, но не хватает кэша с учётом комиссии',
+            Boolean(position),
+          );
+          continue;
+        }
 
         const amount = usd.div(fillPrice);
         const slippage = amount.mul(rawPrice).minus(usd);
@@ -331,7 +405,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
             slippageUsd: usdString(slippage),
             realizedPnlUsd: '0.00000000',
             reason: decision.reason,
-            signal: { strategy: strategyRow.key, price: quote.priceUsd },
+            signal: { strategy: bot.strategyKey, price: quote.priceUsd },
             executedAt: now,
           });
 
@@ -354,6 +428,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
         cash = cash.minus(debit);
         changed = true;
+        await this.recordSignal(bot.id, row.asset.id, quote, 'buy', decision.reason, true);
         await this.snapshot(bot.id, now, true);
       } else if (decision.action === 'sell' && position) {
         const amount = decimal(position.amount);
@@ -381,7 +456,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
             slippageUsd: usdString(slippage),
             realizedPnlUsd: usdString(realized),
             reason: decision.reason,
-            signal: { strategy: strategyRow.key, price: quote.priceUsd },
+            signal: { strategy: bot.strategyKey, price: quote.priceUsd },
             executedAt: now,
           });
           await tx.insert(botEvents).values({
@@ -409,7 +484,26 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         dailyLossBlocked = dailyRealized.negated().gte(dailyLimit) && dailyLimit.gt(0);
         openPositions = Math.max(0, openPositions - 1);
         changed = true;
+        await this.recordSignal(bot.id, row.asset.id, quote, 'sell', decision.reason, false);
         await this.snapshot(bot.id, now, true);
+      } else if (decision.action === 'sell') {
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          quote,
+          'hold',
+          'Сигнал на продажу, но открытой позиции нет',
+          false,
+        );
+      } else {
+        await this.recordSignal(
+          bot.id,
+          row.asset.id,
+          quote,
+          'hold',
+          decision.reason,
+          Boolean(position),
+        );
       }
     }
 
@@ -420,6 +514,40 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .where(eq(tradingBots.id, bot.id));
       await this.snapshot(bot.id, now, false);
     }
+  }
+
+  private async recordSignal(
+    botId: string,
+    assetId: string,
+    quote: MarketQuoteValue | null,
+    action: 'buy' | 'sell' | 'hold',
+    reason: string,
+    hasPosition: boolean,
+  ): Promise<void> {
+    await this.db
+      .insert(botSignals)
+      .values({
+        botId,
+        assetId,
+        priceUsd: quote?.priceUsd ?? null,
+        change24hPct: quote?.change24hPct ?? null,
+        action,
+        reason,
+        hasPosition,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [botSignals.botId, botSignals.assetId],
+        set: {
+          priceUsd: quote?.priceUsd ?? null,
+          change24hPct: quote?.change24hPct ?? null,
+          action,
+          reason,
+          hasPosition,
+          updatedAt: new Date(),
+        },
+      })
+      .catch(() => undefined);
   }
 
   private async sampleQuote(assetId: string, quote: MarketQuoteValue, now: Date): Promise<void> {
