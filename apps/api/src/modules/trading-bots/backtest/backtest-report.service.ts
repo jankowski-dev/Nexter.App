@@ -130,11 +130,19 @@ function summaryCards(run: BotBacktestRun): Content {
     metricCard('Общий убыток', formatUsd(stats.grossLossUsd), RED),
     metricCard('Win rate', stats.winRate ? `${stats.winRate}%` : '—', DARK),
     metricCard('Сделки', `${stats.tradesCount} · ${stats.wins}/${stats.losses}`, DARK),
+    metricCard('Макс. просадка', `${stats.maxDrawdownPct}%`, RED),
+    metricCard(
+      'Купить и держать',
+      formatPct(stats.buyHoldReturnPct),
+      pnlColor(stats.buyHoldReturnPct ?? '0'),
+    ),
   ];
 
   const rows: Content[][] = [];
   for (let index = 0; index < cards.length; index += 4) {
-    rows.push(cards.slice(index, index + 4));
+    const row = cards.slice(index, index + 4);
+    while (row.length < 4) row.push({ text: '' });
+    rows.push(row);
   }
 
   return {

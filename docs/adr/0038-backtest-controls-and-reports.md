@@ -19,7 +19,7 @@ The first backtest release was usable but the owner found several gaps:
 ## Decision
 
 - **Drawer replacement.** `Drawer` now has an exit animation and `BotDetailDrawer` receives an `open` flag. Opening edit from the detail drawer closes the detail drawer first, waits for the exit transition, opens edit, and reopens the detail drawer after save/cancel. There is no stacked pair of bot drawers.
-- **Backtest options.** `useStopLoss`, `useTakeProfit`, and `reinvestProfit` are stored per run (migration `0037`). Disabling stop-loss/take-profit skips both the intrabar protective check and matching strategy sell reasons. Reinvestment sizes each buy from current equity instead of initial capital.
+- **Backtest options.** `useStopLoss`, `useTakeProfit`, and `reinvestProfit` are stored per run (migration `0037`). The flags are passed into `StrategyContext`: disabling stop-loss/take-profit skips only that exit branch (both intrabar protection and the strategy's close-based check), so other exits such as trend break or mean reversion still fire. It does not post-filter whole sell decisions. Reinvestment sizes each buy from current equity instead of initial capital.
 - **Run cleanup.** `DELETE /backtests/:id` removes one run; `DELETE /backtests?strategyKey=` clears the journal for a strategy. Deletions are owner-scoped and audited (`bot.backtest_deleted`). `nexter_app` receives DELETE on `bot_backtest_runs`; UPDATE remains revoked.
 - **30-day period.** The UI offers 30/90/180/365 days; the API already accepted 30–730.
 - **Adaptive chart.** The chart uses a logarithmic price axis when values are positive, draws daily high/low wicks, a first-close baseline, and a period-change label. This makes small absolute prices and wide ranges readable.

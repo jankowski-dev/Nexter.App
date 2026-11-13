@@ -19,6 +19,9 @@ export interface StrategyContext {
   history: StrategySample[];
   position: StrategyPosition | null;
   buyCount: number;
+  /** Defaults to true; backtests can disable protective exits. */
+  stopLossEnabled?: boolean;
+  takeProfitEnabled?: boolean;
 }
 
 export interface StrategyDecision {

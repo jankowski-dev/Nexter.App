@@ -218,15 +218,13 @@ export function runBacktest(
           }
         : null,
       buyCount,
+      stopLossEnabled: options.useStopLoss !== false,
+      takeProfitEnabled: options.useTakeProfit !== false,
     });
 
     if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
       executeBuy(candle.date, close, decision.reason);
-    } else if (
-      decision.action === 'sell' &&
-      position &&
-      !isExitDisabled(decision.reason, options)
-    ) {
+    } else if (decision.action === 'sell' && position) {
       executeSell(candle.date, close, decision.reason);
     }
 
@@ -282,11 +280,4 @@ export function runBacktest(
 
 function positiveNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function isExitDisabled(reason: string, options: BacktestOptions): boolean {
-  const normalized = reason.toLowerCase();
-  if (options.useStopLoss === false && normalized.includes('стоп-лосс')) return true;
-  if (options.useTakeProfit === false && normalized.includes('тейк-профит')) return true;
-  return false;
 }

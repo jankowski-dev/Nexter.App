@@ -49,8 +49,12 @@ export const momentumBreakout: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (fast && slow && fast.lt(slow)) return sell('быстрая SMA ниже медленной');
       return hold('позиция в пределах риска');
     }
@@ -117,8 +121,12 @@ export const meanReversion: StrategyDefinition = {
     if (ctx.position) {
       const cost = dec(ctx.position.avgCostUsd);
       if (price.gte(avg.mul(1 + params.exitAbovePct / 100))) return sell('возврат к среднему');
-      if (price.gte(cost.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(cost.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(cost.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(cost.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       return hold('ожидание возврата');
     }
 
@@ -161,8 +169,12 @@ export const gridRange: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('шаг сетки вверх');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('шаг сетки вверх');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (ctx.buyCount < params.maxAdds && price.lte(avg.mul(1 - params.gridStepPct / 100))) {
         return buy('следующая ступень сетки');
       }
@@ -214,8 +226,12 @@ export const trendPullback: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (fast.lt(slow)) return sell('тренд сломан');
       return hold('позиция в тренде');
     }
@@ -260,8 +276,12 @@ export const dcaDip: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (ctx.buyCount < params.maxAdds && price.lte(avg.mul(1 - params.dipPct / 100))) {
         return buy('докупка на просадке');
       }
