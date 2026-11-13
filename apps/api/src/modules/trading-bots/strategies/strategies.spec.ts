@@ -195,6 +195,28 @@ describe('trend_pullback', () => {
       ).action,
     ).toBe('hold');
   });
+
+  it('still exits on trend break when stop-loss is disabled', () => {
+    const samples = history(Array.from({ length: 50 }, (_, index) => 2 - index * 0.01));
+    const position = { amount: '10', avgCostUsd: '1.20000000', costBasisUsd: '12.00000000' };
+    expect(
+      trendPullback.evaluate(
+        context({
+          params,
+          history: samples,
+          priceUsd: '1.00000000',
+          position,
+          stopLossEnabled: false,
+        }),
+      ),
+    ).toEqual({ action: 'sell', reason: 'тренд сломан' });
+
+    expect(
+      trendPullback.evaluate(
+        context({ params, history: samples, priceUsd: '1.00000000', position }),
+      ).reason,
+    ).toBe('стоп-лосс');
+  });
 });
 
 describe('dca_dip', () => {
