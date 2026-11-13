@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 import { BotRunnerService } from '../src/modules/trading-bots/bot-runner.service';
+import { HistoricalDataService } from '../src/modules/trading-bots/backtest/historical-data.service';
 
 const canRun = Boolean(
   process.env.NEXTER_TEST_DB === '1' &&
@@ -354,5 +355,97 @@ describe.runIf(canRun)('Trading bots e2e', () => {
 
     const list = await agent.get('/api/v1/trading-bots/bots').expect(200);
     expect(list.body.data).toHaveLength(0);
+  }, 60_000);
+
+  it('previews historical candles, runs a backtest, lists it and downloads the PDF', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const assets = assetsResponse.body.assets as Array<{ id: string; symbol: string }>;
+    const asset = assets[0];
+    if (!asset) throw new Error('No seeded asset available for the backtest test');
+
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: asset.id })
+      .expect(201);
+
+    const start = Date.UTC(2025, 0, 1);
+    const candles = Array.from({ length: 90 }, (_, index) => {
+      const price = 1 + Math.sin(index / 3) * 0.08 + index * 0.0005;
+      const value = price.toFixed(8);
+      return {
+        date: new Date(start + index * 86_400_000).toISOString().slice(0, 10),
+        openUsd: value,
+        highUsd: value,
+        lowUsd: value,
+        closeUsd: value,
+        volumeUsd: '250000.00',
+      };
+    });
+
+    const historical = app.get(HistoricalDataService);
+    historical.seedForTests(asset.id, 90, 'test', candles);
+
+    const preview = await agent
+      .post('/api/v1/trading-bots/backtests/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: asset.id, days: 90 })
+      .expect(201);
+    expect(preview.body.source).toBe('test');
+    expect(preview.body.candles).toHaveLength(90);
+    expect(preview.body.asset.id).toBe(asset.id);
+
+    const run = await agent
+      .post('/api/v1/trading-bots/backtests')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        assetId: asset.id,
+        days: 90,
+        strategyKey: 'mean_reversion',
+        strategyParams: {
+          lookback: 5,
+          entryDropPct: 1,
+          exitAbovePct: 0.2,
+          takeProfitPct: 5,
+          stopLossPct: 10,
+        },
+      })
+      .expect(201);
+
+    const runId = run.body.id as string;
+    expect(run.body.strategyName).toBe('Возврат к среднему');
+    expect(run.body.candles).toHaveLength(90);
+    expect(run.body.stats.tradesCount).toBeGreaterThan(0);
+    expect(run.body.trades.length).toBe(run.body.stats.tradesCount);
+    expect(run.body.equityCurve).toHaveLength(90);
+
+    const list = await agent
+      .get('/api/v1/trading-bots/backtests?strategyKey=mean_reversion')
+      .expect(200);
+    expect(list.body.data).toHaveLength(1);
+    expect(list.body.data[0].id).toBe(runId);
+
+    const detail = await agent.get(`/api/v1/trading-bots/backtests/${runId}`).expect(200);
+    expect(detail.body.id).toBe(runId);
+    expect(detail.body.strategyParams.lookback).toBe(5);
+
+    const report = await agent
+      .get(`/api/v1/trading-bots/backtests/${runId}/report.pdf`)
+      .expect(200);
+    expect(report.headers['content-type']).toContain('application/pdf');
+    expect(report.headers['content-disposition']).toContain('nexter-backtest');
+    const reportLength = Number(
+      report.headers['content-length'] ?? (Buffer.isBuffer(report.body) ? report.body.length : 0),
+    );
+    expect(reportLength).toBeGreaterThan(1000);
+
+    await agent
+      .post('/api/v1/trading-bots/backtests/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: '00000000-0000-4000-8000-000000000000', days: 30 })
+      .expect(404);
   }, 60_000);
 });

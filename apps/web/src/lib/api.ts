@@ -4,6 +4,9 @@ import {
   assetsResponseSchema,
   auditLogResponseSchema,
   authMeResponseSchema,
+  botBacktestPreviewResponseSchema,
+  botBacktestRunSchema,
+  botBacktestsResponseSchema,
   botDetailResponseSchema,
   botEquityResponseSchema,
   botEventsResponseSchema,
@@ -70,6 +73,12 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
+  type BotBacktestListQuery,
+  type BotBacktestPreviewRequest,
+  type BotBacktestPreviewResponse,
+  type BotBacktestRequest,
+  type BotBacktestRun,
+  type BotBacktestsResponse,
   type BotCreateRequest,
   type BotDetailResponse,
   type BotEquityResponse,
@@ -993,6 +1002,38 @@ export async function fetchBotEquity(id: string, limit = 500): Promise<BotEquity
 
 export async function fetchBotSignals(id: string): Promise<BotSignalsResponse> {
   return apiFetch(`/api/v1/trading-bots/bots/${id}/signals`, {}, botSignalsResponseSchema);
+}
+
+export async function previewBotBacktest(
+  body: BotBacktestPreviewRequest,
+): Promise<BotBacktestPreviewResponse> {
+  return apiPost('/api/v1/trading-bots/backtests/preview', body, botBacktestPreviewResponseSchema);
+}
+
+export async function runBotBacktest(body: BotBacktestRequest): Promise<BotBacktestRun> {
+  return apiPost('/api/v1/trading-bots/backtests', body, botBacktestRunSchema);
+}
+
+export async function fetchBotBacktests(
+  query: Partial<BotBacktestListQuery> = {},
+): Promise<BotBacktestsResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/backtests${queryString({
+      strategyKey: query.strategyKey,
+      assetId: query.assetId,
+      limit: query.limit,
+    })}`,
+    {},
+    botBacktestsResponseSchema,
+  );
+}
+
+export async function fetchBotBacktest(id: string): Promise<BotBacktestRun> {
+  return apiFetch(`/api/v1/trading-bots/backtests/${id}`, {}, botBacktestRunSchema);
+}
+
+export function botBacktestReportUrl(id: string): string {
+  return `/api/v1/trading-bots/backtests/${id}/report.pdf`;
 }
 
 export async function fetchNotifications(limit = 100): Promise<NotificationsResponse> {

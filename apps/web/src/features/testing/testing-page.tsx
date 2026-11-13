@@ -32,13 +32,15 @@ import { Decimal } from 'decimal.js';
 import { useEffect, useState } from 'react';
 import type {
   BotCreateRequest,
-  BotStrategyParamField,
   BotStrategyTemplate,
   BotSummary,
   BotUpdateRequest,
 } from '@nexter/contracts';
+import { BacktestPanel } from './backtest-panel';
 import { BotDetailDrawer } from './bot-detail-drawer';
 import { StrategyIcon } from './strategy-icon';
+import { StrategyParamInputs } from './strategy-param-inputs';
+import { formToParams, paramsToForm } from './strategy-params';
 
 type Tab = 'bots' | 'strategies';
 type Sort = 'pnl' | 'equity' | 'profitFactor';
@@ -65,38 +67,6 @@ const sortOptions: Array<{ value: Sort; label: string }> = [
 ];
 
 const defaultParams: Record<string, unknown> = {};
-
-function paramsToForm(params: Record<string, unknown>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(params).map(([key, value]) => [key, value === null ? '' : String(value)]),
-  );
-}
-
-function formToParams(
-  fields: BotStrategyParamField[],
-  values: Record<string, string>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const field of fields) {
-    const raw = values[field.key];
-    if (raw === undefined || raw.trim() === '') continue;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) {
-      throw new Error(`Поле «${field.label}» должно быть числом.`);
-    }
-    if (field.integer && !Number.isInteger(parsed)) {
-      throw new Error(`Поле «${field.label}» должно быть целым числом.`);
-    }
-    if (field.min !== undefined && parsed < field.min) {
-      throw new Error(`Поле «${field.label}» не может быть меньше ${field.min}.`);
-    }
-    if (field.max !== undefined && parsed > field.max) {
-      throw new Error(`Поле «${field.label}» не может быть больше ${field.max}.`);
-    }
-    result[field.key] = parsed;
-  }
-  return result;
-}
 
 function emptyBotForm(template?: BotStrategyTemplate): BotFormState {
   return {
@@ -173,40 +143,6 @@ function BotStats({ bot }: { bot: BotSummary }) {
   );
 }
 
-function StrategyParamInputs({
-  template,
-  values,
-  onChange,
-}: {
-  template: BotStrategyTemplate;
-  values: Record<string, string>;
-  onChange: (key: string, value: string) => void;
-}) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {template.paramFields.map((field) => (
-        <label key={field.key} className="block text-sm text-zinc-600">
-          {field.label}
-          <div className="mt-1 flex items-center gap-2">
-            <Input
-              type="number"
-              min={field.min}
-              max={field.max}
-              step={field.step ?? (field.integer ? 1 : 'any')}
-              value={values[field.key] ?? ''}
-              onChange={(event) => onChange(field.key, event.target.value)}
-            />
-            {field.unit ? <span className="text-xs text-zinc-500">{field.unit}</span> : null}
-          </div>
-          {field.hint ? (
-            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{field.hint}</p>
-          ) : null}
-        </label>
-      ))}
-    </div>
-  );
-}
-
 export function TestingPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('bots');
@@ -235,7 +171,7 @@ export function TestingPage() {
   const watchlist = useQuery({
     queryKey: ['trading-bot-tokens'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
-    enabled: botDialogOpen,
+    enabled: botDialogOpen || Boolean(strategyDetail),
   });
 
   const templates = strategies.data?.data ?? [];
@@ -924,7 +860,7 @@ export function TestingPage() {
             <StrategyIcon icon={strategyDetail.icon} className="h-8 w-8" />
           ) : undefined
         }
-        size="third"
+        size="lg"
         footer={
           <Button variant="ghost" onClick={() => setStrategyDetail(null)}>
             Закрыть
@@ -976,6 +912,13 @@ export function TestingPage() {
               Стратегия встроена в приложение и не редактируется. Все числовые параметры задаются
               отдельно для каждого робота при создании или в настройках.
             </p>
+            <BacktestPanel
+              key={strategyDetail.key}
+              template={strategyDetail}
+              tokenEntries={tokenEntries}
+              tokensPending={watchlist.isPending}
+              tokensError={watchlist.error}
+            />
           </div>
         ) : null}
       </Drawer>

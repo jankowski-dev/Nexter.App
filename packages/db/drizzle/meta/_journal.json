@@ -253,6 +253,13 @@
       "when": 1794572390152,
       "tag": "0035_warm_kate_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1794575299283,
+      "tag": "0036_spooky_snowbird",
+      "breakpoints": true
     }
   ]
 }

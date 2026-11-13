@@ -119,6 +119,8 @@ export const envSchema = z.object({
   COINGECKO_BASE_URL: z.url().default('https://api.coingecko.com/api/v3'),
   COINGECKO_API_KEY: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   COINGECKO_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
+  GECKOTERMINAL_BASE_URL: z.url().default('https://api.geckoterminal.com/api/v2'),
+  GECKOTERMINAL_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
   DEXSCREENER_BASE_URL: z.url().default('https://api.dexscreener.com'),
   DEXSCREENER_TIMEOUT_MS: z.coerce.number().int().min(1000).max(15_000).default(5000),
   BOT_RUNNER_ENABLED: z
