@@ -292,7 +292,11 @@ export function BacktestPanel({
                 </option>
               ))}
             </Select>
-            <Button onClick={preview ? startRun : startPreview} disabled={previewing || running}>
+            <Button
+              className="xl:col-span-2"
+              onClick={preview ? startRun : startPreview}
+              disabled={previewing || running}
+            >
               {primaryLabel}
             </Button>
           </div>
