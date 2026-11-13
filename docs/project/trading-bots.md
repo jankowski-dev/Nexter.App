@@ -385,3 +385,10 @@ interface StrategyDefinition {
 - Migration `0037` was applied first to the restored copy: three boolean option columns exist, DELETE is granted on `bot_backtest_runs`. Production now has 38 migrations; `nexter_app` grants are `SELECT/INSERT/DELETE` on runs (UPDATE revoked) and `SELECT/INSERT/UPDATE` on `bot_signals` (DELETE revoked).
 - PR #108 merged as `848e64b9`; API deployment `534e68b1-b064-4dfb-bb96-7445ee16cccf`; `/ready` 200; bundle `assets/index-DJtO_mjB.js`.
 - All 31 existing runs were preserved and receive `use_stop_loss=true`, `use_take_profit=true`, `reinvest_profit=false` defaults. No real-ledger changes.
+
+### UI-43 (2026-11-13)
+
+- Fixed exit-flag handling: `stopLossEnabled`/`takeProfitEnabled` are passed into `StrategyContext`, so disabling stop-loss skips only that branch and does not suppress trend-break or other exits.
+- An XNY `trend_pullback` report with stop-loss disabled held the 2026-05-17 position until the end of the period, producing a −$2,154.46 loss. The corrected replay exits on the 2026-05-26 trend break for −$879.71 and finishes at +317.58% (vs +187.60%), PF 2.09 (vs 1.86), 18/6 wins/losses (vs 12/2), max drawdown 28.59% (vs 47.15%).
+- PDF summary cards now include max drawdown and buy-and-hold. Existing runs remain immutable; new runs use the corrected engine.
+- Deployment `e5192250-affc-4049-b68d-826961e6151c`; bundle `assets/index-vYeHY3mT.js`; no migration.
