@@ -399,3 +399,11 @@ interface StrategyDefinition {
 - An XNY `trend_pullback` report with stop-loss disabled held the 2026-05-17 position until the end of the period, producing a −$2,154.46 loss. The corrected replay exits on the 2026-05-26 trend break for −$879.71 and finishes at +317.58% (vs +187.60%), PF 2.09 (vs 1.86), 18/6 wins/losses (vs 12/2), max drawdown 28.59% (vs 47.15%).
 - PDF summary cards now include max drawdown and buy-and-hold. Existing runs remain immutable; new runs use the corrected engine.
 - Deployment `e5192250-affc-4049-b68d-826961e6151c`; bundle `assets/index-vYeHY3mT.js`; no migration.
+
+### UI-44 (2026-11-13)
+
+- Strategies are documentation-only; the backtest block moved out of strategy drawers into the standalone `/testing` stand with a strategy selector.
+- `/portfolio` now has `Роботы` and `Стратегии` tabs after `Портфель`/`Сделки`; `/testing` contains only the stand.
+- Bot trade/event journals load 20 records per request through `limit/offset` and append pages with `Ещё`; the backtest journal starts at 20 and grows to 100.
+- Strategy metadata adds `bestFor` and `risks`; the strategy drawer shows description, best-use cases, guide, risks and defaults.
+- Deployment `b138c1ea-af5b-4b31-9f9b-cd17c5e87c94`; bundle `assets/index-pQAOvbq_.js`; `/ready` 200. No migration, no real-ledger changes.
