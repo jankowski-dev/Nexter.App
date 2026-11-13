@@ -51,25 +51,51 @@ function SafeIcon({ className = 'h-5 w-5' }: { className?: string }) {
   );
 }
 
-function VaultAuthShell({
-  title,
-  description,
-  children,
+function VaultPasswordInput({
+  label,
+  placeholder,
+  value,
+  onChange,
+  autoComplete,
+  autoFocus = false,
+  show,
+  onToggle,
+  onEnter,
 }: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: string;
+  autoFocus?: boolean;
+  show: boolean;
+  onToggle: () => void;
+  onEnter?: () => void;
 }) {
   return (
-    <div className="flex min-h-[60vh] items-center justify-center px-2 py-6">
-      <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-gradient-to-br from-[#202329] via-[#252932] to-[#1b1e23] p-7 shadow-2xl">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/30">
-          <SafeIcon className="h-8 w-8" />
-        </div>
-        <h2 className="mt-5 text-center text-2xl font-semibold text-white">{title}</h2>
-        <p className="mt-2 text-center text-sm leading-6 text-zinc-400">{description}</p>
-        <div className="mt-6">{children}</div>
-      </div>
+    <div className="relative flex-1">
+      <SafeIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+      <Input
+        aria-label={label}
+        placeholder={placeholder ?? label}
+        className="h-11 rounded-xl border-zinc-200 bg-white pl-9 pr-10 shadow-sm"
+        type={show ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onEnter?.();
+        }}
+      />
+      <button
+        type="button"
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        onClick={onToggle}
+        aria-label={show ? 'Скрыть пароль' : 'Показать пароль'}
+      >
+        <EyeIcon />
+      </button>
     </div>
   );
 }
@@ -400,86 +426,54 @@ export function VaultPage() {
       ) : null}
 
       {!config ? (
-        <VaultAuthShell
-          title="Создать хранилище"
-          description="Придумайте мастер-пароль. Он не отправляется на сервер и не сохраняется. При потере пароля восстановить записи невозможно — это цена end-to-end шифрования."
-        >
-          <div className="space-y-3">
-            <label className="block text-sm text-zinc-300">
-              Мастер-пароль
-              <div className="relative mt-1">
-                <Input
-                  className="border-zinc-700 bg-zinc-900/80 pr-10 text-white placeholder:text-zinc-500"
-                  type={showMasterPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  value={masterPassword}
-                  onChange={(event) => setMasterPassword(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:text-white"
-                  onClick={() => setShowMasterPassword((value) => !value)}
-                  aria-label={showMasterPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                >
-                  <EyeIcon />
-                </button>
-              </div>
-            </label>
-            <label className="block text-sm text-zinc-300">
-              Повторите пароль
-              <Input
-                className="mt-1 border-zinc-700 bg-zinc-900/80 text-white placeholder:text-zinc-500"
-                type={showMasterPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </label>
-            {unlockError ? <p className="text-sm text-red-300">{unlockError}</p> : null}
-            <Button className="w-full" onClick={() => void setupVault()} disabled={busy}>
-              {busy ? 'Создаю хранилище…' : 'Создать хранилище'}
-            </Button>
-          </div>
-        </VaultAuthShell>
+        <div className="w-full max-w-md space-y-2">
+          <VaultPasswordInput
+            label="Мастер-пароль"
+            placeholder="Мастер-пароль"
+            value={masterPassword}
+            onChange={setMasterPassword}
+            autoComplete="new-password"
+            show={showMasterPassword}
+            onToggle={() => setShowMasterPassword((value) => !value)}
+          />
+          <Input
+            aria-label="Повторите пароль"
+            placeholder="Повторите пароль"
+            className="h-11 rounded-xl border-zinc-200 bg-white shadow-sm"
+            type={showMasterPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+          {unlockError ? <p className="text-sm text-red-700">{unlockError}</p> : null}
+          <Button className="h-11 w-full" onClick={() => void setupVault()} disabled={busy}>
+            {busy ? 'Создаю хранилище…' : 'Создать хранилище'}
+          </Button>
+        </div>
       ) : !unlocked ? (
-        <VaultAuthShell
-          title="Хранилище заблокировано"
-          description="Введите мастер-пароль, чтобы расшифровать записи в этом браузере."
-        >
-          <div className="space-y-3">
-            <label className="block text-sm text-zinc-300">
-              Мастер-пароль
-              <div className="relative mt-1">
-                <Input
-                  className="border-zinc-700 bg-zinc-900/80 pr-10 text-white placeholder:text-zinc-500"
-                  type={showMasterPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={masterPassword}
-                  onChange={(event) => setMasterPassword(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void unlockVault();
-                  }}
-                />
-                <button
-                  type="button"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-zinc-400 hover:text-white"
-                  onClick={() => setShowMasterPassword((value) => !value)}
-                  aria-label={showMasterPassword ? 'Скрыть пароль' : 'Показать пароль'}
-                >
-                  <EyeIcon />
-                </button>
-              </div>
-            </label>
-            {unlockError ? <p className="text-sm text-red-300">{unlockError}</p> : null}
+        <div className="w-full max-w-md">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <VaultPasswordInput
+              label="Мастер-пароль"
+              placeholder="Мастер-пароль"
+              value={masterPassword}
+              onChange={setMasterPassword}
+              autoComplete="current-password"
+              autoFocus
+              show={showMasterPassword}
+              onToggle={() => setShowMasterPassword((value) => !value)}
+              onEnter={() => void unlockVault()}
+            />
             <Button
-              className="w-full"
+              className="h-11 w-full shrink-0 px-5 sm:w-auto"
               onClick={() => void unlockVault()}
               disabled={busy || !masterPassword}
             >
               {busy ? 'Расшифровываю…' : 'Разблокировать'}
             </Button>
           </div>
-        </VaultAuthShell>
+          {unlockError ? <p className="mt-2 text-sm text-red-700">{unlockError}</p> : null}
+        </div>
       ) : (
         <>
           <div className="relative">
