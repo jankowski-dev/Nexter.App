@@ -94,7 +94,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   expect(vaultBody).not.toContain('Тестовая запись vault');
 
   await page.reload();
-  await expect(page.getByText('Хранилище заблокировано', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Мастер-пароль')).toBeVisible();
   await page.getByLabel('Мастер-пароль').fill('wrong master password');
   await page.getByRole('button', { name: 'Разблокировать' }).click();
   await expect(page.getByText('Неверный мастер-пароль.')).toBeVisible();
@@ -111,7 +111,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
     .getByRole('button', { name: 'Заблокировать' })
     .evaluate((node) => (node as { click: () => void }).click());
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByText('Хранилище заблокировано', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Мастер-пароль')).toBeVisible();
 
   await page.getByLabel('Мастер-пароль').fill(masterPassword);
   await page.getByRole('button', { name: 'Разблокировать' }).click();
@@ -260,7 +260,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(page.getByText('↻ Повтор').first()).toBeVisible();
 
   await nav.getByRole('link', { name: 'Хранилище' }).click();
-  await expect(page.getByText('Хранилище заблокировано', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Мастер-пароль')).toBeVisible();
 
   await nav.getByRole('link', { name: 'Заметки' }).click();
   await expect(page.getByRole('heading', { name: 'Заметки', exact: true })).toBeVisible();
