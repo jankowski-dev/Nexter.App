@@ -68,18 +68,30 @@ export function OperationsPage() {
   });
 
   const rows = transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
-  const visibleRows = filterBySearch(rows, search, (transaction) => [
-    typeLabels[transaction.type] ?? transaction.type,
-    subtypeLabels[transaction.subtype] ?? transaction.subtype,
-    transaction.notes,
-  ]);
-  const refreshOperations = useCallback(() => {
-    void transactions.refetch();
-  }, [transactions.refetch]);
   const assetById = new Map((assets.data?.assets ?? []).map((asset) => [asset.id, asset]));
   const accountById = new Map(
     (accounts.data?.accounts ?? []).map((account) => [account.id, account]),
   );
+  const visibleRows = filterBySearch(rows, search, (transaction) => {
+    const tokens = transaction.postings.flatMap((posting) => {
+      const asset = assetById.get(posting.assetId);
+      return asset ? [asset.symbol, asset.name] : [];
+    });
+    const accountsForPostings = transaction.postings.flatMap((posting) => {
+      const account = accountById.get(posting.accountId);
+      return account ? [account.name] : [];
+    });
+    return [
+      typeLabels[transaction.type] ?? transaction.type,
+      subtypeLabels[transaction.subtype] ?? transaction.subtype,
+      transaction.notes,
+      ...tokens,
+      ...accountsForPostings,
+    ];
+  });
+  const refreshOperations = useCallback(() => {
+    void transactions.refetch();
+  }, [transactions.refetch]);
 
   return (
     <div className="space-y-6">

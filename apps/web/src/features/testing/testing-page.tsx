@@ -698,7 +698,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                       key={template.key}
                       type="button"
                       onClick={() => setStandStrategyKey(template.key)}
-                      className={`rounded-xl border p-3 text-left transition-colors ${
+                      className={`cursor-pointer rounded-xl border p-3 text-left transition-colors ${
                         selected
                           ? 'border-emerald-300 bg-emerald-50/70'
                           : 'border-zinc-200 bg-white hover:border-emerald-200'

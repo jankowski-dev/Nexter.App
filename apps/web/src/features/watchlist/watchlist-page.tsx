@@ -155,6 +155,10 @@ export function WatchlistPage() {
     entry.asset.name,
     entry.asset.contractAddress,
     entry.asset.chainCode,
+    entry.bscContractAddress,
+    entry.ethereumContractAddress,
+    entry.thesis,
+    entry.tags.join(' '),
   ]);
   const sortedEntries =
     sortKey === 'default'
