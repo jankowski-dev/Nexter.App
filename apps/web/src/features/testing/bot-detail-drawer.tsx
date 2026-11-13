@@ -24,7 +24,7 @@ import {
   formatUsd,
   pnlTone,
 } from '@/lib/format';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
@@ -32,6 +32,8 @@ const statusLabels: Record<BotStatus, string> = {
   running: 'Работает',
   stopped: 'Остановлен',
 };
+
+const HISTORY_PAGE_SIZE = 20;
 
 const eventLabels: Record<string, string> = {
   created: 'создан',
@@ -74,18 +76,26 @@ export function BotDetailDrawer({
     enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
-  const trades = useQuery({
+  const trades = useInfiniteQuery({
     queryKey: ['trading-bot-trades', botId],
-    queryFn: () => fetchBotTrades(botId as string),
+    queryFn: ({ pageParam }) => fetchBotTrades(botId as string, HISTORY_PAGE_SIZE, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.data.length === HISTORY_PAGE_SIZE ? allPages.length * HISTORY_PAGE_SIZE : undefined,
     enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
-  const events = useQuery({
+  const events = useInfiniteQuery({
     queryKey: ['trading-bot-events', botId],
-    queryFn: () => fetchBotEvents(botId as string),
+    queryFn: ({ pageParam }) => fetchBotEvents(botId as string, HISTORY_PAGE_SIZE, pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.data.length === HISTORY_PAGE_SIZE ? allPages.length * HISTORY_PAGE_SIZE : undefined,
     enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
+  const tradeRows = trades.data?.pages.flatMap((page) => page.data) ?? [];
+  const eventRows = events.data?.pages.flatMap((page) => page.data) ?? [];
   const equity = useQuery({
     queryKey: ['trading-bot-equity', botId],
     queryFn: () => fetchBotEquity(botId as string),
@@ -476,7 +486,7 @@ export function BotDetailDrawer({
             <p className="text-sm text-red-700">
               {toRussianError(trades.error, 'Не удалось загрузить сделки')}
             </p>
-          ) : !trades.data || trades.data.data.length === 0 ? (
+          ) : tradeRows.length === 0 ? (
             <CardDescription>Сделок пока нет.</CardDescription>
           ) : (
             <div className="mt-3 overflow-x-auto">
@@ -493,7 +503,7 @@ export function BotDetailDrawer({
                   </tr>
                 </thead>
                 <tbody>
-                  {trades.data.data.map((trade) => (
+                  {tradeRows.map((trade) => (
                     <tr key={trade.id} className="border-b border-zinc-100 last:border-0">
                       <td className="py-2 pr-3 text-xs text-zinc-500">
                         {formatDateTime(trade.executedAt)}
@@ -522,6 +532,18 @@ export function BotDetailDrawer({
                   ))}
                 </tbody>
               </table>
+              {trades.hasNextPage ? (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => void trades.fetchNextPage()}
+                    disabled={trades.isFetchingNextPage}
+                  >
+                    {trades.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </Card>
@@ -532,11 +554,11 @@ export function BotDetailDrawer({
             <p className="text-sm text-red-700">
               {toRussianError(events.error, 'Не удалось загрузить журнал')}
             </p>
-          ) : !events.data || events.data.data.length === 0 ? (
+          ) : eventRows.length === 0 ? (
             <CardDescription>Событий нет.</CardDescription>
           ) : (
             <div className="mt-2 space-y-1.5">
-              {events.data.data.slice(0, 40).map((event) => (
+              {eventRows.map((event) => (
                 <div key={event.id} className="flex items-start gap-2 text-xs">
                   <span className="shrink-0 text-zinc-400">{formatDateTime(event.createdAt)}</span>
                   <Badge tone={event.type === 'error' ? 'warning' : 'info'}>
@@ -545,6 +567,18 @@ export function BotDetailDrawer({
                   <span className="text-zinc-600">{event.message}</span>
                 </div>
               ))}
+              {events.hasNextPage ? (
+                <div className="pt-2">
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => void events.fetchNextPage()}
+                    disabled={events.isFetchingNextPage}
+                  >
+                    {events.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </Card>

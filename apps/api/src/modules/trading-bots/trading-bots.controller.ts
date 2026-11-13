@@ -132,27 +132,27 @@ export class TradingBotsController {
   trades(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number },
+    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
   ): Promise<BotTradesResponse> {
-    return this.bots.trades(auth.user.id, id, query.limit);
+    return this.bots.trades(auth.user.id, id, query.limit, query.offset);
   }
 
   @Get('bots/:id/events')
   events(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number },
+    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
   ): Promise<BotEventsResponse> {
-    return this.bots.events(auth.user.id, id, query.limit);
+    return this.bots.events(auth.user.id, id, query.limit, query.offset);
   }
 
   @Get('bots/:id/equity')
   equity(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number },
+    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
   ): Promise<BotEquityResponse> {
-    return this.bots.equity(auth.user.id, id, query.limit);
+    return this.bots.equity(auth.user.id, id, query.limit, query.offset);
   }
 
   @Get('bots/:id/signals')

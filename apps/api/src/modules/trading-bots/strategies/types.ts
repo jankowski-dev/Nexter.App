@@ -46,6 +46,8 @@ export interface StrategyDefinition {
   name: string;
   description: string;
   guide: string;
+  bestFor: string;
+  risks: string;
   icon: string;
   kind: 'system' | 'custom';
   defaultParams: Record<string, unknown>;
