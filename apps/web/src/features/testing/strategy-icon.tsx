@@ -52,6 +52,15 @@ const visuals: Record<string, Visual> = {
       </>
     ),
   },
+  shield: {
+    tile: 'border-violet-200 bg-violet-50 text-violet-700',
+    icon: (
+      <>
+        <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.6-7 9.3-4.2-1.7-7-4.9-7-9.3V6l7-2.5Z" />
+        <path d="m9 12 2 2 4-4.5" />
+      </>
+    ),
+  },
   beaker: {
     tile: 'border-zinc-200 bg-zinc-100 text-zinc-700',
     icon: (

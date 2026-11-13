@@ -60,6 +60,7 @@ export function runBacktest(
   const trades: BotBacktestTrade[] = [];
   const equityCurve: BotBacktestEquityPoint[] = [];
   const samples: StrategySample[] = [];
+  let strategyState: Record<string, unknown> = {};
 
   const equityAt = (price: Decimal) => (position ? cash.plus(position.amount.mul(price)) : cash);
 
@@ -220,7 +221,9 @@ export function runBacktest(
       buyCount,
       stopLossEnabled: options.useStopLoss !== false,
       takeProfitEnabled: options.useTakeProfit !== false,
+      state: strategyState,
     });
+    strategyState = decision.nextState ?? strategyState;
 
     if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
       executeBuy(candle.date, close, decision.reason);

@@ -7,6 +7,7 @@ export const botStrategyKeys = [
   'grid_range',
   'trend_pullback',
   'dca_dip',
+  'crash_protected_grid',
 ] as const;
 
 export const botStrategyKeySchema = z.enum(botStrategyKeys);

@@ -1,0 +1,1 @@
+ALTER TABLE "bot_signals" ADD COLUMN "strategy_state" jsonb DEFAULT '{}'::jsonb NOT NULL;

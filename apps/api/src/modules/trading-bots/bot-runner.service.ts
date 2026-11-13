@@ -219,24 +219,33 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     const budget = decimal(bot.budgetUsd);
     let changed = false;
 
+    const signalStateRows = await this.db
+      .select({ assetId: botSignals.assetId, strategyState: botSignals.strategyState })
+      .from(botSignals)
+      .where(eq(botSignals.botId, bot.id));
+    const stateByAsset = new Map(
+      signalStateRows.map((row) => [row.assetId, row.strategyState] as const),
+    );
+
     for (const row of tokenRows) {
+      const strategyState = stateByAsset.get(row.asset.id) ?? {};
+      let nextState = strategyState;
+      const record = (
+        quote: MarketQuoteValue | null,
+        action: 'buy' | 'sell' | 'hold',
+        reason: string,
+        hasPosition: boolean,
+      ): Promise<void> =>
+        this.recordSignal(bot.id, row.asset.id, quote, action, reason, hasPosition, nextState);
+
       const quote = quoteMap.get(row.asset.id);
       const existingPosition = positionByAsset.get(row.asset.id) ?? null;
       if (!quote) {
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
-          null,
-          'hold',
-          'Нет котировки от источника данных',
-          Boolean(existingPosition),
-        );
+        await record(null, 'hold', 'Нет котировки от источника данных', Boolean(existingPosition));
         continue;
       }
       if (now.getTime() - quote.fetchedAt.getTime() > 5 * 60_000) {
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
+        await record(
           quote,
           'hold',
           'Котировка устарела (старше 5 минут)',
@@ -245,14 +254,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         continue;
       }
       if (decimal(quote.priceUsd).lte(0)) {
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
-          quote,
-          'hold',
-          'Некорректная цена в котировке',
-          Boolean(existingPosition),
-        );
+        await record(quote, 'hold', 'Некорректная цена в котировке', Boolean(existingPosition));
         continue;
       }
 
@@ -284,7 +286,9 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
               }
             : null,
           buyCount,
+          state: strategyState,
         });
+        nextState = decision.nextState ?? strategyState;
       } catch (error) {
         await this.recordError(
           bot.id,
@@ -295,9 +299,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           ),
           row.asset.id,
         );
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
+        await record(
           quote,
           'hold',
           `Ошибка стратегии: ${error instanceof Error ? error.message : 'unknown error'}`,
@@ -308,9 +310,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
       if (decision.action === 'buy') {
         if (dailyLossBlocked || inCooldown) {
-          await this.recordSignal(
-            bot.id,
-            row.asset.id,
+          await record(
             quote,
             'hold',
             dailyLossBlocked
@@ -321,9 +321,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           continue;
         }
         if (!position && openPositions >= bot.maxPositions) {
-          await this.recordSignal(
-            bot.id,
-            row.asset.id,
+          await record(
             quote,
             'hold',
             'Сигнал на покупку, но достигнут лимит открытых позиций',
@@ -335,9 +333,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         const target = budget.mul(decimal(bot.positionSizePct)).div(100);
         const usd = Decimal.min(target, cash);
         if (usd.lt(1)) {
-          await this.recordSignal(
-            bot.id,
-            row.asset.id,
+          await record(
             quote,
             'hold',
             'Сигнал на покупку, но недостаточно свободного кэша',
@@ -353,9 +349,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         const fee = usd.mul(decimal(String(bot.feeBps))).div(10_000);
         const debit = usd.plus(fee);
         if (debit.gt(cash)) {
-          await this.recordSignal(
-            bot.id,
-            row.asset.id,
+          await record(
             quote,
             'hold',
             'Сигнал на покупку, но не хватает кэша с учётом комиссии',
@@ -428,7 +422,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
         cash = cash.minus(debit);
         changed = true;
-        await this.recordSignal(bot.id, row.asset.id, quote, 'buy', decision.reason, true);
+        await record(quote, 'buy', decision.reason, true);
         await this.snapshot(bot.id, now, true);
       } else if (decision.action === 'sell' && position) {
         const amount = decimal(position.amount);
@@ -484,26 +478,12 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         dailyLossBlocked = dailyRealized.negated().gte(dailyLimit) && dailyLimit.gt(0);
         openPositions = Math.max(0, openPositions - 1);
         changed = true;
-        await this.recordSignal(bot.id, row.asset.id, quote, 'sell', decision.reason, false);
+        await record(quote, 'sell', decision.reason, false);
         await this.snapshot(bot.id, now, true);
       } else if (decision.action === 'sell') {
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
-          quote,
-          'hold',
-          'Сигнал на продажу, но открытой позиции нет',
-          false,
-        );
+        await record(quote, 'hold', 'Сигнал на продажу, но открытой позиции нет', false);
       } else {
-        await this.recordSignal(
-          bot.id,
-          row.asset.id,
-          quote,
-          'hold',
-          decision.reason,
-          Boolean(position),
-        );
+        await record(quote, 'hold', decision.reason, Boolean(position));
       }
     }
 
@@ -523,6 +503,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     action: 'buy' | 'sell' | 'hold',
     reason: string,
     hasPosition: boolean,
+    strategyState: Record<string, unknown>,
   ): Promise<void> {
     await this.db
       .insert(botSignals)
@@ -534,6 +515,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         action,
         reason,
         hasPosition,
+        strategyState,
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
@@ -544,6 +526,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           action,
           reason,
           hasPosition,
+          strategyState,
           updatedAt: new Date(),
         },
       })
