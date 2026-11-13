@@ -419,6 +419,7 @@ interface StrategyDefinition {
 - Общие `Select`/`ListToolbar`/`TabGroup` унифицируют поиск слева и сортировку справа в заметках, задачах, операциях, базе токенов и хранилище; архивные фильтры и восстановление убраны с этих страниц.
 - Загрузчик страниц ограничен `<main>`, индикатор синхронизации работает на всех страницах.
 - No migration, no real-ledger changes.
+- Production release 2026-11-14: PR #117, merge `8a105ee`, deployment `fc54e20f-ddf9-4542-88f9-e0138b859bb8`, bundle `assets/index-DdwtK4WO.js`, `/ready` 200.
 
 ### UI-45 (2026-11-13)
 
