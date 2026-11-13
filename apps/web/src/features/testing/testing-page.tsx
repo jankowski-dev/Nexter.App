@@ -291,8 +291,18 @@ export function TestingPage() {
 
   async function openEditBot(bot: BotSummary) {
     if (bot.status === 'running') {
-      notify('Остановите робота, чтобы изменить настройки.', true);
-      return;
+      if (
+        !window.confirm(
+          'Остановить робота, чтобы открыть настройки? Открытые позиции и история сохранятся.',
+        )
+      ) {
+        return;
+      }
+      try {
+        await stopMutation.mutateAsync(bot.id);
+      } catch {
+        return;
+      }
     }
     let detail;
     try {
@@ -526,10 +536,10 @@ export function TestingPage() {
                       variant="ghost"
                       className="h-8 px-2 text-xs"
                       onClick={() => void openEditBot(bot)}
-                      disabled={bot.status === 'running'}
+                      disabled={busy}
                       title={
                         bot.status === 'running'
-                          ? 'Остановите робота, чтобы изменить настройки'
+                          ? 'Остановить робота и изменить настройки'
                           : undefined
                       }
                     >

@@ -163,9 +163,9 @@ export function BotDetailDrawer({
             <Button
               variant="secondary"
               onClick={() => onEdit(bot)}
-              disabled={busy || bot.status === 'running'}
+              disabled={busy}
               title={
-                bot.status === 'running' ? 'Остановите робота, чтобы изменить настройки' : undefined
+                bot.status === 'running' ? 'Остановить робота и изменить настройки' : undefined
               }
             >
               Изменить
