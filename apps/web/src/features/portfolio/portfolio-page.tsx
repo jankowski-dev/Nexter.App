@@ -238,7 +238,7 @@ export function PortfolioPage() {
                       >
                         <div className="flex items-center gap-2">
                           <TokenIcon
-                            logoUrl={item.asset.logoUrl}
+                            logoUrl={watchlistLogos.get(item.asset.id) ?? item.asset.logoUrl}
                             symbol={item.asset.symbol}
                             className="h-8 w-8 text-[10px]"
                           />
