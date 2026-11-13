@@ -364,9 +364,9 @@ interface StrategyDefinition {
 - Verification: `bot_signals` exists, `nexter_app` has SELECT/INSERT/UPDATE (DELETE revoked in the follow-up migration), existing bots preserved, diagnostics populated for 3 running bots. The owner DB password was rotated during the operation after an internal restore command echoed it; API/worker variables were updated and the worker restarted successfully.
 - No real-ledger changes.
 
-### UI-38 (в процессе, 2026-11-13)
+### UI-38 (2026-11-13)
 
-- Migration `0036` adds `bot_backtest_runs` with SELECT/INSERT grants for `nexter_app`, revokes UPDATE/DELETE on runs and DELETE on `bot_signals`.
-- API adds historical candle preview, backtest run/list/detail, and PDF endpoints.
-- UI adds the backtest block and run journal to the strategy drawer.
-- Data sources: CoinGecko daily market chart with GeckoTerminal daily OHLCV fallback. No real-ledger changes.
+- Encrypted backup `nexter-2026-11-13-ui38.dump.enc` (plaintext SHA-256 `5ff6bd67…ae02`, encrypted SHA-256 `0291c6ce…39c1`). Restore check in `nexter_restore_check_ui38` matched static counts: users 1, assets 49, bots 4, trades 22, events 39, notifications 3, signals 9, cash sum `4016.51537404`; equity snapshots and quote samples differed only by live ticks (313/314 and 3841/3844).
+- Migration `0036` applied first to the restored copy: `bot_backtest_runs` created, grants `INSERT, SELECT`, `UPDATE/DELETE` absent. Production now has 37 migrations and `bot_signals` grants `INSERT, SELECT, UPDATE` (DELETE revoked).
+- PR #102 merged as `df41099`; API deployment `6ab56830-81c5-4c88-baf4-82ef54555185`; `/ready` 200; bundle `assets/index-NW7z5vXx.js`.
+- Provider smoke: CoinGecko returned 256 daily candles for `bitway`; GeckoTerminal returned 90 daily candles for CAKE/WBNB. No real-ledger changes.
