@@ -21,6 +21,17 @@ function series(prices: number[]): BotCandle[] {
   );
 }
 
+function bar(date: string, open: number, high: number, low: number, close: number): BotCandle {
+  return {
+    date,
+    openUsd: open.toFixed(8),
+    highUsd: high.toFixed(8),
+    lowUsd: low.toFixed(8),
+    closeUsd: close.toFixed(8),
+    volumeUsd: '100000.00',
+  };
+}
+
 describe('runBacktest', () => {
   it('runs mean reversion buy and sell cycles on daily candles', () => {
     const params = meanReversion.parseParams({
@@ -81,5 +92,58 @@ describe('runBacktest', () => {
     expect(result.stats.finalEquityUsd).toBe('1000.00000000');
     expect(result.stats.totalReturnPct).toBe('0.00');
     expect(result.stats.buyHoldReturnPct).toBe('20.00');
+  });
+
+  it('executes an intrabar stop at the configured threshold, not at the daily close', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 50,
+      stopLossPct: 3,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const stopBar = bar('2026-01-05', 97, 98, 90, 92);
+    const result = runBacktest(meanReversion, params, [...entry, stopBar]);
+
+    const stop = result.trades.find((trade) => trade.side === 'sell');
+    expect(stop?.reason).toBe('стоп-лосс (внутри дня)');
+    expect(Number(stop?.priceUsd)).toBeGreaterThan(92);
+    expect(Number(stop?.realizedPnlUsd)).toBeGreaterThan(-45);
+    expect(Number(stop?.realizedPnlUsd)).toBeLessThan(-20);
+  });
+
+  it('fills a gap-down stop at the open price', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 50,
+      stopLossPct: 3,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const gapBar = bar('2026-01-05', 90, 91, 88, 89);
+    const result = runBacktest(meanReversion, params, [...entry, gapBar]);
+
+    const stop = result.trades.find((trade) => trade.side === 'sell');
+    expect(stop?.reason).toBe('стоп-лосс (гэп)');
+    expect(Number(stop?.priceUsd)).toBeCloseTo(90 * 0.999, 6);
+  });
+
+  it('executes an intrabar take-profit at the configured threshold', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 5,
+      stopLossPct: 50,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const profitBar = bar('2026-01-05', 97, 110, 97, 102);
+    const result = runBacktest(meanReversion, params, [...entry, profitBar]);
+
+    const takeProfit = result.trades.find((trade) => trade.side === 'sell');
+    expect(takeProfit?.reason).toBe('тейк-профит (внутри дня)');
+    expect(Number(takeProfit?.priceUsd)).toBeGreaterThan(102);
   });
 });

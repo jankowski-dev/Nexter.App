@@ -24,6 +24,7 @@ import type {
   WatchlistEntry,
 } from '@nexter/contracts';
 import { BacktestChart } from './backtest-chart';
+import { countMissingDays } from './backtest-utils';
 import { StrategyParamInputs } from './strategy-param-inputs';
 import { formToParams, paramsToForm } from './strategy-params';
 
@@ -64,6 +65,7 @@ export function BacktestPanel({
     entry.asset.chainCode,
   ]);
   const selectedToken = tokenEntries.find((entry) => entry.asset.id === selectedAssetId);
+  const missingDays = preview ? countMissingDays(preview.candles) : 0;
 
   const journal = useQuery({
     queryKey: ['trading-bot-backtests', template.key],
@@ -198,8 +200,8 @@ export function BacktestPanel({
     <Card>
       <CardTitle>Прогон по историческим данным</CardTitle>
       <CardDescription>
-        Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Открытая позиция закрывается в
-        конце периода.
+        Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Стоп-лосс и тейк-профит срабатывают
+        внутри дня по high/low; открытая позиция закрывается в конце периода.
       </CardDescription>
 
       <div className="mt-3 space-y-3">
@@ -316,6 +318,13 @@ export function BacktestPanel({
                 </span>
               ) : null}
             </div>
+            {missingDays > 0 ? (
+              <p className="text-xs leading-5 text-amber-700">
+                В данных {missingDays} пропущенных дн. Для низколиквидных токенов источник может
+                отдавать неполный ряд: стоп/тейк могут сработать с задержкой, а гэп — исполниться по
+                цене открытия.
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-zinc-200 text-sm text-zinc-500">
