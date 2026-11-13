@@ -11,6 +11,8 @@ export interface StrategyPosition {
   costBasisUsd: string;
 }
 
+export type StrategyState = Record<string, unknown>;
+
 export interface StrategyContext {
   now: Date;
   params: Record<string, unknown>;
@@ -22,11 +24,14 @@ export interface StrategyContext {
   /** Defaults to true; backtests can disable protective exits. */
   stopLossEnabled?: boolean;
   takeProfitEnabled?: boolean;
+  /** Persisted per bot/token or per backtest run. */
+  state?: StrategyState;
 }
 
 export interface StrategyDecision {
   action: 'buy' | 'sell' | 'hold';
   reason: string;
+  nextState?: StrategyState;
 }
 
 export interface StrategyParamField {
@@ -56,16 +61,16 @@ export interface StrategyDefinition {
   evaluate: (ctx: StrategyContext) => StrategyDecision;
 }
 
-export function hold(reason: string): StrategyDecision {
-  return { action: 'hold', reason };
+export function hold(reason: string, nextState?: StrategyState): StrategyDecision {
+  return nextState ? { action: 'hold', reason, nextState } : { action: 'hold', reason };
 }
 
-export function buy(reason: string): StrategyDecision {
-  return { action: 'buy', reason };
+export function buy(reason: string, nextState?: StrategyState): StrategyDecision {
+  return nextState ? { action: 'buy', reason, nextState } : { action: 'buy', reason };
 }
 
-export function sell(reason: string): StrategyDecision {
-  return { action: 'sell', reason };
+export function sell(reason: string, nextState?: StrategyState): StrategyDecision {
+  return nextState ? { action: 'sell', reason, nextState } : { action: 'sell', reason };
 }
 
 export function dec(value: string): Decimal {

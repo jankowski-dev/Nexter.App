@@ -267,6 +267,13 @@
       "when": 1794587358257,
       "tag": "0037_fat_radioactive_man",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1794600895410,
+      "tag": "0038_living_ogun",
+      "breakpoints": true
     }
   ]
 }

@@ -1291,6 +1291,7 @@ export const botSignals = pgTable(
     action: text('action').notNull().default('hold'),
     reason: text('reason').notNull().default(''),
     hasPosition: boolean('has_position').notNull().default(false),
+    strategyState: jsonb('strategy_state').$type<Record<string, unknown>>().notNull().default({}),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [

@@ -325,6 +325,7 @@ export class TradingBotsService {
       const definition = this.requireDefinition(bot.strategyKey);
       nextStrategyParams = parseStrategyParams(definition, input.strategyParams);
     }
+    const strategyChanged = input.strategyKey !== undefined || input.strategyParams !== undefined;
     const tokenAssetIds =
       input.tokenAssetIds !== undefined ? uniqueAssetIds(input.tokenAssetIds) : undefined;
     if (tokenAssetIds !== undefined) {
@@ -376,6 +377,10 @@ export class TradingBotsService {
           await tx
             .insert(botTokens)
             .values(tokenAssetIds.map((assetId) => ({ botId: id, assetId })));
+        }
+
+        if (strategyChanged || tokenAssetIds !== undefined) {
+          await tx.delete(botSignals).where(eq(botSignals.botId, id));
         }
 
         await this.audit.log(
@@ -513,6 +518,7 @@ export class TradingBotsService {
       await tx.delete(botPositions).where(eq(botPositions.botId, id));
       await tx.delete(botTrades).where(eq(botTrades.botId, id));
       await tx.delete(botEquitySnapshots).where(eq(botEquitySnapshots.botId, id));
+      await tx.delete(botSignals).where(eq(botSignals.botId, id));
       await tx
         .update(tradingBots)
         .set({

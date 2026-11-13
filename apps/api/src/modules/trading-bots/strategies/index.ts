@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { rollingHigh, sma } from './indicators';
-import { buy, dec, hold, sell, type StrategyDefinition } from './types';
+import { buy, dec, hold, sell, type StrategyDefinition, type StrategyState } from './types';
 
 const momentumParamsSchema = z
   .object({
@@ -313,12 +313,163 @@ export const dcaDip: StrategyDefinition = {
   },
 };
 
+const crashProtectedGridParamsSchema = z
+  .object({
+    gridStepPct: z.number().min(0.2).max(20).default(1.5),
+    maxAdds: z.number().int().min(1).max(20).default(4),
+    takeProfitPct: z.number().min(0.1).max(100).default(2.5),
+    crashTriggerPct: z.number().min(1).max(90).default(10),
+    resumeDropPct: z.number().min(2).max(95).default(30),
+    closeLossThresholdPct: z.number().min(0).max(100).default(10),
+  })
+  .refine((value) => value.resumeDropPct > value.crashTriggerPct, {
+    message: 'resumeDropPct must be greater than crashTriggerPct',
+    path: ['resumeDropPct'],
+  });
+
+interface CrashGridState {
+  hwm: ReturnType<typeof dec>;
+  mode: 'normal' | 'crash';
+  adds: number;
+}
+
+function readCrashGridState(
+  value: Record<string, unknown> | undefined,
+  priceUsd: string,
+): CrashGridState {
+  let hwm = dec(priceUsd);
+  if (value && typeof value.highWaterMark === 'string') {
+    try {
+      const parsed = dec(value.highWaterMark);
+      if (parsed.gt(0)) hwm = parsed;
+    } catch {
+      // Fall back to the current price.
+    }
+  }
+  const mode = value?.mode === 'crash' ? 'crash' : 'normal';
+  const addsRaw = Number(value?.adds);
+  const adds = Number.isFinite(addsRaw) && addsRaw >= 0 ? Math.floor(addsRaw) : 0;
+  return { hwm, mode, adds };
+}
+
+function crashGridState(
+  hwm: ReturnType<typeof dec>,
+  mode: 'normal' | 'crash',
+  adds: number,
+): StrategyState {
+  return { highWaterMark: hwm.toString(), mode, adds };
+}
+
+export const crashProtectedGrid: StrategyDefinition = {
+  key: 'crash_protected_grid',
+  version: 1,
+  icon: 'shield',
+  kind: 'custom',
+  name: 'Защитная сетка',
+  description:
+    'Сетка с защитным режимом на обвале: закрывает прибыльные и низкоубыточные позиции, пережидает падение и возобновляет работу ниже.',
+  guide:
+    'Обычный режим покупает ступени ниже опоры и продаёт по тейк-профиту. Стратегия запоминает максимум цены (high-water mark). Если цена падает от него на crashTriggerPct, покупки останавливаются: позиция закрывается, если её P&L не хуже −closeLossThresholdPct; более глубокий убыток остаётся открытым. Пауза держится до падения на resumeDropPct от максимума. На этом уровне опора сбрасывается на текущую цену, счётчик докупок обнуляется и сетка снова начинает работать. Если цена обновляет максимум, защитный режим снимается автоматически.',
+  bestFor:
+    'Волатильные активы с резкими обвалами и отскоками, где нужно переждать падение, а не докупать в свободном падении.',
+  risks:
+    'Глубоко убыточная позиция остаётся открытой и может пережить длительный обвал. После сброса опоры новая сетка может снова попасть под падение. Нужен свободный кэш и готовность к просадке.',
+  paramFields: [
+    { key: 'gridStepPct', label: 'Шаг сетки', min: 0.2, max: 20, step: 0.1, unit: '%' },
+    { key: 'maxAdds', label: 'Макс. докупок', min: 1, max: 20, step: 1, integer: true },
+    { key: 'takeProfitPct', label: 'Тейк-профит сетки', min: 0.1, max: 100, step: 0.1, unit: '%' },
+    {
+      key: 'crashTriggerPct',
+      label: 'Порог обвала для паузы',
+      hint: 'Падение от максимума, после которого покупки останавливаются',
+      min: 1,
+      max: 90,
+      step: 0.5,
+      unit: '%',
+    },
+    {
+      key: 'resumeDropPct',
+      label: 'Порог возобновления',
+      hint: 'Падение от максимума, после которого сетка снова работает',
+      min: 2,
+      max: 95,
+      step: 0.5,
+      unit: '%',
+    },
+    {
+      key: 'closeLossThresholdPct',
+      label: 'Закрывать при убытке до',
+      hint: 'На обвале закрываются позиции с P&L не хуже этого уровня',
+      min: 0,
+      max: 100,
+      step: 0.5,
+      unit: '%',
+    },
+  ],
+  defaultParams: crashProtectedGridParamsSchema.parse({}),
+  parseParams: (value) => crashProtectedGridParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = crashProtectedGridParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+    const state = readCrashGridState(ctx.state, ctx.priceUsd);
+    const position = ctx.position;
+    const avgCost = position ? dec(position.avgCostUsd) : null;
+    if (typeof ctx.state?.highWaterMark !== 'string' && avgCost && avgCost.gt(state.hwm)) {
+      state.hwm = avgCost;
+    }
+    const pnlPct =
+      position && avgCost && avgCost.gt(0) ? price.minus(avgCost).div(avgCost).mul(100) : null;
+    const canCloseOnCrash =
+      position !== null && pnlPct !== null && pnlPct.gte(-params.closeLossThresholdPct);
+
+    let hwm = price.gt(state.hwm) ? price : state.hwm;
+    let mode = state.mode;
+    if (price.gte(state.hwm)) {
+      hwm = price;
+      mode = 'normal';
+    }
+
+    const dropPct = hwm.gt(0) ? hwm.minus(price).div(hwm).mul(100) : dec('0');
+
+    if (dropPct.gte(params.resumeDropPct)) {
+      if (canCloseOnCrash) {
+        return sell('защитное закрытие на обвале', crashGridState(price, 'normal', 0));
+      }
+      return buy('возобновление сетки после обвала', crashGridState(price, 'normal', 1));
+    }
+
+    if (mode === 'crash' || dropPct.gte(params.crashTriggerPct)) {
+      if (canCloseOnCrash) {
+        return sell('защитное закрытие на обвале', crashGridState(hwm, 'crash', 0));
+      }
+      return hold('обвал: покупки приостановлены', crashGridState(hwm, 'crash', state.adds));
+    }
+
+    if (position && avgCost) {
+      if (price.gte(avgCost.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит', crashGridState(hwm, 'normal', 0));
+      }
+      if (state.adds < params.maxAdds && price.lte(avgCost.mul(1 - params.gridStepPct / 100))) {
+        return buy('ступень защитной сетки', crashGridState(hwm, 'normal', state.adds + 1));
+      }
+      return hold('внутри сетки', crashGridState(hwm, 'normal', state.adds));
+    }
+
+    if (price.lte(hwm.mul(1 - params.gridStepPct / 100))) {
+      return buy('первая ступень защитной сетки', crashGridState(hwm, 'normal', 1));
+    }
+
+    return hold('цена у опоры', crashGridState(hwm, 'normal', 0));
+  },
+};
+
 export const strategyDefinitions = [
   momentumBreakout,
   meanReversion,
   gridRange,
   trendPullback,
   dcaDip,
+  crashProtectedGrid,
 ];
 
 export const strategyByKey = new Map(strategyDefinitions.map((item) => [item.key, item]));

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { BotCandle } from '@nexter/contracts';
 import { runBacktest } from './backtest.engine';
-import { meanReversion } from '../strategies';
+import { crashProtectedGrid, meanReversion } from '../strategies';
 
 function candle(date: string, close: number): BotCandle {
   const value = close.toFixed(8);
@@ -193,5 +193,35 @@ describe('runBacktest', () => {
     const takeProfit = result.trades.find((trade) => trade.side === 'sell');
     expect(takeProfit?.reason).toBe('тейк-профит (внутри дня)');
     expect(Number(takeProfit?.priceUsd)).toBeGreaterThan(102);
+  });
+  it('runs a stateful crash-protected grid through pause, resume and take-profit', () => {
+    const params = crashProtectedGrid.parseParams({
+      gridStepPct: 1.5,
+      maxAdds: 4,
+      takeProfitPct: 2.5,
+      crashTriggerPct: 10,
+      resumeDropPct: 30,
+      closeLossThresholdPct: 10,
+    });
+    const candles = [
+      candle('2026-01-01', 1),
+      candle('2026-01-02', 1),
+      candle('2026-01-03', 0.98),
+      candle('2026-01-04', 0.9),
+      candle('2026-01-05', 0.8),
+      candle('2026-01-06', 0.7),
+      candle('2026-01-07', 0.72),
+    ];
+    const result = runBacktest(crashProtectedGrid, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.trades.map((trade) => `${trade.side}:${trade.reason}`)).toEqual([
+      'buy:первая ступень защитной сетки',
+      'sell:защитное закрытие на обвале',
+      'buy:возобновление сетки после обвала',
+      'sell:тейк-профит (гэп)',
+    ]);
   });
 });

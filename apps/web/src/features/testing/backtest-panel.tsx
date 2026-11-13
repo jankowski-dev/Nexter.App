@@ -75,6 +75,8 @@ export function BacktestPanel({
     entry.asset.chainCode,
   ]);
   const selectedToken = tokenEntries.find((entry) => entry.asset.id === selectedAssetId);
+  const supportsStopLoss = template.paramFields.some((field) => field.key === 'stopLossPct');
+  const supportsTakeProfit = template.paramFields.some((field) => field.key === 'takeProfitPct');
   const missingDays = preview ? countMissingDays(preview.candles) : 0;
   const periodChangePct =
     preview && preview.candles.length > 1
@@ -357,24 +359,28 @@ export function BacktestPanel({
               onChange={(key, value) => setParamValues((current) => ({ ...current, [key]: value }))}
             />
             <div className="mt-4 grid gap-3 border-t border-zinc-200 pt-3 sm:grid-cols-3">
-              <OptionToggle
-                label="Стоп-лосс"
-                hint="Защитная продажа при просадке"
-                checked={useStopLoss}
-                onChange={(checked) => {
-                  setUseStopLoss(checked);
-                  resetRun();
-                }}
-              />
-              <OptionToggle
-                label="Тейк-профит"
-                hint="Фиксация прибыли по цели"
-                checked={useTakeProfit}
-                onChange={(checked) => {
-                  setUseTakeProfit(checked);
-                  resetRun();
-                }}
-              />
+              {supportsStopLoss ? (
+                <OptionToggle
+                  label="Стоп-лосс"
+                  hint="Защитная продажа при просадке"
+                  checked={useStopLoss}
+                  onChange={(checked) => {
+                    setUseStopLoss(checked);
+                    resetRun();
+                  }}
+                />
+              ) : null}
+              {supportsTakeProfit ? (
+                <OptionToggle
+                  label="Тейк-профит"
+                  hint="Фиксация прибыли по цели"
+                  checked={useTakeProfit}
+                  onChange={(checked) => {
+                    setUseTakeProfit(checked);
+                    resetRun();
+                  }}
+                />
+              ) : null}
               <OptionToggle
                 label="Реинвестирование"
                 hint="Следующие сделки от текущего капитала"

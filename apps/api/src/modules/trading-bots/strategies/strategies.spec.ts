@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  crashProtectedGrid,
   dcaDip,
   gridRange,
   meanReversion,
@@ -36,13 +37,14 @@ function risingHistory(): StrategySample[] {
 
 describe('trading bot strategy registry', () => {
   it('exposes five templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(5);
+    expect(strategyDefinitions).toHaveLength(6);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
       'grid_range',
       'trend_pullback',
       'dca_dip',
+      'crash_protected_grid',
     ]);
 
     for (const definition of strategyDefinitions) {
@@ -50,7 +52,7 @@ describe('trading bot strategy registry', () => {
       expect(definition.guide.length).toBeGreaterThan(0);
       expect(definition.bestFor.length).toBeGreaterThan(0);
       expect(definition.risks.length).toBeGreaterThan(0);
-      expect(definition.kind).toBe('system');
+      expect(definition.kind).toBe(definition.key === 'crash_protected_grid' ? 'custom' : 'system');
       expect(definition.paramFields.length).toBeGreaterThan(0);
       for (const field of definition.paramFields) {
         expect(definition.defaultParams).toHaveProperty(field.key);
@@ -251,5 +253,65 @@ describe('dca_dip', () => {
         context({ params, history: flat, priceUsd: '1.06000000', position, buyCount: 0 }),
       ).reason,
     ).toBe('тейк-профит');
+  });
+});
+
+describe('crash_protected_grid', () => {
+  const params = crashProtectedGrid.defaultParams;
+  const position = { amount: '1000', avgCostUsd: '0.98000000', costBasisUsd: '980.00000000' };
+
+  it('closes a low-loss grid position when the crash trigger is crossed', () => {
+    const first = crashProtectedGrid.evaluate(
+      context({ params, priceUsd: '1.00000000', history: history([1]) }),
+    );
+    expect(first.nextState).toMatchObject({ highWaterMark: '1', mode: 'normal', adds: 0 });
+
+    const entry = crashProtectedGrid.evaluate(
+      context({
+        params,
+        priceUsd: '0.98000000',
+        history: history([1, 0.98]),
+        state: first.nextState,
+      }),
+    );
+    expect(entry.action).toBe('buy');
+
+    const crash = crashProtectedGrid.evaluate(
+      context({
+        params,
+        priceUsd: '0.90000000',
+        history: history([1, 0.98, 0.9]),
+        position,
+        state: { highWaterMark: '1', mode: 'normal', adds: 1 },
+      }),
+    );
+    expect(crash).toMatchObject({ action: 'sell', reason: 'защитное закрытие на обвале' });
+    expect(crash.nextState).toMatchObject({ mode: 'crash', adds: 0 });
+  });
+
+  it('keeps a deep loss open and resumes the grid after a 30% drop', () => {
+    const crash = crashProtectedGrid.evaluate(
+      context({
+        params,
+        priceUsd: '0.85000000',
+        history: history([1, 0.85]),
+        position: { amount: '1000', avgCostUsd: '1.00000000', costBasisUsd: '1000.00000000' },
+        state: { highWaterMark: '1', mode: 'normal', adds: 1 },
+      }),
+    );
+    expect(crash).toMatchObject({ action: 'hold', reason: 'обвал: покупки приостановлены' });
+    expect(crash.nextState).toMatchObject({ mode: 'crash' });
+
+    const resumed = crashProtectedGrid.evaluate(
+      context({
+        params,
+        priceUsd: '0.70000000',
+        history: history([1, 0.7]),
+        position: { amount: '1000', avgCostUsd: '1.00000000', costBasisUsd: '1000.00000000' },
+        state: { highWaterMark: '1', mode: 'crash', adds: 1 },
+      }),
+    );
+    expect(resumed).toMatchObject({ action: 'buy', reason: 'возобновление сетки после обвала' });
+    expect(resumed.nextState).toMatchObject({ highWaterMark: '0.7', mode: 'normal', adds: 1 });
   });
 });
