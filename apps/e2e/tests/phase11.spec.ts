@@ -118,14 +118,9 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(page.getByText('Test Login')).toBeVisible();
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'В архив' }).click();
+  await page.getByRole('button', { name: 'Удалить' }).click();
   await expect(page.getByText('Test Login')).toHaveCount(0);
-  await page.getByRole('switch', { name: 'Показать архивные записи' }).click();
-  await expect(page.getByText('Test Login')).toBeVisible();
-  await page.getByRole('button', { name: 'Вернуть' }).click();
-  await expect(page.getByRole('button', { name: 'В архив' })).toBeVisible();
-  await page.getByRole('switch', { name: 'Показать архивные записи' }).click();
-  await expect(page.getByText('Test Login')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Показать архивные записи' })).toHaveCount(0);
 
   await nav.getByRole('link', { name: 'Задачи' }).click();
   await expect(page.getByRole('heading', { name: 'Задачи', exact: true })).toBeVisible();
@@ -212,20 +207,15 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('Задача для списка')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Архивные' }).click();
-  await expect(page.getByText('Задача для списка')).toBeVisible();
-  await page.getByRole('button', { name: 'Вернуть задачу' }).click();
+  await page.getByRole('tab', { name: 'Все' }).click();
   await expect(page.getByText('Задача для списка')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Актуальные' }).click();
-  await page.getByRole('tab', { name: 'Выполненные' }).click();
-  await expect(page.getByText('Задача для списка')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Архивные' })).toHaveCount(0);
 
   const monthValue = String(today.getMonth() + 1).padStart(2, '0');
   const firstDate = `${today.getFullYear()}-${monthValue}-10`;
   const secondDate = `${today.getFullYear()}-${monthValue}-11`;
   const lastDate = `${today.getFullYear()}-${monthValue}-24`;
 
-  await page.getByRole('button', { name: 'Актуальные' }).click();
   await page.getByRole('tab', { name: 'Календарь' }).click();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const recurringDialog = page.getByRole('dialog');
@@ -295,6 +285,9 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   await page.getByLabel('Поиск по заметкам').fill('корреляцию');
   await expect(page.getByText('Идея по портфелю')).toBeVisible();
+  await page.getByRole('tab', { name: 'По созданию' }).click();
+  await expect(page.getByText('Идея по портфелю')).toBeVisible();
+  await page.getByRole('tab', { name: 'По изменению' }).click();
 
   await page.getByText('Идея по портфелю').first().click();
   const deleteDrawer = page.getByRole('dialog');
@@ -306,10 +299,5 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByRole('button', { name: 'Подтвердить удаление' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByText('Идея по портфелю')).toHaveCount(0);
-
-  await page.getByRole('button', { name: 'Архивные' }).click();
-  await expect(page.getByText('Идея по портфелю')).toBeVisible();
-  await page.getByRole('button', { name: 'Вернуть заметку' }).click();
-  await page.getByRole('button', { name: 'Актуальные' }).click();
-  await expect(page.getByText('Идея по портфелю')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Архивные' })).toHaveCount(0);
 });

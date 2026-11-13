@@ -232,6 +232,7 @@ export function PortfolioPage() {
                       <button
                         key={item.asset.id}
                         type="button"
+                        aria-label={`Открыть статистику ${item.asset.symbol}`}
                         onClick={() => setSelectedAssetId(item.asset.id)}
                         className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       >

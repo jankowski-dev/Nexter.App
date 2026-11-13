@@ -410,6 +410,7 @@ export function WatchlistPage() {
         search={search}
         onSearch={setSearch}
         searchPlaceholder="Поиск по символу, названию, контракту или сети"
+        searchAriaLabel="Поиск по базе токенов"
       >
         <Select
           className="w-48"

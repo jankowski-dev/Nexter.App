@@ -96,7 +96,12 @@ export function OperationsPage() {
         }
       />
 
-      <ListToolbar search={search} onSearch={setSearch} searchPlaceholder="Поиск по операциям">
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder="Поиск по операциям"
+        searchAriaLabel="Поиск по операциям"
+      >
         <TabGroup
           value={filter}
           onChange={setFilter}

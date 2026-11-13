@@ -162,7 +162,12 @@ export function TasksPage() {
         }
       />
 
-      <ListToolbar search={search} onSearch={setSearch} searchPlaceholder="Поиск по задачам">
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder="Поиск по задачам"
+        searchAriaLabel="Поиск по задачам"
+      >
         {view === 'list' ? (
           <TabGroup
             value={filter}

@@ -43,12 +43,14 @@ export function ListToolbar({
   search,
   onSearch,
   searchPlaceholder,
+  searchAriaLabel,
   children,
   className,
 }: {
   search: string;
   onSearch: (value: string) => void;
   searchPlaceholder: string;
+  searchAriaLabel?: string;
   children?: ReactNode;
   className?: string;
 }) {
@@ -59,7 +61,7 @@ export function ListToolbar({
         value={search}
         onChange={(event) => onSearch(event.target.value)}
         placeholder={searchPlaceholder}
-        aria-label={searchPlaceholder}
+        aria-label={searchAriaLabel ?? searchPlaceholder}
         className="max-w-sm"
       />
       <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>

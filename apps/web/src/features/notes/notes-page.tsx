@@ -74,6 +74,7 @@ export function NotesPage() {
         search={search}
         onSearch={setSearch}
         searchPlaceholder="Поиск по заголовку, тексту и тегам"
+        searchAriaLabel="Поиск по заметкам"
       >
         <TabGroup
           value={sort}

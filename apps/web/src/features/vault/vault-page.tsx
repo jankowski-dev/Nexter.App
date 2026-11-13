@@ -451,6 +451,7 @@ export function VaultPage() {
             search={search}
             onSearch={setSearch}
             searchPlaceholder="Поиск по названию, логину или сайту"
+            searchAriaLabel="Поиск в хранилище"
           >
             <TabGroup
               value={sort}
