@@ -78,6 +78,12 @@
 - **Bot runner не тикает:** проверьте `BOT_RUNNER_ENABLED`, логи API `Bot runner tick failed`, advisory lock (`pg_locks`), что API-реплика жива и `NODE_ENV!=test`.
 - **Дубли сделок:** проверьте, что несколько API-реплик используют один Postgres advisory lock; вторая реплика должна пропускать тик.
 
+## 7.2. Уведомления
+
+- Счётчик в меню не исчезает: откройте `/notifications`; страница вызывает `POST /notifications/read-all`. Если запрос не прошёл, проверьте CSRF/сессию.
+- Уведомлений нет после остановки бота: проверьте, что миграция `0033` применена и `nexter_app` имеет SELECT/INSERT/UPDATE на `notifications`.
+- Уведомления приходят с задержкой до 30 секунд: счётчик в навигации обновляется опросом; на странице есть кнопка «Обновить».
+
 ## 8. Reconciliation
 
 - `RECONCILIATION_ENABLED=false` — indexer выключен.

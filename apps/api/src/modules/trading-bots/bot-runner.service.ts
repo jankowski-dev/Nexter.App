@@ -25,6 +25,7 @@ import { env } from '../../shared/config/env';
 import { DB, DB_POOL } from '../../shared/db/db.module';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService, type MarketQuoteValue } from '../market-data/market-quote.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { strategyByKey } from './strategies';
 
 const HISTORY_LIMIT = 300;
@@ -42,6 +43,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     @Inject(DB) private readonly db: Database,
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly quotes: MarketQuoteService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -135,10 +137,21 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         bot.id,
         new Error(`Strategy ${strategyRow.key} is not available in this deployment`),
       );
+      const now = new Date();
       await this.db
         .update(tradingBots)
-        .set({ status: 'stopped', stoppedAt: new Date(), updatedAt: new Date() })
+        .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
+      await this.notifications
+        .create({
+          userId: bot.userId,
+          type: 'bot_stopped',
+          title: 'Бот остановлен',
+          body: `Бот «${bot.name}» остановлен: стратегия недоступна в этой версии.`,
+          href: '/testing',
+          payload: { botId: bot.id, reason: 'strategy_unavailable' },
+        })
+        .catch(() => undefined);
       return;
     }
 
@@ -159,6 +172,16 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .update(tradingBots)
         .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
+      await this.notifications
+        .create({
+          userId: bot.userId,
+          type: 'bot_stopped',
+          title: 'Бот остановлен',
+          body: `Бот «${bot.name}» остановлен: некорректные параметры стратегии.`,
+          href: '/testing',
+          payload: { botId: bot.id, reason: 'invalid_params' },
+        })
+        .catch(() => undefined);
       return;
     }
 

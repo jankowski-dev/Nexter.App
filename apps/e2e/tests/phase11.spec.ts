@@ -66,7 +66,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByLabel('Мастер-пароль').fill(masterPassword);
   await page.getByLabel('Повторите пароль').fill(masterPassword);
   await page.getByRole('button', { name: 'Создать хранилище' }).click();
-  await expect(page.getByText('Хранилище создано')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Добавить запись' }).first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Добавить запись' }).first().click();
   const vaultDialog = page.getByRole('dialog');
@@ -120,11 +120,11 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'В архив' }).click();
   await expect(page.getByText('Test Login')).toHaveCount(0);
-  await page.getByLabel('Архив').check();
+  await page.getByRole('switch', { name: 'Показать архивные записи' }).click();
   await expect(page.getByText('Test Login')).toBeVisible();
   await page.getByRole('button', { name: 'Вернуть' }).click();
   await expect(page.getByRole('button', { name: 'В архив' })).toBeVisible();
-  await page.getByLabel('Архив').uncheck();
+  await page.getByRole('switch', { name: 'Показать архивные записи' }).click();
   await expect(page.getByText('Test Login')).toBeVisible();
 
   await nav.getByRole('link', { name: 'Задачи' }).click();

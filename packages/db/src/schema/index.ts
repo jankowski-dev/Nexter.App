@@ -1109,6 +1109,27 @@ export const externalApiCalls = pgTable(
   (table) => [index('external_api_calls_created_idx').on(table.createdAt)],
 );
 
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    href: text('href'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    readAt: timestamp('read_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('notifications_user_time_idx').on(table.userId, table.createdAt),
+    index('notifications_user_unread_idx').on(table.userId, table.readAt),
+  ],
+);
+
 export const botStrategies = pgTable(
   'bot_strategies',
   {
@@ -1314,6 +1335,7 @@ export type ImportRow = typeof importRows.$inferSelect;
 export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
+export type NotificationRecord = typeof notifications.$inferSelect;
 export type BotStrategyRecord = typeof botStrategies.$inferSelect;
 export type TradingBotRecord = typeof tradingBots.$inferSelect;
 export type BotTokenRecord = typeof botTokens.$inferSelect;

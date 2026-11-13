@@ -8,6 +8,7 @@ export * from './finance';
 export * from './habits';
 export * from './imports';
 export * from './notes';
+export * from './notifications';
 export * from './pagination';
 export * from './portfolio';
 export * from './reconciliation';

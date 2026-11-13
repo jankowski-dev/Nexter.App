@@ -12,7 +12,6 @@ import {
 } from '@/lib/api';
 import type { ImportSummary } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { Link } from '@tanstack/react-router';
 import { useState, type ChangeEvent } from 'react';
 
@@ -449,9 +448,6 @@ export function ImportPage() {
     transactions: null,
   });
   const [preview, setPreview] = useState<ImportResponse | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [localError, setLocalError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -464,7 +460,6 @@ export function ImportPage() {
     mutationFn: previewNotionImport,
     onSuccess: (data) => {
       setPreview(data);
-      setNotice('Предпросмотр готов. Проверьте итоги и подтвердите импорт.');
       setLocalError(null);
       void queryClient.invalidateQueries({ queryKey: ['imports'] });
     },
@@ -478,7 +473,6 @@ export function ImportPage() {
     mutationFn: commitImport,
     onSuccess: (data) => {
       setPreview(data);
-      setNotice('Импорт применён к учёту.');
       setLocalError(null);
       void queryClient.invalidateQueries({ queryKey: ['imports'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -492,7 +486,6 @@ export function ImportPage() {
     mutationFn: rollbackImport,
     onSuccess: (data) => {
       setPreview(data);
-      setNotice('Импорт откатан. Проводки, лоты и цены импорта удалены.');
       setLocalError(null);
       void queryClient.invalidateQueries({ queryKey: ['imports'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -506,7 +499,6 @@ export function ImportPage() {
     mutationFn: fetchImport,
     onSuccess: (data) => {
       setPreview(data);
-      setNotice(null);
       setLocalError(null);
     },
     onError: (error) => {
@@ -534,14 +526,12 @@ export function ImportPage() {
       setFiles((current) => ({ ...current, [key]: file }));
       setPreview(null);
       setLocalError(null);
-      setNotice(null);
     };
   }
 
   async function handlePreview() {
     setPreview(null);
     setLocalError(null);
-    setNotice(null);
 
     try {
       const [source, orders, transactions] = await Promise.all([
@@ -667,12 +657,6 @@ export function ImportPage() {
       {localError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {localError}
-        </div>
-      ) : null}
-
-      {notice ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          {notice}
         </div>
       ) : null}
 

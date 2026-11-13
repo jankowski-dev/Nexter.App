@@ -232,6 +232,26 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(201);
 
+    const notifications = await agent.get('/api/v1/notifications').expect(200);
+    expect(notifications.body.unreadCount).toBeGreaterThan(0);
+    expect(
+      notifications.body.data.some(
+        (notification: { type: string }) => notification.type === 'bot_stopped',
+      ),
+    ).toBe(true);
+
+    const unread = await agent.get('/api/v1/notifications/unread-count').expect(200);
+    expect(unread.body.count).toBeGreaterThan(0);
+
+    const readAll = await agent
+      .post('/api/v1/notifications/read-all')
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    expect(readAll.body.updated).toBeGreaterThan(0);
+
+    const afterRead = await agent.get('/api/v1/notifications/unread-count').expect(200);
+    expect(afterRead.body.count).toBe(0);
+
     const closeBot = await agent
       .post('/api/v1/trading-bots/bots')
       .set('x-csrf-token', owner.csrf)

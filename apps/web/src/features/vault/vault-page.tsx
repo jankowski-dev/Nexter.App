@@ -4,6 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
+import { Switch } from '@/components/ui/switch';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
 import { CopyIcon, EyeIcon } from '@/components/ui/icons';
@@ -23,7 +24,6 @@ import {
   type VaultItemData,
 } from '@/lib/vault-crypto';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useEffect, useState } from 'react';
 import type { VaultItem } from '@nexter/contracts';
 
@@ -124,9 +124,6 @@ export function VaultPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [error, setError] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<DecryptedItem | null>(null);
@@ -225,7 +222,6 @@ export function VaultPage() {
 
   async function setupVault(): Promise<void> {
     setUnlockError(null);
-    setNotice(null);
 
     if (masterPassword.length < 12) {
       setUnlockError('Мастер-пароль должен содержать минимум 12 символов.');
@@ -255,7 +251,6 @@ export function VaultPage() {
       setDataKey(key);
       setMasterPassword('');
       setConfirmPassword('');
-      setNotice('Хранилище создано. Мастер-пароль не сохраняется — запомните его.');
       invalidate();
     } catch (err) {
       setUnlockError(toRussianError(err, 'Не удалось создать хранилище'));
@@ -269,7 +264,6 @@ export function VaultPage() {
     if (!config) return;
 
     setUnlockError(null);
-    setNotice(null);
     setBusy(true);
 
     try {
@@ -277,7 +271,6 @@ export function VaultPage() {
       const key = await unwrapDataKey(config.wrappedKey, config.wrappedKeyIv, masterKey);
       setDataKey(key);
       setMasterPassword('');
-      setNotice(null);
     } catch {
       setUnlockError('Неверный мастер-пароль.');
     } finally {
@@ -331,13 +324,11 @@ export function VaultPage() {
     setConfirmPassword('');
     setUnlockError(null);
     closeItemDialog();
-    setNotice('Хранилище заблокировано.');
   }
 
   async function copyPassword(value: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(value);
-      setNotice('Пароль скопирован в буфер обмена.');
       setError(null);
     } catch {
       setError('Не удалось скопировать пароль. Браузер запретил доступ к буферу.');
@@ -383,18 +374,17 @@ export function VaultPage() {
         actions={
           config ? (
             <>
-              <label className="flex items-center gap-2 text-sm text-zinc-600">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2 text-sm text-zinc-600">
+                <Switch
                   checked={includeArchived}
-                  onChange={(event) => {
-                    setIncludeArchived(event.target.checked);
+                  onChange={(checked) => {
+                    setIncludeArchived(checked);
                     setRevealed(null);
                   }}
-                  className="h-4 w-4 rounded border-zinc-300 bg-white"
+                  label="Показать архивные записи"
                 />
-                Архив
-              </label>
+                <span>Архив</span>
+              </div>
               {unlocked ? (
                 <>
                   <Button variant="secondary" onClick={lockVault}>
@@ -408,11 +398,6 @@ export function VaultPage() {
         }
       />
 
-      {notice ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-          {notice}
-        </div>
-      ) : null}
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}
@@ -549,7 +534,7 @@ export function VaultPage() {
                     <div className="flex flex-wrap items-center justify-end gap-1.5">
                       {row.data.username ? (
                         <span
-                          className="max-w-48 truncate font-mono text-xs text-zinc-600"
+                          className="mr-2 max-w-48 truncate font-mono text-xs text-zinc-600"
                           title={row.data.username}
                         >
                           {row.data.username}
