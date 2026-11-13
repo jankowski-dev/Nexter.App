@@ -48,36 +48,65 @@ export function LiveRefreshIndicator() {
   const fetching = useIsFetching({
     predicate: (query) => (route ? queryMatches(route, query.queryKey) : false),
   });
-  const [spinning, setSpinning] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [active, setActive] = useState(false);
   const startedAt = useRef(0);
+  const activeRef = useRef(false);
+  const hideTimer = useRef<number | null>(null);
+  const unmountTimer = useRef<number | null>(null);
 
   useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
+  useEffect(() => {
+    const clearTimers = () => {
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+      if (unmountTimer.current !== null) window.clearTimeout(unmountTimer.current);
+      hideTimer.current = null;
+      unmountTimer.current = null;
+    };
+
     if (!route) {
-      setSpinning(false);
+      clearTimers();
+      setMounted(false);
+      setActive(false);
       return;
     }
 
     if (fetching > 0) {
-      startedAt.current = Date.now();
-      setSpinning(true);
+      clearTimers();
+      if (!activeRef.current) startedAt.current = Date.now();
+      setMounted(true);
+      window.requestAnimationFrame(() => setActive(true));
       return;
     }
 
-    if (!spinning) return;
+    if (!mounted) return;
 
-    const remaining = Math.max(0, 700 - (Date.now() - startedAt.current));
-    const timer = window.setTimeout(() => setSpinning(false), remaining);
-    return () => window.clearTimeout(timer);
-  }, [fetching, route, spinning]);
+    const remaining = Math.max(0, 3000 - (Date.now() - startedAt.current));
+    hideTimer.current = window.setTimeout(() => {
+      setActive(false);
+      unmountTimer.current = window.setTimeout(() => setMounted(false), 550);
+    }, remaining);
 
-  if (!route || !spinning) return null;
+    return () => {
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    };
+  }, [fetching, route, mounted]);
+
+  if (!route || !mounted) return null;
 
   return (
     <div
-      className="flex h-9 items-center gap-2 whitespace-nowrap text-xs text-zinc-500"
+      className={`flex h-9 items-center gap-2 whitespace-nowrap text-xs text-zinc-500 transition-opacity duration-500 ${
+        active ? 'opacity-100' : 'opacity-0'
+      }`}
       role="status"
       aria-live="polite"
       aria-label="Синхронизация данных"
+      aria-hidden={!active}
     >
       <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
       <span>Синхронизация данных</span>
