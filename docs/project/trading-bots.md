@@ -378,3 +378,10 @@ interface StrategyDefinition {
 - PR #102 merged as `df41099`; API deployment `6ab56830-81c5-4c88-baf4-82ef54555185`; `/ready` 200; bundle `assets/index-NW7z5vXx.js`.
 - Provider smoke: CoinGecko returned 256 daily candles for `bitway`; GeckoTerminal returned 90 daily candles for CAKE/WBNB. No real-ledger changes.
 - UI-40 follow-up: stops/take-profits now execute intrabar by daily high/low (threshold fill, gap at open, stop first). The XNY report that showed −16.8% stop exits was re-run against its stored candles with the corrected engine: stop exits became ≈−3% plus fees/slippage, total return improved from −30.31% to −19.86%, max drawdown from 37.88% to 23.60%. Existing runs stay immutable; new runs use the corrected engine. Production deployment `b352c48e-df1f-4f58-b953-d9174141cff3`, bundle `assets/index-68b2C4tu.js`.
+
+### UI-41 (2026-11-13)
+
+- Encrypted backup `nexter-2026-11-13-ui41.dump.enc` (plaintext SHA-256 `84b42842…2120`, encrypted SHA-256 `a8da1017…e461`). Restore check in `nexter_restore_check_ui41` matched production exactly: users 1, assets 49, bots 4, trades 22, signals 9, backtest runs 31, cash sum `4016.51537404`.
+- Migration `0037` was applied first to the restored copy: three boolean option columns exist, DELETE is granted on `bot_backtest_runs`. Production now has 38 migrations; `nexter_app` grants are `SELECT/INSERT/DELETE` on runs (UPDATE revoked) and `SELECT/INSERT/UPDATE` on `bot_signals` (DELETE revoked).
+- PR #108 merged as `848e64b9`; API deployment `534e68b1-b064-4dfb-bb96-7445ee16cccf`; `/ready` 200; bundle `assets/index-DJtO_mjB.js`.
+- All 31 existing runs were preserved and receive `use_stop_loss=true`, `use_take_profit=true`, `reinvest_profit=false` defaults. No real-ledger changes.
