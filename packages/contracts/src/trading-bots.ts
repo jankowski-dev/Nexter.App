@@ -226,6 +226,103 @@ export const botSignalsResponseSchema = z.object({
   data: z.array(botSignalSchema),
 });
 
+export const botCandleSchema = z.object({
+  date: z.string(),
+  openUsd: z.string(),
+  highUsd: z.string(),
+  lowUsd: z.string(),
+  closeUsd: z.string(),
+  volumeUsd: z.string().nullable(),
+});
+
+export const botBacktestTradeSchema = z.object({
+  index: z.number().int().nonnegative(),
+  side: botTradeSideSchema,
+  date: z.string(),
+  priceUsd: z.string(),
+  amount: z.string(),
+  usdValue: z.string(),
+  feeUsd: z.string(),
+  slippageUsd: z.string(),
+  realizedPnlUsd: z.string(),
+  reason: z.string(),
+  equityUsd: z.string(),
+});
+
+export const botBacktestEquityPointSchema = z.object({
+  date: z.string(),
+  equityUsd: z.string(),
+});
+
+export const botBacktestStatsSchema = z.object({
+  initialCapitalUsd: z.string(),
+  finalEquityUsd: z.string(),
+  totalPnlUsd: z.string(),
+  totalReturnPct: z.string(),
+  grossProfitUsd: z.string(),
+  grossLossUsd: z.string(),
+  profitFactor: z.string().nullable(),
+  winRate: z.string().nullable(),
+  tradesCount: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+  maxDrawdownPct: z.string(),
+  buyHoldReturnPct: z.string().nullable(),
+});
+
+export const botBacktestAssetSchema = z.object({
+  id: z.uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  chainCode: z.string(),
+  logoUrl: z.string().nullable(),
+});
+
+export const botBacktestRunSummarySchema = z.object({
+  id: z.uuid(),
+  strategyKey: botStrategyKeySchema,
+  strategyName: z.string(),
+  asset: botBacktestAssetSchema,
+  days: z.number().int(),
+  source: z.string(),
+  stats: botBacktestStatsSchema,
+  createdAt: z.iso.datetime(),
+});
+
+export const botBacktestRunSchema = botBacktestRunSummarySchema.extend({
+  strategyParams: paramsSchema,
+  candles: z.array(botCandleSchema),
+  trades: z.array(botBacktestTradeSchema),
+  equityCurve: z.array(botBacktestEquityPointSchema),
+});
+
+export const botBacktestPreviewRequestSchema = z.object({
+  assetId: z.uuid(),
+  days: z.coerce.number().int().min(30).max(730).default(365),
+});
+
+export const botBacktestPreviewResponseSchema = z.object({
+  asset: botBacktestAssetSchema,
+  days: z.number().int(),
+  source: z.string(),
+  candles: z.array(botCandleSchema),
+});
+
+export const botBacktestRequestSchema = botBacktestPreviewRequestSchema.extend({
+  strategyKey: botStrategyKeySchema,
+  strategyParams: paramsSchema.optional(),
+});
+
+export const botBacktestListQuerySchema = z.object({
+  strategyKey: botStrategyKeySchema.optional(),
+  assetId: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const botBacktestsResponseSchema = z.object({
+  data: z.array(botBacktestRunSummarySchema),
+});
+
 export const botStrategiesResponseSchema = z.object({
   data: z.array(botStrategyTemplateSchema),
 });
@@ -254,6 +351,18 @@ export type BotEquityPoint = z.infer<typeof botEquityPointSchema>;
 export type BotSignalAction = z.infer<typeof botSignalActionSchema>;
 export type BotSignal = z.infer<typeof botSignalSchema>;
 export type BotSignalsResponse = z.infer<typeof botSignalsResponseSchema>;
+export type BotCandle = z.infer<typeof botCandleSchema>;
+export type BotBacktestTrade = z.infer<typeof botBacktestTradeSchema>;
+export type BotBacktestEquityPoint = z.infer<typeof botBacktestEquityPointSchema>;
+export type BotBacktestStats = z.infer<typeof botBacktestStatsSchema>;
+export type BotBacktestAsset = z.infer<typeof botBacktestAssetSchema>;
+export type BotBacktestRunSummary = z.infer<typeof botBacktestRunSummarySchema>;
+export type BotBacktestRun = z.infer<typeof botBacktestRunSchema>;
+export type BotBacktestPreviewRequest = z.infer<typeof botBacktestPreviewRequestSchema>;
+export type BotBacktestPreviewResponse = z.infer<typeof botBacktestPreviewResponseSchema>;
+export type BotBacktestRequest = z.infer<typeof botBacktestRequestSchema>;
+export type BotBacktestListQuery = z.infer<typeof botBacktestListQuerySchema>;
+export type BotBacktestsResponse = z.infer<typeof botBacktestsResponseSchema>;
 export type BotStrategyParamField = z.infer<typeof botStrategyParamFieldSchema>;
 export type BotDetailResponse = z.infer<typeof botDetailResponseSchema>;
 export type TradingBotsResponse = z.infer<typeof tradingBotsResponseSchema>;

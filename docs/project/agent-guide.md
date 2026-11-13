@@ -171,14 +171,14 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 
 ## 15. Trading bots (implemented, see `trading-bots.md`)
 
-- Paper-only v1; no real swaps/signing. Tables are `trading_bots` (with `strategy_key`/`strategy_params`), `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, and diagnostics `bot_signals` (migrations `0032`, `0034`–`0035`).
+- Paper-only v1; no real swaps/signing. Tables are `trading_bots` (with `strategy_key`/`strategy_params`), `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, diagnostics `bot_signals`, and immutable `bot_backtest_runs` (migrations `0032`, `0034`–`0036`).
 - Strategy algorithms live in `apps/api/src/modules/trading-bots/strategies/` as a read-only code registry with Zod params, `guide`, `kind`, and `paramFields`. New strategy = code + unit tests + deploy; never execute user scripts. Bots own their `strategyKey`/`strategyParams`; there is no strategy-instance table.
 - `GET /bots/:id/signals` returns per-token price/24h/action/reason so blocked tokens are explainable in the UI.
 - `BotRunnerService` ticks every `BOT_RUNNER_INTERVAL_SECONDS` (60) under Postgres advisory lock `nexter:bot-runner`; `runOnce()` is used by tests. Quotes come only from `market_quotes`; stale (>5 min) or missing quotes are skipped.
 - Sizing: `min(budget * positionSizePct / 100, cash)` per buy; no per-asset cap, so DCA/grid can add until strategy `maxAdds` or cash runs out. Max positions applies only to new positions.
 - P&L is average-cost: buy cost basis includes fee; sell realized = net proceeds − cost basis. Never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
 - All user mutations are audited (`bot.*`); paper trades/events are their own journals. Running bots cannot be edited; unknown or invalid strategy keys/params cannot be saved or started. `POST /bots/:id/close-positions` force-closes all paper positions at the latest quotes, preserves trade history and stops the bot; archiving is blocked while positions remain. Bot stops/closes create `notifications` rows; the global nav shows an unread badge, and opening `/notifications` marks all read.
-- API under `/api/v1/trading-bots`; UI at `/testing` with whole-card click, P&L/equity/profit-factor sort tabs, token search, read-only strategy drawer, and per-token signal diagnostics.
+- API under `/api/v1/trading-bots`; UI at `/testing` with whole-card click, P&L/equity/profit-factor sort tabs, token search, read-only strategy drawer, per-token signal diagnostics, and a historical backtest panel. Backtests use daily candles from CoinGecko or GeckoTerminal, run through the same strategy registry, store an immutable snapshot in `bot_backtest_runs`, and generate a Russian PDF on demand. PDF uses pdfmake + Roboto; local/URL font access is restricted to the pdfmake fonts directory.
 - Real automated trading is blocked by WalletConnect/Tangem manual signing. A future live venue needs an owner-approved signer/session-key/AA design and a separate security review; no server private keys.
 
 ## 16. Definition of Done

@@ -1299,6 +1299,48 @@ export const botSignals = pgTable(
   ],
 );
 
+export const botBacktestRuns = pgTable(
+  'bot_backtest_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    strategyKey: text('strategy_key').notNull(),
+    strategyParams: jsonb('strategy_params').$type<Record<string, unknown>>().notNull().default({}),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'restrict' }),
+    days: integer('days').notNull(),
+    source: text('source').notNull(),
+    initialCapitalUsd: numeric('initial_capital_usd', { precision: 24, scale: 8 }).notNull(),
+    finalEquityUsd: numeric('final_equity_usd', { precision: 24, scale: 8 }).notNull(),
+    totalPnlUsd: numeric('total_pnl_usd', { precision: 24, scale: 8 }).notNull(),
+    totalReturnPct: numeric('total_return_pct', { precision: 12, scale: 4 }).notNull(),
+    grossProfitUsd: numeric('gross_profit_usd', { precision: 24, scale: 8 }).notNull(),
+    grossLossUsd: numeric('gross_loss_usd', { precision: 24, scale: 8 }).notNull(),
+    profitFactor: numeric('profit_factor', { precision: 12, scale: 4 }),
+    winRate: numeric('win_rate', { precision: 12, scale: 4 }),
+    tradesCount: integer('trades_count').notNull(),
+    wins: integer('wins').notNull(),
+    losses: integer('losses').notNull(),
+    maxDrawdownPct: numeric('max_drawdown_pct', { precision: 12, scale: 4 }).notNull(),
+    buyHoldReturnPct: numeric('buy_hold_return_pct', { precision: 12, scale: 4 }),
+    candles: jsonb('candles').$type<unknown[]>().notNull(),
+    trades: jsonb('trades').$type<unknown[]>().notNull(),
+    equityCurve: jsonb('equity_curve').$type<unknown[]>().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('bot_backtests_user_strategy_time_idx').on(
+      table.userId,
+      table.strategyKey,
+      table.createdAt,
+    ),
+    index('bot_backtests_asset_time_idx').on(table.assetId, table.createdAt),
+  ],
+);
+
 export const botQuoteSamples = pgTable(
   'bot_quote_samples',
   {
@@ -1341,6 +1383,7 @@ export type BotTradeRecord = typeof botTrades.$inferSelect;
 export type BotEquitySnapshotRecord = typeof botEquitySnapshots.$inferSelect;
 export type BotEventRecord = typeof botEvents.$inferSelect;
 export type BotSignalRecord = typeof botSignals.$inferSelect;
+export type BotBacktestRunRecord = typeof botBacktestRuns.$inferSelect;
 export type BotQuoteSampleRecord = typeof botQuoteSamples.$inferSelect;
 export type TokenApproval = typeof tokenApprovals.$inferSelect;
 export type VaultConfig = typeof vaultConfigs.$inferSelect;

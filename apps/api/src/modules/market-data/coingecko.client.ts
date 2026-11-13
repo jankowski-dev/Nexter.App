@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { decimal, usdString } from '../../shared/money/decimal';
+import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
 
 export interface CoinGeckoToken {
   coingeckoId: string;
@@ -171,6 +172,62 @@ export class CoinGeckoClient {
     }
 
     return result;
+  }
+
+  async getDailyCandles(coingeckoId: string, days: number): Promise<HistoricalCandle[]> {
+    if (env.NODE_ENV === 'test') return [];
+
+    const body = await this.fetchJson(
+      `/coins/${encodeURIComponent(coingeckoId)}/market_chart?vs_currency=usd&days=${days}`,
+    );
+    if (!body || typeof body !== 'object') return [];
+
+    const data = body as { prices?: unknown; total_volumes?: unknown };
+    if (!Array.isArray(data.prices)) return [];
+
+    const volumeByTimestamp = new Map<number, number>();
+    if (Array.isArray(data.total_volumes)) {
+      for (const point of data.total_volumes) {
+        if (!Array.isArray(point) || point.length < 2) continue;
+        const timestamp = Number(point[0]);
+        const volume = Number(point[1]);
+        if (Number.isFinite(timestamp) && Number.isFinite(volume)) {
+          volumeByTimestamp.set(timestamp, volume);
+        }
+      }
+    }
+
+    const byDate = new Map<string, { prices: number[]; volumes: number[] }>();
+    for (const point of data.prices) {
+      if (!Array.isArray(point) || point.length < 2) continue;
+      const timestamp = Number(point[0]);
+      const price = Number(point[1]);
+      if (!Number.isFinite(timestamp) || !Number.isFinite(price) || price <= 0) continue;
+      const date = new Date(timestamp).toISOString().slice(0, 10);
+      const entry = byDate.get(date) ?? { prices: [], volumes: [] };
+      entry.prices.push(price);
+      const volume = volumeByTimestamp.get(timestamp);
+      if (volume !== undefined) entry.volumes.push(volume);
+      byDate.set(date, entry);
+    }
+
+    return [...byDate.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([date, entry]) => {
+        const open = entry.prices[0] as number;
+        const close = entry.prices[entry.prices.length - 1] as number;
+        const high = Math.max(...entry.prices);
+        const low = Math.min(...entry.prices);
+        const volume = entry.volumes.reduce((total, value) => total + value, 0);
+        return {
+          date,
+          openUsd: usdString(decimal(String(open))),
+          highUsd: usdString(decimal(String(high))),
+          lowUsd: usdString(decimal(String(low))),
+          closeUsd: usdString(decimal(String(close))),
+          volumeUsd: entry.volumes.length > 0 ? decimal(String(volume)).toFixed(2) : null,
+        };
+      });
   }
 
   private read<T>(key: string): T | null | undefined {

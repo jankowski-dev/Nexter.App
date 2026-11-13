@@ -1,6 +1,6 @@
-# Trading bots — бумажная торговля (UI-37)
+# Trading bots — бумажная торговля и исторический бэктест (UI-38)
 
-> Статус: **UI-37 (упрощение стратегий и диагностика сигналов)**. Стратегии — встроенный код, без отдельных экземпляров. Параметры живут в боте. Добавлена таблица `bot_signals` для диагностики по каждому токену.
+> Статус: **UI-37 (упрощение стратегий и диагностика сигналов)** + **UI-38 (исторический бэктест)**. Стратегии — встроенный код, без отдельных экземпляров. Параметры живут в боте. `bot_signals` объясняет решения по каждому токену. `bot_backtest_runs` хранит дневные прогоны, сделки, equity curve и статистику; PDF генерируется по запросу.
 >
 > Это paper-only система. Реальные свопы, подписи и приватные ключи не используются. Бумажные сделки не пишут в `transactions`/`postings` и не влияют на реальный ledger, отчёты и налоги.
 
@@ -14,6 +14,7 @@
 - Запуск/остановка, сброс бумажного состояния, принудительное закрытие позиций, архивирование.
 - Стратегии — встроенный реестр из пяти алгоритмов. Пользователь выбирает стратегию в боте и настраивает её числовые параметры прямо в боте.
 - Диагностика: по каждому токену видно последнюю цену, изменение 24 ч, сигнал (`Покупка`/`Продажа`/`Ждёт`), причину и наличие позиции.
+- Исторический бэктест: выбор токена и периода (90/180/365 дней), дневной график, анимированные сделки, статистика, PDF-отчёт и журнал прогонов по каждой стратегии.
 
 ## 2. Границы v1
 
@@ -24,7 +25,7 @@
 - **No arbitrary scripts.** Алгоритмы только в коде; параметры валидируются Zod-схемой стратегии.
 - **Isolated tables.** `trading_bots`, `bot_*` не связаны с реальным ledger, кроме ссылок на `assets` и `users`.
 - **Single tick source.** Цены берутся только из `market_quotes`; отдельного источника цен у ботов нет.
-- **No historical backtest yet.** Исторический прогон — следующий этап (UI-38).
+- **Historical backtest uses daily bars.** Внутридневная история и тиковый бэктест не поддерживаются; исполнение — по цене закрытия дня.
 
 ## 3. Компоненты
 
@@ -44,6 +45,10 @@ flowchart TB
   Runner --> Diagnostics[bot_signals]
   UI --> Stats
   UI --> Diagnostics
+  UI --> Backtests[Backtest API]
+  Backtests --> History[CoinGecko / GeckoTerminal daily candles]
+  Backtests --> Runs[bot_backtest_runs]
+  Backtests --> PDF[PDF report]
 ```
 
 - `TradingBotsService` — CRUD, статистика, диагностика, сброс/закрытие/архив, аудит.
@@ -52,6 +57,9 @@ flowchart TB
 - `market_quotes` — единственный источник цены и 24h change.
 - `bot_quote_samples` — минутные точки для индикаторов; общие для всех ботов.
 - `bot_signals` — последнее решение/причина по каждому токену каждого бота.
+- `HistoricalDataService` — дневные свечи из CoinGecko (по `coingeckoId`) или GeckoTerminal (по контракту), кэш на 1 час.
+- `BacktestService` / `runBacktest` — прогон стратегии по дневным свечам, статистика и сохранение прогона.
+- `BacktestReportService` — PDF на русском через pdfmake/Roboto.
 
 ## 4. Модель данных
 
@@ -113,6 +121,32 @@ flowchart TB
 ### `bot_signals`
 
 `bot_id`, `asset_id`, `price_usd`, `change_24h_pct`, `action` (`buy`/`sell`/`hold`), `reason`, `has_position`, `updated_at`. `(bot_id, asset_id)` unique; upsert на каждом тике. Это диагностический слой, а не ledger: таблица не влияет на сделки и не заменяет `bot_trades`. Строки создаются по каждому включённому токену, включая случаи «нет котировки», «котировка устарела», «пауза после покупки», «дневной лимит», «достигнут лимит позиций» и «недостаточно кэша». Благодаря этому видно, почему бот с несколькими токенами не торгует по каждому из них.
+
+### `bot_backtest_runs`
+
+| Поле                                  | Тип                     | Смысл                                  |
+| ------------------------------------- | ----------------------- | -------------------------------------- |
+| `id`                                  | uuid                    | PK                                     |
+| `user_id`                             | uuid                    | owner                                  |
+| `strategy_key`                        | text                    | ключ встроенной стратегии              |
+| `strategy_params`                     | jsonb                   | параметры конкретного прогона          |
+| `asset_id`                            | uuid                    | → `assets`                             |
+| `days`                                | int                     | запрошенный период                     |
+| `source`                              | text                    | `coingecko` / `geckoterminal`          |
+| `initial_capital_usd`                 | numeric(24,8)           | стартовый капитал ($1000)              |
+| `final_equity_usd`                    | numeric(24,8)           | капитал после принудительного закрытия |
+| `total_pnl_usd`                       | numeric(24,8)           | итоговый P&L                           |
+| `total_return_pct`                    | numeric(12,4)           | доходность, %                          |
+| `gross_profit_usd` / `gross_loss_usd` | numeric(24,8)           | прибыльные/убыточные продажи           |
+| `profit_factor`                       | numeric(12,4), nullable | gross profit / gross loss              |
+| `win_rate`                            | numeric(12,4), nullable | wins / (wins + losses)                 |
+| `trades_count`, `wins`, `losses`      | int                     | счётчики                               |
+| `max_drawdown_pct`                    | numeric(12,4)           | максимальная просадка equity           |
+| `buy_hold_return_pct`                 | numeric(12,4), nullable | сравнение с удержанием                 |
+| `candles`, `trades`, `equity_curve`   | jsonb                   | снимок данных прогона для отчёта       |
+| `created_at`                          | timestamptz             | время прогона                          |
+
+Прогон иммутабелен: API не обновляет и не удаляет его. `nexter_app` имеет только `SELECT, INSERT`; `UPDATE/DELETE` явно отозваны. Снимок свечей и сделок хранится вместе с прогоном, поэтому PDF и журнал не зависят от будущих изменений провайдера.
 
 ## 5. Стратегии
 
@@ -199,7 +233,44 @@ interface StrategyDefinition {
 - Бумажные сделки при любом варианте не влияют на реальный ledger.
 - Остановка бота и принудительное закрытие позиций создают запись в `notifications`; счётчик непрочитанных виден в главном меню, страница `/notifications` помечает их прочитанными.
 
-## 6. Runner и надёжность
+## 6. Исторический бэктест
+
+### 6.1. Поток
+
+1. На странице `Стратегии` открыть read-only drawer стратегии.
+2. Выбрать токен из активной Базы токенов и период: 90, 180 или 365 дней.
+3. Нажать `Начать`: API загружает дневные свечи, кэширует их на час и возвращает график.
+4. Нажать `Прогнать`: API прогоняет стратегию по свечам, сохраняет `bot_backtest_runs` и возвращает сделки/статистику.
+5. UI показывает сделки на графике по одной (покупательные — синие, прибыльные продажи — зелёные, убыточные — красные), затем карточки статистики и ссылку `Скачать PDF`.
+6. Прогон появляется в журнале стратегии; оттуда можно открыть его снова или скачать PDF.
+
+### 6.2. Источник данных
+
+- Если у актива есть `coingecko_id`, используется CoinGecko `GET /coins/{id}/market_chart?vs_currency=usd&days=N`. Ответ группируется по UTC-дням: open/close/high/low из цен дня, volume — сумма `total_volumes` дня.
+- Если CoinGecko недоступен или вернул меньше 30 свечей, используется GeckoTerminal: топ-пул токена по `reserve_in_usd`, затем `GET /networks/{network}/pools/{pool}/ohlcv/day`. Сети: `bsc` → `bsc`, `ethereum` → `eth`.
+- Минимум 30 дневных свечей; иначе `422` с понятным сообщением.
+- Кэш в памяти API: `assetId:days` на 1 час, не более 50 записей. Снимок свечей сохраняется в прогоне, поэтому отчёт воспроизводим.
+- Внешние запросы не выполняются в `NODE_ENV=test`; e2e тест наполняет кэш детерминированными свечами.
+
+### 6.3. Движок
+
+- Стартовый капитал — $1000, комиссия 25 bps, проскальзывание 10 bps (как дефолты paper-ботов).
+- Один токен, long-only. Сигналы считаются по закрытию каждого дня; исполнение — по этому же закрытию с slippage.
+- Размер одной покупки: `initialCapital / maxAdds` (для стратегий без `maxAdds` — весь капитал). Докупки ограничены `maxAdds` и свободным кэшем.
+- Позиция учитывается по средней стоимости; `realized = net proceeds − cost basis`.
+- В конце периода открытая позиция принудительно закрывается по последнему закрытию с причиной `закрытие в конце периода`.
+- Equity curve строится по каждому дню; max drawdown считается по пику equity.
+- Статистика: total P&L, return %, gross profit/loss, profit factor, win rate, trades/wins/losses, max drawdown, buy-and-hold return.
+- Параметры прогона можно менять в блоке `Параметры прогона`; это не меняет сохранённую стратегию и не влияет на ботов.
+
+### 6.4. PDF и журнал
+
+- `GET /backtests/:id/report.pdf` генерирует PDF на русском (pdfmake + Roboto): сводка, сравнение с buy-and-hold, параметры, гайд, таблица всех сделок, дисклеймер.
+- PDF не хранится: он собирается из снимка прогона при скачивании. Поэтому ссылка в журнале всегда актуальна и не занимает место.
+- Журнал `GET /backtests?strategyKey=` owner-scoped и показывает последние 20 прогонов стратегии. Записи иммутабельны.
+- Прогон создаёт audit-событие `bot.backtest_created`; сами сделки бэктеста не пишут в `bot_trades` и реальный ledger.
+
+## 7. Runner и надёжность
 
 - `BotRunnerService` стартует через 5 секунд после boot API и затем каждые `BOT_RUNNER_INTERVAL_SECONDS` (60). Для индикаторов загружаются последние 300 минутных samples (покрывает максимальные окна стратегий).
 - `BOT_RUNNER_ENABLED=true` по умолчанию; `NODE_ENV=test` отключает интервал.
@@ -210,7 +281,7 @@ interface StrategyDefinition {
 - Retention: samples — `BOT_SAMPLE_RETENTION_DAYS` (30), events — 90 дней, equity — 365 дней. `bot_signals` — bounded by bots × tokens (одна строка на пару), отдельная очистка не нужна.
 - При нескольких API-репликах advisory lock предотвращает дубли; per-bot lock не нужен, пока тик один.
 
-## 7. API
+## 8. API
 
 Базовый путь: `/api/v1/trading-bots`. Все мутации требуют CSRF и аудируются.
 
@@ -230,24 +301,30 @@ interface StrategyDefinition {
 | GET    | `/bots/:id/events?limit=`   | журнал                                                         |
 | GET    | `/bots/:id/equity?limit=`   | equity curve                                                   |
 | GET    | `/bots/:id/signals`         | диагностика по каждому токену                                  |
+| POST   | `/backtests/preview`        | дневные свечи для графика (`assetId`, `days`)                  |
+| POST   | `/backtests`                | прогнать стратегию и сохранить прогон                          |
+| GET    | `/backtests?strategyKey=`   | журнал прогонов (owner-scoped, до 100)                         |
+| GET    | `/backtests/:id`            | полный прогон: свечи, сделки, equity curve, статистика         |
+| GET    | `/backtests/:id/report.pdf` | PDF-отчёт по прогону                                           |
 
 `/bots/:id/signals` возвращает по каждому токену бота: `assetId`, `symbol`, `name`, `chainCode`, `logoUrl`, `priceUsd`, `change24hPct`, `action`, `reason`, `hasPosition`, `updatedAt`. Если тика ещё не было, `reason = 'Ожидает первого тика'`, `updatedAt = null`.
 
 Ошибки: `VALIDATION_ERROR`, `CONFLICT`, `NOT_FOUND`. Уникальность имени бота — `CONFLICT`. Running-бот нельзя редактировать. Неизвестную стратегию нельзя сохранить или запустить.
 
-Аудит: `bot.created`, `bot.updated`, `bot.started`, `bot.stopped`, `bot.positions_closed`, `bot.reset`, `bot.archived`. Бумажные сделки и события живут в `bot_trades`/`bot_events`, а не в `audit_log`. Отдельных аудит-событий для стратегий больше нет: стратегии не изменяются пользователем.
+Аудит: `bot.created`, `bot.updated`, `bot.started`, `bot.stopped`, `bot.positions_closed`, `bot.reset`, `bot.archived`, `bot.backtest_created`. Бумажные сделки и события живут в `bot_trades`/`bot_events`, а не в `audit_log`. Отдельных аудит-событий для стратегий больше нет: стратегии не изменяются пользователем.
 
-## 8. UI
+## 9. UI
 
 - Top-level пункт **Тестирование** внутри Crypto (`/testing`).
 - Табы **Роботы** и **Стратегии**; рядом с `Роботы` — табы сортировки **По P&L**, **По капиталу**, **По профит-фактору**. Глобального индикатора «Роботы работают» нет: состояние видно на каждой карточке.
 - Карточка робота кликабельна целиком (мышь, Enter/Space); кнопки `Настройки`/`Запустить`/`Остановить` не открывают drawer. Сортировка по P&L/капиталу/профит-фактору применяется к списку.
 - Создание/редактирование: имя, описание, встроенная стратегия, авто-форма её параметров, токены из Базы токенов с поиском по символу/названию/сети, бюджет $1000 с шагом $100, max positions, position size %, fee/slippage bps, daily loss %, cooldown.
 - Drawer бота: equity chart, токены, **сигналы стратегии по токенам** (цена, 24 ч, сигнал, причина, позиция, время), настройки, параметры стратегии, открытые позиции, сделки, журнал, кнопка `Изменить`, start/stop/reset/close/archive.
-- Стратегии: read-only карточки с маркером `Системная`/`Кастомная`; клик открывает drawer с описанием, гайдом и параметрами по умолчанию. Создания/редактирования/архива стратегий нет.
-- Поиск токенов использует общий client-side helper `apps/web/src/lib/search.ts` (регистронезависимый, `ё = е`, несколько слов через AND). Тот же helper применён в поиске Хранилища.
+- Стратегии: read-only карточки с маркером `Системная`/`Кастомная`; клик открывает широкий drawer с описанием, гайдом и параметрами по умолчанию. Создания/редактирования/архива стратегий нет.
+- В drawer стратегии — блок `Прогон по историческим данным`: поиск токена, период 90/180/365, кнопка `Начать` → спиннер загрузки → дневной график → `Прогнать` → сделки появляются на графике (синие покупки, зелёные/красные продажи) → статистика → `Скачать PDF`. Ниже — журнал прогонов с кнопками `Открыть` и `PDF`.
+- Поиск токенов использует общий client-side helper `apps/web/src/lib/search.ts` (регистронезависимый, `ё = е`, несколько слов через AND). Тот же helper применён в поиске Хранилища и выборе токена для бэктеста.
 
-## 9. Безопасность и границы
+## 10. Безопасность и границы
 
 - Нет приватных ключей, seed, подписи, WalletConnect и реальных свопов.
 - Paper-сделки не создают `transactions`, `postings`, `lots`, `trade_groups`; реальный ledger и налоги не меняются.
@@ -256,30 +333,40 @@ interface StrategyDefinition {
 - Стратегии — только код; никакого исполнения пользовательских скриптов.
 - Реальная автоторговля невозможна через WalletConnect/Tangem без ручного подтверждения каждой подписи. Для live нужен отдельный подписант/session key/AA, отдельный security review и ADR; сервер не должен хранить приватные ключи.
 
-## 10. Ограничения и будущее
+## 11. Ограничения и будущее
 
 - Минутный тик — не HFT; стоп-лосс срабатывает с задержкой до 60 секунд.
 - Paper fill не учитывает глубину пула; slippage фиксированный.
 - Токены без котировки/свежести пропускаются; причина видна в `bot_signals`.
-- Нет исторического бэктеста в этой итерации; equity curve начинается с запуска. Бэктест по дневным барам, график со сделками, PDF-отчёт и журнал прогонов — UI-38.
+- Исторический бэктест — дневные бары, не тиковый/HFT. Он не учитывает глубину пула и внутридневные движения; результаты сравнительные, не гарантия будущей доходности.
 - Нет уведомлений вне приложения; журнал событий внутри drawer.
 - Будущий live-режим: отдельный `ExecutionVenue` adapter, allowlist, симуляция, лимиты, kill switch, аудит и подписант на стороне владельца. До этого боты остаются paper.
 
-## 11. Проверка
+## 12. Проверка
 
 - Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для пяти стратегий.
+- Unit: `apps/api/src/modules/trading-bots/backtest/backtest.engine.spec.ts` — buy/sell-циклы, принудительное закрытие, drawdown, buy-and-hold.
 - Unit: `apps/web/src/lib/search.test.ts` — общий поиск (регистр, `ё`, несколько слов).
-- E2E: `apps/api/test/trading-bots.e2e.spec.ts` — read-only стратегии, создание бота с `strategyKey`/`strategyParams`, валидация бюджета, buy/sell по котировкам, статистика, диагностика сигналов, смена стратегии, reset, archive.
-- Перед production: format, typecheck, lint, test, build; backup + restore check; миграции `0034`–`0035`; проверка `/ready` и грантов `nexter_app`.
+- E2E: `apps/api/test/trading-bots.e2e.spec.ts` — read-only стратегии, создание бота с `strategyKey`/`strategyParams`, валидация бюджета, buy/sell по котировкам, статистика, диагностика сигналов, смена стратегии, reset, archive, preview/run/list/PDF бэктеста.
+- Перед production: format, typecheck, lint, test, build; backup + restore check; миграции `0034`–`0036`; проверка `/ready` и грантов `nexter_app`.
 
-## 12. Production releases
+## 13. Production releases
 
 ### UI-24 (2026-11-12)
 
 - Encrypted backup `nexter-2026-11-12-ui24.dump.enc`, restore-check exact match; PR #88 as `f4e806d`; migration `0032`; bundle `assets/index-CJwbitFy.js`.
 
-### UI-37 (в процессе, 2026-11-13)
+### UI-37 (2026-11-13)
 
-- Migration `0034` adds `bot_signals`, `trading_bots.strategy_key`/`strategy_params`, and backfills values from `bot_strategies` before the old table is removed.
-- Migration `0035` drops the `strategy_id` FK/column and the `bot_strategies` table after the backfill.
-- API/UI change is frontend + API only; no real-ledger changes.
+- Encrypted backup `nexter-2026-11-13-ui37.dump.enc` (plaintext SHA-256 `3494315f…5262c`, encrypted SHA-256 `a4a77de6…354020`). Restore check in `nexter_restore_check_ui37` matched static counts exactly: users 1, assets 49, bots 4, trades 18, events 32, equity 270, notifications 1, cash sum `4009.43372568`; quote samples differed only by live ticks during the check (3406 vs 3409).
+- Migrations `0034`–`0035` were first applied to the restored copy. All four bots kept `mean_reversion` and the exact params JSON; `bot_strategies` and `strategy_id` were absent afterwards.
+- PR #101 merged as `a627b80`; API deployment `9d70b353-5b00-4222-bdd7-0caca4524af3`; 36 migrations applied; `/ready` 200; bundle `assets/index-eCq4h8AJ.js`.
+- Verification: `bot_signals` exists, `nexter_app` has SELECT/INSERT/UPDATE (DELETE revoked in the follow-up migration), existing bots preserved, diagnostics populated for 3 running bots. The owner DB password was rotated during the operation after an internal restore command echoed it; API/worker variables were updated and the worker restarted successfully.
+- No real-ledger changes.
+
+### UI-38 (в процессе, 2026-11-13)
+
+- Migration `0036` adds `bot_backtest_runs` with SELECT/INSERT grants for `nexter_app`, revokes UPDATE/DELETE on runs and DELETE on `bot_signals`.
+- API adds historical candle preview, backtest run/list/detail, and PDF endpoints.
+- UI adds the backtest block and run journal to the strategy drawer.
+- Data sources: CoinGecko daily market chart with GeckoTerminal daily OHLCV fallback. No real-ledger changes.
