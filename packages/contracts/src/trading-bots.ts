@@ -285,6 +285,9 @@ export const botBacktestRunSummarySchema = z.object({
   asset: botBacktestAssetSchema,
   days: z.number().int(),
   source: z.string(),
+  useStopLoss: z.boolean(),
+  useTakeProfit: z.boolean(),
+  reinvestProfit: z.boolean(),
   stats: botBacktestStatsSchema,
   createdAt: z.iso.datetime(),
 });
@@ -311,6 +314,9 @@ export const botBacktestPreviewResponseSchema = z.object({
 export const botBacktestRequestSchema = botBacktestPreviewRequestSchema.extend({
   strategyKey: botStrategyKeySchema,
   strategyParams: paramsSchema.optional(),
+  useStopLoss: z.boolean().default(true),
+  useTakeProfit: z.boolean().default(true),
+  reinvestProfit: z.boolean().default(false),
 });
 
 export const botBacktestListQuerySchema = z.object({
@@ -321,6 +327,14 @@ export const botBacktestListQuerySchema = z.object({
 
 export const botBacktestsResponseSchema = z.object({
   data: z.array(botBacktestRunSummarySchema),
+});
+
+export const botBacktestClearQuerySchema = z.object({
+  strategyKey: botStrategyKeySchema.optional(),
+});
+
+export const botBacktestClearResponseSchema = z.object({
+  deleted: z.number().int().nonnegative(),
 });
 
 export const botStrategiesResponseSchema = z.object({
@@ -363,6 +377,8 @@ export type BotBacktestPreviewResponse = z.infer<typeof botBacktestPreviewRespon
 export type BotBacktestRequest = z.infer<typeof botBacktestRequestSchema>;
 export type BotBacktestListQuery = z.infer<typeof botBacktestListQuerySchema>;
 export type BotBacktestsResponse = z.infer<typeof botBacktestsResponseSchema>;
+export type BotBacktestClearQuery = z.infer<typeof botBacktestClearQuerySchema>;
+export type BotBacktestClearResponse = z.infer<typeof botBacktestClearResponseSchema>;
 export type BotStrategyParamField = z.infer<typeof botStrategyParamFieldSchema>;
 export type BotDetailResponse = z.infer<typeof botDetailResponseSchema>;
 export type TradingBotsResponse = z.infer<typeof tradingBotsResponseSchema>;

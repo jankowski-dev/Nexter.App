@@ -3,9 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import {
   botBacktestReportUrl,
+  clearBotBacktests,
+  deleteBotBacktest,
   fetchBotBacktest,
   fetchBotBacktests,
   previewBotBacktest,
@@ -29,6 +32,7 @@ import { StrategyParamInputs } from './strategy-param-inputs';
 import { formToParams, paramsToForm } from './strategy-params';
 
 const periodOptions = [
+  { value: '30', label: '30 дней' },
   { value: '90', label: '90 дней' },
   { value: '180', label: '180 дней' },
   { value: '365', label: '1 год' },
@@ -49,6 +53,9 @@ export function BacktestPanel({
   const [tokenSearch, setTokenSearch] = useState('');
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [days, setDays] = useState('365');
+  const [useStopLoss, setUseStopLoss] = useState(true);
+  const [useTakeProfit, setUseTakeProfit] = useState(true);
+  const [reinvestProfit, setReinvestProfit] = useState(false);
   const [paramValues, setParamValues] = useState<Record<string, string>>(() =>
     paramsToForm(template.defaultParams),
   );
@@ -58,6 +65,8 @@ export function BacktestPanel({
   const [animating, setAnimating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const filteredTokens = filterBySearch(tokenEntries, tokenSearch, (entry) => [
     entry.asset.symbol,
@@ -66,6 +75,14 @@ export function BacktestPanel({
   ]);
   const selectedToken = tokenEntries.find((entry) => entry.asset.id === selectedAssetId);
   const missingDays = preview ? countMissingDays(preview.candles) : 0;
+  const periodChangePct =
+    preview && preview.candles.length > 1
+      ? (() => {
+          const first = Number(preview.candles[0]?.closeUsd);
+          const last = Number(preview.candles[preview.candles.length - 1]?.closeUsd);
+          return first > 0 ? (((last - first) / first) * 100).toFixed(2) : null;
+        })()
+      : null;
 
   const journal = useQuery({
     queryKey: ['trading-bot-backtests', template.key],
@@ -158,6 +175,9 @@ export function BacktestPanel({
       days: Number(days),
       strategyKey: template.key,
       strategyParams,
+      useStopLoss,
+      useTakeProfit,
+      reinvestProfit,
     });
   }
 
@@ -168,6 +188,9 @@ export function BacktestPanel({
       const data = await fetchBotBacktest(id);
       setSelectedAssetId(data.asset.id);
       setDays(String(data.days));
+      setUseStopLoss(data.useStopLoss);
+      setUseTakeProfit(data.useTakeProfit);
+      setReinvestProfit(data.reinvestProfit);
       setParamValues(paramsToForm(data.strategyParams));
       setPreview({
         asset: data.asset,
@@ -183,6 +206,47 @@ export function BacktestPanel({
     } finally {
       setLoadingRunId(null);
     }
+  }
+
+  async function removeRun(id: string) {
+    if (!window.confirm('Удалить этот прогон из журнала?')) return;
+    setDeletingRunId(id);
+    setError(null);
+    try {
+      await deleteBotBacktest(id);
+      if (run?.id === id) {
+        setRun(null);
+        setPreview(null);
+      }
+      void queryClient.invalidateQueries({ queryKey: ['trading-bot-backtests'] });
+    } catch (err) {
+      setError(toRussianError(err, 'Не удалось удалить прогон'));
+    } finally {
+      setDeletingRunId(null);
+    }
+  }
+
+  async function clearRuns() {
+    if (!window.confirm('Удалить все прогоны этой стратегии? Это действие необратимо.')) return;
+    setClearing(true);
+    setError(null);
+    try {
+      await clearBotBacktests(template.key);
+      setPreview(null);
+      setRun(null);
+      setVisibleTrades(0);
+      void queryClient.invalidateQueries({ queryKey: ['trading-bot-backtests'] });
+    } catch (err) {
+      setError(toRussianError(err, 'Не удалось очистить журнал'));
+    } finally {
+      setClearing(false);
+    }
+  }
+
+  function resetRun() {
+    setRun(null);
+    setVisibleTrades(0);
+    setAnimating(false);
   }
 
   const previewing = previewMutation.isPending;
@@ -290,6 +354,35 @@ export function BacktestPanel({
               values={paramValues}
               onChange={(key, value) => setParamValues((current) => ({ ...current, [key]: value }))}
             />
+            <div className="mt-4 grid gap-3 border-t border-zinc-200 pt-3 sm:grid-cols-3">
+              <OptionToggle
+                label="Стоп-лосс"
+                hint="Защитная продажа при просадке"
+                checked={useStopLoss}
+                onChange={(checked) => {
+                  setUseStopLoss(checked);
+                  resetRun();
+                }}
+              />
+              <OptionToggle
+                label="Тейк-профит"
+                hint="Фиксация прибыли по цели"
+                checked={useTakeProfit}
+                onChange={(checked) => {
+                  setUseTakeProfit(checked);
+                  resetRun();
+                }}
+              />
+              <OptionToggle
+                label="Реинвестирование"
+                hint="Следующие сделки от текущего капитала"
+                checked={reinvestProfit}
+                onChange={(checked) => {
+                  setReinvestProfit(checked);
+                  resetRun();
+                }}
+              />
+            </div>
           </div>
         </details>
 
@@ -310,6 +403,7 @@ export function BacktestPanel({
             <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
               <span>
                 {preview.candles.length} дневных свечей · источник {preview.source}
+                {periodChangePct ? ` · изменение цены ${formatPct(periodChangePct)}` : ''}
               </span>
               {run && animating ? (
                 <span className="ml-auto inline-flex items-center gap-2 text-emerald-700">
@@ -350,7 +444,19 @@ export function BacktestPanel({
         <div>
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="text-sm font-medium text-zinc-800">Журнал прогонов</div>
-            <div className="text-xs text-zinc-500">{journal.data?.data.length ?? 0}</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs text-zinc-500">{journal.data?.data.length ?? 0}</div>
+              {(journal.data?.data.length ?? 0) > 0 ? (
+                <Button
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-red-700"
+                  onClick={() => void clearRuns()}
+                  disabled={clearing}
+                >
+                  {clearing ? 'Очищаю…' : 'Очистить'}
+                </Button>
+              ) : null}
+            </div>
           </div>
           {journal.isPending ? (
             <p className="text-xs text-zinc-500">Загрузка журнала…</p>
@@ -414,6 +520,14 @@ export function BacktestPanel({
                           >
                             PDF
                           </a>
+                          <button
+                            type="button"
+                            className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            onClick={() => void removeRun(item.id)}
+                            disabled={deletingRunId === item.id}
+                          >
+                            {deletingRunId === item.id ? '…' : 'Удалить'}
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -425,6 +539,28 @@ export function BacktestPanel({
         </div>
       </div>
     </Card>
+  );
+}
+
+function OptionToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-sm text-zinc-700">{label}</div>
+        <div className="text-[11px] leading-4 text-zinc-500">{hint}</div>
+      </div>
+      <Switch checked={checked} onChange={onChange} label={label} />
+    </div>
   );
 }
 

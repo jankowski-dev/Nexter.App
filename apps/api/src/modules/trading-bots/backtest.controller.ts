@@ -1,6 +1,19 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, Req, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
+  BotBacktestClearQuery,
+  BotBacktestClearResponse,
   BotBacktestListQuery,
   BotBacktestPreviewRequest,
   BotBacktestPreviewResponse,
@@ -9,6 +22,7 @@ import type {
   BotBacktestsResponse,
 } from '@nexter/contracts';
 import {
+  botBacktestClearQuerySchema,
   botBacktestListQuerySchema,
   botBacktestPreviewRequestSchema,
   botBacktestRequestSchema,
@@ -51,6 +65,24 @@ export class BacktestController {
     @Query(new ZodValidationPipe(botBacktestListQuerySchema)) query: BotBacktestListQuery,
   ): Promise<BotBacktestsResponse> {
     return this.backtests.list(auth.user.id, query);
+  }
+
+  @Delete()
+  clear(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(botBacktestClearQuerySchema)) query: BotBacktestClearQuery,
+    @Req() request: FastifyRequest,
+  ): Promise<BotBacktestClearResponse> {
+    return this.backtests.clear(auth.user.id, query.strategyKey, meta(request));
+  }
+
+  @Delete(':id')
+  delete(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<BotBacktestClearResponse> {
+    return this.backtests.deleteRun(auth.user.id, id, meta(request));
   }
 
   @Get(':id')

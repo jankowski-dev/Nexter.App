@@ -130,6 +130,54 @@ describe('runBacktest', () => {
     expect(Number(stop?.priceUsd)).toBeCloseTo(90 * 0.999, 6);
   });
 
+  it('can disable the stop-loss and take-profit exits', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 5,
+      stopLossPct: 3,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const stopBar = bar('2026-01-05', 97, 98, 90, 92);
+    const noStop = runBacktest(meanReversion, params, [...entry, stopBar], {
+      useStopLoss: false,
+    });
+    expect(noStop.trades.some((trade) => trade.reason.includes('стоп-лосс'))).toBe(false);
+    expect(noStop.trades[noStop.trades.length - 1]?.reason).toBe('закрытие в конце периода');
+
+    const profitBar = bar('2026-01-05', 97, 110, 97, 102);
+    const noTakeProfit = runBacktest(meanReversion, params, [...entry, profitBar], {
+      useTakeProfit: false,
+    });
+    expect(noTakeProfit.trades.some((trade) => trade.reason.includes('тейк-профит'))).toBe(false);
+  });
+
+  it('compounds the next position when reinvestment is enabled', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const candles = series([100, 100, 100, 97, 100, 100, 97, 100]);
+    const withoutReinvest = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+      reinvestProfit: false,
+    });
+    const withReinvest = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+      reinvestProfit: true,
+    });
+
+    expect(Number(withReinvest.stats.finalEquityUsd)).toBeGreaterThan(
+      Number(withoutReinvest.stats.finalEquityUsd),
+    );
+  });
+
   it('executes an intrabar take-profit at the configured threshold', () => {
     const params = meanReversion.parseParams({
       lookback: 3,

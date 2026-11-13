@@ -2,8 +2,8 @@ import type { BotBacktestTrade, BotCandle } from '@nexter/contracts';
 import { formatPrice } from '@/lib/format';
 
 const WIDTH = 900;
-const HEIGHT = 280;
-const PADDING = { top: 16, right: 64, bottom: 30, left: 12 };
+const HEIGHT = 320;
+const PADDING = { top: 16, right: 76, bottom: 34, left: 12 };
 
 export function BacktestChart({
   candles,
@@ -39,16 +39,26 @@ export function BacktestChart({
     min -= delta;
     max += delta;
   }
+  const originalMin = min;
   const padding = (max - min) * 0.06;
   min -= padding;
   max += padding;
+  if (originalMin > 0 && min <= 0) min = originalMin * 0.5;
+
+  const logMin = Math.log10(min);
+  const logMax = Math.log10(max);
+  const useLogScale = min > 0 && max > min;
 
   const chartWidth = WIDTH - PADDING.left - PADDING.right;
   const chartHeight = HEIGHT - PADDING.top - PADDING.bottom;
   const x = (index: number) =>
     PADDING.left +
     (candles.length === 1 ? chartWidth / 2 : (index / (candles.length - 1)) * chartWidth);
-  const y = (value: number) => PADDING.top + ((max - value) / (max - min)) * chartHeight;
+  const y = (value: number) =>
+    useLogScale
+      ? PADDING.top +
+        ((logMax - Math.log10(Math.max(value, min))) / (logMax - logMin)) * chartHeight
+      : PADDING.top + ((max - value) / (max - min)) * chartHeight;
 
   const linePath = closes
     .map(
@@ -58,7 +68,9 @@ export function BacktestChart({
   const areaPath = `${linePath} L ${x(candles.length - 1).toFixed(2)} ${(HEIGHT - PADDING.bottom).toFixed(2)} L ${x(0).toFixed(2)} ${(HEIGHT - PADDING.bottom).toFixed(2)} Z`;
 
   const yTicks = Array.from({ length: 5 }, (_, index) => {
-    const value = min + ((max - min) * index) / 4;
+    const value = useLogScale
+      ? 10 ** (logMin + ((logMax - logMin) * index) / 4)
+      : min + ((max - min) * index) / 4;
     return { value, y: y(value) };
   });
 
@@ -99,8 +111,29 @@ export function BacktestChart({
             </text>
           </g>
         ))}
+        <line
+          x1={PADDING.left}
+          x2={WIDTH - PADDING.right}
+          y1={y(closes[0] as number)}
+          y2={y(closes[0] as number)}
+          stroke="#a1a1aa"
+          strokeDasharray="4 5"
+          strokeWidth="1"
+        />
+        {candles.map((candle, index) => (
+          <line
+            key={`wick-${candle.date}`}
+            x1={x(index)}
+            x2={x(index)}
+            y1={y(Number(candle.highUsd))}
+            y2={y(Number(candle.lowUsd))}
+            stroke="#a7f3d0"
+            strokeWidth={candles.length > 220 ? 0.6 : 1}
+            opacity="0.75"
+          />
+        ))}
         <path d={areaPath} fill="url(#backtest-area)" />
-        <path d={linePath} fill="none" stroke="#059669" strokeWidth="2" />
+        <path d={linePath} fill="none" stroke="#059669" strokeWidth="2.2" />
         {uniqueTicks.map((index) => (
           <text
             key={index}

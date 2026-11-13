@@ -260,6 +260,13 @@
       "when": 1794575299283,
       "tag": "0036_spooky_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794587358257,
+      "tag": "0037_fat_radioactive_man",
+      "breakpoints": true
     }
   ]
 }

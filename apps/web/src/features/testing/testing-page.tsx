@@ -154,6 +154,8 @@ export function TestingPage() {
   const [botError, setBotError] = useState<string | null>(null);
   const [strategyDetail, setStrategyDetail] = useState<BotStrategyTemplate | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [returnToDetailBotId, setReturnToDetailBotId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useAutoDismissNotice(actionError, () => setActionError(null), 8000);
@@ -212,6 +214,8 @@ export function TestingPage() {
       setBotError(null);
       notify('Бот создан. Запустите его, чтобы начать бумажную торговлю.');
       setDetailBotId(created.bot.id);
+      setDetailOpen(true);
+      setReturnToDetailBotId(null);
       invalidate();
     },
     onError: (err) => setBotError(toRussianError(err, 'Не удалось создать бота')),
@@ -221,9 +225,7 @@ export function TestingPage() {
     mutationFn: ({ id, body }: { id: string; body: BotUpdateRequest }) =>
       updateTradingBot(id, body),
     onSuccess: () => {
-      setBotDialogOpen(false);
-      setEditingBot(null);
-      setBotError(null);
+      closeBotDialog();
       notify('Настройки бота сохранены.');
       invalidate();
     },
@@ -265,7 +267,8 @@ export function TestingPage() {
   const archiveMutation = useMutation({
     mutationFn: archiveTradingBot,
     onSuccess: () => {
-      setDetailBotId(null);
+      setDetailOpen(false);
+      setReturnToDetailBotId(null);
       notify('Бот удалён в архив.');
       invalidate();
     },
@@ -278,6 +281,7 @@ export function TestingPage() {
   }
 
   function openCreateBot() {
+    setReturnToDetailBotId(null);
     if (strategies.isError) {
       notify(toRussianError(strategies.error, 'Не удалось загрузить стратегии'), true);
       return;
@@ -289,19 +293,19 @@ export function TestingPage() {
     setBotDialogOpen(true);
   }
 
-  async function openEditBot(bot: BotSummary) {
+  async function openEditBot(bot: BotSummary): Promise<boolean> {
     if (bot.status === 'running') {
       if (
         !window.confirm(
           'Остановить робота, чтобы открыть настройки? Открытые позиции и история сохранятся.',
         )
       ) {
-        return;
+        return false;
       }
       try {
         await stopMutation.mutateAsync(bot.id);
       } catch {
-        return;
+        return false;
       }
     }
     let detail;
@@ -309,7 +313,7 @@ export function TestingPage() {
       detail = await fetchTradingBot(bot.id);
     } catch (error) {
       notify(toRussianError(error, 'Не удалось загрузить настройки бота'), true);
-      return;
+      return false;
     }
     setEditingBot(detail.bot);
     setBotForm({
@@ -329,6 +333,44 @@ export function TestingPage() {
     setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);
+    return true;
+  }
+
+  function openBotDetail(id: string) {
+    setDetailBotId(id);
+    setDetailOpen(true);
+  }
+
+  function closeBotDetail() {
+    setDetailOpen(false);
+    setReturnToDetailBotId(null);
+  }
+
+  function closeBotDialog() {
+    setBotDialogOpen(false);
+    setBotError(null);
+    const id = returnToDetailBotId;
+    if (id) {
+      setReturnToDetailBotId(null);
+      window.setTimeout(() => {
+        setDetailBotId(id);
+        setDetailOpen(true);
+      }, 250);
+    }
+  }
+
+  function openEditBotFromDetail(bot: BotSummary) {
+    const id = bot.id;
+    setDetailOpen(false);
+    setReturnToDetailBotId(id);
+    window.setTimeout(() => {
+      void openEditBot(bot).then((opened) => {
+        if (opened) return;
+        setReturnToDetailBotId(null);
+        setDetailBotId(id);
+        setDetailOpen(true);
+      });
+    }, 250);
   }
 
   function changeStrategy(key: string) {
@@ -494,12 +536,12 @@ export function TestingPage() {
                 tabIndex={0}
                 aria-label={`Открыть робота ${bot.name}`}
                 className="cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-                onClick={() => setDetailBotId(bot.id)}
+                onClick={() => openBotDetail(bot.id)}
                 onKeyDown={(event) => {
                   if (event.target !== event.currentTarget) return;
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    setDetailBotId(bot.id);
+                    openBotDetail(bot.id);
                   }
                 }}
               >
@@ -617,13 +659,13 @@ export function TestingPage() {
 
       <Drawer
         open={botDialogOpen}
-        onClose={() => setBotDialogOpen(false)}
+        onClose={closeBotDialog}
         title={editingBot ? 'Настройки робота' : 'Новый робот'}
         description="Бумажный портфель. Реальные свопы не выполняются."
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setBotDialogOpen(false)}>
+            <Button variant="ghost" onClick={closeBotDialog}>
               Отмена
             </Button>
             <Button
@@ -935,8 +977,9 @@ export function TestingPage() {
 
       <BotDetailDrawer
         botId={detailBotId}
-        onClose={() => setDetailBotId(null)}
-        onEdit={(bot) => void openEditBot(bot)}
+        open={detailOpen}
+        onClose={closeBotDetail}
+        onEdit={openEditBotFromDetail}
         onStart={(id) => startMutation.mutate(id)}
         onStop={(id) => stopMutation.mutate(id)}
         onReset={(id) => {
