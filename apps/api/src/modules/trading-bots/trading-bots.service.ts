@@ -740,7 +740,7 @@ export class TradingBotsService {
     });
   }
 
-  async trades(userId: string, id: string, limit: number): Promise<BotTradesResponse> {
+  async trades(userId: string, id: string, limit: number, offset = 0): Promise<BotTradesResponse> {
     await this.requireBot(userId, id);
     const rows = await this.db
       .select({ trade: botTrades, asset: assets, chainCode: chains.code })
@@ -749,32 +749,35 @@ export class TradingBotsService {
       .innerJoin(chains, eq(assets.chainId, chains.id))
       .where(eq(botTrades.botId, id))
       .orderBy(desc(botTrades.executedAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
 
     return {
       data: rows.map((row) => toTrade(row.trade, assetContract(row.asset, row.chainCode))),
     };
   }
 
-  async events(userId: string, id: string, limit: number): Promise<BotEventsResponse> {
+  async events(userId: string, id: string, limit: number, offset = 0): Promise<BotEventsResponse> {
     await this.requireBot(userId, id);
     const rows = await this.db
       .select()
       .from(botEvents)
       .where(eq(botEvents.botId, id))
       .orderBy(desc(botEvents.createdAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
     return { data: rows.map(toEvent) };
   }
 
-  async equity(userId: string, id: string, limit: number): Promise<BotEquityResponse> {
+  async equity(userId: string, id: string, limit: number, offset = 0): Promise<BotEquityResponse> {
     await this.requireBot(userId, id);
     const rows = await this.db
       .select()
       .from(botEquitySnapshots)
       .where(eq(botEquitySnapshots.botId, id))
       .orderBy(desc(botEquitySnapshots.capturedAt))
-      .limit(limit);
+      .limit(limit)
+      .offset(offset);
     return { data: rows.reverse().map(toEquityPoint) };
   }
 

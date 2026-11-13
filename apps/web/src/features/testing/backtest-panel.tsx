@@ -67,6 +67,7 @@ export function BacktestPanel({
   const [loadingRunId, setLoadingRunId] = useState<string | null>(null);
   const [deletingRunId, setDeletingRunId] = useState<string | null>(null);
   const [clearing, setClearing] = useState(false);
+  const [journalLimit, setJournalLimit] = useState(20);
 
   const filteredTokens = filterBySearch(tokenEntries, tokenSearch, (entry) => [
     entry.asset.symbol,
@@ -85,8 +86,8 @@ export function BacktestPanel({
       : null;
 
   const journal = useQuery({
-    queryKey: ['trading-bot-backtests', template.key],
-    queryFn: () => fetchBotBacktests({ strategyKey: template.key, limit: 50 }),
+    queryKey: ['trading-bot-backtests', template.key, journalLimit],
+    queryFn: () => fetchBotBacktests({ strategyKey: template.key, limit: journalLimit }),
   });
 
   const previewMutation = useMutation({
@@ -235,6 +236,7 @@ export function BacktestPanel({
       setPreview(null);
       setRun(null);
       setVisibleTrades(0);
+      setJournalLimit(20);
       void queryClient.invalidateQueries({ queryKey: ['trading-bot-backtests'] });
     } catch (err) {
       setError(toRussianError(err, 'Не удалось очистить журнал'));
@@ -534,6 +536,17 @@ export function BacktestPanel({
                   ))}
                 </tbody>
               </table>
+              {(journal.data?.data.length ?? 0) >= journalLimit && journalLimit < 100 ? (
+                <div className="flex justify-center border-t border-zinc-100 py-2">
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setJournalLimit((current) => Math.min(current + 20, 100))}
+                  >
+                    Ещё
+                  </Button>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

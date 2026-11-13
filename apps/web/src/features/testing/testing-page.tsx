@@ -42,7 +42,7 @@ import { StrategyIcon } from './strategy-icon';
 import { StrategyParamInputs } from './strategy-param-inputs';
 import { formToParams, paramsToForm } from './strategy-params';
 
-type Tab = 'bots' | 'strategies';
+export type TestingMode = 'stand' | 'bots' | 'strategies';
 type Sort = 'pnl' | 'equity' | 'profitFactor';
 
 type BotFormState = {
@@ -143,10 +143,10 @@ function BotStats({ bot }: { bot: BotSummary }) {
   );
 }
 
-export function TestingPage() {
+export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>('bots');
   const [sort, setSort] = useState<Sort>('pnl');
+  const [standStrategyKey, setStandStrategyKey] = useState('');
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
@@ -168,12 +168,13 @@ export function TestingPage() {
   const bots = useQuery({
     queryKey: ['trading-bots'],
     queryFn: () => fetchTradingBots(false),
+    enabled: mode === 'bots',
     refetchInterval: 15_000,
   });
   const watchlist = useQuery({
     queryKey: ['trading-bot-tokens'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
-    enabled: botDialogOpen || Boolean(strategyDetail),
+    enabled: botDialogOpen || mode === 'stand',
   });
 
   const templates = strategies.data?.data ?? [];
@@ -196,6 +197,15 @@ export function TestingPage() {
       strategyParams: paramsToForm(first.defaultParams),
     }));
   }, [botDialogOpen, templates, botForm.strategyKey]);
+
+  useEffect(() => {
+    if (templates.length === 0) return;
+    if (templates.some((template) => template.key === standStrategyKey)) return;
+    setStandStrategyKey(templates[0].key);
+  }, [templates, standStrategyKey]);
+
+  const standTemplate =
+    templates.find((template) => template.key === standStrategyKey) ?? templates[0];
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['trading-bots'] });
@@ -442,11 +452,12 @@ export function TestingPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Тестирование"
-        subtitle="Бумажные торговые боты. Реальные деньги и подписи не используются."
-        actions={<Button onClick={openCreateBot}>Добавить робота</Button>}
-      />
+      {mode === 'stand' ? (
+        <PageHeader
+          title="Тестирование"
+          subtitle="Тестовый стенд для прогона стратегий по историческим данным. Реальные деньги не используются."
+        />
+      ) : null}
 
       {actionError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -454,208 +465,237 @@ export function TestingPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div
-          role="tablist"
-          aria-label="Раздел тестирования"
-          className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
-        >
-          {(
-            [
-              ['bots', 'Роботы'],
-              ['strategies', 'Стратегии'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={tab === value}
-              onClick={() => setTab(value)}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                tab === value
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
+      {mode === 'bots' ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div
+              role="tablist"
+              aria-label="Сортировка роботов"
+              className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
             >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {tab === 'bots' ? (
-          <div
-            role="tablist"
-            aria-label="Сортировка роботов"
-            className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
-          >
-            {sortOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                role="tab"
-                aria-selected={sort === option.value}
-                onClick={() => setSort(option.value)}
-                className={`rounded-md px-3 py-1.5 text-sm ${
-                  sort === option.value
-                    ? 'bg-white text-zinc-900 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+              {sortOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={sort === option.value}
+                  onClick={() => setSort(option.value)}
+                  className={`rounded-md px-3 py-1.5 text-sm ${
+                    sort === option.value
+                      ? 'bg-white text-zinc-900 shadow-sm'
+                      : 'text-zinc-500 hover:text-zinc-900'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Button onClick={openCreateBot}>Добавить робота</Button>
           </div>
-        ) : null}
-      </div>
-
-      {tab === 'bots' ? (
-        bots.isPending ? (
-          <LoadingRows rows={6} />
-        ) : bots.isError ? (
-          <ErrorState
-            message={toRussianError(bots.error, 'Не удалось загрузить роботов')}
-            onRetry={() => void bots.refetch()}
-          />
-        ) : sortedBots.length === 0 ? (
-          <Card>
-            <CardTitle>Роботов пока нет</CardTitle>
-            <CardDescription>
-              Добавьте робота, выберите встроенную стратегию, токены и бюджет.
-            </CardDescription>
-            <Button className="mt-4" onClick={openCreateBot}>
-              Добавить робота
-            </Button>
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {sortedBots.map((bot) => (
-              <Card
-                key={bot.id}
-                role="button"
-                tabIndex={0}
-                aria-label={`Открыть робота ${bot.name}`}
-                className="cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-                onClick={() => openBotDetail(bot.id)}
-                onKeyDown={(event) => {
-                  if (event.target !== event.currentTarget) return;
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    openBotDetail(bot.id);
-                  }
-                }}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
-                      <NavIcon name="testing" className="h-5 w-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {bot.status === 'running' ? <FanIcon spinning /> : null}
-                        <span className="text-base font-semibold text-zinc-900">{bot.name}</span>
-                        <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
-                          {bot.status === 'running'
-                            ? 'Работает'
-                            : bot.status === 'draft'
-                              ? 'Черновик'
-                              : 'Остановлен'}
-                        </Badge>
-                        <Badge tone="info">{bot.strategy.name}</Badge>
-                      </div>
-                      <div className="mt-1 text-xs text-zinc-500">
-                        {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}
-                        {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
+          {bots.isPending ? (
+            <LoadingRows rows={6} />
+          ) : bots.isError ? (
+            <ErrorState
+              message={toRussianError(bots.error, 'Не удалось загрузить роботов')}
+              onRetry={() => void bots.refetch()}
+            />
+          ) : sortedBots.length === 0 ? (
+            <Card>
+              <CardTitle>Роботов пока нет</CardTitle>
+              <CardDescription>
+                Добавьте робота, выберите встроенную стратегию, токены и бюджет.
+              </CardDescription>
+              <Button className="mt-4" onClick={openCreateBot}>
+                Добавить робота
+              </Button>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {sortedBots.map((bot) => (
+                <Card
+                  key={bot.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Открыть робота ${bot.name}`}
+                  className="cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                  onClick={() => openBotDetail(bot.id)}
+                  onKeyDown={(event) => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openBotDetail(bot.id);
+                    }
+                  }}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
+                        <NavIcon name="testing" className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {bot.status === 'running' ? <FanIcon spinning /> : null}
+                          <span className="text-base font-semibold text-zinc-900">{bot.name}</span>
+                          <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
+                            {bot.status === 'running'
+                              ? 'Работает'
+                              : bot.status === 'draft'
+                                ? 'Черновик'
+                                : 'Остановлен'}
+                          </Badge>
+                          <Badge tone="info">{bot.strategy.name}</Badge>
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-500">
+                          {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}
+                          {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div
-                    className="flex shrink-0 flex-wrap gap-1"
-                    onClick={(event) => event.stopPropagation()}
-                    onKeyDown={(event) => event.stopPropagation()}
-                  >
-                    <Button
-                      variant="ghost"
-                      className="h-8 px-2 text-xs"
-                      onClick={() => void openEditBot(bot)}
-                      disabled={busy}
-                      title={
-                        bot.status === 'running'
-                          ? 'Остановить робота и изменить настройки'
-                          : undefined
-                      }
+                    <div
+                      className="flex shrink-0 flex-wrap gap-1"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
                     >
-                      Настройки
-                    </Button>
-                    {bot.status === 'running' ? (
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         className="h-8 px-2 text-xs"
-                        onClick={() => stopMutation.mutate(bot.id)}
+                        onClick={() => void openEditBot(bot)}
                         disabled={busy}
+                        title={
+                          bot.status === 'running'
+                            ? 'Остановить робота и изменить настройки'
+                            : undefined
+                        }
                       >
-                        Остановить
+                        Настройки
                       </Button>
-                    ) : (
-                      <Button
-                        className="h-8 px-2 text-xs"
-                        onClick={() => startMutation.mutate(bot.id)}
-                        disabled={busy}
-                      >
-                        Запустить
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <BotStats bot={bot} />
-                </div>
-              </Card>
-            ))}
-          </div>
-        )
-      ) : strategies.isPending ? (
-        <LoadingRows rows={5} />
-      ) : strategies.isError ? (
-        <ErrorState
-          message={toRussianError(strategies.error, 'Не удалось загрузить стратегии')}
-          onRetry={() => void strategies.refetch()}
-        />
-      ) : (
-        <Card>
-          <CardTitle>Стратегии</CardTitle>
-          <CardDescription>
-            Встроенные алгоритмы. Их нельзя изменить — параметры настраиваются в каждом роботе.
-            Нажмите на карточку, чтобы прочитать описание и гайд.
-          </CardDescription>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {templates.map((template) => (
-              <button
-                key={template.key}
-                type="button"
-                onClick={() => setStrategyDetail(template)}
-                className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-              >
-                <div className="flex items-start gap-3">
-                  <StrategyIcon icon={template.icon} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-zinc-900">{template.name}</span>
-                      <Badge tone={template.kind === 'system' ? 'info' : 'warning'}>
-                        {template.kind === 'system' ? 'Системная' : 'Кастомная'}
-                      </Badge>
+                      {bot.status === 'running' ? (
+                        <Button
+                          variant="secondary"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => stopMutation.mutate(bot.id)}
+                          disabled={busy}
+                        >
+                          Остановить
+                        </Button>
+                      ) : (
+                        <Button
+                          className="h-8 px-2 text-xs"
+                          onClick={() => startMutation.mutate(bot.id)}
+                          disabled={busy}
+                        >
+                          Запустить
+                        </Button>
+                      )}
                     </div>
-                    <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
-                    <p className="mt-2 text-[11px] text-zinc-400">
-                      {template.paramFields.length} параметров · нажмите для подробностей
-                    </p>
                   </div>
+                  <div className="mt-3">
+                    <BotStats bot={bot} />
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {mode === 'strategies' ? (
+        <>
+          {strategies.isPending ? (
+            <LoadingRows rows={5} />
+          ) : strategies.isError ? (
+            <ErrorState
+              message={toRussianError(strategies.error, 'Не удалось загрузить стратегии')}
+              onRetry={() => void strategies.refetch()}
+            />
+          ) : (
+            <Card>
+              <CardTitle>Стратегии</CardTitle>
+              <CardDescription>
+                Встроенные алгоритмы. Их нельзя изменить — параметры настраиваются в каждом роботе и
+                на тестовом стенде. Нажмите на карточку, чтобы прочитать подробное описание и гайд.
+              </CardDescription>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {templates.map((template) => (
+                  <button
+                    key={template.key}
+                    type="button"
+                    onClick={() => setStrategyDetail(template)}
+                    className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                  >
+                    <div className="flex items-start gap-3">
+                      <StrategyIcon icon={template.icon} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-zinc-900">{template.name}</span>
+                          <Badge tone={template.kind === 'system' ? 'info' : 'warning'}>
+                            {template.kind === 'system' ? 'Системная' : 'Кастомная'}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
+                        <p className="mt-2 text-[11px] text-zinc-400">
+                          {template.paramFields.length} параметров · нажмите для подробностей
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      ) : null}
+
+      {mode === 'stand' ? (
+        strategies.isPending ? (
+          <LoadingRows rows={5} />
+        ) : strategies.isError ? (
+          <ErrorState
+            message={toRussianError(strategies.error, 'Не удалось загрузить стратегии')}
+            onRetry={() => void strategies.refetch()}
+          />
+        ) : standTemplate ? (
+          <div className="space-y-4">
+            <Card>
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <CardTitle>Тестовый стенд</CardTitle>
+                  <CardDescription>
+                    Выберите стратегию — параметры и гайд подстроятся автоматически.
+                  </CardDescription>
                 </div>
-              </button>
-            ))}
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="block min-w-56 text-sm text-zinc-600">
+                    Стратегия
+                    <Select
+                      className="mt-1"
+                      value={standTemplate.key}
+                      onChange={(event) => setStandStrategyKey(event.target.value)}
+                    >
+                      {templates.map((template) => (
+                        <option key={template.key} value={template.key}>
+                          {template.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </label>
+                  <Button variant="secondary" onClick={() => setStrategyDetail(standTemplate)}>
+                    Описание
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-zinc-700">{standTemplate.description}</p>
+            </Card>
+            <BacktestPanel
+              key={standTemplate.key}
+              template={standTemplate}
+              tokenEntries={tokenEntries}
+              tokensPending={watchlist.isPending}
+              tokensError={watchlist.error}
+            />
           </div>
-        </Card>
-      )}
+        ) : null
+      ) : null}
 
       <Drawer
         open={botDialogOpen}
@@ -936,6 +976,14 @@ export function TestingPage() {
               <p className="mt-1 text-sm leading-6 text-zinc-700">{strategyDetail.guide}</p>
             </Card>
             <Card>
+              <CardTitle>Когда лучше использовать</CardTitle>
+              <p className="mt-1 text-sm leading-6 text-zinc-700">{strategyDetail.bestFor}</p>
+            </Card>
+            <Card className="border-amber-200/80 bg-amber-50/50">
+              <CardTitle>Риски</CardTitle>
+              <p className="mt-1 text-sm leading-6 text-zinc-700">{strategyDetail.risks}</p>
+            </Card>
+            <Card>
               <CardTitle>Параметры по умолчанию</CardTitle>
               <div className="mt-2 space-y-2">
                 {strategyDetail.paramFields.map((field) => {
@@ -962,15 +1010,8 @@ export function TestingPage() {
             </Card>
             <p className="text-xs leading-5 text-zinc-500">
               Стратегия встроена в приложение и не редактируется. Все числовые параметры задаются
-              отдельно для каждого робота при создании или в настройках.
+              отдельно для каждого робота и для прогона на тестовом стенде.
             </p>
-            <BacktestPanel
-              key={strategyDetail.key}
-              template={strategyDetail}
-              tokenEntries={tokenEntries}
-              tokensPending={watchlist.isPending}
-              tokensError={watchlist.error}
-            />
           </div>
         ) : null}
       </Drawer>

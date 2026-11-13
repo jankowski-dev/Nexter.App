@@ -224,6 +224,12 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     const sells = await agent.get(`/api/v1/trading-bots/bots/${botId}/trades`).expect(200);
     expect(sells.body.data.map((trade: { side: string }) => trade.side)).toEqual(['sell', 'buy']);
 
+    const olderTrade = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/trades?limit=1&offset=1`)
+      .expect(200);
+    expect(olderTrade.body.data).toHaveLength(1);
+    expect(olderTrade.body.data[0].side).toBe('buy');
+
     const events = await agent.get(`/api/v1/trading-bots/bots/${botId}/events`).expect(200);
     expect(events.body.data.map((event: { type: string }) => event.type)).toEqual(
       expect.arrayContaining(['created', 'started', 'buy', 'sell']),

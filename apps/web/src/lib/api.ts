@@ -978,25 +978,37 @@ export async function archiveTradingBot(id: string): Promise<void> {
   await apiDelete(`/api/v1/trading-bots/bots/${id}`);
 }
 
-export async function fetchBotTrades(id: string, limit = 100): Promise<BotTradesResponse> {
+export async function fetchBotTrades(
+  id: string,
+  limit = 100,
+  offset = 0,
+): Promise<BotTradesResponse> {
   return apiFetch(
-    `/api/v1/trading-bots/bots/${id}/trades?limit=${limit}`,
+    `/api/v1/trading-bots/bots/${id}/trades${queryString({ limit, offset })}`,
     {},
     botTradesResponseSchema,
   );
 }
 
-export async function fetchBotEvents(id: string, limit = 100): Promise<BotEventsResponse> {
+export async function fetchBotEvents(
+  id: string,
+  limit = 100,
+  offset = 0,
+): Promise<BotEventsResponse> {
   return apiFetch(
-    `/api/v1/trading-bots/bots/${id}/events?limit=${limit}`,
+    `/api/v1/trading-bots/bots/${id}/events${queryString({ limit, offset })}`,
     {},
     botEventsResponseSchema,
   );
 }
 
-export async function fetchBotEquity(id: string, limit = 500): Promise<BotEquityResponse> {
+export async function fetchBotEquity(
+  id: string,
+  limit = 500,
+  offset = 0,
+): Promise<BotEquityResponse> {
   return apiFetch(
-    `/api/v1/trading-bots/bots/${id}/equity?limit=${limit}`,
+    `/api/v1/trading-bots/bots/${id}/equity${queryString({ limit, offset })}`,
     {},
     botEquityResponseSchema,
   );

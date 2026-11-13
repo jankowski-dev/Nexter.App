@@ -27,13 +27,17 @@ import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
 import { TokenBuyList } from './token-buy-list';
+import { TestingPage } from '../testing/testing-page';
 
-type PortfolioTab = 'portfolio' | 'trades';
+type PortfolioTab = 'portfolio' | 'trades' | 'robots' | 'strategies';
 type PortfolioView = 'positions' | 'main';
 
 function tabFromHash(): PortfolioTab {
   if (typeof window === 'undefined') return 'portfolio';
-  return window.location.hash === '#trades' ? 'trades' : 'portfolio';
+  if (window.location.hash === '#trades') return 'trades';
+  if (window.location.hash === '#robots') return 'robots';
+  if (window.location.hash === '#strategies') return 'strategies';
+  return 'portfolio';
 }
 
 function viewFromHash(): PortfolioView {
@@ -65,7 +69,7 @@ export function PortfolioPage() {
   }, [positions.refetch]);
   const watchlistLogos = useWatchlistLogos();
 
-  if (positions.isPending) {
+  if ((tab === 'portfolio' || tab === 'trades') && positions.isPending) {
     return (
       <div className="space-y-6">
         <PageHeader title="Портфель" subtitle="Загружаю позиции и сделки…" />
@@ -74,7 +78,7 @@ export function PortfolioPage() {
     );
   }
 
-  if (positions.isError || !positions.data) {
+  if ((tab === 'portfolio' || tab === 'trades') && (positions.isError || !positions.data)) {
     return (
       <div className="space-y-6">
         <PageHeader title="Портфель" />
@@ -87,10 +91,12 @@ export function PortfolioPage() {
   }
 
   const data = positions.data;
-  const sortedPositions = [...data.positions].sort((a, b) =>
-    new Decimal(b.costBasisUsd).comparedTo(a.costBasisUsd),
+  const sortedPositions = data
+    ? [...data.positions].sort((a, b) => new Decimal(b.costBasisUsd).comparedTo(a.costBasisUsd))
+    : [];
+  const positionByAsset = new Map(
+    (data?.positions ?? []).map((position) => [position.asset.id, position]),
   );
-  const positionByAsset = new Map(data.positions.map((position) => [position.asset.id, position]));
 
   function changeTab(next: PortfolioTab): void {
     setTab(next);
@@ -100,7 +106,15 @@ export function PortfolioPage() {
     window.history.replaceState(
       null,
       '',
-      next === 'trades' ? '#trades' : portfolioView === 'main' ? '#list' : '#portfolio',
+      next === 'trades'
+        ? '#trades'
+        : next === 'robots'
+          ? '#robots'
+          : next === 'strategies'
+            ? '#strategies'
+            : portfolioView === 'main'
+              ? '#list'
+              : '#portfolio',
     );
   }
 
@@ -112,12 +126,20 @@ export function PortfolioPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Портфель"
-        subtitle="Позиции, покупка токенов и сделки."
+        title={tab === 'robots' ? 'Роботы' : tab === 'strategies' ? 'Стратегии' : 'Портфель'}
+        subtitle={
+          tab === 'robots'
+            ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
+            : tab === 'strategies'
+              ? 'Встроенные стратегии и подробные описания.'
+              : 'Позиции, покупка токенов и сделки.'
+        }
         actions={
-          <Button variant="secondary" onClick={() => setManual({})}>
-            Ручная сделка
-          </Button>
+          tab === 'portfolio' || tab === 'trades' ? (
+            <Button variant="secondary" onClick={() => setManual({})}>
+              Ручная сделка
+            </Button>
+          ) : undefined
         }
       />
 
@@ -130,6 +152,8 @@ export function PortfolioPage() {
           [
             ['portfolio', 'Портфель'],
             ['trades', 'Сделки'],
+            ['robots', 'Роботы'],
+            ['strategies', 'Стратегии'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -149,7 +173,7 @@ export function PortfolioPage() {
         ))}
       </div>
 
-      {tab === 'portfolio' ? (
+      {tab === 'portfolio' && data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
@@ -357,6 +381,8 @@ export function PortfolioPage() {
       ) : null}
 
       {tab === 'trades' ? <TradesPanel onOpenTrade={setSellGroup} logos={watchlistLogos} /> : null}
+      {tab === 'robots' ? <TestingPage mode="bots" /> : null}
+      {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
 
       <AssetDrawer
         assetId={selectedAssetId}
