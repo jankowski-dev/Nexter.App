@@ -20,9 +20,9 @@ const cryptoNavigation = [
 
 const topNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard, icon: 'dashboard' },
+  { to: '/notifications', label: messages.nav.notifications, icon: 'notifications' },
   { to: '/tasks', label: messages.nav.tasks, icon: 'tasks' },
   { to: '/notes', label: messages.nav.notes, icon: 'notes' },
-  { to: '/notifications', label: messages.nav.notifications, icon: 'notifications' },
 ] as const;
 
 const afterCryptoNavigation = [
@@ -286,8 +286,8 @@ function RootLayoutContent() {
 
           <div className="mt-auto">
             <Button
-              className="w-full justify-start text-zinc-300 hover:bg-white/5 hover:text-white"
-              variant="ghost"
+              className="w-full justify-start text-white"
+              variant="danger"
               onClick={() => void logout()}
             >
               Выйти
