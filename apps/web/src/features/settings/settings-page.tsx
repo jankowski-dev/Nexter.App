@@ -7,7 +7,6 @@ import { downloadExport, fetchSettings, updateSettings } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 
@@ -16,9 +15,6 @@ export function SettingsPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const [timezone, setTimezone] = useState('Europe/Minsk');
   const [includeGas, setIncludeGas] = useState(true);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,11 +27,9 @@ export function SettingsPage() {
     mutationFn: () => updateSettings({ timezone, includeGasInCostBasis: includeGas }),
     onSuccess: (data) => {
       queryClient.setQueryData(['settings'], data);
-      setNotice('Настройки сохранены.');
       setError(null);
     },
     onError: (err) => {
-      setNotice(null);
       setError(toRussianError(err, 'Не удалось сохранить настройки'));
     },
   });
@@ -46,10 +40,8 @@ export function SettingsPage() {
   ) {
     try {
       await downloadExport(dataset, format);
-      setNotice(`Экспорт ${dataset}.${format} скачан.`);
       setError(null);
     } catch (err) {
-      setNotice(null);
       setError(toRussianError(err, 'Не удалось скачать экспорт'));
     }
   }
@@ -82,11 +74,6 @@ export function SettingsPage() {
         subtitle="Общие параметры, безопасность, аудит, качество данных и экспорт."
       />
 
-      {notice ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
-          {notice}
-        </div>
-      ) : null}
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           {error}

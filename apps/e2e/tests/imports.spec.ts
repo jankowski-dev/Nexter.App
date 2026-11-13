@@ -183,7 +183,6 @@ test('previews, commits and rolls back a Notion import through the UI', async ({
   });
 
   await page.getByRole('button', { name: 'Предпросмотр' }).click();
-  await expect(page.getByText(/Предпросмотр готов/)).toBeVisible();
   await expect(page.getByText('Сверка с контролем 429 ордеров')).toBeVisible();
   await expect(page.getByText('Не применимо').first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Подтвердить импорт' })).toBeEnabled();
@@ -195,14 +194,13 @@ test('previews, commits and rolls back a Notion import through the UI', async ({
   });
   await expect(page.getByRole('button', { name: 'Подтвердить импорт' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Предпросмотр' }).click();
-  await expect(page.getByText(/Предпросмотр готов/)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Подтвердить импорт' })).toBeEnabled();
 
   page.on('dialog', (dialog) => {
     void dialog.accept();
   });
 
   await page.getByRole('button', { name: 'Подтвердить импорт' }).click();
-  await expect(page.getByText('Импорт применён к учёту.')).toBeVisible();
   await expect(page.getByText('Результат в учёте')).toBeVisible();
   await expect(page.getByText(/370,00/).first()).toBeVisible();
   await expect(page.getByText(/430,00/).first()).toBeVisible();
@@ -210,7 +208,6 @@ test('previews, commits and rolls back a Notion import through the UI', async ({
   await expect(page.getByText(/-20,00/).first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Откатить импорт' }).click();
-  await expect(page.getByText('Импорт откатан.')).toBeVisible();
   await expect(page.getByText('Результат в учёте')).toHaveCount(0);
 
   const history = page.getByRole('heading', { name: 'История импортов' });

@@ -9,6 +9,7 @@ import { FinanceModule } from './modules/finance/finance.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { NotesModule } from './modules/notes/notes.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { VaultModule } from './modules/vault/vault.module';
 import { SettingsModule } from './modules/settings/settings.module';
@@ -36,6 +37,7 @@ import { loggerModule } from './shared/logging/logger.module';
     HabitsModule,
     WatchlistModule,
     NotesModule,
+    NotificationsModule,
     TasksModule,
     VaultModule,
     SettingsModule,

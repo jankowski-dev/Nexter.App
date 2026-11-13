@@ -14,6 +14,7 @@ export const messages = {
     vault: 'Хранилище',
     tasks: 'Задачи',
     testing: 'Тестирование',
+    notifications: 'Уведомления',
     notes: 'Заметки',
     settings: 'Настройки',
   },

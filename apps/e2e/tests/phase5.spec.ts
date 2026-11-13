@@ -269,12 +269,12 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await drawerToArchive.getByRole('button', { name: 'В архив' }).click();
   await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
 
-  await page.getByLabel('Архив').check();
+  await page.getByRole('switch', { name: 'Показать архивные токены' }).click();
   await page.getByRole('button', { name: /BASED/ }).first().click();
   const archivedDrawer = page.getByRole('dialog');
   await archivedDrawer.getByRole('button', { name: 'Вернуть' }).click();
   await archivedDrawer.getByLabel('Закрыть').click();
-  await page.getByLabel('Архив').uncheck();
+  await page.getByRole('switch', { name: 'Показать архивные токены' }).click();
   await expect(page.getByRole('button', { name: /BASED/ }).first()).toBeVisible();
 
   await page.goto('/settings');
@@ -282,7 +282,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Общие').first()).toBeVisible();
   await page.getByLabel('Часовой пояс (IANA)').fill('Europe/Moscow');
   await page.getByRole('button', { name: 'Сохранить настройки' }).click();
-  await expect(page.getByText('Настройки сохранены.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByLabel('Часовой пояс (IANA)')).toHaveValue('Europe/Moscow');
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'CSV' }).first().click();

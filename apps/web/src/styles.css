@@ -133,6 +133,7 @@ button:focus-visible,
 
 [data-theme='dark'] .bg-emerald-50,
 [data-theme='dark'] .bg-emerald-50\/40,
+[data-theme='dark'] .bg-emerald-50\/60,
 [data-theme='dark'] .bg-emerald-50\/70,
 [data-theme='dark'] .hover\:bg-emerald-50:hover,
 [data-theme='dark'] .hover\:bg-emerald-50\/70:hover {

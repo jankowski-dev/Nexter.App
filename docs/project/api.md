@@ -175,6 +175,16 @@
 | POST  | `/reconciliation/runs`      | запустить (если enabled)                        |
 | GET   | `/reconciliation/addresses` | watched addresses                               |
 
+## 11.1. Notifications
+
+| Метод | Путь                          | Описание                            |
+| ----- | ----------------------------- | ----------------------------------- |
+| GET   | `/notifications?limit=`       | последние уведомления + unreadCount |
+| GET   | `/notifications/unread-count` | число непрочитанных                 |
+| POST  | `/notifications/read-all`     | пометить все прочитанными           |
+
+Все ответы owner-scoped. Уведомления создаются сервером; отдельного пользовательского создания нет.
+
 ## 12. Trading bots (paper)
 
 | Метод  | Путь                                     | Описание                                                |

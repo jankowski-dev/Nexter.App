@@ -144,17 +144,9 @@ export function TestingPage() {
   const [botError, setBotError] = useState<string | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
   const [pendingBotAfterStrategy, setPendingBotAfterStrategy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [noticeError, setNoticeError] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  useAutoDismissNotice(
-    notice,
-    () => {
-      setNotice(null);
-      setNoticeError(false);
-    },
-    noticeError ? 8000 : 5000,
-  );
+  useAutoDismissNotice(actionError, () => setActionError(null), 8000);
 
   const strategies = useQuery({
     queryKey: ['trading-bot-strategies'],
@@ -193,6 +185,7 @@ export function TestingPage() {
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-trades'] });
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-events'] });
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-equity'] });
+    void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
   };
 
   const createBotMutation = useMutation({
@@ -302,8 +295,8 @@ export function TestingPage() {
   });
 
   function notify(message: string, isError = false) {
-    setNotice(message);
-    setNoticeError(isError);
+    if (!isError) return;
+    setActionError(message);
   }
 
   function openCreateBot() {
@@ -485,15 +478,9 @@ export function TestingPage() {
         }
       />
 
-      {notice ? (
-        <div
-          className={`rounded-lg border p-3 text-sm ${
-            noticeError
-              ? 'border-red-200 bg-red-50 text-red-800'
-              : 'border-emerald-200 bg-emerald-50 text-emerald-800'
-          }`}
-        >
-          {notice}
+      {actionError ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {actionError}
         </div>
       ) : null}
 

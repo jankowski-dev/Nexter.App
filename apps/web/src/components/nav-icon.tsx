@@ -12,6 +12,7 @@ export type NavIconName =
   | 'finance'
   | 'notes'
   | 'vault'
+  | 'notifications'
   | 'settings';
 
 const icons: Record<NavIconName, ReactNode> = {
@@ -78,6 +79,12 @@ const icons: Record<NavIconName, ReactNode> = {
     <>
       <rect x="5" y="10" width="14" height="10" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" />
+    </>
+  ),
+  notifications: (
+    <>
+      <path d="M18 8.5a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+      <path d="M10 21h4" />
     </>
   ),
   settings: (

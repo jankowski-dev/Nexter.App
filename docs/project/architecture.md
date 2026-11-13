@@ -212,6 +212,13 @@ flowchart LR
 - Sentry — только safe error context.
 - `/health` — liveness; `/ready` — DB readiness.
 
+## 12.1. Уведомления
+
+- `notifications` хранит owner-scoped события: `type`, `title`, `body`, `href`, `payload`, `readAt`.
+- API: `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/read-all`.
+- UI `/notifications` помечает всё прочитанным при открытии, а глобальная навигация показывает badge непрочитанных.
+- Первые события: остановка бота и принудительное закрытие позиций. Сервис `NotificationsService.create` готов для будущих длительных операций и фоновых задач.
+
 ## 13. Бумажные торговые боты (см. `trading-bots.md`)
 
 ```mermaid

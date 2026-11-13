@@ -2,7 +2,7 @@ import { ChainToggle } from '@/components/chain-toggle';
 import { NavIcon } from '@/components/nav-icon';
 import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
-import { apiFetch, apiPost } from '@/lib/api';
+import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { authMeResponseSchema } from '@nexter/contracts';
@@ -22,6 +22,7 @@ const topNavigation = [
   { to: '/dashboard', label: messages.nav.dashboard, icon: 'dashboard' },
   { to: '/tasks', label: messages.nav.tasks, icon: 'tasks' },
   { to: '/notes', label: messages.nav.notes, icon: 'notes' },
+  { to: '/notifications', label: messages.nav.notifications, icon: 'notifications' },
 ] as const;
 
 const afterCryptoNavigation = [
@@ -168,6 +169,12 @@ function RootLayoutContent() {
     }
   });
   const wallet = useWallet();
+  const unreadNotifications = useQuery({
+    queryKey: ['notifications-unread-count'],
+    queryFn: fetchNotificationUnreadCount,
+    refetchInterval: 30_000,
+  });
+  const unreadCount = unreadNotifications.data?.count ?? 0;
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiFetch('/api/v1/auth/me', {}, authMeResponseSchema),
@@ -224,6 +231,11 @@ function RootLayoutContent() {
               >
                 <NavIcon name={item.icon} className="h-4 w-4 shrink-0" />
                 <span>{item.label}</span>
+                {item.to === '/notifications' && unreadCount > 0 ? (
+                  <span className="ml-auto min-w-5 rounded-full bg-emerald-500 px-1.5 text-center text-[10px] font-semibold leading-5 text-zinc-950">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             ))}
             <button
@@ -368,6 +380,11 @@ function RootLayoutContent() {
                 >
                   <NavIcon name={item.icon} className="h-3.5 w-3.5 shrink-0" />
                   <span>{item.label}</span>
+                  {item.to === '/notifications' && unreadCount > 0 ? (
+                    <span className="ml-0.5 min-w-4 rounded-full bg-emerald-500 px-1 text-center text-[10px] font-semibold leading-4 text-zinc-950">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  ) : null}
                 </Link>
               ))}
               <button

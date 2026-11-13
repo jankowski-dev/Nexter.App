@@ -14,6 +14,7 @@ import { WatchlistPage } from '@/features/watchlist/watchlist-page';
 import { OperationsPage } from '@/features/operations/operations-page';
 import { ReportsPage } from '@/features/reports/reports-page';
 import { NotesPage } from '@/features/notes/notes-page';
+import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
 import { TestingPage } from '@/features/testing/testing-page';
 import { VaultPage } from '@/features/vault/vault-page';
@@ -194,6 +195,12 @@ const notesRoute = createRoute({
   component: NotesPage,
 });
 
+const notificationsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/notifications',
+  component: NotificationsPage,
+});
+
 const importRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/import',
@@ -273,6 +280,7 @@ const routeTree = rootRoute.addChildren([
     tasksRoute,
     testingRoute,
     notesRoute,
+    notificationsRoute,
     importRoute,
     financeRoute,
     watchlistRoute,

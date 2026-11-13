@@ -21,7 +21,6 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useMemo, useRef, useState } from 'react';
 import type {
   FinanceAccount,
@@ -162,9 +161,6 @@ export function FinancePage() {
   const [period, setPeriod] = useState<PeriodPreset>('current');
   const [customMonth, setCustomMonth] = useState(currentMonth);
   const [journalFilter, setJournalFilter] = useState<JournalFilter>('all');
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useAutoDismissNotice(notice, () => setNotice(null), 6000);
   const [transactionDialog, setTransactionDialog] = useState<{
     transaction?: FinanceTransaction;
     kind?: FinanceTransactionKind;
@@ -286,24 +282,14 @@ export function FinancePage() {
       transaction: FinanceTransaction;
       archived: boolean;
     }) => updateFinanceTransaction(transaction.id, { archived }),
-    onSuccess: (_data, variables) => {
-      setNotice(
-        variables.archived
-          ? 'Операция отменена. Вернуть её можно во вкладке «Отменённые».'
-          : 'Операция возвращена.',
-      );
+    onSuccess: () => {
       invalidate();
     },
   });
   const archiveTransfer = useMutation({
     mutationFn: ({ transfer, archived }: { transfer: FinanceTransfer; archived: boolean }) =>
       updateFinanceTransfer(transfer.id, { archived }),
-    onSuccess: (_data, variables) => {
-      setNotice(
-        variables.archived
-          ? 'Перевод отменён. Вернуть его можно во вкладке «Отменённые».'
-          : 'Перевод возвращён.',
-      );
+    onSuccess: () => {
       invalidate();
     },
   });
@@ -688,12 +674,6 @@ export function FinancePage() {
             Отменённые операции не удаляются безвозвратно: открой вкладку «Отменённые», чтобы
             вернуть их.
           </p>
-
-          {notice ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              {notice}
-            </div>
-          ) : null}
 
           {journal.isPending ? <LoadingRows rows={6} /> : null}
           {journal.isError ? (

@@ -37,6 +37,9 @@ import {
   manualTransactionResponseSchema,
   noteImageSchema,
   noteSchema,
+  notificationsResponseSchema,
+  notificationsReadAllResponseSchema,
+  notificationUnreadCountSchema,
   notesResponseSchema,
   portfolioAssetDetailSchema,
   portfolioSnapshotSchema,
@@ -118,6 +121,9 @@ import {
   type Note,
   type NoteCreateRequest,
   type NoteImage,
+  type NotificationUnreadCount,
+  type NotificationsResponse,
+  type NotificationsReadAllResponse,
   type NoteImageCreateRequest,
   type NoteListQuery,
   type NoteUpdateRequest,
@@ -996,4 +1002,16 @@ export async function fetchBotEquity(id: string, limit = 500): Promise<BotEquity
     {},
     botEquityResponseSchema,
   );
+}
+
+export async function fetchNotifications(limit = 100): Promise<NotificationsResponse> {
+  return apiFetch(`/api/v1/notifications?limit=${limit}`, {}, notificationsResponseSchema);
+}
+
+export async function fetchNotificationUnreadCount(): Promise<NotificationUnreadCount> {
+  return apiFetch('/api/v1/notifications/unread-count', {}, notificationUnreadCountSchema);
+}
+
+export async function markAllNotificationsRead(): Promise<NotificationsReadAllResponse> {
+  return apiPost('/api/v1/notifications/read-all', {}, notificationsReadAllResponseSchema);
 }

@@ -5,6 +5,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
+import { Switch } from '@/components/ui/switch';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
@@ -392,15 +393,14 @@ export function WatchlistPage() {
         subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
         actions={
           <>
-            <label className="flex items-center gap-2 text-sm text-zinc-600">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2 text-sm text-zinc-600">
+              <Switch
                 checked={includeArchived}
-                onChange={(event) => setIncludeArchived(event.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 bg-white"
+                onChange={setIncludeArchived}
+                label="Показать архивные токены"
               />
-              Архив
-            </label>
+              <span>Архив</span>
+            </div>
             <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
               Новая группа
             </Button>
