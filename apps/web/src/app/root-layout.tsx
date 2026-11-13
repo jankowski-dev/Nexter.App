@@ -143,7 +143,7 @@ function RouteLoadingOverlay() {
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-white/55 backdrop-blur-[1px]"
+      className="absolute inset-0 z-30 flex items-center justify-center bg-white/55 backdrop-blur-[1px]"
       role="status"
       aria-label="Загрузка страницы"
     >
@@ -429,14 +429,14 @@ function RootLayoutContent() {
             ) : null}
           </nav>
 
-          <main id="main" className="min-w-0 flex-1 p-4 md:p-6">
+          <main id="main" className="relative min-w-0 flex-1 p-4 md:p-6">
             <div key={pathname} className="page-enter">
               <Outlet />
             </div>
+            <RouteLoadingOverlay />
           </main>
         </div>
       </div>
-      <RouteLoadingOverlay />
     </div>
   );
 }

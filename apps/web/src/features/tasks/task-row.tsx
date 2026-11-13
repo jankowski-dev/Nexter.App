@@ -39,7 +39,6 @@ export function TaskCompactRow({
   onOpen,
   onToggleStatus,
   onDelete,
-  onRestore,
   busy = false,
 }: {
   task: Task;
@@ -47,7 +46,6 @@ export function TaskCompactRow({
   onOpen?: () => void;
   onToggleStatus?: () => void;
   onDelete?: () => void;
-  onRestore?: () => void;
   busy?: boolean;
 }) {
   const overdue = isTaskOverdue(task, now);
@@ -56,9 +54,7 @@ export function TaskCompactRow({
   return (
     <Card
       data-task-id={task.id}
-      className={`flex items-center justify-between gap-3 p-3 transition-colors hover:border-emerald-300 ${
-        task.archivedAt ? 'opacity-60' : ''
-      }`}
+      className="flex items-center justify-between gap-3 p-3 transition-colors hover:border-emerald-300"
     >
       <button
         type="button"
@@ -88,7 +84,6 @@ export function TaskCompactRow({
             </span>
             <Badge tone={taskStatusTones[task.status]}>{taskStatusLabels[task.status]}</Badge>
             {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
-            {task.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
           </span>
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="flex items-center gap-1">
@@ -113,47 +108,32 @@ export function TaskCompactRow({
         </span>
       </button>
 
-      {onToggleStatus || onDelete || onRestore ? (
+      {onToggleStatus || onDelete ? (
         <div className="flex shrink-0 items-center gap-1">
-          {onRestore ? (
+          {onToggleStatus ? (
             <Button
               variant="ghost"
-              className="h-8 w-8 p-0"
-              aria-label="Вернуть задачу"
-              title="Вернуть"
-              onClick={onRestore}
+              className={`h-8 w-8 p-0 ${done ? 'text-zinc-500' : 'text-emerald-700'}`}
+              aria-label={done ? 'Вернуть в работу' : 'Завершить задачу'}
+              title={done ? 'Вернуть в работу' : 'Завершить'}
+              onClick={onToggleStatus}
               disabled={busy}
             >
-              <UndoIcon />
+              {done ? <UndoIcon /> : <CheckIcon />}
             </Button>
-          ) : (
-            <>
-              {onToggleStatus ? (
-                <Button
-                  variant="ghost"
-                  className={`h-8 w-8 p-0 ${done ? 'text-zinc-500' : 'text-emerald-700'}`}
-                  aria-label={done ? 'Вернуть в работу' : 'Завершить задачу'}
-                  title={done ? 'Вернуть в работу' : 'Завершить'}
-                  onClick={onToggleStatus}
-                  disabled={busy}
-                >
-                  {done ? <UndoIcon /> : <CheckIcon />}
-                </Button>
-              ) : null}
-              {onDelete ? (
-                <Button
-                  variant="ghost"
-                  className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
-                  aria-label="Удалить задачу"
-                  title="Удалить"
-                  onClick={onDelete}
-                  disabled={busy}
-                >
-                  <TrashIcon />
-                </Button>
-              ) : null}
-            </>
-          )}
+          ) : null}
+          {onDelete ? (
+            <Button
+              variant="ghost"
+              className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
+              aria-label="Удалить задачу"
+              title="Удалить"
+              onClick={onDelete}
+              disabled={busy}
+            >
+              <TrashIcon />
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </Card>

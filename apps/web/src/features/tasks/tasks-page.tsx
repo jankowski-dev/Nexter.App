@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Input } from '@/components/ui/input';
+import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchTasks, updateTask } from '@/lib/api';
@@ -44,7 +44,6 @@ export function TasksPage() {
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [filter, setFilter] = useState<TaskFilter>('open');
-  const [archivedOnly, setArchivedOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [drawer, setDrawer] = useState<TaskDrawerState | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null);
@@ -52,12 +51,11 @@ export function TasksPage() {
 
   const range = view === 'calendar' ? monthRange(month) : null;
   const tasks = useQuery({
-    queryKey: ['tasks', view, filter, archivedOnly, search, range?.from ?? null, range?.to ?? null],
+    queryKey: ['tasks', view, filter, search, range?.from ?? null, range?.to ?? null],
     queryFn: () =>
       fetchTasks({
-        status: view === 'list' && !archivedOnly && filter !== 'all' ? filter : undefined,
+        status: view === 'list' && filter !== 'all' ? filter : undefined,
         search: search || undefined,
-        archivedOnly,
         ...(range ?? {}),
         limit: view === 'calendar' ? 500 : 200,
       }),
@@ -76,15 +74,6 @@ export function TasksPage() {
       invalidate();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось изменить задачу')),
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: (task: Task) => updateTask(task.id, { archived: false }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось вернуть задачу')),
   });
 
   const moveMutation = useMutation({
@@ -150,7 +139,7 @@ export function TasksPage() {
                   aria-selected={view === value}
                   onClick={() => {
                     setView(value);
-                    if (value === 'calendar' && !archivedOnly) setFilter('all');
+                    if (value === 'calendar') setFilter('all');
                   }}
                   className={`rounded-md px-3 py-1.5 text-sm ${
                     view === value
@@ -173,77 +162,20 @@ export function TasksPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-          {view === 'list' ? (
-            <div className="flex gap-1" role="tablist" aria-label="Статус задач">
-              {(
-                [
-                  ['open', 'Открытые'],
-                  ['done', 'Выполненные'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={!archivedOnly && filter === value}
-                  onClick={() => {
-                    setArchivedOnly(false);
-                    setFilter(value);
-                  }}
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    !archivedOnly && filter === value
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <div className="flex gap-1 border-l border-zinc-200 pl-1">
-            <button
-              type="button"
-              onClick={() => {
-                setArchivedOnly(false);
-                setFilter('all');
-              }}
-              aria-pressed={!archivedOnly && (view === 'calendar' || filter === 'all')}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                !archivedOnly && (view === 'calendar' || filter === 'all')
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Актуальные
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setArchivedOnly(true);
-                setFilter('all');
-              }}
-              aria-pressed={archivedOnly}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                archivedOnly
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              Архивные
-            </button>
-          </div>
-        </div>
-        <Input
-          className="max-w-xs"
-          placeholder="Поиск по задачам"
-          aria-label="Поиск по задачам"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-      </div>
+      <ListToolbar search={search} onSearch={setSearch} searchPlaceholder="Поиск по задачам">
+        {view === 'list' ? (
+          <TabGroup
+            value={filter}
+            onChange={setFilter}
+            ariaLabel="Статус задач"
+            options={[
+              { value: 'open', label: 'Открытые' },
+              { value: 'done', label: 'Выполненные' },
+              { value: 'all', label: 'Все' },
+            ]}
+          />
+        ) : null}
+      </ListToolbar>
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -274,17 +206,11 @@ export function TasksPage() {
           />
         ) : rows.length === 0 ? (
           <Card>
-            <CardTitle>{archivedOnly ? 'Архив пуст' : 'Задач нет'}</CardTitle>
-            <CardDescription>
-              {archivedOnly
-                ? 'Удалённые задачи появятся здесь.'
-                : 'Создайте задачу, чтобы не забыть важное действие.'}
-            </CardDescription>
-            {!archivedOnly ? (
-              <Button className="mt-4" onClick={() => openCreate()}>
-                Новая задача
-              </Button>
-            ) : null}
+            <CardTitle>Задач нет</CardTitle>
+            <CardDescription>Создайте задачу, чтобы не забыть важное действие.</CardDescription>
+            <Button className="mt-4" onClick={() => openCreate()}>
+              Новая задача
+            </Button>
           </Card>
         ) : (
           <div className="space-y-2">
@@ -301,8 +227,7 @@ export function TasksPage() {
                   })
                 }
                 onDelete={() => setDeleteTarget(task)}
-                onRestore={task.archivedAt ? () => restoreMutation.mutate(task) : undefined}
-                busy={statusMutation.isPending || restoreMutation.isPending}
+                busy={statusMutation.isPending}
               />
             ))}
           </div>

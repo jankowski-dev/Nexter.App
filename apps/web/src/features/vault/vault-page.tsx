@@ -1,10 +1,9 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
+import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { PageHeader } from '@/components/ui/page-header';
-import { Switch } from '@/components/ui/switch';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
 import { CopyIcon, EyeIcon } from '@/components/ui/icons';
@@ -31,6 +30,10 @@ import type { VaultItem } from '@nexter/contracts';
 interface DecryptedItem {
   item: VaultItem;
   data: VaultItemData;
+}
+
+function rowTitle(row: DecryptedItem): string {
+  return row.data.title || 'Без названия';
 }
 
 function SafeIcon({ className = 'h-5 w-5' }: { className?: string }) {
@@ -112,10 +115,10 @@ function safeUrl(value: string): string | null {
 
 export function VaultPage() {
   const queryClient = useQueryClient();
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [sort, setSort] = useState<'updated' | 'title'>('updated');
   const vault = useQuery({
-    queryKey: ['vault', includeArchived],
-    queryFn: () => fetchVault(includeArchived),
+    queryKey: ['vault'],
+    queryFn: () => fetchVault(false),
   });
   const [dataKey, setDataKey] = useState<CryptoKey | null>(null);
   const [decrypted, setDecrypted] = useState<DecryptedItem[]>([]);
@@ -208,17 +211,7 @@ export function VaultPage() {
       setError(null);
       invalidate();
     },
-    onError: (err) => setError(toRussianError(err, 'Не удалось архивировать запись')),
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: (item: VaultItem) => updateVaultItem(item.id, { archived: false }),
-    onSuccess: () => {
-      setRevealed(null);
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось вернуть запись')),
+    onError: (err) => setError(toRussianError(err, 'Не удалось удалить запись')),
   });
 
   async function setupVault(): Promise<void> {
@@ -364,6 +357,11 @@ export function VaultPage() {
     row.data.username,
     row.data.url,
   ]);
+  const sortedItems = [...visibleItems].sort((left, right) =>
+    sort === 'title'
+      ? rowTitle(left).localeCompare(rowTitle(right), 'ru')
+      : right.item.updatedAt.localeCompare(left.item.updatedAt),
+  );
 
   return (
     <div className="space-y-6">
@@ -373,17 +371,6 @@ export function VaultPage() {
         actions={
           config ? (
             <>
-              <div className="flex items-center gap-2 text-sm text-zinc-600">
-                <Switch
-                  checked={includeArchived}
-                  onChange={(checked) => {
-                    setIncludeArchived(checked);
-                    setRevealed(null);
-                  }}
-                  label="Показать архивные записи"
-                />
-                <span>Архив</span>
-              </div>
               {unlocked ? (
                 <>
                   <Button variant="secondary" onClick={lockVault}>
@@ -460,18 +447,21 @@ export function VaultPage() {
         </div>
       ) : (
         <>
-          <div className="relative">
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Поиск по названию, логину или сайту"
-              aria-label="Поиск в хранилище"
-              className="pl-9"
+          <ListToolbar
+            search={search}
+            onSearch={setSearch}
+            searchPlaceholder="Поиск по названию, логину или сайту"
+          >
+            <TabGroup
+              value={sort}
+              onChange={setSort}
+              ariaLabel="Сортировка хранилища"
+              options={[
+                { value: 'updated', label: 'По изменению' },
+                { value: 'title', label: 'По названию' },
+              ]}
             />
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
-              ⌕
-            </span>
-          </div>
+          </ListToolbar>
 
           {decrypted.length === 0 && decryptFailures === 0 ? (
             <Card>
@@ -483,20 +473,15 @@ export function VaultPage() {
                 Добавить запись
               </Button>
             </Card>
-          ) : visibleItems.length === 0 ? (
+          ) : sortedItems.length === 0 ? (
             <Card>
               <CardTitle>Ничего не найдено</CardTitle>
               <CardDescription>Попробуйте другое название, логин или сайт.</CardDescription>
             </Card>
           ) : (
             <div className="space-y-2">
-              {visibleItems.map((row) => (
-                <Card
-                  key={row.item.id}
-                  className={`p-3 transition-colors hover:border-emerald-300 ${
-                    row.item.archivedAt ? 'opacity-60' : ''
-                  }`}
-                >
+              {sortedItems.map((row) => (
+                <Card key={row.item.id} className="p-3 transition-colors hover:border-emerald-300">
                   <div className="flex flex-wrap items-center gap-3">
                     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
                       <SafeIcon className="h-5 w-5" />
@@ -506,7 +491,6 @@ export function VaultPage() {
                         <div className="truncate text-base font-semibold text-zinc-900">
                           {row.data.title || 'Без названия'}
                         </div>
-                        {row.item.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
                         <span>{formatDateTime(row.item.updatedAt)}</span>
@@ -567,29 +551,18 @@ export function VaultPage() {
                       >
                         Изменить
                       </Button>
-                      {row.item.archivedAt ? (
-                        <Button
-                          variant="secondary"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => restoreMutation.mutate(row.item)}
-                          disabled={restoreMutation.isPending}
-                        >
-                          Вернуть
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          className="h-8 px-3 text-xs"
-                          onClick={() => {
-                            if (window.confirm(`Архивировать запись «${row.data.title}»?`)) {
-                              archiveMutation.mutate(row.item);
-                            }
-                          }}
-                          disabled={archiveMutation.isPending}
-                        >
-                          В архив
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        className="h-8 px-3 text-xs text-red-700"
+                        onClick={() => {
+                          if (window.confirm(`Удалить запись «${row.data.title}»?`)) {
+                            archiveMutation.mutate(row.item);
+                          }
+                        }}
+                        disabled={archiveMutation.isPending}
+                      >
+                        Удалить
+                      </Button>
                     </div>
                   </div>
                 </Card>

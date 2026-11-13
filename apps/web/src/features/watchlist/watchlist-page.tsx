@@ -2,14 +2,15 @@ import { Badge } from '@/components/ui/badge';
 import { ChainToggle } from '@/components/chain-toggle';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
-import { Switch } from '@/components/ui/switch';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
+import { TrashIcon } from '@/components/ui/icons';
 import { TokenIcon } from '@/components/token-icon';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatUsd, formatUsdCompact, pnlTone } from '@/lib/format';
+import { filterBySearch } from '@/lib/search';
 import { compressTokenIcon } from '@/lib/image';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -102,7 +104,7 @@ function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>)
 
 export function WatchlistPage() {
   const queryClient = useQueryClient();
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<TokenSortKey>('default');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -139,19 +141,25 @@ export function WatchlistPage() {
   const effectiveSearchGroupId = searchGroupId || defaultGroup?.id || '';
 
   const watchlist = useInfiniteQuery({
-    queryKey: ['watchlist', includeArchived, selectedGroupId],
+    queryKey: ['watchlist', selectedGroupId],
     queryFn: ({ pageParam }) =>
-      fetchWatchlist(includeArchived, pageParam ?? undefined, selectedGroupId ?? undefined),
+      fetchWatchlist(false, pageParam ?? undefined, selectedGroupId ?? undefined),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.page.hasMore ? last.page.nextCursor : undefined),
     refetchInterval: 30_000,
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
+  const searchEntries = filterBySearch(entries, search, (entry) => [
+    entry.asset.symbol,
+    entry.asset.name,
+    entry.asset.contractAddress,
+    entry.asset.chainCode,
+  ]);
   const sortedEntries =
     sortKey === 'default'
-      ? entries
-      : [...entries].sort((left, right) => {
+      ? searchEntries
+      : [...searchEntries].sort((left, right) => {
           const a = sortValue(left, sortKey);
           const b = sortValue(right, sortKey);
           if (a === null && b === null) return 0;
@@ -261,16 +269,6 @@ export function WatchlistPage() {
     onError: (err) => setGroupError(toRussianError(err, 'Не удалось создать группу')),
   });
 
-  const deleteGroupMutation = useMutation({
-    mutationFn: (id: string) => deleteWatchlistGroup(id),
-    onSuccess: (_data, id) => {
-      if (selectedGroupId === id) setSelectedGroupId(null);
-      void queryClient.invalidateQueries({ queryKey: ['watchlist-groups'] });
-      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось удалить группу')),
-  });
-
   const changeGroupMutation = useMutation({
     mutationFn: ({ id, groupId }: { id: string; groupId: string }) =>
       updateWatchlist(id, { groupId }),
@@ -282,23 +280,24 @@ export function WatchlistPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось сменить группу')),
   });
 
-  const archiveMutation = useMutation({
-    mutationFn: (id: string) => archiveWatchlist(id),
+  const deleteGroupMutation = useMutation({
+    mutationFn: (id: string) => deleteWatchlistGroup(id),
+    onSuccess: (_data, id) => {
+      if (selectedGroupId === id) setSelectedGroupId(null);
+      void queryClient.invalidateQueries({ queryKey: ['watchlist-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['watchlist'] });
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось удалить группу')),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (entry: WatchlistEntry) => archiveWatchlist(entry.id),
     onSuccess: () => {
       closeDrawer();
       setError(null);
       invalidate();
     },
-    onError: (err) => setError(toRussianError(err, 'Не удалось архивировать запись')),
-  });
-
-  const restoreMutation = useMutation({
-    mutationFn: (id: string) => updateWatchlist(id, { archived: false }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось вернуть запись')),
+    onError: (err) => setError(toRussianError(err, 'Не удалось удалить токен')),
   });
 
   function openCreate() {
@@ -393,14 +392,6 @@ export function WatchlistPage() {
         subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
         actions={
           <>
-            <div className="flex items-center gap-2 text-sm text-zinc-600">
-              <Switch
-                checked={includeArchived}
-                onChange={setIncludeArchived}
-                label="Показать архивные токены"
-              />
-              <span>Архив</span>
-            </div>
             <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
               Новая группа
             </Button>
@@ -415,78 +406,53 @@ export function WatchlistPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setSelectedGroupId(null)}
-          className={`rounded-lg border px-3 py-1.5 text-sm ${
-            selectedGroupId === null
-              ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-              : 'border-zinc-200 bg-white text-zinc-600 hover:text-zinc-900'
-          }`}
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder="Поиск по символу, названию, контракту или сети"
+      >
+        <Select
+          className="w-48"
+          value={selectedGroupId ?? ''}
+          onChange={(event) => setSelectedGroupId(event.target.value || null)}
+          aria-label="Группа токенов"
         >
-          Все
-        </button>
-        {groupsToRender.map((group) => (
-          <div
-            key={group.id}
-            className={`flex items-center gap-1 rounded-lg border ${
-              selectedGroupId === group.id
-                ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                : 'border-zinc-200 bg-white text-zinc-600'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setSelectedGroupId(group.id)}
-              className="px-3 py-1.5 text-sm hover:text-zinc-900"
-            >
-              {group.name}
-              <span className="ml-1.5 text-xs text-zinc-500">{group.entryCount}</span>
-            </button>
-            {!group.isDefault ? (
-              <button
-                type="button"
-                aria-label={`Удалить группу ${group.name}`}
-                className="px-2 py-1.5 text-xs text-zinc-400 hover:text-red-700"
-                onClick={() => {
-                  if (
-                    window.confirm(`Удалить группу «${group.name}»? Токены перейдут в «Основную».`)
-                  ) {
-                    deleteGroupMutation.mutate(group.id);
-                  }
-                }}
-              >
-                ✕
-              </button>
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm text-zinc-500">Сортировка</span>
-        <div
-          className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
-          role="group"
-          aria-label="Сортировка базы токенов"
-        >
-          {(Object.keys(TOKEN_SORT_LABELS) as TokenSortKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              aria-pressed={sortKey === key}
-              onClick={() => setSortKey(key)}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                sortKey === key
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-            >
-              {TOKEN_SORT_LABELS[key]}
-            </button>
+          <option value="">Все группы</option>
+          {groupsToRender.map((group) => (
+            <option key={group.id} value={group.id}>
+              {group.name} · {group.entryCount}
+            </option>
           ))}
-        </div>
+        </Select>
+        {selectedGroupId && selectedGroupId !== defaultGroup?.id ? (
+          <Button
+            variant="ghost"
+            className="h-10 px-3 text-zinc-500 hover:text-red-700"
+            aria-label="Удалить группу"
+            title="Удалить группу"
+            disabled={deleteGroupMutation.isPending}
+            onClick={() => {
+              const group = groupsToRender.find((item) => item.id === selectedGroupId);
+              if (
+                group &&
+                window.confirm(`Удалить группу «${group.name}»? Токены перейдут в «Основную».`)
+              ) {
+                deleteGroupMutation.mutate(group.id);
+              }
+            }}
+          >
+            <TrashIcon />
+          </Button>
+        ) : null}
+        <TabGroup
+          value={sortKey}
+          onChange={setSortKey}
+          ariaLabel="Сортировка базы токенов"
+          options={(Object.keys(TOKEN_SORT_LABELS) as TokenSortKey[]).map((key) => ({
+            value: key,
+            label: TOKEN_SORT_LABELS[key],
+          }))}
+        />
         <Button
           variant="secondary"
           className="h-10 px-3"
@@ -497,14 +463,10 @@ export function WatchlistPage() {
         >
           {sortDirection === 'desc' ? '↓' : '↑'}
         </Button>
-      </div>
+      </ListToolbar>
 
       <Card>
         <CardTitle>Найти токен по контракту</CardTitle>
-        <CardDescription>
-          Введите адрес ERC-20/BEP-20 контракта. Метаданные читаются on-chain, цена и иконка — через
-          серверный CoinGecko.
-        </CardDescription>
         <div className="mt-4 grid gap-3 md:grid-cols-[auto_1fr_auto]">
           <div>
             <span className="block text-sm text-zinc-600">Сеть</span>
@@ -637,9 +599,7 @@ export function WatchlistPage() {
               return (
                 <Card
                   key={entry.id}
-                  className={`p-0 transition-colors hover:border-emerald-300 ${
-                    entry.archivedAt ? 'opacity-60' : ''
-                  }`}
+                  className={`p-0 transition-colors hover:border-emerald-300 ${''}`}
                 >
                   <button
                     type="button"
@@ -657,7 +617,6 @@ export function WatchlistPage() {
                           <span className="truncate text-base font-semibold text-zinc-900">
                             {entry.asset.symbol}
                           </span>
-                          {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                           {group ? <Badge tone="info">{group.name}</Badge> : null}
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
@@ -735,17 +694,16 @@ export function WatchlistPage() {
         groupBusy={changeGroupMutation.isPending}
         onClose={closeDrawer}
         onEdit={openEdit}
-        onArchive={(entry) => {
+        onDelete={(entry) => {
           if (
             window.confirm(
-              `Архивировать ${entry.asset.symbol}? Токен скроется из Базы, но транзакции и сделки останутся в Портфеле и Статистике.`,
+              `Удалить ${entry.asset.symbol} из базы? Транзакции и сделки с токеном сохранятся.`,
             )
           ) {
-            archiveMutation.mutate(entry.id);
+            deleteMutation.mutate(entry);
           }
         }}
-        onRestore={(entry) => restoreMutation.mutate(entry.id)}
-        busy={archiveMutation.isPending || restoreMutation.isPending}
+        deleteBusy={deleteMutation.isPending}
         error={error}
       />
 

@@ -273,6 +273,7 @@ export function TokenTradeDrawer({
         void loadTrade(groupId);
       }
       void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['portfolio-token-summaries'] });
       void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       void queryClient.invalidateQueries({ queryKey: ['operations'] });
@@ -771,8 +772,8 @@ export function TokenTradeDrawer({
             </div>
             <div className="rounded-lg border border-zinc-200 p-2">
               <div className="text-xs text-zinc-500">Проскальзывание</div>
-              <select
-                className="mt-1 w-full bg-transparent font-mono text-zinc-800 outline-none"
+              <Select
+                className="mt-1 h-8 border-0 bg-transparent px-0 pr-6 font-mono text-xs"
                 value={String(slippageBps ?? config.data?.defaultSlippageBps ?? 50)}
                 onChange={(event) => setSlippageBps(Number(event.target.value))}
                 disabled={executing}
@@ -782,7 +783,7 @@ export function TokenTradeDrawer({
                     {(value / 100).toFixed(2)}%
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div className="rounded-lg border border-zinc-200 p-2">
               <div className="text-xs text-zinc-500">Остаток</div>

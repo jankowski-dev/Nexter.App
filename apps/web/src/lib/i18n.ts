@@ -6,7 +6,7 @@ export const messages = {
   },
   nav: {
     dashboard: 'Дашборд',
-    portfolio: 'Портфель',
+    portfolio: 'Торговля',
     operations: 'Операции',
     finance: 'Финансы',
     watchlist: 'База токенов',

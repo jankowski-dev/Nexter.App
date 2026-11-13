@@ -9,7 +9,15 @@ import { PriceFreshness } from '@/components/ui/price-freshness';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchAssets, fetchTradeGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDate, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
+import {
+  formatDate,
+  formatPrice,
+  formatSignedUsd,
+  formatUsd,
+  pluralizeRu,
+  pnlTone,
+} from '@/lib/format';
+import { Decimal } from 'decimal.js';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useDeferredValue, useState } from 'react';
 import type { TradeGroupSummary, TradeGroupView } from '@nexter/contracts';
@@ -144,7 +152,7 @@ export function TradesPanel({
 
       {!groups.isPending && !groups.isError ? (
         <Card>
-          <CardTitle>{viewLabels[view]} сделки</CardTitle>
+          <CardTitle>{viewLabels[view]} ордера</CardTitle>
           <CardDescription>
             {groupRows.length === 0
               ? 'Сделок нет.'
@@ -167,6 +175,8 @@ export function TradesPanel({
                     <th className="py-2 pr-3 text-right font-medium">Дней</th>
                     <th className="py-2 pr-3 text-right font-medium">Покупка</th>
                     <th className="py-2 pr-3 text-right font-medium">Продажа</th>
+                    <th className="py-2 pr-3 text-right font-medium">Инвестировано</th>
+                    <th className="py-2 pr-3 text-right font-medium">Средний курс</th>
                     <th className="py-2 pr-3 text-right font-medium">Результат</th>
                     <th className="py-2 pr-3 font-medium">Обновлено</th>
                     <th className="py-2 pr-3 text-right font-medium">Доходность</th>
@@ -217,6 +227,18 @@ export function TradesPanel({
                       </td>
                       <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
                         {formatUsd(group.sellUsd)}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                        {formatUsd(group.remainingCostBasisUsd)}
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
+                        {new Decimal(group.remainingAmount).gt(0)
+                          ? formatPrice(
+                              new Decimal(group.remainingCostBasisUsd)
+                                .div(new Decimal(group.remainingAmount))
+                                .toFixed(18),
+                            )
+                          : '—'}
                       </td>
                       <td
                         className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(

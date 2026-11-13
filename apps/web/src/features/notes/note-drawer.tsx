@@ -128,7 +128,6 @@ export function NoteDrawer({
   const [body, setBody] = useState(note?.body ?? '');
   const [tags, setTags] = useState(note?.tags.join(', ') ?? '');
   const [pinned] = useState(note?.pinned ?? false);
-  const [archived, setArchived] = useState(Boolean(note?.archivedAt));
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
   const attachments = useQuery({
     queryKey: ['note-attachments', note?.id],
@@ -326,21 +325,6 @@ export function NoteDrawer({
     }
   }
 
-  async function restore(): Promise<void> {
-    if (!noteIdRef.current) return;
-    try {
-      const updated = await enqueue(() =>
-        updateNote(noteIdRef.current as string, { archived: false }),
-      );
-      setArchived(false);
-      setUpdatedAt(updated.updatedAt);
-      setError(null);
-      onSaved(updated);
-    } catch (err) {
-      setError(toRussianError(err, 'Не удалось вернуть заметку'));
-    }
-  }
-
   async function finishEditing(): Promise<void> {
     if (!draftRef.current.title.trim()) {
       setError('Название заметки не может быть пустым.');
@@ -382,23 +366,17 @@ export function NoteDrawer({
               ) : null}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {archived ? (
-                <Button variant="secondary" onClick={() => void restore()}>
-                  Вернуть
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  className="text-red-700"
-                  onClick={() => {
-                    if (noteIdRef.current) setConfirmDelete(true);
-                  }}
-                  disabled={!noteIdRef.current}
-                >
-                  <TrashIcon />
-                  Удалить
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                className="text-red-700"
+                onClick={() => {
+                  if (noteIdRef.current) setConfirmDelete(true);
+                }}
+                disabled={!noteIdRef.current}
+              >
+                <TrashIcon />
+                Удалить
+              </Button>
               {mode === 'view' ? (
                 <Button onClick={() => setMode('edit')}>
                   <PencilIcon />
@@ -414,8 +392,6 @@ export function NoteDrawer({
         }
       >
         <div className="space-y-5">
-          {archived ? <Badge tone="neutral">В архиве</Badge> : null}
-
           {mode === 'edit' ? (
             <Input
               value={title}

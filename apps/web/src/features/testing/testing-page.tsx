@@ -146,7 +146,9 @@ function BotStats({ bot }: { bot: BotSummary }) {
 export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   const queryClient = useQueryClient();
   const [sort, setSort] = useState<Sort>('pnl');
-  const [standStrategyKey, setStandStrategyKey] = useState('');
+  const [standStrategyKey, setStandStrategyKey] = useState(
+    () => new URLSearchParams(window.location.search).get('strategy') ?? '',
+  );
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
@@ -617,11 +619,19 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
               </CardDescription>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {templates.map((template) => (
-                  <button
+                  <div
                     key={template.key}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setStrategyDetail(template)}
-                    className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                    onKeyDown={(event) => {
+                      if (event.target !== event.currentTarget) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setStrategyDetail(template);
+                      }
+                    }}
+                    className="cursor-pointer rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                   >
                     <div className="flex items-start gap-3">
                       <StrategyIcon icon={template.icon} />
@@ -638,7 +648,19 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                         </p>
                       </div>
                     </div>
-                  </button>
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        variant="secondary"
+                        className="h-8 px-3 text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          window.location.href = `/testing?strategy=${template.key}`;
+                        }}
+                      >
+                        Тестировать
+                      </Button>
+                    </div>
+                  </div>
                 ))}
               </div>
             </Card>
@@ -661,28 +683,44 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                 <div>
                   <CardTitle>Тестовый стенд</CardTitle>
                   <CardDescription>
-                    Выберите стратегию — параметры и гайд подстроятся автоматически.
+                    Выберите стратегию карточкой — параметры и гайд подстроятся автоматически.
                   </CardDescription>
                 </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <label className="block min-w-56 text-sm text-zinc-600">
-                    Стратегия
-                    <Select
-                      className="mt-1"
-                      value={standTemplate.key}
-                      onChange={(event) => setStandStrategyKey(event.target.value)}
+                <Button variant="secondary" onClick={() => setStrategyDetail(standTemplate)}>
+                  Подробное описание
+                </Button>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {templates.map((template) => {
+                  const selected = template.key === standTemplate.key;
+                  return (
+                    <button
+                      key={template.key}
+                      type="button"
+                      onClick={() => setStandStrategyKey(template.key)}
+                      className={`rounded-xl border p-3 text-left transition-colors ${
+                        selected
+                          ? 'border-emerald-300 bg-emerald-50/70'
+                          : 'border-zinc-200 bg-white hover:border-emerald-200'
+                      }`}
                     >
-                      {templates.map((template) => (
-                        <option key={template.key} value={template.key}>
-                          {template.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  <Button variant="secondary" onClick={() => setStrategyDetail(standTemplate)}>
-                    Описание
-                  </Button>
-                </div>
+                      <div className="flex items-center gap-2">
+                        <StrategyIcon icon={template.icon} className="h-8 w-8" />
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-medium text-zinc-900">
+                            {template.name}
+                          </div>
+                          <div className="text-[11px] text-zinc-500">
+                            {template.kind === 'system' ? 'Системная' : 'Кастомная'}
+                          </div>
+                        </div>
+                      </div>
+                      <p className="mt-2 line-clamp-2 text-xs leading-4 text-zinc-500">
+                        {template.description}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
               <p className="mt-3 text-sm text-zinc-700">{standTemplate.description}</p>
             </Card>
@@ -954,9 +992,27 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
         }
         size="lg"
         footer={
-          <Button variant="ghost" onClick={() => setStrategyDetail(null)}>
-            Закрыть
-          </Button>
+          <>
+            <Button variant="ghost" onClick={() => setStrategyDetail(null)}>
+              Закрыть
+            </Button>
+            {strategyDetail ? (
+              <Button
+                onClick={() => {
+                  const key = strategyDetail.key;
+                  setStrategyDetail(null);
+                  if (mode === 'stand') {
+                    setStandStrategyKey(key);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else {
+                    window.location.href = `/testing?strategy=${key}`;
+                  }
+                }}
+              >
+                Тестировать
+              </Button>
+            ) : null}
+          </>
         }
       >
         {strategyDetail ? (

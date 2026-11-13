@@ -27,9 +27,8 @@ export function TokenDrawer({
   groupBusy,
   onClose,
   onEdit,
-  onArchive,
-  onRestore,
-  busy,
+  onDelete,
+  deleteBusy,
   error,
 }: {
   entry: WatchlistEntry | null;
@@ -40,9 +39,8 @@ export function TokenDrawer({
   groupBusy: boolean;
   onClose: () => void;
   onEdit: (entry: WatchlistEntry) => void;
-  onArchive: (entry: WatchlistEntry) => void;
-  onRestore: (entry: WatchlistEntry) => void;
-  busy: boolean;
+  onDelete: (entry: WatchlistEntry) => void;
+  deleteBusy: boolean;
   error?: string | null;
 }) {
   if (!entry) return null;
@@ -78,15 +76,14 @@ export function TokenDrawer({
           <Button variant="ghost" onClick={onClose}>
             Закрыть
           </Button>
-          {entry.archivedAt ? (
-            <Button variant="secondary" onClick={() => onRestore(entry)} disabled={busy}>
-              Вернуть
-            </Button>
-          ) : (
-            <Button variant="ghost" onClick={() => onArchive(entry)} disabled={busy}>
-              В архив
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            className="text-red-700"
+            onClick={() => onDelete(entry)}
+            disabled={deleteBusy}
+          >
+            Удалить
+          </Button>
           <Button onClick={() => onEdit(entry)}>Изменить</Button>
         </>
       }
@@ -109,7 +106,6 @@ export function TokenDrawer({
                 <span className="text-xl font-semibold text-zinc-900">{entry.asset.symbol}</span>
                 <Badge tone="neutral">{entry.asset.chainCode}</Badge>
                 {groupName ? <Badge tone="info">{groupName}</Badge> : null}
-                {entry.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
               </div>
               <div className="text-sm text-zinc-500">{entry.asset.name}</div>
             </div>
@@ -124,12 +120,6 @@ export function TokenDrawer({
           </div>
         </div>
 
-        {entry.archivedAt ? (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            Токен скрыт из активной Базы. Транзакции, лоты и сделки с ним сохранены и продолжают
-            отображаться в Портфеле и Статистике.
-          </div>
-        ) : null}
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
           <div>
             <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Группа</div>
@@ -140,7 +130,7 @@ export function TokenDrawer({
             className="w-56"
             value={entry.groupId ?? defaultGroupId ?? groups[0]?.id ?? ''}
             onChange={(event) => onGroupChange(entry, event.target.value)}
-            disabled={groupBusy || Boolean(entry.archivedAt) || groups.length === 0}
+            disabled={groupBusy || groups.length === 0}
           >
             {groups.map((group) => (
               <option key={group.id} value={group.id}>

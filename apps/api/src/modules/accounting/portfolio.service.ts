@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { lots, watchlist, type Database } from '@nexter/db';
 import type {
   PortfolioAssetDetail,
+  PortfolioTokenSummariesResponse,
   Position,
   TradeGroupSummary,
   Transaction,
@@ -12,6 +13,7 @@ import { AssetsService } from './assets.service';
 import { LedgerService } from './ledger.service';
 import { PricingService } from './pricing.service';
 import { ReportingService } from './reporting.service';
+import { aggregateTokenSummaries } from './token-summaries';
 import { TradeGroupsService } from './trade-groups.service';
 
 @Injectable()
@@ -24,6 +26,10 @@ export class PortfolioService {
     private readonly tradeGroups: TradeGroupsService,
     private readonly ledger: LedgerService,
   ) {}
+
+  async tokenSummaries(userId: string): Promise<PortfolioTokenSummariesResponse> {
+    return { data: aggregateTokenSummaries(await this.allTradeGroups(userId)) };
+  }
 
   async assetDetail(userId: string, assetId: string): Promise<PortfolioAssetDetail> {
     const asset = await this.assets.get(assetId);
@@ -88,7 +94,7 @@ export class PortfolioService {
     };
   }
 
-  private async allTradeGroups(userId: string, assetId: string): Promise<TradeGroupSummary[]> {
+  private async allTradeGroups(userId: string, assetId?: string): Promise<TradeGroupSummary[]> {
     const all: TradeGroupSummary[] = [];
     let cursor: string | undefined;
 

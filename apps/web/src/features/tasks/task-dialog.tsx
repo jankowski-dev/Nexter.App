@@ -105,7 +105,6 @@ export function TaskDialog({
   const [completedAt, setCompletedAt] = useState<string | null>(task?.completedAt ?? null);
   const [createdAt, setCreatedAt] = useState<string | null>(task?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(task?.updatedAt ?? null);
-  const [archived, setArchived] = useState(Boolean(task?.archivedAt));
   const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>(task?.recurrence ?? 'none');
   const [recurrenceEnds, setRecurrenceEnds] = useState('');
   const [images, setImages] = useState<TaskImage[]>(task?.images ?? []);
@@ -215,7 +214,6 @@ export function TaskDialog({
       setCompletedAt(saved.completedAt);
       setCreatedAt(saved.createdAt);
       setUpdatedAt(saved.updatedAt);
-      setArchived(Boolean(saved.archivedAt));
       if (draft.recurrence !== 'none') setSeriesLocked(true);
       setSaveState('saved');
       onSaved();
@@ -312,19 +310,6 @@ export function TaskDialog({
     }
   }
 
-  async function restore(): Promise<void> {
-    if (!taskIdRef.current) return;
-    try {
-      const updated = await updateTask(taskIdRef.current, { archived: false });
-      setArchived(false);
-      setUpdatedAt(updated.updatedAt);
-      setError(null);
-      onSaved();
-    } catch (err) {
-      setError(toRussianError(err, 'Не удалось вернуть задачу'));
-    }
-  }
-
   async function handleFiles(files: FileList | null): Promise<void> {
     if (!files || files.length === 0) return;
 
@@ -416,11 +401,7 @@ export function TaskDialog({
               ) : null}
             </span>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {archived ? (
-                <Button variant="secondary" onClick={() => void restore()}>
-                  Вернуть
-                </Button>
-              ) : persisted ? (
+              {persisted ? (
                 <Button
                   variant="ghost"
                   className="text-red-700"
@@ -430,7 +411,7 @@ export function TaskDialog({
                   Удалить
                 </Button>
               ) : null}
-              {persisted && !archived ? (
+              {persisted ? (
                 <Button
                   variant={status === 'done' ? 'secondary' : 'ghost'}
                   onClick={() => void toggleStatus()}
@@ -454,8 +435,6 @@ export function TaskDialog({
         }
       >
         <div className="space-y-5">
-          {archived ? <Badge tone="neutral">В архиве</Badge> : null}
-
           {mode === 'view' ? (
             <>
               <div>

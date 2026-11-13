@@ -243,7 +243,7 @@ export function DashboardPage() {
               </CardDescription>
             </div>
             <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
-              <Link to="/portfolio">Портфель</Link>
+              <Link to="/portfolio">Торговля</Link>
             </Button>
           </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">

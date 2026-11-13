@@ -46,6 +46,7 @@ import {
   notificationUnreadCountSchema,
   notesResponseSchema,
   portfolioAssetDetailSchema,
+  portfolioTokenSummariesResponseSchema,
   portfolioSnapshotSchema,
   positionsResponseSchema,
   reportsResponseSchema,
@@ -138,6 +139,7 @@ import {
   type NoteUpdateRequest,
   type NotesResponse,
   type PortfolioAssetDetail,
+  type PortfolioTokenSummariesResponse,
   type PortfolioSnapshot,
   type PositionsResponse,
   type ReportsResponse,
@@ -361,6 +363,10 @@ function queryString(params: Record<string, string | number | boolean | undefine
 
 export async function fetchMe() {
   return apiFetch('/api/v1/auth/me', {}, authMeResponseSchema);
+}
+
+export async function fetchPortfolioTokenSummaries(): Promise<PortfolioTokenSummariesResponse> {
+  return apiFetch('/api/v1/portfolio/token-summaries', {}, portfolioTokenSummariesResponseSchema);
 }
 
 export async function fetchPositions(): Promise<PositionsResponse> {

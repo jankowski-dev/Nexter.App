@@ -166,6 +166,7 @@ export function ManualTradeDialog({
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['positions'] });
+      void queryClient.invalidateQueries({ queryKey: ['portfolio-token-summaries'] });
       void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
       void queryClient.invalidateQueries({ queryKey: ['transactions'] });
       void queryClient.invalidateQueries({ queryKey: ['operations'] });

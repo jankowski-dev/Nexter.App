@@ -1,11 +1,13 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchAccounts, fetchAssets, fetchTransactions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
+import { filterBySearch } from '@/lib/search';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import { ExchangeDrawer } from '../trade/exchange-drawer';
@@ -44,6 +46,7 @@ const subtypeLabels: Record<string, string> = {
 
 export function OperationsPage() {
   const [filter, setFilter] = useState<OperationFilter>('all');
+  const [search, setSearch] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
   const [onchainOpen, setOnchainOpen] = useState(false);
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
@@ -65,6 +68,11 @@ export function OperationsPage() {
   });
 
   const rows = transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
+  const visibleRows = filterBySearch(rows, search, (transaction) => [
+    typeLabels[transaction.type] ?? transaction.type,
+    subtypeLabels[transaction.subtype] ?? transaction.subtype,
+    transaction.notes,
+  ]);
   const refreshOperations = useCallback(() => {
     void transactions.refetch();
   }, [transactions.refetch]);
@@ -77,7 +85,7 @@ export function OperationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Операции"
-        subtitle="Пополнения, выводы и обмены. Сделки ведутся в Портфеле."
+        subtitle="Пополнения, выводы и обмены. Сделки ведутся в Торговле."
         actions={
           <>
             <Button variant="secondary" onClick={() => setOnchainOpen(true)}>
@@ -88,29 +96,17 @@ export function OperationsPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
-          {(Object.keys(filterLabels) as OperationFilter[]).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setFilter(item)}
-              className={`rounded-md px-4 py-2 text-sm ${
-                filter === item
-                  ? 'bg-white text-zinc-900 shadow-sm'
-                  : 'text-zinc-500 hover:text-zinc-900'
-              }`}
-              aria-selected={filter === item}
-              role="tab"
-            >
-              {filterLabels[item]}
-            </button>
-          ))}
-        </div>
-        <div className="text-xs text-zinc-500">
-          {rows.length > 0 ? `Загружено ${rows.length}` : 'Операций пока нет'}
-        </div>
-      </div>
+      <ListToolbar search={search} onSearch={setSearch} searchPlaceholder="Поиск по операциям">
+        <TabGroup
+          value={filter}
+          onChange={setFilter}
+          ariaLabel="Тип операций"
+          options={(Object.keys(filterLabels) as OperationFilter[]).map((item) => ({
+            value: item,
+            label: filterLabels[item],
+          }))}
+        />
+      </ListToolbar>
 
       {transactions.isPending ? <LoadingRows rows={8} /> : null}
       {transactions.isError ? (
@@ -124,10 +120,12 @@ export function OperationsPage() {
         <Card>
           <CardTitle>Журнал операций</CardTitle>
           <CardDescription>
-            Все движения по кошелькам. Сделки открываются из Портфеля.
+            Все движения по кошелькам. Сделки открываются из Торговли.
           </CardDescription>
-          {rows.length === 0 ? (
-            <p className="mt-4 text-sm text-zinc-600">Операций нет.</p>
+          {visibleRows.length === 0 ? (
+            <p className="mt-4 text-sm text-zinc-600">
+              {rows.length === 0 ? 'Операций нет.' : 'Ничего не найдено.'}
+            </p>
           ) : (
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-sm">
@@ -142,7 +140,7 @@ export function OperationsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((transaction) => {
+                  {visibleRows.map((transaction) => {
                     const walletPostings = transaction.postings.filter(
                       (posting) =>
                         posting.amount !== '0' &&

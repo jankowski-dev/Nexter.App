@@ -2,23 +2,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { LiveValue } from '@/components/ui/live-value';
-import { PriceFreshness } from '@/components/ui/price-freshness';
-import { PeriodChange } from '@/components/period-change';
 import { TokenIcon } from '@/components/token-icon';
-import { fetchPositions } from '@/lib/api';
+import { fetchDashboardSummary, fetchPortfolioTokenSummaries, fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import {
-  formatCount,
-  formatPct,
-  formatPrice,
-  formatSignedUsd,
-  formatTokenAmount,
-  formatUsd,
-  pnlTone,
-} from '@/lib/format';
+import { formatPrice, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { Decimal } from 'decimal.js';
 import { useCallback, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
@@ -30,8 +18,6 @@ import { TokenBuyList } from './token-buy-list';
 import { TestingPage } from '../testing/testing-page';
 
 type PortfolioTab = 'portfolio' | 'trades' | 'robots' | 'strategies';
-type PortfolioView = 'positions' | 'main';
-
 function tabFromHash(): PortfolioTab {
   if (typeof window === 'undefined') return 'portfolio';
   if (window.location.hash === '#trades') return 'trades';
@@ -40,14 +26,27 @@ function tabFromHash(): PortfolioTab {
   return 'portfolio';
 }
 
-function viewFromHash(): PortfolioView {
-  if (typeof window === 'undefined') return 'positions';
-  return window.location.hash === '#list' || window.location.hash === '#buy' ? 'main' : 'positions';
+function PortfolioMetric({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  hint?: string;
+}) {
+  return (
+    <div title={hint}>
+      <div className="text-[10px] text-zinc-500">{label}</div>
+      <div className={`mt-0.5 font-mono text-xs ${tone ?? 'text-zinc-800'}`}>{value}</div>
+    </div>
+  );
 }
 
 export function PortfolioPage() {
   const [tab, setTab] = useState<PortfolioTab>(tabFromHash);
-  const [portfolioView, setPortfolioView] = useState<PortfolioView>(viewFromHash);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [buyTarget, setBuyTarget] = useState<{
     asset: Asset;
@@ -68,11 +67,23 @@ export function PortfolioPage() {
     void positions.refetch();
   }, [positions.refetch]);
   const watchlistLogos = useWatchlistLogos();
+  const tokenSummaries = useQuery({
+    queryKey: ['portfolio-token-summaries'],
+    queryFn: fetchPortfolioTokenSummaries,
+    enabled: tab === 'portfolio',
+    refetchInterval: 15_000,
+  });
+  const dashboardSummary = useQuery({
+    queryKey: ['dashboard-summary'],
+    queryFn: fetchDashboardSummary,
+    enabled: tab === 'portfolio',
+    refetchInterval: 30_000,
+  });
 
   if ((tab === 'portfolio' || tab === 'trades') && positions.isPending) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Портфель" subtitle="Загружаю позиции и сделки…" />
+        <PageHeader title="Торговля" subtitle="Загружаю позиции и сделки…" />
         <LoadingRows rows={8} />
       </div>
     );
@@ -81,7 +92,7 @@ export function PortfolioPage() {
   if ((tab === 'portfolio' || tab === 'trades') && (positions.isError || !positions.data)) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Портфель" />
+        <PageHeader title="Торговля" />
         <ErrorState
           message={toRussianError(positions.error, 'Не удалось загрузить позиции')}
           onRetry={refetchPositions}
@@ -91,9 +102,6 @@ export function PortfolioPage() {
   }
 
   const data = positions.data;
-  const sortedPositions = data
-    ? [...data.positions].sort((a, b) => new Decimal(b.costBasisUsd).comparedTo(a.costBasisUsd))
-    : [];
   const positionByAsset = new Map(
     (data?.positions ?? []).map((position) => [position.asset.id, position]),
   );
@@ -112,27 +120,20 @@ export function PortfolioPage() {
           ? '#robots'
           : next === 'strategies'
             ? '#strategies'
-            : portfolioView === 'main'
-              ? '#list'
-              : '#portfolio',
+            : '#portfolio',
     );
-  }
-
-  function changePortfolioView(next: PortfolioView): void {
-    setPortfolioView(next);
-    window.history.replaceState(null, '', next === 'main' ? '#list' : '#portfolio');
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title={tab === 'robots' ? 'Роботы' : tab === 'strategies' ? 'Стратегии' : 'Портфель'}
+        title="Торговля"
         subtitle={
           tab === 'robots'
             ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
             : tab === 'strategies'
               ? 'Встроенные стратегии и подробные описания.'
-              : 'Позиции, покупка токенов и сделки.'
+              : 'Позиции, ордера и покупка токенов.'
         }
         actions={
           tab === 'portfolio' || tab === 'trades' ? (
@@ -145,13 +146,13 @@ export function PortfolioPage() {
 
       <div
         role="tablist"
-        aria-label="Раздел портфеля"
+        aria-label="Раздел торговли"
         className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
       >
         {(
           [
             ['portfolio', 'Портфель'],
-            ['trades', 'Сделки'],
+            ['trades', 'Ордера'],
             ['robots', 'Роботы'],
             ['strategies', 'Стратегии'],
           ] as const
@@ -177,13 +178,6 @@ export function PortfolioPage() {
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
-              <CardTitle>Кэш</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-                {formatUsd(data.cashUsd)}
-              </div>
-              <CardDescription>Свободные USDT / USDC вне позиций</CardDescription>
-            </Card>
-            <Card>
               <CardTitle>Стоимость позиций</CardTitle>
               <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatUsd(data.positionsValueUsd)}
@@ -195,188 +189,124 @@ export function PortfolioPage() {
               <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
                 {formatUsd(data.equityUsd)}
               </div>
-              <CardDescription>Кэш + стоимость позиций</CardDescription>
+              <CardDescription>Стоимость позиций + кэш</CardDescription>
             </Card>
             <Card>
-              <CardTitle>Позиций</CardTitle>
+              <CardTitle>Кэш</CardTitle>
               <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-                {formatCount(data.positions.length)}
+                {formatUsd(data.cashUsd)}
               </div>
-              <CardDescription>
-                {data.missingPrices.length > 0
-                  ? `Без цен: ${data.missingPrices.join(', ')}`
-                  : 'Все позиции оценены'}
-              </CardDescription>
+              <CardDescription>Свободные USDT / USDC вне позиций</CardDescription>
+            </Card>
+            <Card>
+              <CardTitle>Вложено из фиата</CardTitle>
+              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+                {dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'}
+              </div>
+              <CardDescription>Пополнения минус выводы</CardDescription>
             </Card>
           </div>
 
-          <div
-            role="tablist"
-            aria-label="Вид портфеля"
-            className="flex w-fit flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
-          >
-            {(
-              [
-                ['positions', 'Позиции по активам'],
-                ['main', 'Основной список'],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => changePortfolioView(value)}
-                className={`rounded-md px-3 py-1.5 text-sm ${
-                  portfolioView === value
-                    ? 'bg-white text-zinc-900 shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-900'
-                }`}
-                aria-selected={portfolioView === value}
-                role="tab"
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {portfolioView === 'positions' ? (
+          {tokenSummaries.isPending ? <LoadingRows rows={4} /> : null}
+          {tokenSummaries.isError ? (
+            <ErrorState
+              message={toRussianError(tokenSummaries.error, 'Не удалось загрузить сводку')}
+              onRetry={() => void tokenSummaries.refetch()}
+            />
+          ) : null}
+          {!tokenSummaries.isPending && !tokenSummaries.isError ? (
             <Card>
+              <CardTitle>Портфель по токенам</CardTitle>
               <CardDescription>
-                Нажми на токен, чтобы открыть статистику, лоты и сделки в боковой панели.
+                Консолидированные данные по токену: P&L, инвестиции в открытые ордера, текущий плюс
+                и минус, оборот, средневзвешенный курс и количество ордеров.
               </CardDescription>
-              {sortedPositions.length === 0 ? (
-                <p className="mt-4 text-sm text-zinc-600">Позиций нет.</p>
+              {(tokenSummaries.data?.data ?? []).filter((item) => item.openOrdersCount > 0)
+                .length === 0 ? (
+                <p className="mt-4 text-sm text-zinc-600">Открытых ордеров нет.</p>
               ) : (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[1120px] text-sm">
-                    <thead>
-                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                        <th className="py-2 pr-3 font-medium">Актив</th>
-                        <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                        <th className="py-2 pr-3 text-right font-medium">Цена</th>
-                        <th className="py-2 pr-3 text-right font-medium">24ч</th>
-                        <th className="py-2 pr-3 text-right font-medium">7д</th>
-                        <th className="py-2 pr-3 text-right font-medium">30д</th>
-                        <th className="py-2 pr-3 text-right font-medium">1г</th>
-                        <th className="py-2 pr-3 font-medium">Обновлено</th>
-                        <th className="py-2 pr-3 text-right font-medium">Средняя цена</th>
-                        <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                        <th className="py-2 pr-3 text-right font-medium">Себестоимость</th>
-                        <th className="py-2 pr-3 text-right font-medium">Результат</th>
-                        <th className="py-2 pr-3 text-right font-medium">Доля</th>
-                        <th className="py-2 text-right font-medium">Действие</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedPositions.map((position) => {
-                        const share =
-                          Number(data.equityUsd) > 0 && position.valueUsd
-                            ? (Number(position.valueUsd) / Number(data.equityUsd)) * 100
-                            : null;
-
-                        return (
-                          <tr
-                            key={position.asset.id}
-                            className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {(tokenSummaries.data?.data ?? [])
+                    .filter((item) => item.openOrdersCount > 0)
+                    .map((item) => (
+                      <button
+                        key={item.asset.id}
+                        type="button"
+                        onClick={() => setSelectedAssetId(item.asset.id)}
+                        className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                      >
+                        <div className="flex items-center gap-2">
+                          <TokenIcon
+                            logoUrl={item.asset.logoUrl}
+                            symbol={item.asset.symbol}
+                            className="h-8 w-8 text-[10px]"
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-semibold text-zinc-900">
+                              {item.asset.symbol}
+                            </div>
+                            <div className="truncate text-[11px] text-zinc-500">
+                              {item.asset.name} · {item.asset.chainCode}
+                            </div>
+                          </div>
+                          <span
+                            className="ml-auto text-xs text-zinc-500"
+                            title="Открытых / всего ордеров"
                           >
-                            <td className="py-2 pr-3">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedAssetId(position.asset.id)}
-                                className="flex items-center gap-2 text-left"
-                                aria-label={`Открыть статистику ${position.asset.symbol}`}
-                              >
-                                <TokenIcon
-                                  logoUrl={
-                                    position.asset.logoUrl ??
-                                    watchlistLogos.get(position.asset.id) ??
-                                    null
-                                  }
-                                  symbol={position.asset.symbol}
-                                />
-                                <span className="min-w-0">
-                                  <span className="block font-medium text-zinc-800 hover:text-emerald-800">
-                                    {position.asset.symbol}
-                                  </span>
-                                  <span className="block text-xs text-zinc-500">
-                                    {position.asset.chainCode}
-                                    {!position.asset.isVerified ? ' · не проверен' : ''}
-                                  </span>
-                                </span>
-                              </button>
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                              {formatTokenAmount(position.amount, 8)}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-700">
-                              <LiveValue value={formatPrice(position.priceUsd)}>
-                                {formatPrice(position.priceUsd)}
-                              </LiveValue>
-                            </td>
-                            <PeriodChange value={position.change24hPct} />
-                            <PeriodChange value={position.change7dPct} />
-                            <PeriodChange value={position.change30dPct} />
-                            <PeriodChange value={position.change1yPct} />
-                            <td className="py-2 pr-3">
-                              <PriceFreshness
-                                updatedAt={position.priceUpdatedAt}
-                                fetchedAt={position.priceFetchedAt}
-                                source={position.priceSource}
-                              />
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                              {formatPrice(position.avgCostUsd)}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
-                              <LiveValue value={formatUsd(position.valueUsd)}>
-                                {formatUsd(position.valueUsd)}
-                              </LiveValue>
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                              {formatUsd(position.costBasisUsd)}
-                            </td>
-                            <td
-                              className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
-                                position.unrealizedPnlUsd,
-                              )}`}
-                            >
-                              <LiveValue value={formatSignedUsd(position.unrealizedPnlUsd)}>
-                                {formatSignedUsd(position.unrealizedPnlUsd)}
-                              </LiveValue>
-                            </td>
-                            <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                              <LiveValue
-                                value={share === null ? '—' : `${formatPct(share.toFixed(2))}`}
-                              >
-                                {share === null ? '—' : `${formatPct(share.toFixed(2))}`}
-                              </LiveValue>
-                            </td>
-                            <td className="py-2 text-right">
-                              <Button
-                                variant="ghost"
-                                className="h-8 px-2 text-xs"
-                                onClick={() => setSelectedAssetId(position.asset.id)}
-                              >
-                                Статистика
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                            {item.openOrdersCount} / {item.ordersCount}
+                          </span>
+                        </div>
+                        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
+                          <PortfolioMetric
+                            label="P&L"
+                            value={formatSignedUsd(item.totalPnlUsd)}
+                            tone={pnlTone(item.totalPnlUsd)}
+                            hint="Реализованный + нереализованный"
+                          />
+                          <PortfolioMetric
+                            label="Инвестировано"
+                            value={formatUsd(item.investedUsd)}
+                            hint="Себестоимость открытых ордеров"
+                          />
+                          <PortfolioMetric
+                            label="Плюс"
+                            value={formatUsd(item.positiveUnrealizedUsd)}
+                            tone="text-emerald-700"
+                            hint="Нереализованная прибыль прибыльных ордеров"
+                          />
+                          <PortfolioMetric
+                            label="Минус"
+                            value={formatUsd(item.negativeUnrealizedUsd)}
+                            tone="text-red-700"
+                            hint="Нереализованный убыток убыточных ордеров"
+                          />
+                          <PortfolioMetric
+                            label="Оборот"
+                            value={formatUsd(item.turnoverUsd)}
+                            hint="Все покупки и продажи"
+                          />
+                          <PortfolioMetric
+                            label="Средний курс"
+                            value={
+                              item.breakEvenPriceUsd ? formatPrice(item.breakEvenPriceUsd) : '—'
+                            }
+                            hint="Курс выхода в ноль при закрытии всех сделок"
+                          />
+                        </div>
+                      </button>
+                    ))}
                 </div>
               )}
             </Card>
-          ) : (
-            <TokenBuyList
-              positions={data.positions}
-              showHeading={false}
-              onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
-              onManual={(asset) => {
-                setManual({ assetId: asset.id, side: 'entry' });
-              }}
-            />
-          )}
+          ) : null}
+
+          <TokenBuyList
+            positions={data.positions}
+            onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
+            onManual={(asset) => {
+              setManual({ assetId: asset.id, side: 'entry' });
+            }}
+          />
         </>
       ) : null}
 
