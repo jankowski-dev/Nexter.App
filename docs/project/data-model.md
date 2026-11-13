@@ -132,6 +132,6 @@
 | `bot_equity_snapshots` | Снимки equity при сделках и раз в 5 минут                                                                                                                       |
 | `bot_events`           | Журнал created/started/stopped/buy/sell/error/reset/archived                                                                                                    |
 | `bot_quote_samples`    | Минутные цены токенов активных ботов для индикаторов и истории                                                                                                  |
-| `bot_signals`          | Последний сигнал/причина по каждому токену бота; `(botId, assetId)` unique                                                                                      |
+| `bot_signals`          | Последний сигнал/причина и `strategy_state` по каждому токену бота; `(botId, assetId)` unique                                                                   |
 
 Таблицы изолированы от реального ledger: paper-сделки не пишут в `transactions`, `postings`, `lots` или `trade_groups`. `budgetUsd` неизменяем после создания; `reset` возвращает `cashUsd` к бюджету и удаляет paper-позиции/сделки/снимки. Стратегии встроены в код; отдельной таблицы экземпляров нет. Полное описание — в `trading-bots.md`.
