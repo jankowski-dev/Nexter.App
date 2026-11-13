@@ -286,7 +286,7 @@ function RootLayoutContent() {
 
           <div className="mt-auto">
             <Button
-              className="w-full justify-start text-white"
+              className="w-full justify-center bg-red-700 text-white hover:bg-red-800"
               variant="danger"
               onClick={() => void logout()}
             >
