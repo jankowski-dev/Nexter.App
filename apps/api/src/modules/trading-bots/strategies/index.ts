@@ -414,6 +414,9 @@ export const crashProtectedGrid: StrategyDefinition = {
     const state = readCrashGridState(ctx.state, ctx.priceUsd);
     const position = ctx.position;
     const avgCost = position ? dec(position.avgCostUsd) : null;
+    if (typeof ctx.state?.highWaterMark !== 'string' && avgCost && avgCost.gt(state.hwm)) {
+      state.hwm = avgCost;
+    }
     const pnlPct =
       position && avgCost && avgCost.gt(0) ? price.minus(avgCost).div(avgCost).mul(100) : null;
     const canCloseOnCrash =
