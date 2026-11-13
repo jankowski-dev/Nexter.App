@@ -72,7 +72,8 @@ export function runBacktest(
   };
 
   const executeBuy = (date: string, close: Decimal, reason: string) => {
-    const usd = Decimal.min(allocationPerBuy, cash);
+    const spendable = cash.div(new Decimal(1).plus(feeRate));
+    const usd = Decimal.min(allocationPerBuy, spendable);
     if (usd.lt(1)) return false;
 
     const fillPrice = close.mul(new Decimal(1).plus(slippageRate));

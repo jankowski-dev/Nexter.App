@@ -34,7 +34,6 @@ describe('runBacktest', () => {
       meanReversion,
       params,
       series([100, 100, 100, 97, 100, 100, 96, 100]),
-      { feeBps: 0, slippageBps: 0 },
     );
 
     expect(result.trades.map((trade) => trade.side)).toEqual(['buy', 'sell', 'buy', 'sell']);
