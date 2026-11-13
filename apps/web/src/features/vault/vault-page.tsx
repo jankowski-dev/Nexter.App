@@ -11,6 +11,7 @@ import { CopyIcon, EyeIcon } from '@/components/ui/icons';
 import { createVaultItem, fetchVault, initializeVault, updateVaultItem } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
+import { filterBySearch } from '@/lib/search';
 import {
   createSalt,
   decryptVaultItem,
@@ -358,13 +359,11 @@ export function VaultPage() {
 
   const config = vault.data?.config;
   const unlocked = Boolean(config && dataKey);
-  const query = search.trim().toLowerCase();
-  const visibleItems = decrypted.filter((row) => {
-    if (!query) return true;
-    return [row.data.title, row.data.username, row.data.url].some((value) =>
-      value.toLowerCase().includes(query),
-    );
-  });
+  const visibleItems = filterBySearch(decrypted, search, (row) => [
+    row.data.title,
+    row.data.username,
+    row.data.url,
+  ]);
 
   return (
     <div className="space-y-6">

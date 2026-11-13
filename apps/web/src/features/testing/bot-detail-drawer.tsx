@@ -7,10 +7,17 @@ import { FanIcon } from '@/components/live-refresh-indicator';
 import { LineChart } from '@/components/charts/line-chart';
 import { TokenIcon } from '@/components/token-icon';
 import { StrategyIcon } from './strategy-icon';
-import { fetchBotEquity, fetchBotEvents, fetchBotTrades, fetchTradingBot } from '@/lib/api';
+import {
+  fetchBotEquity,
+  fetchBotEvents,
+  fetchBotSignals,
+  fetchBotTrades,
+  fetchTradingBot,
+} from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatDateTime,
+  formatPct,
   formatPrice,
   formatSignedUsd,
   formatTokenAmount,
@@ -18,7 +25,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import type { BotStatus } from '@nexter/contracts';
+import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
   draft: 'Черновик',
@@ -41,6 +48,7 @@ const eventLabels: Record<string, string> = {
 export function BotDetailDrawer({
   botId,
   onClose,
+  onEdit,
   onStart,
   onStop,
   onReset,
@@ -50,6 +58,7 @@ export function BotDetailDrawer({
 }: {
   botId: string | null;
   onClose: () => void;
+  onEdit: (bot: BotSummary) => void;
   onStart: (id: string) => void;
   onStop: (id: string) => void;
   onReset: (id: string) => void;
@@ -81,6 +90,12 @@ export function BotDetailDrawer({
     enabled: Boolean(botId),
     refetchInterval: 15_000,
   });
+  const signals = useQuery({
+    queryKey: ['trading-bot-signals', botId],
+    queryFn: () => fetchBotSignals(botId as string),
+    enabled: Boolean(botId),
+    refetchInterval: 15_000,
+  });
 
   if (!botId) return null;
   if (detail.isPending) {
@@ -101,7 +116,7 @@ export function BotDetailDrawer({
     );
   }
 
-  const { bot, strategy, tokens, positions } = detail.data;
+  const { bot, strategy, strategyParams, tokens, positions } = detail.data;
   const stats = bot.stats;
   const equityPoints = (equity.data?.data ?? []).map((point) => ({
     label: formatDateTime(point.capturedAt),
@@ -145,6 +160,16 @@ export function BotDetailDrawer({
                 Запустить
               </Button>
             )}
+            <Button
+              variant="secondary"
+              onClick={() => onEdit(bot)}
+              disabled={busy || bot.status === 'running'}
+              title={
+                bot.status === 'running' ? 'Остановите робота, чтобы изменить настройки' : undefined
+              }
+            >
+              Изменить
+            </Button>
             <Button variant="ghost" onClick={onClose}>
               Закрыть
             </Button>
@@ -156,8 +181,11 @@ export function BotDetailDrawer({
         <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
           <div>
             <div className="text-sm font-medium text-zinc-800">{strategy.name}</div>
-            <div className="text-xs text-zinc-500">
-              {strategy.key} · v{strategy.version}
+            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+              <span className="font-mono">{strategy.key}</span>
+              <Badge tone={strategy.kind === 'system' ? 'info' : 'warning'}>
+                {strategy.kind === 'system' ? 'Системная' : 'Кастомная'}
+              </Badge>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-600">
@@ -243,6 +271,92 @@ export function BotDetailDrawer({
         </Card>
 
         <Card>
+          <CardTitle>Сигналы стратегии по токенам</CardTitle>
+          <CardDescription>
+            Что стратегия видит по каждому токену на последнем тике. Если сигнала на покупку нет,
+            здесь будет причина.
+          </CardDescription>
+          {signals.isError ? (
+            <p className="mt-2 text-sm text-red-700">
+              {toRussianError(signals.error, 'Не удалось загрузить сигналы')}
+            </p>
+          ) : !signals.data || signals.data.data.length === 0 ? (
+            <CardDescription>
+              Сигналы появятся после первого тика запущенного робота.
+            </CardDescription>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                    <th className="py-2 pr-3 font-medium">Токен</th>
+                    <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                    <th className="py-2 pr-3 text-right font-medium">24 ч</th>
+                    <th className="py-2 pr-3 font-medium">Сигнал</th>
+                    <th className="py-2 pr-3 font-medium">Причина</th>
+                    <th className="py-2 text-right font-medium">Обновлено</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {signals.data.data.map((signal) => (
+                    <tr
+                      key={signal.assetId}
+                      className="border-b border-zinc-100 last:border-0 align-top"
+                    >
+                      <td className="py-2 pr-3">
+                        <div className="flex items-center gap-2">
+                          <TokenIcon logoUrl={signal.logoUrl} symbol={signal.symbol} />
+                          <div>
+                            <div className="font-medium">
+                              {signal.symbol}
+                              {signal.hasPosition ? (
+                                <Badge tone="success" className="ml-2">
+                                  В позиции
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <div className="text-[11px] text-zinc-500">{signal.chainCode}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2 pr-3 text-right font-mono">
+                        {formatPrice(signal.priceUsd)}
+                      </td>
+                      <td
+                        className={`py-2 pr-3 text-right font-mono ${pnlTone(signal.change24hPct)}`}
+                      >
+                        {formatPct(signal.change24hPct)}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <Badge
+                          tone={
+                            signal.action === 'buy'
+                              ? 'success'
+                              : signal.action === 'sell'
+                                ? 'warning'
+                                : 'neutral'
+                          }
+                        >
+                          {signal.action === 'buy'
+                            ? 'Покупка'
+                            : signal.action === 'sell'
+                              ? 'Продажа'
+                              : 'Ждёт'}
+                        </Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-xs text-zinc-600">{signal.reason}</td>
+                      <td className="py-2 text-right text-xs text-zinc-500">
+                        {signal.updatedAt ? formatDateTime(signal.updatedAt) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+
+        <Card>
           <CardTitle>Настройки</CardTitle>
           <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
             <div>
@@ -279,6 +393,24 @@ export function BotDetailDrawer({
                 {bot.lastTickAt ? formatDateTime(bot.lastTickAt) : '—'}
               </div>
             </div>
+          </div>
+        </Card>
+
+        <Card>
+          <CardTitle>Параметры стратегии</CardTitle>
+          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+            {strategy.paramFields.map((field) => {
+              const value = strategyParams[field.key];
+              return (
+                <div key={field.key}>
+                  <div className="text-zinc-500">{field.label}</div>
+                  <div className="font-mono text-zinc-900">
+                    {value === undefined || value === null ? '—' : String(value)}
+                    {field.unit ? ` ${field.unit}` : ''}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
 

@@ -13,7 +13,6 @@ import { TokenIcon } from '@/components/token-icon';
 import {
   archiveTradingBot,
   closeTradingBotPositions,
-  createBotStrategy,
   createTradingBot,
   fetchBotStrategies,
   fetchTradingBot,
@@ -22,17 +21,18 @@ import {
   resetTradingBot,
   startTradingBot,
   stopTradingBot,
-  updateBotStrategy,
   updateTradingBot,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { filterBySearch } from '@/lib/search';
 import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Decimal } from 'decimal.js';
 import { useEffect, useState } from 'react';
 import type {
   BotCreateRequest,
-  BotStrategy,
+  BotStrategyParamField,
   BotStrategyTemplate,
   BotSummary,
   BotUpdateRequest,
@@ -41,10 +41,13 @@ import { BotDetailDrawer } from './bot-detail-drawer';
 import { StrategyIcon } from './strategy-icon';
 
 type Tab = 'bots' | 'strategies';
+type Sort = 'pnl' | 'equity' | 'profitFactor';
+
 type BotFormState = {
   name: string;
   description: string;
-  strategyId: string;
+  strategyKey: string;
+  strategyParams: Record<string, string>;
   tokenAssetIds: string[];
   budgetUsd: string;
   maxPositions: string;
@@ -55,11 +58,52 @@ type BotFormState = {
   cooldownMinutes: string;
 };
 
-function emptyBotForm(strategyId = ''): BotFormState {
+const sortOptions: Array<{ value: Sort; label: string }> = [
+  { value: 'pnl', label: 'По P&L' },
+  { value: 'equity', label: 'По капиталу' },
+  { value: 'profitFactor', label: 'По профит-фактору' },
+];
+
+const defaultParams: Record<string, unknown> = {};
+
+function paramsToForm(params: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(params).map(([key, value]) => [key, value === null ? '' : String(value)]),
+  );
+}
+
+function formToParams(
+  fields: BotStrategyParamField[],
+  values: Record<string, string>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const field of fields) {
+    const raw = values[field.key];
+    if (raw === undefined || raw.trim() === '') continue;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      throw new Error(`Поле «${field.label}» должно быть числом.`);
+    }
+    if (field.integer && !Number.isInteger(parsed)) {
+      throw new Error(`Поле «${field.label}» должно быть целым числом.`);
+    }
+    if (field.min !== undefined && parsed < field.min) {
+      throw new Error(`Поле «${field.label}» не может быть меньше ${field.min}.`);
+    }
+    if (field.max !== undefined && parsed > field.max) {
+      throw new Error(`Поле «${field.label}» не может быть больше ${field.max}.`);
+    }
+    result[field.key] = parsed;
+  }
+  return result;
+}
+
+function emptyBotForm(template?: BotStrategyTemplate): BotFormState {
   return {
     name: '',
     description: '',
-    strategyId,
+    strategyKey: template?.key ?? 'momentum_breakout',
+    strategyParams: paramsToForm(template?.defaultParams ?? defaultParams),
     tokenAssetIds: [],
     budgetUsd: '1000',
     maxPositions: '5',
@@ -71,16 +115,17 @@ function emptyBotForm(strategyId = ''): BotFormState {
   };
 }
 
-function jsonParams(value: Record<string, unknown>): string {
-  return JSON.stringify(value, null, 2);
-}
-
-function parseParams(value: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(value);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Параметры должны быть JSON-объектом');
+function compareBots(a: BotSummary, b: BotSummary, sort: Sort): number {
+  if (sort === 'profitFactor') {
+    const left = a.stats.profitFactor;
+    const right = b.stats.profitFactor;
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
+    return new Decimal(right).comparedTo(left);
   }
-  return parsed as Record<string, unknown>;
+  const field = sort === 'pnl' ? 'totalPnlUsd' : 'equityUsd';
+  return new Decimal(b.stats[field]).comparedTo(a.stats[field]);
 }
 
 function BotStats({ bot }: { bot: BotSummary }) {
@@ -128,22 +173,51 @@ function BotStats({ bot }: { bot: BotSummary }) {
   );
 }
 
+function StrategyParamInputs({
+  template,
+  values,
+  onChange,
+}: {
+  template: BotStrategyTemplate;
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {template.paramFields.map((field) => (
+        <label key={field.key} className="block text-sm text-zinc-600">
+          {field.label}
+          <div className="mt-1 flex items-center gap-2">
+            <Input
+              type="number"
+              min={field.min}
+              max={field.max}
+              step={field.step ?? (field.integer ? 1 : 'any')}
+              value={values[field.key] ?? ''}
+              onChange={(event) => onChange(field.key, event.target.value)}
+            />
+            {field.unit ? <span className="text-xs text-zinc-500">{field.unit}</span> : null}
+          </div>
+          {field.hint ? (
+            <p className="mt-1 text-[11px] leading-4 text-zinc-500">{field.hint}</p>
+          ) : null}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function TestingPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>('bots');
+  const [sort, setSort] = useState<Sort>('pnl');
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
-  const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
-  const [editingStrategy, setEditingStrategy] = useState<BotStrategy | null>(null);
-  const [strategyKey, setStrategyKey] = useState('momentum_breakout');
-  const [strategyName, setStrategyName] = useState('');
-  const [strategyDescription, setStrategyDescription] = useState('');
-  const [strategyParams, setStrategyParams] = useState('{}');
-  const [strategyError, setStrategyError] = useState<string | null>(null);
+  const [tokenSearch, setTokenSearch] = useState('');
   const [botError, setBotError] = useState<string | null>(null);
+  const [strategyDetail, setStrategyDetail] = useState<BotStrategyTemplate | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
-  const [pendingBotAfterStrategy, setPendingBotAfterStrategy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   useAutoDismissNotice(actionError, () => setActionError(null), 8000);
@@ -151,7 +225,7 @@ export function TestingPage() {
   const strategies = useQuery({
     queryKey: ['trading-bot-strategies'],
     queryFn: fetchBotStrategies,
-    refetchInterval: 30_000,
+    staleTime: 5 * 60_000,
   });
   const bots = useQuery({
     queryKey: ['trading-bots'],
@@ -164,20 +238,26 @@ export function TestingPage() {
     enabled: botDialogOpen,
   });
 
-  const templates = strategies.data?.templates ?? [];
-  const strategyInstances = strategies.data?.data ?? [];
+  const templates = strategies.data?.data ?? [];
   const tokenEntries = watchlist.data?.data ?? [];
-  const strategyFormIcon =
-    editingStrategy?.icon ??
-    templates.find((template) => template.key === strategyKey)?.icon ??
-    'beaker';
-  const runningBots = (bots.data?.data ?? []).filter((bot) => bot.status === 'running').length;
+  const visibleTokenEntries = filterBySearch(tokenEntries, tokenSearch, (entry) => [
+    entry.asset.symbol,
+    entry.asset.name,
+    entry.asset.chainCode,
+  ]);
+  const selectedTemplate = templates.find((template) => template.key === botForm.strategyKey);
+  const sortedBots = [...(bots.data?.data ?? [])].sort((a, b) => compareBots(a, b, sort));
 
   useEffect(() => {
-    if (!botForm.strategyId && strategyInstances[0]) {
-      setBotForm((current) => ({ ...current, strategyId: strategyInstances[0].id }));
-    }
-  }, [botForm.strategyId, strategyInstances]);
+    if (!botDialogOpen || templates.length === 0) return;
+    if (templates.some((template) => template.key === botForm.strategyKey)) return;
+    const first = templates[0];
+    setBotForm((current) => ({
+      ...current,
+      strategyKey: first.key,
+      strategyParams: paramsToForm(first.defaultParams),
+    }));
+  }, [botDialogOpen, templates, botForm.strategyKey]);
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['trading-bots'] });
@@ -185,6 +265,7 @@ export function TestingPage() {
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-trades'] });
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-events'] });
     void queryClient.invalidateQueries({ queryKey: ['trading-bot-equity'] });
+    void queryClient.invalidateQueries({ queryKey: ['trading-bot-signals'] });
     void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
   };
 
@@ -255,135 +336,73 @@ export function TestingPage() {
     onError: (err) => notify(toRussianError(err, 'Не удалось удалить бота'), true),
   });
 
-  const createStrategyMutation = useMutation({
-    mutationFn: createBotStrategy,
-    onSuccess: async (created) => {
-      setStrategyDialogOpen(false);
-      setStrategyError(null);
-      await queryClient.refetchQueries({ queryKey: ['trading-bot-strategies'] });
-      notify('Стратегия создана.');
-      if (pendingBotAfterStrategy) {
-        setPendingBotAfterStrategy(false);
-        setEditingBot(null);
-        setBotForm(emptyBotForm(created.id));
-        setBotError(null);
-        setBotDialogOpen(true);
-      }
-    },
-    onError: (err) => {
-      const message = toRussianError(err, 'Не удалось создать стратегию');
-      setStrategyError(message);
-      notify(message, true);
-    },
-  });
-
-  const updateStrategyMutation = useMutation({
-    mutationFn: ({ id, body }: { id: string; body: Parameters<typeof updateBotStrategy>[1] }) =>
-      updateBotStrategy(id, body),
-    onSuccess: () => {
-      setStrategyDialogOpen(false);
-      setEditingStrategy(null);
-      setStrategyError(null);
-      notify('Стратегия сохранена.');
-      void queryClient.invalidateQueries({ queryKey: ['trading-bot-strategies'] });
-    },
-    onError: (err) => {
-      const message = toRussianError(err, 'Не удалось сохранить стратегию');
-      setStrategyError(message);
-      notify(message, true);
-    },
-  });
-
   function notify(message: string, isError = false) {
     if (!isError) return;
     setActionError(message);
   }
 
   function openCreateBot() {
-    if (strategies.isPending) {
-      notify('Загружаю стратегии…');
-      return;
-    }
     if (strategies.isError) {
       notify(toRussianError(strategies.error, 'Не удалось загрузить стратегии'), true);
       return;
     }
-    if (strategyInstances.length === 0) {
-      notify(
-        'Сначала создайте стратегию: выберите шаблон и задайте название. После сохранения откроется форма робота.',
-      );
-      openCreateStrategy(undefined, true);
-      return;
-    }
     setEditingBot(null);
-    setBotForm(emptyBotForm(strategyInstances[0]?.id ?? ''));
+    setBotForm(emptyBotForm(templates[0]));
+    setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);
   }
 
   async function openEditBot(bot: BotSummary) {
-    let tokenAssetIds: string[] = [];
+    if (bot.status === 'running') {
+      notify('Остановите робота, чтобы изменить настройки.', true);
+      return;
+    }
+    let detail;
     try {
-      const detail = await fetchTradingBot(bot.id);
-      tokenAssetIds = detail.tokens.map((token) => token.assetId);
+      detail = await fetchTradingBot(bot.id);
     } catch (error) {
       notify(toRussianError(error, 'Не удалось загрузить настройки бота'), true);
       return;
     }
-    setEditingBot(bot);
+    setEditingBot(detail.bot);
     setBotForm({
-      name: bot.name,
-      description: bot.description,
-      strategyId: bot.strategy.id,
-      tokenAssetIds,
-      budgetUsd: bot.budgetUsd,
-      maxPositions: String(bot.maxPositions),
-      positionSizePct: String(bot.positionSizePct),
-      feeBps: String(bot.feeBps),
-      slippageBps: String(bot.slippageBps),
-      maxDailyLossPct: String(bot.maxDailyLossPct),
-      cooldownMinutes: String(bot.cooldownMinutes),
+      name: detail.bot.name,
+      description: detail.bot.description,
+      strategyKey: detail.strategy.key,
+      strategyParams: paramsToForm(detail.strategyParams),
+      tokenAssetIds: detail.tokens.map((token) => token.assetId),
+      budgetUsd: detail.bot.budgetUsd,
+      maxPositions: String(detail.bot.maxPositions),
+      positionSizePct: String(detail.bot.positionSizePct),
+      feeBps: String(detail.bot.feeBps),
+      slippageBps: String(detail.bot.slippageBps),
+      maxDailyLossPct: String(detail.bot.maxDailyLossPct),
+      cooldownMinutes: String(detail.bot.cooldownMinutes),
     });
+    setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);
   }
 
-  function openCreateStrategy(template?: BotStrategyTemplate, continueToBot = false) {
-    setPendingBotAfterStrategy(continueToBot);
-    const selected = template ?? templates[0];
-    setEditingStrategy(null);
-    setStrategyKey(selected?.key ?? 'momentum_breakout');
-    setStrategyName(continueToBot ? (selected?.name ?? '') : '');
-    setStrategyDescription(selected?.description ?? '');
-    setStrategyParams(jsonParams(selected?.defaultParams ?? {}));
-    setStrategyError(null);
-    setStrategyDialogOpen(true);
-  }
-
-  function closeStrategyDialog() {
-    setStrategyDialogOpen(false);
-    setPendingBotAfterStrategy(false);
-  }
-
-  function openEditStrategy(strategy: BotStrategy) {
-    setEditingStrategy(strategy);
-    setStrategyKey(strategy.key);
-    setStrategyName(strategy.name);
-    setStrategyDescription(strategy.description);
-    setStrategyParams(jsonParams(strategy.params));
-    setStrategyError(null);
-    setStrategyDialogOpen(true);
+  function changeStrategy(key: string) {
+    const template = templates.find((item) => item.key === key);
+    setBotForm((current) => ({
+      ...current,
+      strategyKey: key,
+      strategyParams: paramsToForm(template?.defaultParams ?? defaultParams),
+    }));
   }
 
   function submitBot() {
     setBotError(null);
-    const strategyId = botForm.strategyId;
-    if (!strategyId) {
-      setBotError('Сначала создайте стратегию.');
+    if (!botForm.name.trim()) {
+      setBotError('Укажите название робота.');
       return;
     }
-    if (!strategyInstances.some((strategy) => strategy.id === strategyId)) {
-      setBotError('Выберите активную стратегию.');
+    const template = templates.find((item) => item.key === botForm.strategyKey);
+    if (!template) {
+      setBotError('Выберите стратегию.');
       return;
     }
     if (botForm.tokenAssetIds.length === 0) {
@@ -391,69 +410,39 @@ export function TestingPage() {
       return;
     }
     const budget = Number(botForm.budgetUsd);
-    if (!Number.isFinite(budget) || budget < 100 || budget % 100 !== 0) {
+    if (!editingBot && (!Number.isFinite(budget) || budget < 100 || budget % 100 !== 0)) {
       setBotError('Бюджет должен быть от $100 и кратен $100.');
       return;
     }
 
-    if (editingBot) {
-      updateBotMutation.mutate({
-        id: editingBot.id,
-        body: {
-          name: botForm.name.trim(),
-          description: botForm.description.trim(),
-          strategyId,
-          ...(botForm.tokenAssetIds.length > 0 ? { tokenAssetIds: botForm.tokenAssetIds } : {}),
-          maxPositions: Number(botForm.maxPositions),
-          positionSizePct: Number(botForm.positionSizePct),
-          feeBps: Number(botForm.feeBps),
-          slippageBps: Number(botForm.slippageBps),
-          maxDailyLossPct: Number(botForm.maxDailyLossPct),
-          cooldownMinutes: Number(botForm.cooldownMinutes),
-        },
-      });
+    let strategyParams: Record<string, unknown>;
+    try {
+      strategyParams = formToParams(template.paramFields, botForm.strategyParams);
+    } catch (error) {
+      setBotError(error instanceof Error ? error.message : 'Некорректные параметры стратегии');
       return;
     }
 
-    createBotMutation.mutate({
+    const common = {
       name: botForm.name.trim(),
       description: botForm.description.trim(),
-      strategyId,
+      strategyKey: template.key,
+      strategyParams,
       tokenAssetIds: botForm.tokenAssetIds,
-      budgetUsd: botForm.budgetUsd,
       maxPositions: Number(botForm.maxPositions),
       positionSizePct: Number(botForm.positionSizePct),
       feeBps: Number(botForm.feeBps),
       slippageBps: Number(botForm.slippageBps),
       maxDailyLossPct: Number(botForm.maxDailyLossPct),
       cooldownMinutes: Number(botForm.cooldownMinutes),
-    });
-  }
+    };
 
-  function submitStrategy() {
-    setStrategyError(null);
-    try {
-      const params = parseParams(strategyParams);
-      if (editingStrategy) {
-        updateStrategyMutation.mutate({
-          id: editingStrategy.id,
-          body: {
-            name: strategyName.trim(),
-            description: strategyDescription.trim(),
-            params,
-          },
-        });
-      } else {
-        createStrategyMutation.mutate({
-          key: strategyKey as BotStrategy['key'],
-          name: strategyName.trim(),
-          description: strategyDescription.trim(),
-          params,
-        });
-      }
-    } catch (error) {
-      setStrategyError(error instanceof Error ? error.message : 'Некорректные параметры');
+    if (editingBot) {
+      updateBotMutation.mutate({ id: editingBot.id, body: common });
+      return;
     }
+
+    createBotMutation.mutate({ ...common, budgetUsd: botForm.budgetUsd });
   }
 
   const busy =
@@ -468,14 +457,7 @@ export function TestingPage() {
       <PageHeader
         title="Тестирование"
         subtitle="Бумажные торговые боты. Реальные деньги и подписи не используются."
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => openCreateStrategy()}>
-              Новая стратегия
-            </Button>
-            <Button onClick={openCreateBot}>Добавить робота</Button>
-          </>
-        }
+        actions={<Button onClick={openCreateBot}>Добавить робота</Button>}
       />
 
       {actionError ? (
@@ -484,7 +466,7 @@ export function TestingPage() {
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <div
           role="tablist"
           aria-label="Раздел тестирования"
@@ -492,7 +474,7 @@ export function TestingPage() {
         >
           {(
             [
-              ['bots', `Роботы${runningBots > 0 ? ` · ${runningBots} работает` : ''}`],
+              ['bots', 'Роботы'],
               ['strategies', 'Стратегии'],
             ] as const
           ).map(([value, label]) => (
@@ -512,10 +494,31 @@ export function TestingPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <FanIcon spinning={runningBots > 0} />
-          {runningBots > 0 ? 'Роботы работают' : 'Нет запущенных роботов'}
-        </div>
+
+        {tab === 'bots' ? (
+          <div
+            role="tablist"
+            aria-label="Сортировка роботов"
+            className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
+          >
+            {sortOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="tab"
+                aria-selected={sort === option.value}
+                onClick={() => setSort(option.value)}
+                className={`rounded-md px-3 py-1.5 text-sm ${
+                  sort === option.value
+                    ? 'bg-white text-zinc-900 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {tab === 'bots' ? (
@@ -526,26 +529,36 @@ export function TestingPage() {
             message={toRussianError(bots.error, 'Не удалось загрузить роботов')}
             onRetry={() => void bots.refetch()}
           />
-        ) : (bots.data?.data.length ?? 0) === 0 ? (
+        ) : sortedBots.length === 0 ? (
           <Card>
             <CardTitle>Роботов пока нет</CardTitle>
             <CardDescription>
-              Создайте стратегию, затем добавьте робота, выберите токены и бюджет.
+              Добавьте робота, выберите встроенную стратегию, токены и бюджет.
             </CardDescription>
             <Button className="mt-4" onClick={openCreateBot}>
-              {strategyInstances.length === 0 ? 'Создать стратегию' : 'Добавить робота'}
+              Добавить робота
             </Button>
           </Card>
         ) : (
           <div className="space-y-2">
-            {(bots.data?.data ?? []).map((bot) => (
-              <Card key={bot.id} className="p-3 transition-colors hover:border-emerald-300">
+            {sortedBots.map((bot) => (
+              <Card
+                key={bot.id}
+                role="button"
+                tabIndex={0}
+                aria-label={`Открыть робота ${bot.name}`}
+                className="cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                onClick={() => setDetailBotId(bot.id)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setDetailBotId(bot.id);
+                  }
+                }}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <button
-                    type="button"
-                    className="flex min-w-0 flex-1 items-start gap-3 text-left"
-                    onClick={() => setDetailBotId(bot.id)}
-                  >
+                  <div className="flex min-w-0 flex-1 items-start gap-3 text-left">
                     <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
                       <NavIcon name="testing" className="h-5 w-5" />
                     </span>
@@ -567,8 +580,12 @@ export function TestingPage() {
                         {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
                       </div>
                     </div>
-                  </button>
-                  <div className="flex shrink-0 flex-wrap gap-1">
+                  </div>
+                  <div
+                    className="flex shrink-0 flex-wrap gap-1"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <Button
                       variant="ghost"
                       className="h-8 px-2 text-xs"
@@ -617,90 +634,39 @@ export function TestingPage() {
           onRetry={() => void strategies.refetch()}
         />
       ) : (
-        <div className="space-y-4">
-          <Card>
-            <CardTitle>Шаблоны стратегий</CardTitle>
-            <CardDescription>
-              Алгоритмы встроены в приложение. Новые шаблоны добавляются кодом и деплоем.
-            </CardDescription>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              {templates.map((template) => (
-                <div key={template.key} className="rounded-xl border border-zinc-200 p-3">
-                  <div className="flex items-start gap-3">
-                    <StrategyIcon icon={template.icon} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-zinc-900">{template.name}</span>
-                        <Badge tone="info">{template.key}</Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
+        <Card>
+          <CardTitle>Стратегии</CardTitle>
+          <CardDescription>
+            Встроенные алгоритмы. Их нельзя изменить — параметры настраиваются в каждом роботе.
+            Нажмите на карточку, чтобы прочитать описание и гайд.
+          </CardDescription>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {templates.map((template) => (
+              <button
+                key={template.key}
+                type="button"
+                onClick={() => setStrategyDetail(template)}
+                className="rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              >
+                <div className="flex items-start gap-3">
+                  <StrategyIcon icon={template.icon} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-zinc-900">{template.name}</span>
+                      <Badge tone={template.kind === 'system' ? 'info' : 'warning'}>
+                        {template.kind === 'system' ? 'Системная' : 'Кастомная'}
+                      </Badge>
                     </div>
+                    <p className="mt-1 text-xs text-zinc-500">{template.description}</p>
+                    <p className="mt-2 text-[11px] text-zinc-400">
+                      {template.paramFields.length} параметров · нажмите для подробностей
+                    </p>
                   </div>
-                  <Button
-                    variant="secondary"
-                    className="mt-3 h-8 px-2 text-xs"
-                    onClick={() => openCreateStrategy(template)}
-                  >
-                    Создать экземпляр
-                  </Button>
                 </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card>
-            <CardTitle>Мои стратегии (экземпляры)</CardTitle>
-            {strategyInstances.length === 0 ? (
-              <CardDescription>Создайте экземпляр стратегии из шаблона.</CardDescription>
-            ) : (
-              <div className="mt-3 grid gap-3 md:grid-cols-2">
-                {strategyInstances.map((strategy) => (
-                  <div
-                    key={strategy.id}
-                    className="rounded-xl border border-zinc-200 p-3 transition-colors hover:border-emerald-300"
-                  >
-                    <button
-                      type="button"
-                      className="flex w-full items-start gap-3 text-left"
-                      onClick={() => openEditStrategy(strategy)}
-                    >
-                      <StrategyIcon icon={strategy.icon} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-zinc-900">{strategy.name}</span>
-                          <Badge tone="neutral">{strategy.key}</Badge>
-                        </div>
-                        <p className="mt-1 text-xs text-zinc-500">
-                          {strategy.description || 'Без описания'}
-                        </p>
-                      </div>
-                    </button>
-                    <div className="mt-3 flex gap-1">
-                      <Button
-                        variant="ghost"
-                        className="h-8 px-2 text-xs text-red-700"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              'Архивировать стратегию? Роботы на ней должны быть остановлены.',
-                            )
-                          ) {
-                            updateStrategyMutation.mutate({
-                              id: strategy.id,
-                              body: { archived: true },
-                            });
-                          }
-                        }}
-                      >
-                        В архив
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
+              </button>
+            ))}
+          </div>
+        </Card>
       )}
 
       <Drawer
@@ -743,22 +709,18 @@ export function TestingPage() {
               Стратегия
               <Select
                 className="mt-1"
-                value={botForm.strategyId}
-                onChange={(event) => setBotForm({ ...botForm, strategyId: event.target.value })}
+                value={botForm.strategyKey}
+                onChange={(event) => changeStrategy(event.target.value)}
               >
-                {strategyInstances.length === 0 ? (
-                  <option value="">Сначала создайте стратегию</option>
-                ) : (
-                  strategyInstances.map((strategy) => (
-                    <option key={strategy.id} value={strategy.id}>
-                      {strategy.name} · {strategy.key}
-                    </option>
-                  ))
-                )}
+                {templates.map((template) => (
+                  <option key={template.key} value={template.key}>
+                    {template.name}
+                  </option>
+                ))}
               </Select>
-              {strategyInstances.length === 0 ? (
-                <p className="mt-1 text-xs text-amber-700">
-                  Без стратегии робот не сможет торговать.
+              {selectedTemplate ? (
+                <p className="mt-1 text-[11px] leading-4 text-zinc-500">
+                  {selectedTemplate.description}
                 </p>
               ) : null}
             </label>
@@ -772,9 +734,47 @@ export function TestingPage() {
               placeholder="Что тестируем и на каком рынке"
             />
           </label>
+
+          {selectedTemplate ? (
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-medium text-zinc-800">
+                  Параметры стратегии · {selectedTemplate.name}
+                </div>
+                <button
+                  type="button"
+                  className="text-xs text-emerald-700 hover:underline"
+                  onClick={() => setStrategyDetail(selectedTemplate)}
+                >
+                  Что это за стратегия?
+                </button>
+              </div>
+              <StrategyParamInputs
+                template={selectedTemplate}
+                values={botForm.strategyParams}
+                onChange={(key, value) =>
+                  setBotForm((current) => ({
+                    ...current,
+                    strategyParams: { ...current.strategyParams, [key]: value },
+                  }))
+                }
+              />
+            </div>
+          ) : null}
+
           <div>
-            <div className="text-sm text-zinc-600">Токены из Базы токенов</div>
-            <div className="mt-2 max-h-48 space-y-1 overflow-y-auto rounded-xl border border-zinc-200 p-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm text-zinc-600">Токены из Базы токенов</div>
+              <div className="text-xs text-zinc-500">Выбрано: {botForm.tokenAssetIds.length}</div>
+            </div>
+            <Input
+              className="mt-2"
+              value={tokenSearch}
+              onChange={(event) => setTokenSearch(event.target.value)}
+              placeholder="Поиск: символ, название или сеть"
+              aria-label="Поиск токена"
+            />
+            <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-xl border border-zinc-200 p-2">
               {watchlist.isPending ? (
                 <p className="text-xs text-zinc-500">Загрузка токенов…</p>
               ) : watchlist.isError ? (
@@ -783,8 +783,10 @@ export function TestingPage() {
                 </p>
               ) : tokenEntries.length === 0 ? (
                 <p className="text-xs text-zinc-500">В базе нет активных токенов.</p>
+              ) : visibleTokenEntries.length === 0 ? (
+                <p className="text-xs text-zinc-500">Ничего не найдено.</p>
               ) : (
-                tokenEntries.map((entry) => {
+                visibleTokenEntries.map((entry) => {
                   const checked = botForm.tokenAssetIds.includes(entry.asset.id);
                   return (
                     <label
@@ -795,12 +797,12 @@ export function TestingPage() {
                         type="checkbox"
                         checked={checked}
                         onChange={() =>
-                          setBotForm({
-                            ...botForm,
+                          setBotForm((current) => ({
+                            ...current,
                             tokenAssetIds: checked
-                              ? botForm.tokenAssetIds.filter((id) => id !== entry.asset.id)
-                              : [...botForm.tokenAssetIds, entry.asset.id],
-                          })
+                              ? current.tokenAssetIds.filter((id) => id !== entry.asset.id)
+                              : [...current.tokenAssetIds, entry.asset.id],
+                          }))
                         }
                       />
                       <TokenIcon
@@ -809,13 +811,17 @@ export function TestingPage() {
                         className="h-5 w-5 text-[9px]"
                       />
                       <span className="font-medium">{entry.asset.symbol}</span>
-                      <span className="text-xs text-zinc-500">{entry.asset.chainCode}</span>
+                      <span className="truncate text-xs text-zinc-500">{entry.asset.name}</span>
+                      <span className="ml-auto shrink-0 text-xs text-zinc-400">
+                        {entry.asset.chainCode}
+                      </span>
                     </label>
                   );
                 })
               )}
             </div>
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="block text-sm text-zinc-600">
               Бюджет, USD
@@ -910,89 +916,74 @@ export function TestingPage() {
       </Drawer>
 
       <Drawer
-        open={strategyDialogOpen}
-        onClose={closeStrategyDialog}
-        title={editingStrategy ? 'Изменить стратегию' : 'Новая стратегия'}
-        titleIcon={<StrategyIcon icon={strategyFormIcon} className="h-8 w-8" />}
-        description="Настройки экземпляра стратегии."
+        open={Boolean(strategyDetail)}
+        onClose={() => setStrategyDetail(null)}
+        title={strategyDetail?.name ?? 'Стратегия'}
+        titleIcon={
+          strategyDetail ? (
+            <StrategyIcon icon={strategyDetail.icon} className="h-8 w-8" />
+          ) : undefined
+        }
         size="third"
         footer={
-          <>
-            <Button variant="ghost" onClick={closeStrategyDialog}>
-              Отмена
-            </Button>
-            <Button
-              onClick={submitStrategy}
-              disabled={
-                createStrategyMutation.isPending ||
-                updateStrategyMutation.isPending ||
-                !strategyName.trim()
-              }
-            >
-              {editingStrategy ? 'Сохранить' : 'Создать'}
-            </Button>
-          </>
+          <Button variant="ghost" onClick={() => setStrategyDetail(null)}>
+            Закрыть
+          </Button>
         }
       >
-        <div className="space-y-3">
-          {pendingBotAfterStrategy ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              Сначала создайте стратегию. После сохранения сразу откроется форма нового робота.
+        {strategyDetail ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={strategyDetail.kind === 'system' ? 'info' : 'warning'}>
+                {strategyDetail.kind === 'system' ? 'Системная' : 'Кастомная'}
+              </Badge>
+              <span className="font-mono text-xs text-zinc-500">{strategyDetail.key}</span>
             </div>
-          ) : null}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-zinc-600">
-              Название
-              <Input
-                className="mt-1"
-                value={strategyName}
-                onChange={(event) => setStrategyName(event.target.value)}
-              />
-            </label>
-            <label className="block text-sm text-zinc-600">
-              Шаблон
-              <Select
-                className="mt-1"
-                value={strategyKey}
-                disabled={Boolean(editingStrategy)}
-                onChange={(event) => {
-                  const key = event.target.value;
-                  const template = templates.find((item) => item.key === key);
-                  setStrategyKey(key);
-                  if (template) setStrategyParams(jsonParams(template.defaultParams));
-                }}
-              >
-                {templates.map((template) => (
-                  <option key={template.key} value={template.key}>
-                    {template.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
+            <Card>
+              <CardTitle>Что это</CardTitle>
+              <p className="mt-1 text-sm text-zinc-700">{strategyDetail.description}</p>
+            </Card>
+            <Card>
+              <CardTitle>Как работает</CardTitle>
+              <p className="mt-1 text-sm leading-6 text-zinc-700">{strategyDetail.guide}</p>
+            </Card>
+            <Card>
+              <CardTitle>Параметры по умолчанию</CardTitle>
+              <div className="mt-2 space-y-2">
+                {strategyDetail.paramFields.map((field) => {
+                  const value = strategyDetail.defaultParams[field.key];
+                  return (
+                    <div
+                      key={field.key}
+                      className="flex items-start justify-between gap-3 border-b border-zinc-100 pb-2 last:border-0 last:pb-0"
+                    >
+                      <div className="text-sm text-zinc-700">
+                        {field.label}
+                        {field.hint ? (
+                          <div className="text-[11px] text-zinc-500">{field.hint}</div>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 font-mono text-sm text-zinc-900">
+                        {value === undefined ? '—' : String(value)}
+                        {field.unit ? ` ${field.unit}` : ''}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+            <p className="text-xs leading-5 text-zinc-500">
+              Стратегия встроена в приложение и не редактируется. Все числовые параметры задаются
+              отдельно для каждого робота при создании или в настройках.
+            </p>
           </div>
-          <label className="block text-sm text-zinc-600">
-            Описание
-            <Textarea
-              className="mt-1"
-              value={strategyDescription}
-              onChange={(event) => setStrategyDescription(event.target.value)}
-            />
-          </label>
-          <label className="block text-sm text-zinc-600">
-            Параметры (JSON)
-            <Textarea
-              className="mt-1 min-h-48 font-mono text-xs"
-              value={strategyParams}
-              onChange={(event) => setStrategyParams(event.target.value)}
-            />
-          </label>
-          {strategyError ? <p className="text-sm text-red-700">{strategyError}</p> : null}
-        </div>
+        ) : null}
       </Drawer>
 
       <BotDetailDrawer
         botId={detailBotId}
         onClose={() => setDetailBotId(null)}
+        onEdit={(bot) => void openEditBot(bot)}
         onStart={(id) => startMutation.mutate(id)}
         onStop={(id) => stopMutation.mutate(id)}
         onReset={(id) => {

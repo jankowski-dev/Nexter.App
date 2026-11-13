@@ -11,53 +11,32 @@ export const botStrategyKeys = [
 
 export const botStrategyKeySchema = z.enum(botStrategyKeys);
 export const botStatusSchema = z.enum(['draft', 'running', 'stopped']);
+export const botStrategyKindSchema = z.enum(['system', 'custom']);
 export const botTradeSideSchema = z.enum(['buy', 'sell']);
 
 const paramsSchema = z.record(z.string(), z.unknown());
+
+export const botStrategyParamFieldSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  hint: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  step: z.number().optional(),
+  unit: z.string().optional(),
+  integer: z.boolean().optional(),
+});
 
 export const botStrategyTemplateSchema = z.object({
   key: botStrategyKeySchema,
   name: z.string(),
   description: z.string(),
+  guide: z.string(),
   icon: z.string(),
+  kind: botStrategyKindSchema,
   defaultParams: paramsSchema,
+  paramFields: z.array(botStrategyParamFieldSchema),
 });
-
-export const botStrategySchema = z.object({
-  id: z.uuid(),
-  key: botStrategyKeySchema,
-  name: z.string(),
-  description: z.string(),
-  icon: z.string(),
-  version: z.number().int().positive(),
-  params: paramsSchema,
-  archivedAt: z.iso.datetime().nullable(),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
-});
-
-export const botStrategyCreateRequestSchema = z.object({
-  key: botStrategyKeySchema,
-  name: z.string().trim().min(1).max(120),
-  description: z.string().max(2000).optional(),
-  params: paramsSchema.optional(),
-});
-
-export const botStrategyUpdateRequestSchema = z
-  .object({
-    name: z.string().trim().min(1).max(120).optional(),
-    description: z.string().max(2000).optional(),
-    params: paramsSchema.optional(),
-    archived: z.boolean().optional(),
-  })
-  .refine(
-    (value) =>
-      value.name !== undefined ||
-      value.description !== undefined ||
-      value.params !== undefined ||
-      value.archived !== undefined,
-    'At least one field must be provided',
-  );
 
 export const botStatsSchema = z.object({
   budgetUsd: z.string(),
@@ -84,10 +63,10 @@ export const botSummarySchema = z.object({
   description: z.string(),
   status: botStatusSchema,
   strategy: z.object({
-    id: z.uuid(),
     key: botStrategyKeySchema,
     name: z.string(),
     icon: z.string(),
+    kind: botStrategyKindSchema,
   }),
   budgetUsd: z.string(),
   cashUsd: z.string(),
@@ -163,7 +142,8 @@ export const tradingBotsResponseSchema = z.object({
 
 export const botDetailResponseSchema = z.object({
   bot: botSummarySchema,
-  strategy: botStrategySchema,
+  strategy: botStrategyTemplateSchema,
+  strategyParams: paramsSchema,
   tokens: z.array(botTokenSchema),
   positions: z.array(botPositionSchema),
 });
@@ -172,7 +152,8 @@ export const botCreateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     description: z.string().max(2000).optional(),
-    strategyId: z.uuid(),
+    strategyKey: botStrategyKeySchema,
+    strategyParams: paramsSchema.optional(),
     tokenAssetIds: z.array(z.uuid()).min(1).max(50),
     budgetUsd: positiveDecimalSchema,
     maxPositions: z.number().int().min(1).max(20).default(5),
@@ -195,7 +176,8 @@ export const botUpdateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().max(2000).optional(),
-    strategyId: z.uuid().optional(),
+    strategyKey: botStrategyKeySchema.optional(),
+    strategyParams: paramsSchema.optional(),
     tokenAssetIds: z.array(z.uuid()).min(1).max(50).optional(),
     maxPositions: z.number().int().min(1).max(20).optional(),
     positionSizePct: z.number().min(1).max(100).optional(),
@@ -224,9 +206,28 @@ export const botEquityResponseSchema = z.object({
   data: z.array(botEquityPointSchema),
 });
 
+export const botSignalActionSchema = z.enum(['buy', 'sell', 'hold']);
+
+export const botSignalSchema = z.object({
+  assetId: z.uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  chainCode: z.string(),
+  logoUrl: z.string().nullable(),
+  priceUsd: z.string().nullable(),
+  change24hPct: z.string().nullable(),
+  action: botSignalActionSchema,
+  reason: z.string(),
+  hasPosition: z.boolean(),
+  updatedAt: z.iso.datetime().nullable(),
+});
+
+export const botSignalsResponseSchema = z.object({
+  data: z.array(botSignalSchema),
+});
+
 export const botStrategiesResponseSchema = z.object({
-  templates: z.array(botStrategyTemplateSchema),
-  data: z.array(botStrategySchema),
+  data: z.array(botStrategyTemplateSchema),
 });
 
 export const botListQuerySchema = z.object({
@@ -243,9 +244,6 @@ export const botHistoryQuerySchema = z.object({
 export type BotStrategyKey = z.infer<typeof botStrategyKeySchema>;
 export type BotStatus = z.infer<typeof botStatusSchema>;
 export type BotStrategyTemplate = z.infer<typeof botStrategyTemplateSchema>;
-export type BotStrategy = z.infer<typeof botStrategySchema>;
-export type BotStrategyCreateRequest = z.infer<typeof botStrategyCreateRequestSchema>;
-export type BotStrategyUpdateRequest = z.infer<typeof botStrategyUpdateRequestSchema>;
 export type BotStats = z.infer<typeof botStatsSchema>;
 export type BotSummary = z.infer<typeof botSummarySchema>;
 export type BotToken = z.infer<typeof botTokenSchema>;
@@ -253,6 +251,10 @@ export type BotPosition = z.infer<typeof botPositionSchema>;
 export type BotTrade = z.infer<typeof botTradeSchema>;
 export type BotEvent = z.infer<typeof botEventSchema>;
 export type BotEquityPoint = z.infer<typeof botEquityPointSchema>;
+export type BotSignalAction = z.infer<typeof botSignalActionSchema>;
+export type BotSignal = z.infer<typeof botSignalSchema>;
+export type BotSignalsResponse = z.infer<typeof botSignalsResponseSchema>;
+export type BotStrategyParamField = z.infer<typeof botStrategyParamFieldSchema>;
 export type BotDetailResponse = z.infer<typeof botDetailResponseSchema>;
 export type TradingBotsResponse = z.infer<typeof tradingBotsResponseSchema>;
 export type BotCreateRequest = z.infer<typeof botCreateRequestSchema>;

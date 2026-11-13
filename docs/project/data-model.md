@@ -123,15 +123,15 @@
 
 ## 11. Бумажные торговые боты
 
-| Таблица                | Назначение                                                                                                                                      |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bot_strategies`       | Экземпляр стратегии: key registry, name, description, version, params jsonb, archivedAt                                                         |
-| `trading_bots`         | Бот: strategyId, status, budget/cash, maxPositions, positionSizePct, fee/slippage bps, daily loss, cooldown, peakEquity/maxDrawdown, timestamps |
-| `bot_tokens`           | Разрешённые токены бота; `(botId, assetId)` unique                                                                                              |
-| `bot_positions`        | Открытая paper-позиция: amount, avgCostUsd, costBasisUsd; average-cost учёт                                                                     |
-| `bot_trades`           | Paper-сделки: side, amount, fill price, usdValue, fee, slippage, realizedPnl, reason, signal                                                    |
-| `bot_equity_snapshots` | Снимки equity при сделках и раз в 5 минут                                                                                                       |
-| `bot_events`           | Журнал created/started/stopped/buy/sell/error/reset/archived                                                                                    |
-| `bot_quote_samples`    | Минутные цены токенов активных ботов для индикаторов и истории                                                                                  |
+| Таблица                | Назначение                                                                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trading_bots`         | Бот: strategyKey/strategyParams, status, budget/cash, maxPositions, positionSizePct, fee/slippage bps, daily loss, cooldown, peakEquity/maxDrawdown, timestamps |
+| `bot_tokens`           | Разрешённые токены бота; `(botId, assetId)` unique                                                                                                              |
+| `bot_positions`        | Открытая paper-позиция: amount, avgCostUsd, costBasisUsd; average-cost учёт                                                                                     |
+| `bot_trades`           | Paper-сделки: side, amount, fill price, usdValue, fee, slippage, realizedPnl, reason, signal                                                                    |
+| `bot_equity_snapshots` | Снимки equity при сделках и раз в 5 минут                                                                                                                       |
+| `bot_events`           | Журнал created/started/stopped/buy/sell/error/reset/archived                                                                                                    |
+| `bot_quote_samples`    | Минутные цены токенов активных ботов для индикаторов и истории                                                                                                  |
+| `bot_signals`          | Последний сигнал/причина по каждому токену бота; `(botId, assetId)` unique                                                                                      |
 
-Таблицы изолированы от реального ledger: paper-сделки не пишут в `transactions`, `postings`, `lots` или `trade_groups`. `budgetUsd` неизменяем после создания; `reset` возвращает `cashUsd` к бюджету и удаляет paper-позиции/сделки/снимки. Полное описание — в `trading-bots.md`.
+Таблицы изолированы от реального ledger: paper-сделки не пишут в `transactions`, `postings`, `lots` или `trade_groups`. `budgetUsd` неизменяем после создания; `reset` возвращает `cashUsd` к бюджету и удаляет paper-позиции/сделки/снимки. Стратегии встроены в код; отдельной таблицы экземпляров нет. Полное описание — в `trading-bots.md`.

@@ -8,7 +8,7 @@ import {
   botEquityResponseSchema,
   botEventsResponseSchema,
   botStrategiesResponseSchema,
-  botStrategySchema,
+  botSignalsResponseSchema,
   botTradesResponseSchema,
   tradingBotsResponseSchema,
   dashboardActivePositionsSchema,
@@ -74,10 +74,8 @@ import {
   type BotDetailResponse,
   type BotEquityResponse,
   type BotEventsResponse,
+  type BotSignalsResponse,
   type BotStrategiesResponse,
-  type BotStrategy,
-  type BotStrategyCreateRequest,
-  type BotStrategyUpdateRequest,
   type BotTradesResponse,
   type BotUpdateRequest,
   type TradingBotsResponse,
@@ -926,17 +924,6 @@ export async function fetchBotStrategies(): Promise<BotStrategiesResponse> {
   return apiFetch('/api/v1/trading-bots/strategies', {}, botStrategiesResponseSchema);
 }
 
-export async function createBotStrategy(body: BotStrategyCreateRequest): Promise<BotStrategy> {
-  return apiPost('/api/v1/trading-bots/strategies', body, botStrategySchema);
-}
-
-export async function updateBotStrategy(
-  id: string,
-  body: BotStrategyUpdateRequest,
-): Promise<BotStrategy> {
-  return apiPatch(`/api/v1/trading-bots/strategies/${id}`, body, botStrategySchema);
-}
-
 export async function fetchTradingBots(includeArchived = false): Promise<TradingBotsResponse> {
   return apiFetch(
     `/api/v1/trading-bots/bots?includeArchived=${includeArchived ? 'true' : 'false'}`,
@@ -1002,6 +989,10 @@ export async function fetchBotEquity(id: string, limit = 500): Promise<BotEquity
     {},
     botEquityResponseSchema,
   );
+}
+
+export async function fetchBotSignals(id: string): Promise<BotSignalsResponse> {
+  return apiFetch(`/api/v1/trading-bots/bots/${id}/signals`, {}, botSignalsResponseSchema);
 }
 
 export async function fetchNotifications(limit = 100): Promise<NotificationsResponse> {

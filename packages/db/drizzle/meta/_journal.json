@@ -239,6 +239,20 @@
       "when": 1794564126226,
       "tag": "0033_nervous_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794572363515,
+      "tag": "0034_clean_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794572390152,
+      "tag": "0035_warm_kate_bishop",
+      "breakpoints": true
     }
   ]
 }
