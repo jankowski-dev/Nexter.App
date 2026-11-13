@@ -408,3 +408,10 @@ interface StrategyDefinition {
 - Bot trade/event journals load 20 records per request through `limit/offset` and append pages with `Ещё`; the backtest journal starts at 20 and grows to 100.
 - Strategy metadata adds `bestFor` and `risks`; the strategy drawer shows description, best-use cases, guide, risks and defaults.
 - Deployment `b138c1ea-af5b-4b31-9f9b-cd17c5e87c94`; bundle `assets/index-pQAOvbq_.js`; `/ready` 200. No migration, no real-ledger changes.
+
+### UI-45 (2026-11-13)
+
+- Encrypted backup `nexter-2026-11-13-ui45.dump.enc` (plaintext SHA-256 `2f4d0c18…5d63`, encrypted SHA-256 `0ae6348b…23ec`). Restore check matched static production counts: users 1, assets 49, bots 4, trades 24, signals 9, backtest runs 45, cash sum `4019.27178231`.
+- Migration `0038` tested on the restored copy: `bot_signals.strategy_state` exists. Production now has 39 migrations.
+- Added custom `crash_protected_grid`; stateful context and runner persistence. Changing strategy/params/tokens or reset clears state.
+- Deployment `097c824b-9842-4c56-a163-5f44fc78760d`; bundle `assets/index-Dvpfp3Wd.js`; `/ready` 200. No real-ledger changes.
