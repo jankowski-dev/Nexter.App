@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { fetchNotes, updateNote } from '@/lib/api';
@@ -10,14 +10,7 @@ import { formatDate } from '@/lib/format';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
-import {
-  NotebookIcon,
-  PaperclipIcon,
-  PencilIcon,
-  PinIcon,
-  TrashIcon,
-  UndoIcon,
-} from '@/components/ui/icons';
+import { NotebookIcon, PaperclipIcon, PencilIcon, PinIcon, TrashIcon } from '@/components/ui/icons';
 import { NoteDrawer } from './note-drawer';
 
 interface DrawerState {
@@ -29,16 +22,15 @@ interface DrawerState {
 export function NotesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [archivedOnly, setArchivedOnly] = useState(false);
+  const [sort, setSort] = useState<'updated' | 'created'>('updated');
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const notes = useInfiniteQuery({
-    queryKey: ['notes', search, archivedOnly],
+    queryKey: ['notes', search],
     queryFn: ({ pageParam }) =>
       fetchNotes({
         search: search || undefined,
-        archivedOnly,
         limit: 30,
         offset: pageParam,
       }),
@@ -60,16 +52,11 @@ export function NotesPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось изменить заметку')),
   });
 
-  const restoreMutation = useMutation({
-    mutationFn: (note: Note) => updateNote(note.id, { archived: false }),
-    onSuccess: () => {
-      setError(null);
-      invalidate();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось вернуть заметку')),
-  });
-
   const rows = notes.data?.pages.flatMap((page) => page.data) ?? [];
+  const sortedRows = [...rows].sort((left, right) => {
+    const field = sort === 'updated' ? 'updatedAt' : 'createdAt';
+    return right[field].localeCompare(left[field]);
+  });
 
   return (
     <div className="space-y-6">
@@ -83,39 +70,22 @@ export function NotesPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Input
-          className="max-w-md"
-          placeholder="Поиск по заголовку, тексту и тегам"
-          aria-label="Поиск по заметкам"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+      <ListToolbar
+        search={search}
+        onSearch={setSearch}
+        searchPlaceholder="Поиск по заголовку, тексту и тегам"
+        searchAriaLabel="Поиск по заметкам"
+      >
+        <TabGroup
+          value={sort}
+          onChange={setSort}
+          ariaLabel="Сортировка заметок"
+          options={[
+            { value: 'updated', label: 'По изменению' },
+            { value: 'created', label: 'По созданию' },
+          ]}
         />
-        <div className="ml-auto flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
-          <button
-            type="button"
-            onClick={() => setArchivedOnly(false)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              !archivedOnly
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900'
-            }`}
-          >
-            Актуальные
-          </button>
-          <button
-            type="button"
-            onClick={() => setArchivedOnly(true)}
-            className={`rounded-lg px-3 py-1.5 text-sm ${
-              archivedOnly
-                ? 'bg-white text-zinc-900 shadow-sm'
-                : 'text-zinc-500 hover:text-zinc-900'
-            }`}
-          >
-            Архивные
-          </button>
-        </div>
-      </div>
+      </ListToolbar>
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -132,28 +102,22 @@ export function NotesPage() {
       ) : null}
 
       {!notes.isPending && !notes.isError ? (
-        rows.length === 0 ? (
+        sortedRows.length === 0 ? (
           <Card>
-            <CardTitle>{archivedOnly ? 'Архив пуст' : 'Заметок нет'}</CardTitle>
+            <CardTitle>Заметок нет</CardTitle>
             <CardDescription>
-              {archivedOnly
-                ? 'Удалённые заметки появятся здесь.'
-                : 'Запишите идею, наблюдение или ссылку, чтобы вернуться к ней позже.'}
+              Запишите идею, наблюдение или ссылку, чтобы вернуться к ней позже.
             </CardDescription>
-            {!archivedOnly ? (
-              <Button className="mt-4" onClick={() => setDrawer({ note: null, startInEdit: true })}>
-                Новая заметка
-              </Button>
-            ) : null}
+            <Button className="mt-4" onClick={() => setDrawer({ note: null, startInEdit: true })}>
+              Новая заметка
+            </Button>
           </Card>
         ) : (
           <div className="space-y-2">
-            {rows.map((note) => (
+            {sortedRows.map((note) => (
               <Card
                 key={note.id}
-                className={`flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:border-emerald-300 ${
-                  note.archivedAt ? 'opacity-60' : ''
-                }`}
+                className="flex cursor-pointer flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:border-emerald-300"
                 onClick={() => setDrawer({ note })}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -166,7 +130,6 @@ export function NotesPage() {
                         {note.title}
                       </span>
                       {note.pinned ? <Badge tone="info">Закреплена</Badge> : null}
-                      {note.archivedAt ? <Badge tone="neutral">Архив</Badge> : null}
                       {note.attachmentCount > 0 ? (
                         <span
                           className="inline-flex items-center gap-1 text-xs text-zinc-500"
@@ -198,34 +161,18 @@ export function NotesPage() {
                   >
                     <PinIcon filled={note.pinned} />
                   </Button>
-                  {note.archivedAt ? (
-                    <Button
-                      variant="ghost"
-                      className="h-8 w-8 p-0"
-                      aria-label="Вернуть заметку"
-                      title="Вернуть"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        restoreMutation.mutate(note);
-                      }}
-                      disabled={restoreMutation.isPending}
-                    >
-                      <UndoIcon />
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
-                      aria-label="Удалить заметку"
-                      title="Удалить"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setDrawer({ note, startWithDelete: true });
-                      }}
-                    >
-                      <TrashIcon />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-zinc-500 hover:text-red-700"
+                    aria-label="Удалить заметку"
+                    title="Удалить"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDrawer({ note, startWithDelete: true });
+                    }}
+                  >
+                    <TrashIcon />
+                  </Button>
                   <Button
                     variant="ghost"
                     className="h-8 w-8 p-0"

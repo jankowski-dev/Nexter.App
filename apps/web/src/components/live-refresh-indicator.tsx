@@ -1,25 +1,5 @@
 import { useIsFetching } from '@tanstack/react-query';
-import { useRouterState } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-
-const LIVE_ROUTES: Array<{ path: string; keyPrefixes: string[] }> = [
-  { path: '/dashboard', keyPrefixes: ['dashboard', 'habits'] },
-  { path: '/portfolio', keyPrefixes: ['positions', 'trade-groups', 'buy-list'] },
-  { path: '/statistics', keyPrefixes: ['reports'] },
-  { path: '/watchlist', keyPrefixes: ['watchlist'] },
-  { path: '/operations', keyPrefixes: ['operations'] },
-  { path: '/testing', keyPrefixes: ['trading-bot'] },
-];
-
-function routeFor(pathname: string) {
-  return LIVE_ROUTES.find((route) => route.path === pathname) ?? null;
-}
-
-function queryMatches(route: { keyPrefixes: string[] }, queryKey: readonly unknown[]): boolean {
-  const first = queryKey[0];
-  if (typeof first !== 'string') return false;
-  return route.keyPrefixes.some((prefix) => first === prefix || first.startsWith(`${prefix}-`));
-}
 
 export function FanIcon({ spinning }: { spinning: boolean }) {
   return (
@@ -43,11 +23,7 @@ export function FanIcon({ spinning }: { spinning: boolean }) {
 }
 
 export function LiveRefreshIndicator() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const route = routeFor(pathname);
-  const fetching = useIsFetching({
-    predicate: (query) => (route ? queryMatches(route, query.queryKey) : false),
-  });
+  const fetching = useIsFetching();
   const [mounted, setMounted] = useState(false);
   const [active, setActive] = useState(false);
   const startedAt = useRef(0);
@@ -66,13 +42,6 @@ export function LiveRefreshIndicator() {
       hideTimer.current = null;
       unmountTimer.current = null;
     };
-
-    if (!route) {
-      clearTimers();
-      setMounted(false);
-      setActive(false);
-      return;
-    }
 
     if (fetching > 0) {
       clearTimers();
@@ -94,9 +63,9 @@ export function LiveRefreshIndicator() {
       if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
       hideTimer.current = null;
     };
-  }, [fetching, route, mounted]);
+  }, [fetching, mounted]);
 
-  if (!route || !mounted) return null;
+  if (!mounted) return null;
 
   return (
     <div

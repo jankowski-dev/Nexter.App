@@ -148,8 +148,8 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // The trade journal opens the sell drawer; the full card still has lots and legs.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Сделки' }).click();
-  await expect(page.getByText('Активные сделки')).toBeVisible();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
+  await expect(page.getByText('Активные ордера')).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   let sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByRole('heading', { name: 'Продать BASED' })).toBeVisible();
@@ -161,7 +161,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // Partial manual sell from the selected trade.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await sellDrawer.getByRole('button', { name: 'Записать продажу вручную' }).click();

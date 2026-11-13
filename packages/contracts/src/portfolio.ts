@@ -272,3 +272,25 @@ export type DashboardDataQuality = z.infer<typeof dashboardDataQualitySchema>;
 export type EquityCurvePoint = z.infer<typeof equityCurvePointSchema>;
 export type EquityCurve = z.infer<typeof equityCurveSchema>;
 export type PortfolioSnapshot = z.infer<typeof portfolioSnapshotSchema>;
+
+export const portfolioTokenSummarySchema = z.object({
+  asset: assetSchema,
+  investedUsd: z.string(),
+  realizedPnlUsd: z.string(),
+  unrealizedPnlUsd: z.string().nullable(),
+  positiveUnrealizedUsd: z.string(),
+  negativeUnrealizedUsd: z.string(),
+  totalPnlUsd: z.string(),
+  turnoverUsd: z.string(),
+  breakEvenPriceUsd: z.string().nullable(),
+  openOrdersCount: z.number().int().nonnegative(),
+  ordersCount: z.number().int().nonnegative(),
+  remainingAmount: z.string(),
+});
+
+export const portfolioTokenSummariesResponseSchema = z.object({
+  data: z.array(portfolioTokenSummarySchema),
+});
+
+export type PortfolioTokenSummary = z.infer<typeof portfolioTokenSummarySchema>;
+export type PortfolioTokenSummariesResponse = z.infer<typeof portfolioTokenSummariesResponseSchema>;

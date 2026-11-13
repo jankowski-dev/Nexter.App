@@ -174,9 +174,9 @@ test('buy drawer preview and on-chain exchange UI', async ({ page }) => {
 
   await page.reload();
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Основной список' }).click();
-  await expect(page.getByText('BASED', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Купить' }).first().click();
+  const basedRow = page.getByRole('row').filter({ hasText: 'BASED' }).first();
+  await expect(basedRow).toBeVisible();
+  await basedRow.getByRole('button', { name: 'Купить' }).click();
 
   const buyDrawer = page.getByRole('dialog');
   await expect(buyDrawer.getByRole('heading', { name: 'Купить BASED' })).toBeVisible();
