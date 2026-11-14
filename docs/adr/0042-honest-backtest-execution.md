@@ -32,3 +32,4 @@ The free GeckoTerminal daily OHLCV endpoint gives true high/low for BSC/Ethereum
 - Existing runs are immutable and are not rewritten. New runs use the corrected engine; old PDFs label CoinGecko data as synthetic because the flag is absent.
 - The free GeckoTerminal window is about six months. Longer true-OHLC history would require a paid provider, pagination or another source and is not part of this change.
 - No schema change, migration, ledger, swap or signing change.
+- Production release on 2026-11-14: PR #119 merged as `e6fc70b`, deployment `6ebf2d82-a47a-4e77-a937-dbfd0d6d2686`, bundle `assets/index-C5881s6H.js`, `/ready` 200.
