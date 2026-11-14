@@ -216,6 +216,9 @@ function conditionsTable(
 ): Content {
   const stopLoss = numberParam(run.strategyParams.stopLossPct);
   const takeProfit = numberParam(run.strategyParams.takeProfitPct);
+  const synthetic =
+    run.candles.some((candle) => candle.synthetic === true) ||
+    (run.source === 'coingecko' && run.candles.every((candle) => candle.synthetic === undefined));
   const rows: Content[][] = [
     conditionRow('Стратегия', `${strategy.name} (${strategy.key})`),
     conditionRow('Токен', `${run.asset.symbol} · ${run.asset.name}`),
@@ -225,6 +228,11 @@ function conditionsTable(
       `${run.days} дней${firstDate && lastDate ? ` · ${formatDate(firstDate)} — ${formatDate(lastDate)}` : ''}`,
     ),
     conditionRow('Источник данных', `${sourceLabel(run.source)} · ${run.candles.length} свечей`),
+    conditionRow(
+      'Качество данных',
+      synthetic ? 'синтетические дневные точки' : 'OHLC',
+      synthetic ? AMBER : DARK,
+    ),
     conditionRow(
       'Пропуски в данных',
       missingDays > 0 ? `${missingDays} дн.` : 'нет',
@@ -236,14 +244,18 @@ function conditionsTable(
     conditionRow(
       'Стоп-лосс',
       run.useStopLoss && stopLoss !== null
-        ? `${stopLoss}% · внутри дня, гэп — по открытию`
+        ? synthetic
+          ? `${stopLoss}% · по закрытию (синтетические свечи)`
+          : `${stopLoss}% · внутри дня, гэп — по открытию`
         : 'выключен',
       run.useStopLoss && stopLoss !== null ? DARK : AMBER,
     ),
     conditionRow(
       'Тейк-профит',
       run.useTakeProfit && takeProfit !== null
-        ? `${takeProfit}% · внутри дня, гэп — по открытию`
+        ? synthetic
+          ? `${takeProfit}% · по порогу (синтетические свечи)`
+          : `${takeProfit}% · внутри дня, гэп — по открытию`
         : 'выключен',
       run.useTakeProfit && takeProfit !== null ? DARK : AMBER,
     ),

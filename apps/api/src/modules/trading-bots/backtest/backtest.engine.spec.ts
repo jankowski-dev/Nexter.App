@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { BotCandle } from '@nexter/contracts';
 import { runBacktest } from './backtest.engine';
 import { crashProtectedGrid, meanReversion } from '../strategies';
@@ -194,6 +194,64 @@ describe('runBacktest', () => {
     expect(takeProfit?.reason).toBe('тейк-профит (внутри дня)');
     expect(Number(takeProfit?.priceUsd)).toBeGreaterThan(102);
   });
+  it('fills take-profit at the threshold on synthetic candles instead of the sampled spike', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 5,
+      stopLossPct: 50,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const syntheticSpike: BotCandle = {
+      ...bar('2026-01-05', 300, 300, 300, 300),
+      synthetic: true,
+    };
+    const result = runBacktest(meanReversion, params, [...entry, syntheticSpike]);
+
+    const takeProfit = result.trades.find((trade) => trade.side === 'sell');
+    expect(takeProfit?.reason).toBe('тейк-профит (по порогу, синтетическая свеча)');
+    expect(Number(takeProfit?.priceUsd)).toBeLessThan(150);
+  });
+
+  it('uses the close for a synthetic stop-loss instead of the sampled open', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 50,
+      stopLossPct: 3,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const syntheticDrop: BotCandle = {
+      ...bar('2026-01-05', 90, 90, 80, 80),
+      synthetic: true,
+    };
+    const result = runBacktest(meanReversion, params, [...entry, syntheticDrop]);
+
+    const stop = result.trades.find((trade) => trade.side === 'sell');
+    expect(stop?.reason).toBe('стоп-лосс (по закрытию, синтетическая свеча)');
+    expect(Number(stop?.priceUsd)).toBeCloseTo(80 * 0.999, 6);
+  });
+
+  it('evaluates stateful strategies on a protective take-profit candle', () => {
+    const evaluate = vi.fn((context) => meanReversion.evaluate(context));
+    const wrapped = { ...meanReversion, evaluate };
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 50,
+      takeProfitPct: 5,
+      stopLossPct: 50,
+    });
+    const entry = series([100, 100, 100, 97]);
+    const profitBar = bar('2026-01-05', 97, 110, 97, 102);
+    const result = runBacktest(wrapped, params, [...entry, profitBar]);
+
+    expect(result.trades.some((trade) => trade.reason === 'тейк-профит (внутри дня)')).toBe(true);
+    expect(evaluate).toHaveBeenCalledTimes(5);
+  });
+
   it('runs a stateful crash-protected grid through pause, resume and take-profit', () => {
     const params = crashProtectedGrid.parseParams({
       gridStepPct: 1.5,

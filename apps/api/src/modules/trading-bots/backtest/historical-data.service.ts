@@ -58,23 +58,38 @@ export class HistoricalDataService {
 
     let source = 'coingecko';
     let candles: HistoricalCandle[] = [];
-    if (asset.coingeckoId) {
-      candles = await this.coingecko.getDailyCandles(asset.coingeckoId, days);
-    }
+    let geckoCandles: HistoricalCandle[] = [];
 
-    if (candles.length < Math.min(days, MIN_CANDLES) && asset.contractAddress) {
-      const fallback = await this.geckoterminal.getDailyCandles(
+    // Prefer true daily OHLCV when the public source covers the requested period.
+    // If it covers only part of the period, the longer sampled series wins and is
+    // marked synthetic so the engine can use conservative exit fills.
+    if (asset.contractAddress && (asset.chainCode === 'bsc' || asset.chainCode === 'ethereum')) {
+      geckoCandles = await this.geckoterminal.getDailyCandles(
         asset.chainCode,
         asset.contractAddress,
         days,
       );
-      if (fallback.length > candles.length) {
-        candles = fallback;
+      if (geckoCandles.length >= days) {
+        candles = geckoCandles;
         source = 'geckoterminal';
       }
     }
 
+    if (candles.length === 0 && geckoCandles.length > 0) {
+      candles = geckoCandles;
+      source = 'geckoterminal';
+    }
+
+    if (candles.length < days && asset.coingeckoId) {
+      const coingeckoCandles = await this.coingecko.getDailyCandles(asset.coingeckoId, days);
+      if (coingeckoCandles.length > candles.length) {
+        candles = coingeckoCandles;
+        source = 'coingecko';
+      }
+    }
+
     candles = candles
+      .map((candle) => ({ ...candle, synthetic: source === 'coingecko' }))
       .filter((candle) => isPositiveCandle(candle))
       .sort((left, right) => left.date.localeCompare(right.date))
       .slice(-days);
@@ -146,7 +161,10 @@ export class HistoricalDataService {
   seedForTests(assetId: string, days: number, source: string, candles: BotCandle[]): void {
     this.writeCache(`${assetId}:${days}`, {
       source,
-      candles: candles.map((candle) => ({ ...candle })),
+      candles: candles.map((candle) => ({
+        ...candle,
+        synthetic: candle.synthetic ?? source === 'coingecko',
+      })),
     });
   }
 

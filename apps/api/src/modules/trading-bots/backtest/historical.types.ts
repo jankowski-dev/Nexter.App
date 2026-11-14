@@ -5,6 +5,8 @@ export interface HistoricalCandle {
   lowUsd: string;
   closeUsd: string;
   volumeUsd: string | null;
+  /** True when the source only provides sampled daily points, not true OHLC. */
+  synthetic?: boolean;
 }
 
 export interface HistoricalSeries {

@@ -165,6 +165,9 @@ export function runBacktest(
     });
 
     const openPosition = position as OpenPosition | null;
+    const synthetic = candle.synthetic === true;
+    let protectiveExit = false;
+
     if (openPosition) {
       const avgCost = openPosition.costBasisUsd.div(openPosition.amount);
       const open = decimal(candle.openUsd);
@@ -178,7 +181,14 @@ export function runBacktest(
 
       if (stopLossPct !== null && options.useStopLoss !== false) {
         const stopPrice = avgCost.mul(new Decimal(1).minus(stopLossPct / 100));
-        if (open.lte(stopPrice)) {
+        if (synthetic) {
+          // A sampled daily point cannot prove an intrabar low. Use the close
+          // (the only end-of-day observation) and keep the stop conservative.
+          if (close.lte(stopPrice)) {
+            exitPrice = close;
+            exitReason = 'стоп-лосс (по закрытию, синтетическая свеча)';
+          }
+        } else if (open.lte(stopPrice)) {
           exitPrice = open;
           exitReason = 'стоп-лосс (гэп)';
         } else if (low.lte(stopPrice)) {
@@ -189,7 +199,14 @@ export function runBacktest(
 
       if (exitPrice === null && takeProfitPct !== null && options.useTakeProfit !== false) {
         const takeProfitPrice = avgCost.mul(new Decimal(1).plus(takeProfitPct / 100));
-        if (open.gte(takeProfitPrice)) {
+        if (synthetic) {
+          // Do not book the sampled high/open as a fill. A limit take-profit
+          // can only be assumed to fill at its threshold when OHLC is unknown.
+          if (close.gte(takeProfitPrice)) {
+            exitPrice = takeProfitPrice;
+            exitReason = 'тейк-профит (по порогу, синтетическая свеча)';
+          }
+        } else if (open.gte(takeProfitPrice)) {
           exitPrice = open;
           exitReason = 'тейк-профит (гэп)';
         } else if (high.gte(takeProfitPrice)) {
@@ -200,22 +217,22 @@ export function runBacktest(
 
       if (exitPrice !== null) {
         executeSell(candle.date, exitPrice, exitReason);
-        pushEquity(candle.date, close);
-        continue;
+        protectiveExit = true;
       }
     }
 
+    const postExitPosition = position as OpenPosition | null;
     const decision = definition.evaluate({
       now: new Date(`${candle.date}T23:59:59.999Z`),
       params,
       priceUsd: candle.closeUsd,
       change24hPct,
       history: samples,
-      position: openPosition
+      position: postExitPosition
         ? {
-            amount: amountString(openPosition.amount),
-            avgCostUsd: usdString(openPosition.costBasisUsd.div(openPosition.amount)),
-            costBasisUsd: usdString(openPosition.costBasisUsd),
+            amount: amountString(postExitPosition.amount),
+            avgCostUsd: usdString(postExitPosition.costBasisUsd.div(postExitPosition.amount)),
+            costBasisUsd: usdString(postExitPosition.costBasisUsd),
           }
         : null,
       buyCount,
@@ -225,10 +242,12 @@ export function runBacktest(
     });
     strategyState = decision.nextState ?? strategyState;
 
-    if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
-      executeBuy(candle.date, close, decision.reason);
-    } else if (decision.action === 'sell' && position) {
-      executeSell(candle.date, close, decision.reason);
+    if (!protectiveExit) {
+      if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
+        executeBuy(candle.date, close, decision.reason);
+      } else if (decision.action === 'sell' && position) {
+        executeSell(candle.date, close, decision.reason);
+      }
     }
 
     pushEquity(candle.date, close);
