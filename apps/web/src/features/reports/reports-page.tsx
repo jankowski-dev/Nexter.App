@@ -70,6 +70,13 @@ function formatRate(value: string | null): string {
   }).format(number)}%`;
 }
 
+const metricSurfaces = ['emerald', 'sky', 'amber', 'violet', 'rose'] as const;
+
+function metricSurface(label: string): (typeof metricSurfaces)[number] {
+  const hash = Array.from(label).reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0);
+  return metricSurfaces[hash % metricSurfaces.length] as (typeof metricSurfaces)[number];
+}
+
 function Metric({
   label,
   value,
@@ -82,7 +89,7 @@ function Metric({
   tone?: string;
 }) {
   return (
-    <Card>
+    <Card className={`tone-surface tone-surface-${metricSurface(label)}`}>
       <CardTitle>{label}</CardTitle>
       <div
         className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}

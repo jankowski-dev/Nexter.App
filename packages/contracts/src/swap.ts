@@ -55,6 +55,24 @@ export const swapConfigResponseSchema = z.object({
   maxSlippageBps: z.number().int().positive(),
 });
 
+export const swapBalanceQuerySchema = z.object({
+  chain: swapChainCodeSchema,
+  wallet: z.string().regex(/^0x[0-9a-fA-F]{40}$/),
+});
+
+export const swapTokenBalanceSchema = z.object({
+  symbol: z.string(),
+  address: z.string(),
+  decimals: z.number().int().min(0).max(36),
+  balance: z.string().nullable(),
+});
+
+export const swapBalancesResponseSchema = z.object({
+  chain: swapChainCodeSchema,
+  wallet: z.string(),
+  balances: z.array(swapTokenBalanceSchema),
+});
+
 export const swapQuoteRequestSchema = z
   .object({
     chain: swapChainCodeSchema,
@@ -238,6 +256,9 @@ export type SwapChainCode = z.infer<typeof swapChainCodeSchema>;
 export type SwapToken = z.infer<typeof swapTokenSchema>;
 export type SwapChainConfig = z.infer<typeof swapChainConfigSchema>;
 export type SwapConfigResponse = z.infer<typeof swapConfigResponseSchema>;
+export type SwapBalanceQuery = z.infer<typeof swapBalanceQuerySchema>;
+export type SwapTokenBalance = z.infer<typeof swapTokenBalanceSchema>;
+export type SwapBalancesResponse = z.infer<typeof swapBalancesResponseSchema>;
 export type SwapQuoteRequest = z.infer<typeof swapQuoteRequestSchema>;
 export type SwapOrderSummary = z.infer<typeof swapOrderSummarySchema>;
 export type SwapOrderDetail = z.infer<typeof swapOrderDetailSchema>;

@@ -17,7 +17,9 @@ import type {
   ApprovalSubmittedRequest,
   ApprovalsQuery,
   ApprovalsResponse,
+  SwapBalanceQuery,
   SwapBuildRequest,
+  SwapBalancesResponse,
   SwapBuildResponse,
   SwapConfigResponse,
   SwapOrderDetail,
@@ -32,6 +34,7 @@ import {
   approvalBuildRequestSchema,
   approvalSubmittedRequestSchema,
   approvalsQuerySchema,
+  swapBalanceQuerySchema,
   swapBuildRequestSchema,
   swapOrdersQuerySchema,
   swapQuoteRequestSchema,
@@ -51,6 +54,15 @@ export class SwapController {
     private readonly swaps: SwapService,
     private readonly approvals: ApprovalService,
   ) {}
+
+  @Get('balances')
+  balances(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(swapBalanceQuerySchema)) query: SwapBalanceQuery,
+  ): Promise<SwapBalancesResponse> {
+    void auth;
+    return this.swaps.balances(query.chain, query.wallet);
+  }
 
   @Get('config')
   config(): SwapConfigResponse {

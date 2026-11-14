@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiFetch, apiPost } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { FormError, Field } from './form-helpers';
+import { FormError } from './form-helpers';
 import { authStatusResponseSchema, loginResponseSchema } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
@@ -64,54 +64,46 @@ export function LoginPage() {
 
   return (
     <div className="space-y-5">
-      <div className="text-center">
-        <h1 className="text-xl font-semibold">Вход</h1>
-        <p className="mt-1 text-sm">Пароль и код из приложения-аутентификатора.</p>
-      </div>
-
       {error ? <FormError>{error}</FormError> : null}
 
       <form className={`space-y-4 ${shake ? 'auth-shake' : ''}`} onSubmit={submit}>
-        <Field label="Email">
-          <Input
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-        </Field>
+        <Input
+          type="email"
+          autoComplete="username"
+          aria-label="Email"
+          placeholder="Email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          required
+        />
 
-        <Field label="Пароль">
-          <Input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => {
-              const next = event.target.value;
-              setPassword(next);
-              visual.setLit(next.length);
-              if (visual.state === 'error') visual.setState('idle');
-            }}
-            required
-          />
-        </Field>
+        <Input
+          type="password"
+          autoComplete="current-password"
+          aria-label="Пароль"
+          placeholder="Пароль"
+          value={password}
+          onChange={(event) => {
+            const next = event.target.value;
+            setPassword(next);
+            visual.setLit(next.length);
+            if (visual.state === 'error') visual.setState('idle');
+          }}
+          required
+        />
 
         <Button className="w-full" type="submit" disabled={loading}>
           {loading ? 'Проверяем…' : 'Войти'}
         </Button>
       </form>
 
-      <div className="flex items-center justify-between text-sm">
-        <Link className="hover:text-zinc-900" to="/reset-password">
-          Забыли пароль?
-        </Link>
-        {status.data && !status.data.initialized ? (
+      {status.data && !status.data.initialized ? (
+        <div className="text-center text-sm">
           <Link className="text-emerald-700 hover:text-emerald-800" to="/setup">
             Первый запуск
           </Link>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

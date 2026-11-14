@@ -1,5 +1,6 @@
 import { ChainToggle } from '@/components/chain-toggle';
 import { NavIcon } from '@/components/nav-icon';
+import { NexterLogo } from '@/components/nexter-logo';
 import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
@@ -239,11 +240,16 @@ function RootLayoutContent() {
 
       <div className="flex min-h-dvh w-full">
         <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 overflow-hidden border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
-          <Link to="/dashboard" className="mb-6 block shrink-0 px-2">
-            <div className="text-lg font-semibold tracking-tight text-white">
-              {messages.app.name}
+          <Link to="/dashboard" className="mb-6 flex shrink-0 items-center gap-3 px-2">
+            <NexterLogo lit={8} className="h-9 w-8 shrink-0" />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold leading-tight text-white">
+                Nexter System
+              </div>
+              <div className="whitespace-nowrap text-[7px] uppercase tracking-[0.08em] text-zinc-400">
+                Analytics and Automation
+              </div>
             </div>
-            <div className="text-xs text-zinc-400">{messages.app.tagline}</div>
           </Link>
 
           <nav
@@ -315,8 +321,8 @@ function RootLayoutContent() {
 
           <div className="mt-4 shrink-0 space-y-2">
             <Button
-              className="w-full justify-center border border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-              variant="secondary"
+              className="w-full justify-center gap-2 text-zinc-300 hover:bg-white/5 hover:text-white"
+              variant="ghost"
               onClick={appLock.lock}
             >
               <LockIcon />

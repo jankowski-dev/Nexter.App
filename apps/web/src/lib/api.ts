@@ -56,6 +56,7 @@ import {
   taskImageSchema,
   taskSchema,
   tasksResponseSchema,
+  swapBalancesResponseSchema,
   swapBuildResponseSchema,
   swapConfigResponseSchema,
   swapOrderDetailSchema,
@@ -157,6 +158,7 @@ import {
   type TasksResponse,
   type SwapChainCode,
   type SwapBuildResponse,
+  type SwapBalancesResponse,
   type SwapConfigResponse,
   type SwapOrderDetail,
   type SwapPreview,
@@ -618,6 +620,13 @@ export async function fetchAuditLog(
   } = {},
 ): Promise<AuditLogResponse> {
   return apiFetch(`/api/v1/audit-log${queryString(params)}`, {}, auditLogResponseSchema);
+}
+
+export async function fetchSwapBalances(params: {
+  chain: 'bsc' | 'ethereum';
+  wallet: string;
+}): Promise<SwapBalancesResponse> {
+  return apiFetch(`/api/v1/swap/balances${queryString(params)}`, {}, swapBalancesResponseSchema);
 }
 
 export async function fetchSwapConfig(): Promise<SwapConfigResponse> {

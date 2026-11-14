@@ -277,6 +277,8 @@ export const portfolioTokenSummarySchema = z.object({
   asset: assetSchema,
   investedUsd: z.string(),
   currentValueUsd: z.string(),
+  priceUsd: z.string().nullable(),
+  change24hPct: z.string().nullable(),
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string().nullable(),
   positiveUnrealizedUsd: z.string(),

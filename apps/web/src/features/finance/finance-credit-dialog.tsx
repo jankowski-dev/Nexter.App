@@ -1,9 +1,11 @@
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
+import { ExpressionInput } from '@/components/ui/expression-input';
 import { Select } from '@/components/ui/select';
 import { createFinanceCreditDrawdown } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import { normalizeAmountInput } from '@/lib/expression';
 import { useState } from 'react';
 import type { FinanceAccountWithBalance, FinanceCurrency } from '@nexter/contracts';
 
@@ -53,15 +55,19 @@ export function FinanceCreditDialog({
     Boolean(selectedDestination) && selectedDestination?.currency !== creditCurrency;
 
   async function save(): Promise<void> {
-    if (!amount.trim() || (mode === 'new' && !name.trim())) {
+    const normalizedAmount = normalizeAmountInput(amount);
+    const normalizedFxRate = normalizeAmountInput(fxRate);
+    const normalizedDestinationAmount = normalizeAmountInput(destinationAmount);
+
+    if (!normalizedAmount || (mode === 'new' && !name.trim())) {
       setError('Заполните сумму и название кредита.');
       return;
     }
-    if (mode === 'new' && currency !== 'BYN' && !fxRate.trim()) {
+    if (mode === 'new' && currency !== 'BYN' && !normalizedFxRate) {
       setError('Укажите курс кредита к BYN.');
       return;
     }
-    if (currenciesDiffer && !destinationAmount.trim()) {
+    if (currenciesDiffer && !normalizedDestinationAmount) {
       setError('Укажите сумму зачисления в валюте счёта.');
       return;
     }
@@ -76,12 +82,12 @@ export function FinanceCreditDialog({
           : {
               name: name.trim(),
               currency,
-              fxRate: currency === 'BYN' ? '1' : fxRate,
+              fxRate: currency === 'BYN' ? '1' : normalizedFxRate,
             }),
-        amount,
+        amount: normalizedAmount,
         occurredOn,
         destinationAccountId: destinationAccountId || null,
-        ...(currenciesDiffer ? { destinationAmount } : {}),
+        ...(currenciesDiffer ? { destinationAmount: normalizedDestinationAmount } : {}),
         description: description.trim() || null,
       });
       onSaved();
@@ -178,11 +184,10 @@ export function FinanceCreditDialog({
             {currency !== 'BYN' ? (
               <label className="block text-sm text-zinc-600">
                 Курс к BYN
-                <Input
+                <ExpressionInput
                   className="mt-1"
-                  inputMode="decimal"
                   value={fxRate}
-                  onChange={(event) => setFxRate(event.target.value)}
+                  onChange={setFxRate}
                   placeholder="2.965"
                 />
               </label>
@@ -193,11 +198,10 @@ export function FinanceCreditDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">
             Сумма кредита
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={setAmount}
               placeholder="5000.00"
             />
           </label>
@@ -234,11 +238,10 @@ export function FinanceCreditDialog({
         {currenciesDiffer ? (
           <label className="block text-sm text-zinc-600">
             Сумма зачисления в {selectedDestination?.currency}
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={destinationAmount}
-              onChange={(event) => setDestinationAmount(event.target.value)}
+              onChange={setDestinationAmount}
               placeholder="0.00"
             />
           </label>

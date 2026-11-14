@@ -6,7 +6,14 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchDashboardSummary, fetchPortfolioTokenSummaries, fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPrice, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
+import {
+  formatPct,
+  formatPrice,
+  formatSignedUsd,
+  formatUsd,
+  pluralizeRu,
+  pnlTone,
+} from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
@@ -50,28 +57,28 @@ function PortfolioMetric({
 
 const statTones = {
   emerald: {
-    card: 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white',
+    card: 'tone-surface tone-surface-emerald',
     title: 'text-emerald-800',
     icon: 'bg-emerald-100 text-emerald-700',
     value: 'text-emerald-950',
     description: 'text-emerald-800/60',
   },
   sky: {
-    card: 'border-sky-200 bg-gradient-to-br from-sky-50 via-white to-white',
+    card: 'tone-surface tone-surface-sky',
     title: 'text-sky-800',
     icon: 'bg-sky-100 text-sky-700',
     value: 'text-sky-950',
     description: 'text-sky-800/60',
   },
   amber: {
-    card: 'border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white',
+    card: 'tone-surface tone-surface-amber',
     title: 'text-amber-800',
     icon: 'bg-amber-100 text-amber-700',
     value: 'text-amber-950',
     description: 'text-amber-800/60',
   },
   violet: {
-    card: 'border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white',
+    card: 'tone-surface tone-surface-violet',
     title: 'text-violet-800',
     icon: 'bg-violet-100 text-violet-700',
     value: 'text-violet-950',
@@ -94,7 +101,7 @@ function PortfolioStatCard({
 }) {
   const styles = statTones[tone];
   return (
-    <Card className={`relative overflow-hidden border ${styles.card}`}>
+    <Card className={`relative overflow-hidden ${styles.card}`}>
       <div className="flex items-start justify-between gap-3">
         <CardTitle className={styles.title}>{title}</CardTitle>
         <span
@@ -145,6 +152,13 @@ export function PortfolioPage() {
     enabled: tab === 'portfolio',
     refetchInterval: 30_000,
   });
+  const activeTokenRows = (tokenSummaries.data?.data ?? []).filter(
+    (item) => item.openOrdersCount > 0,
+  );
+  const totalActiveInvested = activeTokenRows.reduce(
+    (sum, item) => sum + Number(item.investedUsd),
+    0,
+  );
 
   if ((tab === 'portfolio' || tab === 'trades') && positions.isPending) {
     return (
@@ -283,14 +297,18 @@ export function PortfolioPage() {
           {!tokenSummaries.isPending && !tokenSummaries.isError ? (
             <Card>
               <CardTitle>Портфель по токенам</CardTitle>
-              {(tokenSummaries.data?.data ?? []).filter((item) => item.openOrdersCount > 0)
-                .length === 0 ? (
+              {activeTokenRows.length === 0 ? (
                 <p className="mt-4 text-sm text-zinc-600">Открытых ордеров нет.</p>
               ) : (
                 <div className="mt-4 space-y-2">
-                  {(tokenSummaries.data?.data ?? [])
-                    .filter((item) => item.openOrdersCount > 0)
-                    .map((item) => (
+                  {activeTokenRows.map((item) => {
+                    const invested = Number(item.investedUsd);
+                    const share =
+                      totalActiveInvested > 0
+                        ? Math.min(100, (invested / totalActiveInvested) * 100)
+                        : 0;
+
+                    return (
                       <button
                         key={item.asset.id}
                         type="button"
@@ -315,7 +333,7 @@ export function PortfolioPage() {
                             </div>
                           </div>
                           <div
-                            className="min-w-[130px]"
+                            className="min-w-[120px]"
                             title="Реализованный + нереализованный по активным ордерам"
                           >
                             <div className="text-[10px] text-zinc-500">P&L</div>
@@ -327,22 +345,49 @@ export function PortfolioPage() {
                               {formatSignedUsd(item.totalPnlUsd)}
                             </div>
                           </div>
-                          <div className="whitespace-nowrap text-sm font-medium text-zinc-600">
+                          <div
+                            className="min-w-[145px]"
+                            title="Текущий курс и изменение за 24 часа"
+                          >
+                            <div className="text-[10px] text-zinc-500">Курс</div>
+                            <div className="mt-0.5 flex items-baseline gap-2">
+                              <span
+                                className={`font-mono text-lg font-semibold tracking-tight ${pnlTone(
+                                  item.change24hPct,
+                                )}`}
+                              >
+                                {formatPrice(item.priceUsd)}
+                              </span>
+                              <span className={`text-xs font-medium ${pnlTone(item.change24hPct)}`}>
+                                {item.change24hPct ? formatPct(item.change24hPct) : '—'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="whitespace-nowrap text-[11px] text-zinc-500">
                             {item.openOrdersCount}{' '}
-                            {pluralizeRu(
-                              item.openOrdersCount,
-                              'активный ордер',
-                              'активных ордера',
-                              'активных ордеров',
-                            )}
+                            {pluralizeRu(item.openOrdersCount, 'ордер', 'ордера', 'ордеров')}
                           </div>
                           <div className="ml-auto grid min-w-0 flex-1 grid-cols-2 gap-x-5 gap-y-2 text-right sm:grid-cols-3 xl:grid-cols-5">
-                            <PortfolioMetric
+                            <div
                               className="text-right"
-                              label="Инвестировано"
-                              value={formatUsd(item.investedUsd)}
-                              hint="Себестоимость открытых ордеров"
-                            />
+                              title={`${formatUsd(item.investedUsd)} — ${share.toFixed(1)}% от всех активных инвестиций`}
+                            >
+                              <div className="text-[10px] text-zinc-500">Инвестировано</div>
+                              <div className="mt-0.5 font-mono text-xs text-zinc-800">
+                                {formatUsd(item.investedUsd)}
+                              </div>
+                              <div className="mt-1 flex items-center justify-end gap-1.5">
+                                <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-200">
+                                  <div
+                                    className="h-full rounded-full bg-emerald-500"
+                                    style={{ width: `${Math.max(2, share)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-zinc-500">
+                                  {share.toFixed(0)}%
+                                </span>
+                              </div>
+                            </div>
                             <PortfolioMetric
                               className="text-right"
                               label="Капитал"
@@ -374,7 +419,8 @@ export function PortfolioPage() {
                           </div>
                         </div>
                       </button>
-                    ))}
+                    );
+                  })}
                 </div>
               )}
             </Card>

@@ -155,3 +155,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 
 - **UI-53** — the auth pages use the owner-supplied graphite concept: full-screen `#484848`, the 12-ray Nexter logo, Exo font, dark fields and a lime accent. Login, setup, TOTP, recovery and reset keep their existing APIs. The logo lights with input progress and turns red/green on error/success.
 - `Заблокировать` sits next to `Выйти` in the desktop sidebar and as an icon in the mobile header. The first use configures a 6-digit PIN; later uses cover the app with an opaque lock screen. The PIN is hashed with PBKDF2 and stored only in the browser; `Настройки → Безопасность` can change/remove it. This is a privacy screen, not a replacement for password + 2FA. See ADR 0044.
+
+## Finance arithmetic, metric surfaces and portfolio rates
+
+- **UI-54** — finance amount fields evaluate small arithmetic expressions safely on blur/Enter; dashboard, Finance, Statistics and portfolio metrics share the same tinted surfaces in light and dark themes; the sidebar uses the 12-ray brand; auth is reduced to the minimal logo/fields layout. Portfolio token rows show current price, 24h change and an invested-share bar. The buy drawer has a custom stablecoin selector with on-chain wallet balances. The monthly realized P&L bar chart was rebuilt with gradients, grid, hover and tooltip. See ADR 0045.
