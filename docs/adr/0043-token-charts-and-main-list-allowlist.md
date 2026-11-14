@@ -38,3 +38,7 @@ The main list contained 15 BSC tokens. Four were already allowed (`APR`, `BASED`
 2. Deploy the API; the pre-deploy migration runner applies `0039`.
 3. Run `node scripts/enrich-main-watchlist.mjs` (or the same file in the API container) with the owner `DATABASE_URL`; verify 15 updated rows.
 4. Check `/ready`, the token-base chart, the main-list modal, and the green `Купить` state for the new addresses.
+
+## Production release (2026-11-14)
+
+PR #131 merged as `4ea367a`; deployment `4d98f107-81cd-41dd-98a8-7d09130b5c10`; bundle `assets/index-cjs_gB0g.js`; migration `0039` applied; `/health` and `/ready` 200. The enrichment script updated all 15 main-list rows and wrote 15 `watchlist.enriched` audit rows. Targeted `watchlist` backup: 43 rows, SHA-256 `46643b45ff3ec65b45cf35a192ad7c6f44c44f8869d3f5f6ccf6f0ad7d5b79a9`.
