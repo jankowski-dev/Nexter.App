@@ -1,4 +1,11 @@
-import { Client } from 'pg';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(
+  join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', 'db', 'package.json'),
+);
+const { Client } = require('pg');
 
 /**
  * One-off enrichment for the tokens in the default "Основная" watchlist group.
