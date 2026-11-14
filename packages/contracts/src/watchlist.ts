@@ -58,6 +58,8 @@ export const watchlistEntrySchema = z.object({
   tags: z.array(z.string()),
   twitterUrl: z.string().nullable(),
   websiteUrl: z.string().nullable(),
+  telegramUrl: z.string().nullable(),
+  discordUrl: z.string().nullable(),
   bscContractAddress: z.string().nullable(),
   ethereumContractAddress: z.string().nullable(),
   investors: z.array(z.string()),
@@ -89,6 +91,8 @@ export const watchlistCreateRequestSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   twitterUrl: externalUrlSchema.optional(),
   websiteUrl: externalUrlSchema.optional(),
+  telegramUrl: externalUrlSchema.optional(),
+  discordUrl: externalUrlSchema.optional(),
   bscContractAddress: z
     .string()
     .regex(/^0x[0-9a-fA-F]{40}$/)
@@ -132,6 +136,8 @@ export const watchlistUpdateRequestSchema = z.object({
   tags: z.array(z.string().min(1).max(40)).max(20).optional(),
   twitterUrl: externalUrlSchema.optional(),
   websiteUrl: externalUrlSchema.optional(),
+  telegramUrl: externalUrlSchema.optional(),
+  discordUrl: externalUrlSchema.optional(),
   bscContractAddress: z
     .string()
     .regex(/^0x[0-9a-fA-F]{40}$/)
@@ -192,12 +198,36 @@ export const watchlistListQuerySchema = z.object({
   groupId: z.uuid().optional(),
 });
 
+export const watchlistChartQuerySchema = z.object({
+  days: z.coerce
+    .number()
+    .int()
+    .refine((value) => [30, 90, 180, 365].includes(value), {
+      message: 'days must be one of 30, 90, 180, 365',
+    })
+    .default(90),
+});
+
+export const watchlistChartPointSchema = z.object({
+  date: z.string(),
+  priceUsd: z.string(),
+});
+
+export const watchlistChartResponseSchema = z.object({
+  days: z.number().int(),
+  source: z.string(),
+  points: z.array(watchlistChartPointSchema),
+});
+
 export type WatchlistGroup = z.infer<typeof watchlistGroupSchema>;
 export type WatchlistGroupsResponse = z.infer<typeof watchlistGroupsResponseSchema>;
 export type WatchlistGroupCreateRequest = z.infer<typeof watchlistGroupCreateRequestSchema>;
 export type WatchlistGroupUpdateRequest = z.infer<typeof watchlistGroupUpdateRequestSchema>;
 export type WatchlistEntry = z.infer<typeof watchlistEntrySchema>;
 export type WatchlistResponse = z.infer<typeof watchlistResponseSchema>;
+export type WatchlistChartQuery = z.infer<typeof watchlistChartQuerySchema>;
+export type WatchlistChartPoint = z.infer<typeof watchlistChartPointSchema>;
+export type WatchlistChartResponse = z.infer<typeof watchlistChartResponseSchema>;
 export type WatchlistCreateRequest = z.infer<typeof watchlistCreateRequestSchema>;
 export type WatchlistUpdateRequest = z.infer<typeof watchlistUpdateRequestSchema>;
 export type WatchlistListQuery = z.infer<typeof watchlistListQuerySchema>;

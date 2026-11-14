@@ -38,6 +38,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Allowlist changes
 
 - Token addresses are code-owned and require review; do not add arbitrary tokens in production.
+- **Adding a BSC token.** Verify the contract on BscScan, read `decimals()` and `symbol()` from the chain, confirm a KyberSwap route and a DexScreener/CoinGecko listing, then add `{ symbol, name, address, decimals, native: false }` to `BSC_TOKENS` in `apps/api/src/modules/swap/token-registry.ts`. Update `token-registry.spec.ts`, add the matching contract address to the watchlist/asset (the main list falls back to `watchlist.bsc_contract_address`), and deploy. A green `Купить` button still requires the wallet to be in `SWAP_WALLET_ALLOWLIST` and execution to be enabled for the chain.
 - Wallet/router/executor/selector allowlists are environment-owned. Changing them requires a redeploy and a new quote/build check. The application role must not have DELETE on swap tables, approvals, or events.
 - Step-up TOTP is required above the configured threshold; the session window is five minutes. Missing/invalid provider USD fails closed.
 - Calldata is decoded at router level before a build is accepted. Simple mode is rejected; standard aggregator routes use the server-enforced order deadline, which the execution UI must display before signing. New signing is blocked after the deadline; a signed hash can still be recorded.
@@ -45,7 +46,7 @@ Set `SWAP_KILL_SWITCH=true` in Railway and redeploy (or restart) the API. New qu
 ## Ethereum (Phase 9)
 
 - `ETHEREUM_RPC_URL` is required for Ethereum build/simulation/tracking; it may be a private/MEV-protected endpoint. Quotes use KyberSwap and can work without an RPC.
-- Ethereum tokens are USDC (6 decimals), LINK, BASED, APR, and native ETH. Router/executor defaults are the deterministic Kyber addresses. Use per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` allowlists; the legacy global lists are BSC-only.
+- Ethereum tokens are USDC (6 decimals), LINK, BASED, APR, and native ETH. BSC additionally includes AKE, CLO, CYBER, CYC, GWEI, HOME, IRYS, ON, Q, SAHARA, and WARD (all 18 decimals). Router/executor defaults are the deterministic Kyber addresses. Use per-chain `SWAP_BSC_*`/`SWAP_ETHEREUM_*` allowlists; the legacy global lists are BSC-only.
 - Ethereum signing requires both `SWAP_EXECUTION_ENABLED=true` and `SWAP_ETHEREUM_EXECUTION_ENABLED=true`. The flag defaults to false and should be enabled only for acceptance/rollout. The kill switch remains global.
 - Ethereum confirmations default to `SWAP_ETHEREUM_CONFIRMATIONS=12`; BSC uses `SWAP_CONFIRMATIONS` or `SWAP_BSC_CONFIRMATIONS`.
 - WalletConnect/Tangem broadcasts the signed transaction through the wallet. The server cannot enforce MEV protection on that broadcast; use a wallet/device flow the owner trusts, and a private RPC for server-side reads/simulation.

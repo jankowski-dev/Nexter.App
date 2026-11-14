@@ -15,6 +15,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
+  WatchlistChartQuery,
+  WatchlistChartResponse,
   WatchlistCreateRequest,
   WatchlistEntry,
   WatchlistFromContractRequest,
@@ -29,6 +31,7 @@ import type {
   WatchlistUpdateRequest,
 } from '@nexter/contracts';
 import {
+  watchlistChartQuerySchema,
   watchlistCreateRequestSchema,
   watchlistFromContractRequestSchema,
   watchlistGroupCreateRequestSchema,
@@ -54,6 +57,15 @@ export class WatchlistController {
     @Query(new ZodValidationPipe(watchlistListQuerySchema)) query: WatchlistListQuery,
   ): Promise<WatchlistResponse> {
     return this.watchlist.list(auth.user.id, query);
+  }
+
+  @Get(':id/chart')
+  chart(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(watchlistChartQuerySchema)) query: WatchlistChartQuery,
+  ): Promise<WatchlistChartResponse> {
+    return this.watchlist.chart(auth.user.id, id, query.days);
   }
 
   @Get('groups')

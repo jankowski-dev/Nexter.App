@@ -67,6 +67,7 @@ import {
   vaultConfigSchema,
   vaultItemSchema,
   vaultResponseSchema,
+  watchlistChartResponseSchema,
   watchlistEntrySchema,
   watchlistGroupSchema,
   watchlistGroupsResponseSchema,
@@ -173,6 +174,7 @@ import {
   type TransactionsListQuery,
   type TransactionsPageResponse,
   type UpdateSettingsRequest,
+  type WatchlistChartResponse,
   type WatchlistCreateRequest,
   type WatchlistEntry,
   type WatchlistFromContractRequest,
@@ -531,6 +533,17 @@ export async function fetchWatchlist(
     `/api/v1/watchlist${queryString({ includeArchived, cursor, groupId, limit })}`,
     {},
     watchlistResponseSchema,
+  );
+}
+
+export async function fetchWatchlistChart(
+  id: string,
+  days: number,
+): Promise<WatchlistChartResponse> {
+  return apiFetch(
+    `/api/v1/watchlist/${id}/chart${queryString({ days })}`,
+    {},
+    watchlistChartResponseSchema,
   );
 }
 

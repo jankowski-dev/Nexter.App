@@ -12,6 +12,7 @@ import { formatPct, formatPrice, formatUsdCompact, pnlTone } from '@/lib/format'
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Asset, SwapConfigResponse, WatchlistEntry } from '@nexter/contracts';
+import { TokenInfoDialog } from '../watchlist/token-info-dialog';
 
 type TokenListSort =
   'default' | 'price' | 'change24h' | 'change7d' | 'change30d' | 'change1y' | 'marketCap';
@@ -69,6 +70,7 @@ export function TokenBuyList({
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
   const [sortKey, setSortKey] = useState<TokenListSort>('default');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
+  const [selectedEntry, setSelectedEntry] = useState<WatchlistEntry | null>(null);
   const defaultGroup = groups.data?.groups.find((group) => group.isDefault);
   const watchlist = useQuery({
     queryKey: ['buy-list', defaultGroup?.id],
@@ -166,11 +168,29 @@ export function TokenBuyList({
             </thead>
             <tbody>
               {sortedEntries.map((entry) => {
-                const onchainAllowed = isOnchainAllowed(entry.asset, config.data);
+                const chainAddress =
+                  entry.asset.chainCode === 'bsc'
+                    ? entry.bscContractAddress
+                    : entry.asset.chainCode === 'ethereum'
+                      ? entry.ethereumContractAddress
+                      : null;
+                const tradeAsset: Asset = {
+                  ...entry.asset,
+                  contractAddress: entry.asset.contractAddress ?? chainAddress,
+                };
+                const onchainAllowed = isOnchainAllowed(tradeAsset, config.data);
                 return (
                   <tr
                     key={entry.id}
-                    className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
+                    tabIndex={0}
+                    className="cursor-pointer border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70 focus:outline-none focus-visible:bg-emerald-50"
+                    onClick={() => setSelectedEntry(entry)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedEntry(entry);
+                      }
+                    }}
                   >
                     <td className="py-2 pr-3">
                       <div className="flex items-center gap-2">
@@ -194,7 +214,10 @@ export function TokenBuyList({
                       ) : onchainAllowed ? (
                         <Button
                           className="h-8 px-3 text-xs"
-                          onClick={() => onBuy(entry.asset, entry.priceUsd)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onBuy(tradeAsset, entry.priceUsd);
+                          }}
                         >
                           Купить
                         </Button>
@@ -202,7 +225,10 @@ export function TokenBuyList({
                         <Button
                           variant="secondary"
                           className="h-8 px-3 text-xs"
-                          onClick={() => onManual?.(entry.asset, entry.priceUsd)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onManual?.(tradeAsset, entry.priceUsd);
+                          }}
                           disabled={!onManual}
                           title="On-chain покупка недоступна: токен не в разрешённом списке. Откроется ручная запись."
                         >
@@ -244,6 +270,7 @@ export function TokenBuyList({
           </table>
         </div>
       )}
+      <TokenInfoDialog entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
     </Card>
   );
 }
