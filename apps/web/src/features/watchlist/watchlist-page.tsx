@@ -115,6 +115,8 @@ export function WatchlistPage() {
   const [tags, setTags] = useState('');
   const [twitterUrl, setTwitterUrl] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [telegramUrl, setTelegramUrl] = useState('');
+  const [discordUrl, setDiscordUrl] = useState('');
   const [bscContractAddress, setBscContractAddress] = useState('');
   const [ethereumContractAddress, setEthereumContractAddress] = useState('');
   const [investors, setInvestors] = useState('');
@@ -190,6 +192,8 @@ export function WatchlistPage() {
         tags: tagsFromInput(tags),
         twitterUrl: urlOrNull(twitterUrl),
         websiteUrl: urlOrNull(websiteUrl),
+        telegramUrl: urlOrNull(telegramUrl),
+        discordUrl: urlOrNull(discordUrl),
         bscContractAddress: bscContractAddress.trim() || null,
         ethereumContractAddress: ethereumContractAddress.trim() || null,
         investors: investorsFromInput(investors),
@@ -217,6 +221,8 @@ export function WatchlistPage() {
       setTags('');
       setTwitterUrl('');
       setWebsiteUrl('');
+      setTelegramUrl('');
+      setDiscordUrl('');
       setBscContractAddress('');
       setEthereumContractAddress('');
       setInvestors('');
@@ -311,6 +317,8 @@ export function WatchlistPage() {
     setTags('');
     setTwitterUrl('');
     setWebsiteUrl('');
+    setTelegramUrl('');
+    setDiscordUrl('');
     setInvestors('');
     setPriority('0');
     setLogoUrl('');
@@ -338,6 +346,8 @@ export function WatchlistPage() {
     setTags(entry.tags.join(', '));
     setTwitterUrl(entry.twitterUrl ?? '');
     setWebsiteUrl(entry.websiteUrl ?? '');
+    setTelegramUrl(entry.telegramUrl ?? '');
+    setDiscordUrl(entry.discordUrl ?? '');
     setBscContractAddress(entry.bscContractAddress ?? '');
     setEthereumContractAddress(entry.ethereumContractAddress ?? '');
     setInvestors(entry.investors.join(', '));
@@ -375,6 +385,8 @@ export function WatchlistPage() {
   const investorValues = investorsFromInput(investors);
   const twitterInvalid = !isValidExternalUrl(twitterUrl);
   const websiteInvalid = !isValidExternalUrl(websiteUrl);
+  const telegramInvalid = !isValidExternalUrl(telegramUrl);
+  const discordInvalid = !isValidExternalUrl(discordUrl);
   const bscContractInvalid =
     bscContractAddress.trim() !== '' && !/^0x[0-9a-fA-F]{40}$/.test(bscContractAddress.trim());
   const ethereumContractInvalid =
@@ -385,6 +397,8 @@ export function WatchlistPage() {
     investorValues.length > 30 ||
     twitterInvalid ||
     websiteInvalid ||
+    telegramInvalid ||
+    discordInvalid ||
     bscContractInvalid ||
     ethereumContractInvalid ||
     iconInvalid;
@@ -923,6 +937,36 @@ export function WatchlistPage() {
               placeholder="https://x.com/…"
             />
             {twitterInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Ссылка должна начинаться с http:// или https://
+              </span>
+            ) : null}
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Telegram
+            <Input
+              className="mt-1"
+              type="url"
+              value={telegramUrl}
+              onChange={(event) => setTelegramUrl(event.target.value)}
+              placeholder="https://t.me/…"
+            />
+            {telegramInvalid ? (
+              <span className="mt-1 block text-xs text-red-700">
+                Ссылка должна начинаться с http:// или https://
+              </span>
+            ) : null}
+          </label>
+          <label className="block text-sm text-zinc-600">
+            Discord
+            <Input
+              className="mt-1"
+              type="url"
+              value={discordUrl}
+              onChange={(event) => setDiscordUrl(event.target.value)}
+              placeholder="https://discord.gg/…"
+            />
+            {discordInvalid ? (
               <span className="mt-1 block text-xs text-red-700">
                 Ссылка должна начинаться с http:// или https://
               </span>

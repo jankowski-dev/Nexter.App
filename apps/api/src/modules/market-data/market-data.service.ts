@@ -6,6 +6,7 @@ import { DB } from '../../shared/db/db.module';
 import { AssetsService } from '../accounting/assets.service';
 import { EvmRpcService } from '../swap/evm-rpc.service';
 import { CoinGeckoClient, type CoinGeckoMarket } from './coingecko.client';
+import { GeckoTerminalClient } from './geckoterminal.client';
 
 interface IconCacheEntry {
   body: Buffer;
@@ -16,17 +17,27 @@ interface IconCacheEntry {
 const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ICON_CACHE_MAX_ENTRIES = 200;
 const ICON_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+const HISTORY_CACHE_TTL_MS = 60 * 60 * 1000;
+const HISTORY_CACHE_MAX_ENTRIES = 100;
+
+interface PriceHistoryCacheEntry {
+  expiresAt: number;
+  source: string;
+  points: { date: string; priceUsd: string }[];
+}
 
 @Injectable()
 export class MarketDataService {
   private readonly iconCache = new Map<string, IconCacheEntry>();
   private readonly iconInFlight = new Map<string, Promise<{ body: Buffer; contentType: string }>>();
   private iconCacheBytes = 0;
+  private readonly historyCache = new Map<string, PriceHistoryCacheEntry>();
 
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly rpc: EvmRpcService,
     private readonly coingecko: CoinGeckoClient,
+    private readonly geckoterminal: GeckoTerminalClient,
     private readonly assets: AssetsService,
   ) {}
 
@@ -128,6 +139,55 @@ export class MarketDataService {
 
   async getMarkets(ids: string[]): Promise<Map<string, CoinGeckoMarket>> {
     return this.coingecko.getMarkets(ids);
+  }
+
+  async getPriceHistory(
+    chainCode: string,
+    contractAddress: string | null,
+    coingeckoId: string | null,
+    days: number,
+  ): Promise<{ source: string; points: { date: string; priceUsd: string }[] }> {
+    const key = `${chainCode}:${contractAddress ?? ''}:${coingeckoId ?? ''}:${days}`;
+    const cached = this.historyCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return { source: cached.source, points: cached.points };
+    }
+
+    let source = 'coingecko';
+    let candles =
+      contractAddress && (chainCode === 'bsc' || chainCode === 'ethereum')
+        ? await this.geckoterminal.getDailyCandles(chainCode, contractAddress, days)
+        : [];
+
+    if (candles.length > 0) source = 'geckoterminal';
+
+    if (candles.length < days && coingeckoId) {
+      const coingeckoCandles = await this.coingecko.getDailyCandles(coingeckoId, days);
+      if (coingeckoCandles.length > candles.length) {
+        candles = coingeckoCandles;
+        source = 'coingecko';
+      }
+    }
+
+    const points = candles
+      .filter((candle) => Number(candle.closeUsd) > 0)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .slice(-days)
+      .map((candle) => ({ date: candle.date, priceUsd: candle.closeUsd }));
+
+    if (points.length === 0) source = 'none';
+
+    if (this.historyCache.size >= HISTORY_CACHE_MAX_ENTRIES) {
+      const oldest = this.historyCache.keys().next().value;
+      if (oldest) this.historyCache.delete(oldest);
+    }
+    this.historyCache.set(key, {
+      expiresAt: Date.now() + HISTORY_CACHE_TTL_MS,
+      source,
+      points,
+    });
+
+    return { source, points };
   }
 
   async fetchIcon(url: string): Promise<{ body: Buffer; contentType: string }> {

@@ -6,6 +6,7 @@ import { TokenIcon } from '@/components/token-icon';
 import { formatPct, formatPrice, pnlTone } from '@/lib/format';
 import { Link } from '@tanstack/react-router';
 import type { WatchlistEntry, WatchlistGroup } from '@nexter/contracts';
+import { TokenPriceChart } from './token-price-chart';
 
 function safeExternalUrl(value: string | null): string | null {
   if (!value) return null;
@@ -57,6 +58,8 @@ export function TokenDrawer({
             : entry.asset.chainCode;
   const twitterUrl = safeExternalUrl(entry.twitterUrl);
   const websiteUrl = safeExternalUrl(entry.websiteUrl);
+  const telegramUrl = safeExternalUrl(entry.telegramUrl);
+  const discordUrl = safeExternalUrl(entry.discordUrl);
   const bscAddress =
     entry.bscContractAddress ??
     (entry.asset.chainCode === 'bsc' ? entry.asset.contractAddress : null);
@@ -118,6 +121,10 @@ export function TokenDrawer({
               {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-zinc-200 p-3">
+          <TokenPriceChart entryId={entry.id} />
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
@@ -196,6 +203,26 @@ export function TokenDrawer({
                 Twitter / X
               </a>
             ) : null}
+            {telegramUrl ? (
+              <a
+                href={telegramUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-emerald-800 hover:bg-emerald-50"
+              >
+                Telegram
+              </a>
+            ) : null}
+            {discordUrl ? (
+              <a
+                href={discordUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="rounded-md border border-zinc-200 px-3 py-1.5 text-sm text-emerald-800 hover:bg-emerald-50"
+              >
+                Discord
+              </a>
+            ) : null}
             {websiteUrl ? (
               <a
                 href={websiteUrl}
@@ -206,7 +233,7 @@ export function TokenDrawer({
                 Сайт
               </a>
             ) : null}
-            {!twitterUrl && !websiteUrl ? (
+            {!twitterUrl && !telegramUrl && !discordUrl && !websiteUrl ? (
               <span className="text-sm text-zinc-500">Ссылки не заполнены.</span>
             ) : null}
           </div>

@@ -368,7 +368,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       'bsc',
       'ethereum',
     ]);
-    expect(config.body.chains[0].tokens).toHaveLength(8);
+    expect(config.body.chains[0].tokens).toHaveLength(19);
     expect(config.body.chains[1].tokens).toHaveLength(6);
     expect(config.body.chains[0].executionEnabled).toBe(true);
     expect(config.body.chains[1].executionEnabled).toBe(false);

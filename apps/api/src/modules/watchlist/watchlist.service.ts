@@ -17,6 +17,7 @@ import {
   type Database,
 } from '@nexter/db';
 import type {
+  WatchlistChartResponse,
   WatchlistCreateRequest,
   WatchlistEntry,
   WatchlistFromContractRequest,
@@ -67,6 +68,41 @@ export class WatchlistService {
     private readonly marketData: MarketDataService,
     private readonly pricing: PricingService,
   ) {}
+
+  async chart(userId: string, id: string, days: number): Promise<WatchlistChartResponse> {
+    const [row] = await this.db
+      .select({
+        bscContractAddress: watchlist.bscContractAddress,
+        ethereumContractAddress: watchlist.ethereumContractAddress,
+        contractAddress: assets.contractAddress,
+        coingeckoId: assets.coingeckoId,
+        chainCode: chains.code,
+      })
+      .from(watchlist)
+      .innerJoin(assets, eq(watchlist.assetId, assets.id))
+      .innerJoin(chains, eq(assets.chainId, chains.id))
+      .where(and(eq(watchlist.id, id), eq(watchlist.userId, userId)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Watchlist entry not found' });
+    }
+
+    const chainAddress =
+      row.chainCode === 'bsc'
+        ? row.bscContractAddress
+        : row.chainCode === 'ethereum'
+          ? row.ethereumContractAddress
+          : null;
+    const history = await this.marketData.getPriceHistory(
+      row.chainCode,
+      chainAddress ?? row.contractAddress,
+      row.coingeckoId,
+      days,
+    );
+
+    return { days, source: history.source, points: history.points };
+  }
 
   async listGroups(userId: string): Promise<WatchlistGroupsResponse> {
     await this.ensureDefaultGroup(userId);
@@ -448,6 +484,8 @@ export class WatchlistService {
             tags: input.tags ?? [],
             twitterUrl: input.twitterUrl ?? null,
             websiteUrl: input.websiteUrl ?? null,
+            telegramUrl: input.telegramUrl ?? null,
+            discordUrl: input.discordUrl ?? null,
             bscContractAddress: input.bscContractAddress ?? null,
             ethereumContractAddress: input.ethereumContractAddress ?? null,
             investors: input.investors ?? [],
@@ -528,6 +566,8 @@ export class WatchlistService {
           tags: input.tags !== undefined ? input.tags : existing.tags,
           twitterUrl: input.twitterUrl !== undefined ? input.twitterUrl : existing.twitterUrl,
           websiteUrl: input.websiteUrl !== undefined ? input.websiteUrl : existing.websiteUrl,
+          telegramUrl: input.telegramUrl !== undefined ? input.telegramUrl : existing.telegramUrl,
+          discordUrl: input.discordUrl !== undefined ? input.discordUrl : existing.discordUrl,
           bscContractAddress:
             input.bscContractAddress !== undefined
               ? input.bscContractAddress
@@ -784,6 +824,8 @@ export class WatchlistService {
       tags: row.entry.tags,
       twitterUrl: row.entry.twitterUrl,
       websiteUrl: row.entry.websiteUrl,
+      telegramUrl: row.entry.telegramUrl,
+      discordUrl: row.entry.discordUrl,
       bscContractAddress: row.entry.bscContractAddress,
       ethereumContractAddress: row.entry.ethereumContractAddress,
       investors: row.entry.investors,

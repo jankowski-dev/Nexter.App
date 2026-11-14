@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarketDataService } from './market-data.service';
 
 function createService(): MarketDataService {
-  return new MarketDataService({} as never, {} as never, {} as never, {} as never);
+  return new MarketDataService({} as never, {} as never, {} as never, {} as never, {} as never);
 }
 
 function imageResponse(body = 'icon'): Response {
@@ -94,6 +94,60 @@ describe('MarketDataService.fetchIcon', () => {
 
     await expect(service.fetchIcon(ICON_URL)).rejects.toMatchObject({
       response: { code: 'VALIDATION_ERROR' },
+    });
+  });
+});
+
+describe('MarketDataService.getPriceHistory', () => {
+  function candle(date: string, close: string) {
+    return {
+      date,
+      openUsd: close,
+      highUsd: close,
+      lowUsd: close,
+      closeUsd: close,
+      volumeUsd: null,
+    };
+  }
+
+  it('prefers GeckoTerminal candles and falls back to CoinGecko when they are shorter', async () => {
+    const gecko = { getDailyCandles: vi.fn().mockResolvedValue([candle('2026-11-13', '1.5')]) };
+    const coingecko = {
+      getDailyCandles: vi
+        .fn()
+        .mockResolvedValue([candle('2026-11-12', '1.2'), candle('2026-11-13', '1.5')]),
+    };
+    const service = new MarketDataService(
+      {} as never,
+      {} as never,
+      coingecko as never,
+      gecko as never,
+      {} as never,
+    );
+
+    const history = await service.getPriceHistory('bsc', '0xabc', 'token', 30);
+
+    expect(gecko.getDailyCandles).toHaveBeenCalledWith('bsc', '0xabc', 30);
+    expect(coingecko.getDailyCandles).toHaveBeenCalledWith('token', 30);
+    expect(history.source).toBe('coingecko');
+    expect(history.points).toEqual([
+      { date: '2026-11-12', priceUsd: '1.2' },
+      { date: '2026-11-13', priceUsd: '1.5' },
+    ]);
+  });
+
+  it('returns an empty series when no source has data', async () => {
+    const service = new MarketDataService(
+      {} as never,
+      {} as never,
+      { getDailyCandles: vi.fn().mockResolvedValue([]) } as never,
+      { getDailyCandles: vi.fn().mockResolvedValue([]) } as never,
+      {} as never,
+    );
+
+    await expect(service.getPriceHistory('bsc', null, null, 90)).resolves.toEqual({
+      source: 'none',
+      points: [],
     });
   });
 });

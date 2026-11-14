@@ -276,3 +276,11 @@ The personal-finance module creates six tables. The migration conditionally gran
 3. Verify `/ready`, the new chains/assets, the wallet accounts, and CoinGecko quotes for TRX/SOL.
 4. Record native holdings through `Операции → Новая операция → Корректировка` after selecting the matching wallet account.
 5. Rollback: redeploy the previous image. Both migrations are additive; the new chains/assets/accounts may remain unused.
+
+## UI-52 token charts and watchlist social links rollout (`0039`)
+
+1. Take a targeted JSON backup of `watchlist` (all rows) and record its SHA-256. The migration is additive; the JSON backup is the rollback for the enrichment update.
+2. Deploy `main`; pre-deploy runs `node packages/db/dist/migrate.js` and adds nullable `watchlist.telegram_url`/`discord_url`. Confirm `nexter_app` retains SELECT/INSERT/UPDATE and no DELETE (table-level grants cover new columns).
+3. Run `node scripts/enrich-main-watchlist.mjs` (or the same file in the API container) with the owner `DATABASE_URL`. It matches by BSC contract address, updates only `thesis`/links/investors, and audits each row as `watchlist.enriched`. Use `--dry-run` first.
+4. Verify `/ready`, the token-base chart, the main-list modal, and the green `Купить` state for the new allowlist entries. Charts depend on GeckoTerminal/CoinGecko and may be empty immediately after a token launch.
+5. Rollback: redeploy the previous image and restore the watchlist rows from the JSON backup. The two nullable columns may remain; dropping them is optional and requires a maintenance window.

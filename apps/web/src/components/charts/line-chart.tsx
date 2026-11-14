@@ -10,10 +10,14 @@ export function LineChart({
   points,
   height = 220,
   color = '#059669',
+  formatValue = (value) => formatUsd(String(value)),
+  formatTick = (value) => formatUsdCompact(String(value)),
 }: {
   points: LinePoint[];
   height?: number;
   color?: string;
+  formatValue?: (value: number) => string;
+  formatTick?: (value: number) => string;
 }) {
   const [hovered, setHovered] = useState<number | null>(null);
 
@@ -126,14 +130,14 @@ export function LineChart({
           >
             <div className="font-medium text-zinc-800">{points[hovered]?.label}</div>
             <div className="font-mono text-zinc-600">
-              {formatUsd(String(points[hovered]?.value ?? 0))}
+              {formatValue(Number(points[hovered]?.value ?? 0))}
             </div>
           </div>
         ) : null}
       </div>
       <div className="flex justify-between text-xs text-zinc-500">
         <span>{points[0]?.label}</span>
-        <span>{formatUsdCompact(String(max))}</span>
+        <span>{formatTick(max)}</span>
         <span>{points.at(-1)?.label}</span>
       </div>
     </div>
