@@ -4,7 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { NavIcon } from '@/components/nav-icon';
-import { fetchNotifications, markAllNotificationsRead } from '@/lib/api';
+import { clearNotifications, fetchNotifications, markAllNotificationsRead } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +17,16 @@ export function NotificationsPage() {
     queryKey: ['notifications'],
     queryFn: () => fetchNotifications(100),
     refetchInterval: 30_000,
+  });
+  const clearAll = useMutation({
+    mutationFn: clearNotifications,
+    onSuccess: () => {
+      queryClient.setQueryData<NotificationsResponse>(['notifications'], (current) =>
+        current ? { ...current, data: [], unreadCount: 0 } : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+    },
   });
   const markAllRead = useMutation({
     mutationFn: markAllNotificationsRead,
@@ -48,9 +58,21 @@ export function NotificationsPage() {
         title="Уведомления"
         subtitle="События ботов, длительных операций и фоновых задач."
         actions={
-          <Button variant="secondary" onClick={() => void notifications.refetch()}>
-            Обновить
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => void notifications.refetch()}>
+              Обновить
+            </Button>
+            <Button
+              variant="secondary"
+              className="text-red-700"
+              disabled={clearAll.isPending || (notifications.data?.data.length ?? 0) === 0}
+              onClick={() => {
+                if (window.confirm('Очистить все уведомления?')) clearAll.mutate();
+              }}
+            >
+              {clearAll.isPending ? 'Очищаю…' : 'Очистить'}
+            </Button>
+          </>
         }
       />
 

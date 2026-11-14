@@ -222,11 +222,6 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await expect(page.getByRole('heading', { name: 'Аудит' })).toBeVisible();
   await expect(page.getByText('accounting.transaction_created').first()).toBeVisible();
 
-  // Data-quality page renders after the manual entries.
-  await page.goto('/settings/data-quality');
-  await expect(page.getByRole('heading', { name: 'Качество данных' })).toBeVisible();
-  await expect(page.getByText('Отрицательные балансы').first()).toBeVisible();
-
   // JSON export downloads a real file.
   await page.goto('/settings');
   const downloadPromise = page.waitForEvent('download');

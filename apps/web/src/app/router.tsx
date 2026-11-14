@@ -20,7 +20,6 @@ import { TestingPage } from '@/features/testing/testing-page';
 import { VaultPage } from '@/features/vault/vault-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
-import { DataQualityPage } from '@/features/settings/data-quality-page';
 import { SecuritySettingsPage } from '@/features/settings/security-settings-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { ApiError, apiFetch } from '@/lib/api';
@@ -251,12 +250,6 @@ const auditSettingsRoute = createRoute({
   component: AuditSettingsPage,
 });
 
-const dataQualityRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/settings/data-quality',
-  component: DataQualityPage,
-});
-
 const routeTree = rootRoute.addChildren([
   authLayoutRoute.addChildren([
     loginRoute,
@@ -289,7 +282,6 @@ const routeTree = rootRoute.addChildren([
     securitySettingsRoute,
     accountsSettingsRoute,
     auditSettingsRoute,
-    dataQualityRoute,
   ]),
 ]);
 

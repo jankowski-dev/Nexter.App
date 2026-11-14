@@ -5,7 +5,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchDashboardSummary, fetchPortfolioTokenSummaries, fetchPositions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPrice, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { formatPrice, formatSignedUsd, formatUsd, pluralizeRu, pnlTone } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
@@ -218,14 +218,14 @@ export function PortfolioPage() {
             <Card>
               <CardTitle>Портфель по токенам</CardTitle>
               <CardDescription>
-                Консолидированные данные по токену: P&L, инвестиции в открытые ордера, текущий плюс
-                и минус, оборот, средневзвешенный курс и количество ордеров.
+                Консолидированные данные только по активным ордерам: P&L, инвестиции, текущий плюс и
+                минус, оборот, средневзвешенный курс и количество активных ордеров.
               </CardDescription>
               {(tokenSummaries.data?.data ?? []).filter((item) => item.openOrdersCount > 0)
                 .length === 0 ? (
                 <p className="mt-4 text-sm text-zinc-600">Открытых ордеров нет.</p>
               ) : (
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="mt-4 space-y-2">
                   {(tokenSummaries.data?.data ?? [])
                     .filter((item) => item.openOrdersCount > 0)
                     .map((item) => (
@@ -234,13 +234,13 @@ export function PortfolioPage() {
                         type="button"
                         aria-label={`Открыть статистику ${item.asset.symbol}`}
                         onClick={() => setSelectedAssetId(item.asset.id)}
-                        className="cursor-pointer rounded-xl border border-zinc-200 p-3 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                        className="block w-full cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-3">
                           <TokenIcon
                             logoUrl={watchlistLogos.get(item.asset.id) ?? item.asset.logoUrl}
                             symbol={item.asset.symbol}
-                            className="h-8 w-8 text-[10px]"
+                            className="h-9 w-9 text-[10px]"
                           />
                           <div className="min-w-0">
                             <div className="truncate text-sm font-semibold text-zinc-900">
@@ -250,19 +250,22 @@ export function PortfolioPage() {
                               {item.asset.name} · {item.asset.chainCode}
                             </div>
                           </div>
-                          <span
-                            className="ml-auto text-xs text-zinc-500"
-                            title="Открытых / всего ордеров"
-                          >
-                            {item.openOrdersCount} / {item.ordersCount}
+                          <span className="ml-auto text-xs text-zinc-500">
+                            {item.openOrdersCount}{' '}
+                            {pluralizeRu(
+                              item.openOrdersCount,
+                              'активный ордер',
+                              'активных ордера',
+                              'активных ордеров',
+                            )}
                           </span>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs sm:grid-cols-3">
+                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-6">
                           <PortfolioMetric
                             label="P&L"
                             value={formatSignedUsd(item.totalPnlUsd)}
                             tone={pnlTone(item.totalPnlUsd)}
-                            hint="Реализованный + нереализованный"
+                            hint="Реализованный + нереализованный по активным ордерам"
                           />
                           <PortfolioMetric
                             label="Инвестировано"
@@ -273,18 +276,18 @@ export function PortfolioPage() {
                             label="Плюс"
                             value={formatUsd(item.positiveUnrealizedUsd)}
                             tone="text-emerald-700"
-                            hint="Нереализованная прибыль прибыльных ордеров"
+                            hint="Нереализованная прибыль прибыльных активных ордеров"
                           />
                           <PortfolioMetric
                             label="Минус"
                             value={formatUsd(item.negativeUnrealizedUsd)}
                             tone="text-red-700"
-                            hint="Нереализованный убыток убыточных ордеров"
+                            hint="Нереализованный убыток убыточных активных ордеров"
                           />
                           <PortfolioMetric
                             label="Оборот"
                             value={formatUsd(item.turnoverUsd)}
-                            hint="Все покупки и продажи"
+                            hint="Покупки и продажи активных ордеров"
                           />
                           <PortfolioMetric
                             label="Средний курс"

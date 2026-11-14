@@ -77,11 +77,15 @@ export function TasksPage() {
   });
 
   const moveMutation = useMutation({
-    mutationFn: ({ task, date }: { task: Task; date: string }) =>
-      updateTask(task.id, {
-        dueAt: new Date(`${date}T12:00:00`).toISOString(),
+    mutationFn: ({ task, date }: { task: Task; date: string }) => {
+      const source = task.dueAt ? new Date(task.dueAt) : null;
+      const hours = String(source?.getHours() ?? 12).padStart(2, '0');
+      const minutes = String(source?.getMinutes() ?? 0).padStart(2, '0');
+      return updateTask(task.id, {
+        dueAt: new Date(`${date}T${hours}:${minutes}:00`).toISOString(),
         applyToSeries: false,
-      }),
+      });
+    },
     onSuccess: () => {
       setError(null);
       invalidate();

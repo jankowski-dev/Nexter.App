@@ -40,3 +40,7 @@ The logo/login redesign was explicitly deferred because the source files were no
 - Archived records remain in the database and can be restored by an operator if ever needed; the UI no longer exposes that path.
 - The testing URL parameter is intentionally read on mount; the `Тестировать` action performs a full navigation so the stand starts with clean state.
 - CoinGecko/backtest data limitations identified in the CYCLE audit are unchanged and are not fixed by this UI batch.
+
+## Update (UI-49, 2026-11-14)
+
+The portfolio token cards now aggregate **only active trade groups**. Closed groups are excluded, and realized P&L and buy+sell turnover are calculated only from the currently open groups. The card count is the number of active orders. `ordersCount` remains in the response for compatibility but equals the active count.

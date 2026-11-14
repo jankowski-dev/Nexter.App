@@ -380,7 +380,20 @@ export class TradingBotsService {
         }
 
         if (strategyChanged || tokenAssetIds !== undefined) {
-          await tx.delete(botSignals).where(eq(botSignals.botId, id));
+          // bot_signals is diagnostic state and the application role has no DELETE
+          // grant. Reset it in place so strategy/token edits remain possible.
+          await tx
+            .update(botSignals)
+            .set({
+              priceUsd: null,
+              change24hPct: null,
+              action: 'hold',
+              reason: 'Ожидает первого тика',
+              hasPosition: false,
+              strategyState: {},
+              updatedAt: new Date(),
+            })
+            .where(eq(botSignals.botId, id));
         }
 
         await this.audit.log(
@@ -518,7 +531,18 @@ export class TradingBotsService {
       await tx.delete(botPositions).where(eq(botPositions.botId, id));
       await tx.delete(botTrades).where(eq(botTrades.botId, id));
       await tx.delete(botEquitySnapshots).where(eq(botEquitySnapshots.botId, id));
-      await tx.delete(botSignals).where(eq(botSignals.botId, id));
+      await tx
+        .update(botSignals)
+        .set({
+          priceUsd: null,
+          change24hPct: null,
+          action: 'hold',
+          reason: 'Ожидает первого тика',
+          hasPosition: false,
+          strategyState: {},
+          updatedAt: new Date(),
+        })
+        .where(eq(botSignals.botId, id));
       await tx
         .update(tradingBots)
         .set({

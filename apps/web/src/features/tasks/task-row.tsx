@@ -10,8 +10,7 @@ import {
   TrashIcon,
   UndoIcon,
 } from '@/components/ui/icons';
-import { formatDate } from '@/lib/format';
-import { isTaskOverdue } from '@/lib/tasks';
+import { formatTaskDue, isTaskOverdue } from '@/lib/tasks';
 import type { Task, TaskStatus } from '@nexter/contracts';
 
 export const taskStatusLabels: Record<TaskStatus, string> = {
@@ -88,7 +87,7 @@ export function TaskCompactRow({
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="flex items-center gap-1">
               <CalendarIcon className="h-3.5 w-3.5" />
-              {task.dueAt ? formatDate(task.dueAt) : 'Без срока'}
+              {formatTaskDue(task.dueAt)}
             </span>
             <span>{taskPriorityLabels[task.priority] ?? 'Обычный'}</span>
             {task.recurrence ? <span>↻ Повтор</span> : null}

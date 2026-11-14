@@ -18,7 +18,7 @@ import { addTaskImage, createTask, removeTaskImage, updateTask } from '@/lib/api
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
-import { localDateKey } from '@/lib/tasks';
+import { formatTaskDue, localDateKey } from '@/lib/tasks';
 import { useSaveFlash } from '@/lib/use-save-flash';
 import { useEffect, useRef, useState } from 'react';
 import type {
@@ -58,11 +58,20 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 type Mode = 'view' | 'edit';
 
 function dueDate(value: string | null): string {
-  return value ? value.slice(0, 10) : '';
+  return value ? localDateKey(new Date(value)) : '';
 }
 
-function toIsoDate(value: string): string | null {
-  return value ? new Date(`${value}T12:00:00`).toISOString() : null;
+function dueClock(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  if (hours === 12 && minutes === 0) return '';
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+function toIsoDate(value: string, time: string): string | null {
+  return value ? new Date(`${value}T${time || '12:00'}:00`).toISOString() : null;
 }
 
 function tagsFromInput(value: string): string[] {
@@ -73,9 +82,9 @@ function tagsFromInput(value: string): string[] {
     .slice(0, 20);
 }
 
-function dueLabel(value: string): string {
+function dueLabel(value: string, time: string): string {
   if (!value) return 'Без срока';
-  return formatDate(new Date(`${value}T12:00:00`).toISOString());
+  return formatTaskDue(new Date(`${value}T${time || '12:00'}:00`).toISOString());
 }
 
 export function TaskDialog({
@@ -100,6 +109,7 @@ export function TaskDialog({
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState(String(task?.priority ?? 1));
   const [due, setDue] = useState(dueDate(task?.dueAt ?? null) || initialDue || '');
+  const [dueTimeValue, setDueTimeValue] = useState(dueClock(task?.dueAt ?? null));
   const [tags, setTags] = useState(task?.tags.join(', ') ?? '');
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? 'open');
   const [completedAt, setCompletedAt] = useState<string | null>(task?.completedAt ?? null);
@@ -129,8 +139,26 @@ export function TaskDialog({
         })
       : null,
   );
-  const draftRef = useRef({ title, description, priority, due, tags, recurrence, recurrenceEnds });
-  draftRef.current = { title, description, priority, due, tags, recurrence, recurrenceEnds };
+  const draftRef = useRef({
+    title,
+    description,
+    priority,
+    due,
+    dueTime: dueTimeValue,
+    tags,
+    recurrence,
+    recurrenceEnds,
+  });
+  draftRef.current = {
+    title,
+    description,
+    priority,
+    due,
+    dueTime: dueTimeValue,
+    tags,
+    recurrence,
+    recurrenceEnds,
+  };
 
   function basePayload(draft: typeof draftRef.current): {
     title: string;
@@ -144,7 +172,7 @@ export function TaskDialog({
       description: draft.description.trim() || null,
       priority: Number.parseInt(draft.priority, 10) || 0,
       tags: tagsFromInput(draft.tags),
-      dueAt: toIsoDate(draft.due),
+      dueAt: toIsoDate(draft.due, draft.dueTime),
     };
   }
 
@@ -202,7 +230,7 @@ export function TaskDialog({
               ? {
                   recurrence: draft.recurrence,
                   ...(draft.recurrenceEnds
-                    ? { recurrenceEndsAt: toIsoDate(draft.recurrenceEnds) }
+                    ? { recurrenceEndsAt: toIsoDate(draft.recurrenceEnds, '') }
                     : {}),
                 }
               : {}),
@@ -372,7 +400,11 @@ export function TaskDialog({
 
   const effectiveRecurrence = task?.recurrence ?? (recurrence !== 'none' ? recurrence : null);
   const persisted = Boolean(taskIdRef.current);
-  const overdue = status === 'open' && Boolean(due) && due < localDateKey(new Date());
+  const overdue =
+    status === 'open' &&
+    (dueTimeValue
+      ? Boolean(due) && new Date(`${due}T${dueTimeValue}:00`).getTime() < Date.now()
+      : Boolean(due) && due < localDateKey(new Date()));
 
   return (
     <>
@@ -456,7 +488,7 @@ export function TaskDialog({
               <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
                 <div className="flex items-center gap-2">
                   <CalendarIcon />
-                  <span>{dueLabel(due)}</span>
+                  <span>{dueLabel(due, dueTimeValue)}</span>
                 </div>
                 {completedAt ? <div>Выполнена {formatDate(completedAt)}</div> : null}
               </div>
@@ -522,15 +554,32 @@ export function TaskDialog({
                     ))}
                   </Select>
                 </label>
-                <label className="block text-sm text-zinc-600">
-                  Срок
-                  <Input
-                    className="mt-1"
-                    type="date"
-                    value={due}
-                    onChange={(event) => setDue(event.target.value)}
-                  />
-                </label>
+                <div className="sm:col-span-2">
+                  <div className="grid grid-cols-[1fr_120px] gap-2">
+                    <label className="block text-sm text-zinc-600">
+                      Срок
+                      <Input
+                        className="mt-1"
+                        type="date"
+                        value={due}
+                        onChange={(event) => setDue(event.target.value)}
+                      />
+                    </label>
+                    <label className="block text-sm text-zinc-600">
+                      Время
+                      <Input
+                        className="mt-1"
+                        type="time"
+                        value={dueTimeValue}
+                        onChange={(event) => setDueTimeValue(event.target.value)}
+                        disabled={!due}
+                      />
+                    </label>
+                  </div>
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Время необязательно. Без него задача считается задачей на день (12:00).
+                  </p>
+                </div>
               </div>
 
               {persisted ? (

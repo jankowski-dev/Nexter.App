@@ -289,10 +289,13 @@ export function BacktestPanel({
         </Badge>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_auto] lg:items-end">
-        <div className="relative">
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <div className="relative min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div ref={pickerRef} className="relative min-w-[240px] flex-1">
+            <div
+              ref={pickerRef}
+              className="relative w-full min-w-[240px] max-w-sm sm:w-[360px] sm:max-w-full sm:flex-none"
+            >
               <Input
                 value={tokenSearch}
                 onChange={(event) => {
@@ -409,9 +412,9 @@ export function BacktestPanel({
 
       {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(320px,380px)_1fr]">
-        <div className="space-y-3">
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+      <div className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(320px,380px)_1fr]">
+        <div className="flex h-full flex-col gap-3">
+          <div className="flex h-full flex-col rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
             <div className="mb-3 text-sm font-medium text-zinc-800">Параметры прогона</div>
             <StrategyParamInputs
               template={template}
@@ -454,7 +457,7 @@ export function BacktestPanel({
           </div>
         </div>
 
-        <div className="space-y-3">
+        <div className="flex h-full flex-col gap-3">
           {previewing ? (
             <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 text-sm text-zinc-500">
               <span className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
@@ -495,7 +498,7 @@ export function BacktestPanel({
               ) : null}
             </div>
           ) : (
-            <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-zinc-200 text-sm text-zinc-500">
+            <div className="flex min-h-72 flex-1 items-center justify-center rounded-xl border border-dashed border-zinc-200 text-sm text-zinc-500">
               Выберите токен, период и нажмите «Начать».
             </div>
           )}

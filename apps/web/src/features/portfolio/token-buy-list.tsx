@@ -149,9 +149,9 @@ export function TokenBuyList({
                           className="h-8 px-3 text-xs"
                           onClick={() => onManual?.(entry.asset, entry.priceUsd)}
                           disabled={!onManual}
-                          title="Токен не входит в разрешённый список — доступна только ручная запись"
+                          title="On-chain покупка недоступна: токен не в разрешённом списке. Откроется ручная запись."
                         >
-                          Вручную
+                          Купить
                         </Button>
                       )}
                     </td>
