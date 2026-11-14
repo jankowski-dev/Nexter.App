@@ -109,3 +109,7 @@ After the owner logs in, verify TOTP, regenerate recovery codes, and store them.
 4. Confirm audit entries exist for the break-glass action.
 5. Rotate `SETUP_TOKEN` and `AUTH_ENCRYPTION_KEY` only if compromise is suspected. Rotating the encryption key makes existing TOTP secrets unreadable, so disable TOTP first or re-enrol the owner.
 6. Document the incident and the recovery duration.
+
+## Quick lock PIN
+
+The quick-lock PIN is client-side only and is not stored in Postgres, so break-glass SQL cannot recover it. If the owner forgets it, use `Забыли код? Сбросить и выйти` on the lock screen (or clear `nexter-lock-pin-v1` from the browser profile), then sign in with password + TOTP. The server session was never replaced by the PIN, so no session revocation is required. Do not add a server-side PIN recovery endpoint without a new ADR and security review.

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { useWallet, WalletProvider } from '@/lib/wallet-context';
+import { LockProvider, useAppLock } from '@/lib/app-lock';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -50,6 +51,29 @@ function SunIcon() {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <rect
+        x="4.5"
+        y="10"
+        width="15"
+        height="10.5"
+        rx="2.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M8 10V7.5a4 4 0 0 1 8 0V10"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="15.2" r="1.3" fill="currentColor" />
     </svg>
   );
 }
@@ -155,6 +179,7 @@ function RouteLoadingOverlay() {
 function RootLayoutContent() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const appLock = useAppLock();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const cryptoActive = cryptoNavigation.some(
     (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
@@ -197,6 +222,7 @@ function RootLayoutContent() {
     try {
       await apiPost('/api/v1/auth/logout', {});
     } finally {
+      appLock.clearLocked();
       queryClient.clear();
       await navigate({ to: '/login' });
     }
@@ -287,7 +313,15 @@ function RootLayoutContent() {
             ))}
           </nav>
 
-          <div className="mt-4 shrink-0">
+          <div className="mt-4 shrink-0 space-y-2">
+            <Button
+              className="w-full justify-center border border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+              variant="secondary"
+              onClick={appLock.lock}
+            >
+              <LockIcon />
+              Заблокировать
+            </Button>
             <Button
               className="w-full justify-center bg-red-700 text-white hover:bg-red-800"
               variant="danger"
@@ -345,6 +379,15 @@ function RootLayoutContent() {
 
               <WalletControls />
 
+              <Button
+                className="h-8 w-8 px-0 md:hidden"
+                variant="ghost"
+                aria-label="Заблокировать приложение"
+                title="Заблокировать"
+                onClick={appLock.lock}
+              >
+                <LockIcon />
+              </Button>
               <Button className="px-2 md:hidden" variant="ghost" onClick={() => void logout()}>
                 Выйти
               </Button>
@@ -447,7 +490,9 @@ function RootLayoutContent() {
 export function RootLayout() {
   return (
     <WalletProvider>
-      <RootLayoutContent />
+      <LockProvider>
+        <RootLayoutContent />
+      </LockProvider>
     </WalletProvider>
   );
 }

@@ -11,6 +11,7 @@ import {
 } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { LockSettingsCard } from './lock-settings-card';
 
 export function SecuritySettingsPage() {
   const queryClient = useQueryClient();
@@ -106,6 +107,8 @@ export function SecuritySettingsPage() {
           </div>
         </Card>
       ) : null}
+
+      <LockSettingsCard />
 
       <Card>
         <CardTitle>Смена пароля</CardTitle>

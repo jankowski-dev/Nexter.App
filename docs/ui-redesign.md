@@ -150,3 +150,8 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - **UI-8** — owner feedback pass. Implemented: task tags, compressed image attachments stored in Postgres, taller task dialog with autosave (10 s and on close, no Save button), status/priority above the title, one-line description clamp, square BSC/Ethereum chain icons, full-width shell, and the `Открытые` default task filter. See ADR 0022.
 - **UI-9** — visual system. Implemented: light/graphite dark themes with a persistent header switcher, refreshed cards/buttons/inputs/navigation, icon-tiled dashboard KPI blocks, compact cash/gas/fee tiles, quality metrics, and a full-width hero equity chart with a 4 px line. See ADR 0023.
 - Then the ADR 0014 clean cutover.
+
+## Auth and quick lock
+
+- **UI-53** — the auth pages use the owner-supplied graphite concept: full-screen `#484848`, the 12-ray Nexter logo, Exo font, dark fields and a lime accent. Login, setup, TOTP, recovery and reset keep their existing APIs. The logo lights with input progress and turns red/green on error/success.
+- `Заблокировать` sits next to `Выйти` in the desktop sidebar and as an icon in the mobile header. The first use configures a 6-digit PIN; later uses cover the app with an opaque lock screen. The PIN is hashed with PBKDF2 and stored only in the browser; `Настройки → Безопасность` can change/remove it. This is a privacy screen, not a replacement for password + 2FA. See ADR 0044.
