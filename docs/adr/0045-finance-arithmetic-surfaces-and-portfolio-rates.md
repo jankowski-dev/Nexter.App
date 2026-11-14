@@ -44,3 +44,7 @@ The owner requested a batch of usability and visual fixes across Finance, Dashbo
 - `apps/web/src/lib/expression.test.ts` covers the finance example, precedence, parentheses, unary values, invalid input and division by zero.
 - Existing API tests and the full web test suite pass; the swap token registry contract and balances endpoint keep the existing allowlist and auth gates.
 - Manually checked login, lock, dashboard, Finance, Statistics and Portfolio in light and dark widths.
+
+## Production release (2026-11-15)
+
+PR #135 merged as `8d03c9b`; deployment `e368bddf-ad36-4fc1-b130-01f2cc362948`; bundle `assets/index-CTffry5b.js`; `/health` and `/ready` 200. No migration.
