@@ -364,3 +364,229 @@ button:focus-visible,
     animation: none;
   }
 }
+
+/* ============================================================
+   Auth and quick-lock visual language
+   Derived from design-auth/CRM Nexter (dark stage, 12-ray logo).
+   ============================================================ */
+
+@font-face {
+  font-family: 'Exo';
+  src: url('/fonts/exo-latin-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+.auth-shell {
+  min-height: 100dvh;
+  background: #484848;
+  color: #ffffff;
+  color-scheme: dark;
+  font-family: 'Exo', 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+.auth-stage {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(24px, 4vh, 44px);
+  padding: 40px 20px 88px;
+}
+
+.auth-logo {
+  width: clamp(128px, 18vw, 220px);
+  height: auto;
+  overflow: hidden;
+}
+
+.nexter-logo .nexter-ray {
+  fill: #707070;
+  transition: fill 180ms ease;
+}
+
+.nexter-logo .nexter-ray--soft {
+  opacity: 0.5;
+}
+
+.nexter-logo .nexter-ray.is-lit {
+  fill: #c2e32f;
+}
+
+.nexter-logo.is-ok .nexter-ray {
+  fill: #c2e32f;
+}
+
+.nexter-logo.is-error .nexter-ray {
+  fill: #e93f5b;
+}
+
+.auth-content {
+  width: min(380px, 100%);
+}
+
+.auth-shell h1,
+.auth-shell .text-zinc-900,
+.auth-shell .text-zinc-800 {
+  color: #ffffff !important;
+}
+
+.auth-shell .text-zinc-700 {
+  color: #e3e3e3 !important;
+}
+
+.auth-shell .text-zinc-600 {
+  color: #c7c7c7 !important;
+}
+
+.auth-shell .text-zinc-500 {
+  color: #a8a8a8 !important;
+}
+
+.auth-shell .text-emerald-700,
+.auth-shell .text-emerald-800 {
+  color: #c2e32f !important;
+}
+
+.auth-shell .bg-white,
+.auth-shell .bg-zinc-50 {
+  background-color: #2f2f2f !important;
+}
+
+.auth-shell .border-zinc-200 {
+  border-color: #5a5a5a !important;
+}
+
+.auth-shell .bg-red-50 {
+  background-color: rgba(233, 63, 91, 0.12) !important;
+}
+
+.auth-shell .border-red-200 {
+  border-color: rgba(233, 63, 91, 0.4) !important;
+}
+
+.auth-shell .text-red-700 {
+  color: #ffb3bf !important;
+}
+
+.auth-shell .bg-emerald-50 {
+  background-color: rgba(194, 227, 47, 0.1) !important;
+}
+
+.auth-shell .border-emerald-200 {
+  border-color: rgba(194, 227, 47, 0.35) !important;
+}
+
+.auth-shell input {
+  height: 44px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: #2f2f2f !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  font-family: inherit !important;
+}
+
+.auth-shell input::placeholder {
+  color: #8e8e8e !important;
+}
+
+.auth-shell input:focus {
+  border: 0 !important;
+  outline: 2px solid rgba(194, 227, 47, 0.55) !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+.auth-shell input:-webkit-autofill,
+.auth-shell input:-webkit-autofill:hover,
+.auth-shell input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #ffffff;
+  box-shadow: 0 0 0 1000px #2f2f2f inset;
+  caret-color: #ffffff;
+}
+
+.auth-shell .bg-emerald-600 {
+  background-color: #c2e32f !important;
+  color: #1f2410 !important;
+  box-shadow: none !important;
+}
+
+.auth-shell .hover\:bg-emerald-700:hover {
+  background-color: #d2f044 !important;
+}
+
+.auth-shell button {
+  font-family: inherit;
+}
+
+.auth-shell a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.auth-shell .hover\:text-zinc-900:hover,
+.auth-shell .hover\:text-emerald-800:hover {
+  color: #ffffff !important;
+}
+
+.auth-shell .hover\:bg-zinc-100:hover,
+.auth-shell .hover\:bg-zinc-50:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.auth-shell .bg-zinc-100 {
+  background-color: #3a3a3a !important;
+}
+
+.auth-code-input {
+  font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+  font-size: 24px !important;
+  letter-spacing: 0.45em;
+  text-align: center;
+  padding-left: 0.45em;
+}
+
+.auth-shake {
+  animation: auth-shake 500ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes auth-shake {
+  10%,
+  90% {
+    transform: translateX(-2px);
+  }
+  20%,
+  80% {
+    transform: translateX(4px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-7px);
+  }
+  40%,
+  60% {
+    transform: translateX(7px);
+  }
+}
+
+.lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lock-panel {
+  width: min(360px, 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-shake {
+    animation: none;
+  }
+}

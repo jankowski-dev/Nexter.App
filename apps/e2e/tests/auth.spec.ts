@@ -86,4 +86,24 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
   await page.getByLabel('Код').fill(generateSync({ secret }));
   await page.getByRole('button', { name: 'Подтвердить' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.goto('/settings/security');
+  await page.getByRole('button', { name: 'Установить код' }).click();
+  await page.getByLabel('Новый код блокировки').fill('123456');
+  await page.getByLabel('Повторите код блокировки').fill('123456');
+  await page.getByRole('button', { name: 'Сохранить и заблокировать' }).click();
+
+  await expect(page.getByText('Приложение заблокировано')).toBeVisible();
+  await page.getByLabel('Код блокировки').fill('000000');
+  await page.getByRole('button', { name: 'Разблокировать' }).click();
+  await expect(page.getByRole('alert')).toContainText('Неверный код');
+
+  await page.getByLabel('Код блокировки').fill('123456');
+  await page.getByRole('button', { name: 'Разблокировать' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.goto('/settings/security');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Удалить код' }).click();
+  await expect(page.getByText('Код не установлен')).toBeVisible();
 });

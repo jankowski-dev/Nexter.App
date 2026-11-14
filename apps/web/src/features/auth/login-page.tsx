@@ -6,7 +6,8 @@ import { FormError, Field } from './form-helpers';
 import { authStatusResponseSchema, loginResponseSchema } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { useAuthVisual } from './auth-visual';
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -14,6 +15,13 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [shake, setShake] = useState(false);
+  const visual = useAuthVisual();
+
+  useEffect(() => {
+    visual.reset();
+    // Reset the shared logo state when the login screen mounts.
+  }, []);
 
   const status = useQuery({
     queryKey: ['auth-status'],
@@ -28,6 +36,9 @@ export function LoginPage() {
 
     try {
       const result = await apiPost('/api/v1/auth/login', { email, password }, loginResponseSchema);
+      visual.setState('ok');
+      visual.setLit(12);
+      await new Promise((resolve) => window.setTimeout(resolve, 280));
 
       if (result.requires2fa) {
         await navigate({ to: '/2fa' });
@@ -38,6 +49,14 @@ export function LoginPage() {
       }
     } catch (requestError) {
       setError(toRussianError(requestError, 'Не удалось войти. Попробуйте ещё раз.'));
+      visual.setState('error');
+      visual.setLit(0);
+      setShake(true);
+      window.setTimeout(() => {
+        setShake(false);
+        visual.setState('idle');
+        visual.setLit(password.length);
+      }, 650);
     } finally {
       setLoading(false);
     }
@@ -45,14 +64,14 @@ export function LoginPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold text-zinc-900">Вход</h1>
-        <p className="mt-1 text-sm text-zinc-600">Пароль и код из приложения-аутентификатора.</p>
+      <div className="text-center">
+        <h1 className="text-xl font-semibold">Вход</h1>
+        <p className="mt-1 text-sm">Пароль и код из приложения-аутентификатора.</p>
       </div>
 
       {error ? <FormError>{error}</FormError> : null}
 
-      <form className="space-y-4" onSubmit={submit}>
+      <form className={`space-y-4 ${shake ? 'auth-shake' : ''}`} onSubmit={submit}>
         <Field label="Email">
           <Input
             type="email"
@@ -68,7 +87,12 @@ export function LoginPage() {
             type="password"
             autoComplete="current-password"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setPassword(next);
+              visual.setLit(next.length);
+              if (visual.state === 'error') visual.setState('idle');
+            }}
             required
           />
         </Field>
@@ -78,7 +102,7 @@ export function LoginPage() {
         </Button>
       </form>
 
-      <div className="flex items-center justify-between text-sm text-zinc-500">
+      <div className="flex items-center justify-between text-sm">
         <Link className="hover:text-zinc-900" to="/reset-password">
           Забыли пароль?
         </Link>
