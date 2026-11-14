@@ -32,3 +32,7 @@ The owner also asked for a quick “step away” lock: a `Заблокирова
 
 - Unit tests cover PIN validation, salted hashing, correct/wrong verification and unique salts (`apps/web/src/lib/app-lock-crypto.test.ts`).
 - A Playwright smoke check covers setup, wrong PIN, unlock, direct second lock and reset-and-exit; the lock and login screens were visually checked at desktop and mobile widths.
+
+## Production release (2026-11-15)
+
+PR #133 merged as `47fa092`; deployment `8f83dc5a-6eb6-47e3-a945-6b94ec4d9aaf`; bundle `assets/index-DFBl91oc.js`; `/health` and `/ready` 200. No migration. E2E auth covers PIN setup, wrong PIN, unlock and PIN removal.
