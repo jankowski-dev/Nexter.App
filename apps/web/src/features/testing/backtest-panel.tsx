@@ -18,7 +18,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { filterBySearch } from '@/lib/search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   BotBacktestPreviewResponse,
   BotBacktestRun,
@@ -52,6 +52,7 @@ export function BacktestPanel({
   const queryClient = useQueryClient();
   const [tokenSearch, setTokenSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [days, setDays] = useState('365');
   const [useStopLoss, setUseStopLoss] = useState(true);
@@ -291,7 +292,7 @@ export function BacktestPanel({
       <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_auto] lg:items-end">
         <div className="relative">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[240px] flex-1">
+            <div ref={pickerRef} className="relative min-w-[240px] flex-1">
               <Input
                 value={tokenSearch}
                 onChange={(event) => {
@@ -299,7 +300,11 @@ export function BacktestPanel({
                   setPickerOpen(true);
                 }}
                 onFocus={() => setPickerOpen(true)}
-                onBlur={() => window.setTimeout(() => setPickerOpen(false), 140)}
+                onBlur={(event) => {
+                  if (!pickerRef.current?.contains(event.relatedTarget as Node | null)) {
+                    setPickerOpen(false);
+                  }
+                }}
                 placeholder="Найти токен: символ, название или сеть"
                 aria-label="Поиск токена для бэктеста"
               />
