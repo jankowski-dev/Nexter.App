@@ -107,7 +107,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByRole('button', { name: 'Изменить' }).click();
   const editDialog = page.getByRole('dialog');
   await expect(editDialog.getByLabel('Пароль', { exact: true })).toHaveValue('s3cret-password');
-  await page
+  await editDialog
     .getByRole('button', { name: 'Заблокировать' })
     .evaluate((node) => (node as { click: () => void }).click());
   await expect(page.getByRole('dialog')).toHaveCount(0);
