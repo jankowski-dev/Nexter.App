@@ -11,7 +11,7 @@ export function StrategyParamInputs({
   onChange: (key: string, value: string) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-3 sm:grid-cols-2">
       {template.paramFields.map((field) => (
         <label key={field.key} className="block text-sm text-zinc-600">
           {field.label}

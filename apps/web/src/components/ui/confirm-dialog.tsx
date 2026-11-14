@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 export function ConfirmDialog({
   open,
@@ -77,7 +78,7 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="dialog-overlay-enter fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/40 p-4"
       role="presentation"
@@ -118,6 +119,7 @@ export function ConfirmDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

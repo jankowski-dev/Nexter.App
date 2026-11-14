@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function Drawer({
   open,
@@ -74,7 +75,7 @@ export function Drawer({
 
   const resolvedSize = size ?? (wide ? 'lg' : 'md');
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 bg-zinc-900/30 ${
         visible ? 'dialog-overlay-enter' : 'dialog-overlay-exit pointer-events-none'
@@ -123,6 +124,7 @@ export function Drawer({
           <div className="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3">{footer}</div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -18,7 +18,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { filterBySearch } from '@/lib/search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   BotBacktestPreviewResponse,
   BotBacktestRun,
@@ -51,6 +51,8 @@ export function BacktestPanel({
 }) {
   const queryClient = useQueryClient();
   const [tokenSearch, setTokenSearch] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [days, setDays] = useState('365');
   const [useStopLoss, setUseStopLoss] = useState(true);
@@ -147,6 +149,8 @@ export function BacktestPanel({
 
   function selectToken(assetId: string) {
     setSelectedAssetId(assetId);
+    setTokenSearch('');
+    setPickerOpen(false);
     setPreview(null);
     setRun(null);
     setError(null);
@@ -271,143 +275,183 @@ export function BacktestPanel({
 
   return (
     <Card>
-      <CardTitle>Прогон по историческим данным</CardTitle>
-      <CardDescription>
-        Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Для настоящих OHLC стоп-лосс и
-        тейк-профит срабатывают внутри дня по high/low; для синтетических свечей — по
-        закрытию/порогу. Открытая позиция закрывается в конце периода.
-      </CardDescription>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <CardTitle>Прогон по историческим данным</CardTitle>
+          <CardDescription>
+            Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Для настоящих OHLC стоп-лосс и
+            тейк-профит срабатывают внутри дня по high/low; для синтетических свечей — по
+            закрытию/порогу. Открытая позиция закрывается в конце периода.
+          </CardDescription>
+        </div>
+        <Badge tone="neutral" className="mt-1 shrink-0">
+          {template.name}
+        </Badge>
+      </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[370px_1fr]">
-        <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] xl:grid-cols-[1fr_auto]">
-            <Input
-              value={tokenSearch}
-              onChange={(event) => setTokenSearch(event.target.value)}
-              placeholder="Поиск токена: символ, название или сеть"
-              aria-label="Поиск токена для бэктеста"
-            />
-            <Select
-              value={days}
-              onChange={(event) => changeDays(event.target.value)}
-              aria-label="Период бэктеста"
-            >
-              {periodOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-            <Button
-              className="xl:col-span-2"
-              onClick={preview ? startRun : startPreview}
-              disabled={previewing || running}
-            >
-              {primaryLabel}
-            </Button>
-          </div>
-
-          {selectedToken ? (
-            <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm">
-              <TokenIcon
-                logoUrl={selectedToken.logoUrl ?? selectedToken.asset.logoUrl}
-                symbol={selectedToken.asset.symbol}
-                className="h-5 w-5 text-[9px]"
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px_auto] lg:items-end">
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
+            <div ref={pickerRef} className="relative min-w-[240px] flex-1">
+              <Input
+                value={tokenSearch}
+                onChange={(event) => {
+                  setTokenSearch(event.target.value);
+                  setPickerOpen(true);
+                }}
+                onFocus={() => setPickerOpen(true)}
+                onBlur={(event) => {
+                  if (!pickerRef.current?.contains(event.relatedTarget as Node | null)) {
+                    setPickerOpen(false);
+                  }
+                }}
+                placeholder="Найти токен: символ, название или сеть"
+                aria-label="Поиск токена для бэктеста"
               />
-              <span className="font-medium">{selectedToken.asset.symbol}</span>
-              <span className="truncate text-xs text-zinc-500">{selectedToken.asset.name}</span>
-              <Badge tone="neutral" className="ml-auto">
-                {selectedToken.asset.chainCode}
-              </Badge>
+              {pickerOpen ? (
+                <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-xl">
+                  {tokensPending ? (
+                    <p className="px-2 py-2 text-xs text-zinc-500">Загрузка токенов…</p>
+                  ) : tokensError ? (
+                    <p className="px-2 py-2 text-xs text-red-700">
+                      {toRussianError(tokensError, 'Не удалось загрузить Базу токенов')}
+                    </p>
+                  ) : tokenEntries.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-zinc-500">В базе нет активных токенов.</p>
+                  ) : filteredTokens.length === 0 ? (
+                    <p className="px-2 py-2 text-xs text-zinc-500">Ничего не найдено.</p>
+                  ) : (
+                    filteredTokens.map((entry) => {
+                      const selected = entry.asset.id === selectedAssetId;
+                      return (
+                        <button
+                          key={entry.asset.id}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectToken(entry.asset.id)}
+                          className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm ${
+                            selected ? 'bg-emerald-50 text-emerald-900' : 'hover:bg-zinc-50'
+                          }`}
+                        >
+                          <TokenIcon
+                            logoUrl={entry.logoUrl ?? entry.asset.logoUrl}
+                            symbol={entry.asset.symbol}
+                            className="h-5 w-5 text-[9px]"
+                          />
+                          <span className="font-medium">{entry.asset.symbol}</span>
+                          <span className="truncate text-xs text-zinc-500">{entry.asset.name}</span>
+                          <span className="ml-auto shrink-0 text-xs text-zinc-400">
+                            {entry.asset.chainCode}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              ) : null}
             </div>
-          ) : null}
 
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-xl border border-zinc-200 p-2">
-            {tokensPending ? (
-              <p className="text-xs text-zinc-500">Загрузка токенов…</p>
-            ) : tokensError ? (
-              <p className="text-xs text-red-700">
-                {toRussianError(tokensError, 'Не удалось загрузить Базу токенов')}
-              </p>
-            ) : tokenEntries.length === 0 ? (
-              <p className="text-xs text-zinc-500">В базе нет активных токенов.</p>
-            ) : filteredTokens.length === 0 ? (
-              <p className="text-xs text-zinc-500">Ничего не найдено.</p>
-            ) : (
-              filteredTokens.map((entry) => {
-                const selected = entry.asset.id === selectedAssetId;
-                return (
-                  <button
-                    key={entry.asset.id}
-                    type="button"
-                    onClick={() => selectToken(entry.asset.id)}
-                    className={`flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left text-sm ${
-                      selected ? 'bg-emerald-50 text-emerald-900' : 'hover:bg-zinc-50'
-                    }`}
-                  >
-                    <TokenIcon
-                      logoUrl={entry.logoUrl ?? entry.asset.logoUrl}
-                      symbol={entry.asset.symbol}
-                      className="h-5 w-5 text-[9px]"
-                    />
-                    <span className="font-medium">{entry.asset.symbol}</span>
-                    <span className="truncate text-xs text-zinc-500">{entry.asset.name}</span>
-                    <span className="ml-auto shrink-0 text-xs text-zinc-400">
-                      {entry.asset.chainCode}
-                    </span>
-                  </button>
-                );
-              })
-            )}
+            {selectedToken ? (
+              <div className="flex h-10 max-w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm">
+                <TokenIcon
+                  logoUrl={selectedToken.logoUrl ?? selectedToken.asset.logoUrl}
+                  symbol={selectedToken.asset.symbol}
+                  className="h-5 w-5 text-[9px]"
+                />
+                <span className="font-medium">{selectedToken.asset.symbol}</span>
+                <span className="hidden max-w-40 truncate text-xs text-zinc-500 sm:inline">
+                  {selectedToken.asset.name}
+                </span>
+                <Badge tone="neutral">{selectedToken.asset.chainCode}</Badge>
+                <button
+                  type="button"
+                  aria-label="Сбросить токен"
+                  className="ml-1 rounded p-0.5 text-zinc-400 hover:bg-zinc-200 hover:text-zinc-700"
+                  onClick={() => {
+                    setSelectedAssetId('');
+                    setTokenSearch('');
+                    setPreview(null);
+                    setRun(null);
+                    setError(null);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            ) : null}
           </div>
+        </div>
 
-          <details open className="rounded-xl border border-zinc-200 p-3">
-            <summary className="cursor-pointer text-sm text-zinc-600">Параметры прогона</summary>
-            <div className="mt-3">
-              <StrategyParamInputs
-                template={template}
-                values={paramValues}
-                onChange={(key, value) =>
-                  setParamValues((current) => ({ ...current, [key]: value }))
-                }
-              />
-              <div className="mt-4 grid gap-3 border-t border-zinc-200 pt-3 sm:grid-cols-3">
-                {supportsStopLoss ? (
-                  <OptionToggle
-                    label="Стоп-лосс"
-                    hint="Защитная продажа при просадке"
-                    checked={useStopLoss}
-                    onChange={(checked) => {
-                      setUseStopLoss(checked);
-                      resetRun();
-                    }}
-                  />
-                ) : null}
-                {supportsTakeProfit ? (
-                  <OptionToggle
-                    label="Тейк-профит"
-                    hint="Фиксация прибыли по цели"
-                    checked={useTakeProfit}
-                    onChange={(checked) => {
-                      setUseTakeProfit(checked);
-                      resetRun();
-                    }}
-                  />
-                ) : null}
+        <label className="block text-sm text-zinc-600">
+          Период
+          <Select
+            className="mt-1"
+            value={days}
+            onChange={(event) => changeDays(event.target.value)}
+            aria-label="Период бэктеста"
+          >
+            {periodOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </label>
+
+        <Button
+          className="h-10 px-6"
+          onClick={preview ? startRun : startPreview}
+          disabled={previewing || running}
+        >
+          {primaryLabel}
+        </Button>
+      </div>
+
+      {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(320px,380px)_1fr]">
+        <div className="space-y-3">
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+            <div className="mb-3 text-sm font-medium text-zinc-800">Параметры прогона</div>
+            <StrategyParamInputs
+              template={template}
+              values={paramValues}
+              onChange={(key, value) => setParamValues((current) => ({ ...current, [key]: value }))}
+            />
+            <div className="mt-4 grid gap-3 border-t border-zinc-200 pt-3">
+              {supportsStopLoss ? (
                 <OptionToggle
-                  label="Реинвестирование"
-                  hint="Следующие сделки от текущего капитала"
-                  checked={reinvestProfit}
+                  label="Стоп-лосс"
+                  hint="Защитная продажа при просадке"
+                  checked={useStopLoss}
                   onChange={(checked) => {
-                    setReinvestProfit(checked);
+                    setUseStopLoss(checked);
                     resetRun();
                   }}
                 />
-              </div>
+              ) : null}
+              {supportsTakeProfit ? (
+                <OptionToggle
+                  label="Тейк-профит"
+                  hint="Фиксация прибыли по цели"
+                  checked={useTakeProfit}
+                  onChange={(checked) => {
+                    setUseTakeProfit(checked);
+                    resetRun();
+                  }}
+                />
+              ) : null}
+              <OptionToggle
+                label="Реинвестирование"
+                hint="Следующие сделки от текущего капитала"
+                checked={reinvestProfit}
+                onChange={(checked) => {
+                  setReinvestProfit(checked);
+                  resetRun();
+                }}
+              />
             </div>
-          </details>
-
-          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+          </div>
         </div>
 
         <div className="space-y-3">
@@ -451,8 +495,8 @@ export function BacktestPanel({
               ) : null}
             </div>
           ) : (
-            <div className="flex h-40 items-center justify-center rounded-xl border border-dashed border-zinc-200 text-sm text-zinc-500">
-              Выберите токен и нажмите «Начать».
+            <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-zinc-200 text-sm text-zinc-500">
+              Выберите токен, период и нажмите «Начать».
             </div>
           )}
 
@@ -470,115 +514,115 @@ export function BacktestPanel({
               </div>
             </div>
           ) : null}
+        </div>
+      </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="text-sm font-medium text-zinc-800">Журнал прогонов</div>
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-zinc-500">{journal.data?.data.length ?? 0}</div>
-                {(journal.data?.data.length ?? 0) > 0 ? (
-                  <Button
-                    variant="ghost"
-                    className="h-7 px-2 text-xs text-red-700"
-                    onClick={() => void clearRuns()}
-                    disabled={clearing}
-                  >
-                    {clearing ? 'Очищаю…' : 'Очистить'}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-            {journal.isPending ? (
-              <p className="text-xs text-zinc-500">Загрузка журнала…</p>
-            ) : journal.isError ? (
-              <p className="text-xs text-red-700">
-                {toRussianError(journal.error, 'Не удалось загрузить журнал')}
-              </p>
-            ) : !journal.data || journal.data.data.length === 0 ? (
-              <p className="text-xs text-zinc-500">Прогонов ещё не было.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-zinc-200">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs text-zinc-500">
-                      <th className="px-3 py-2 font-medium">Дата</th>
-                      <th className="px-3 py-2 font-medium">Токен</th>
-                      <th className="px-3 py-2 font-medium">Период</th>
-                      <th className="px-3 py-2 text-right font-medium">P&L</th>
-                      <th className="px-3 py-2 text-right font-medium">PF</th>
-                      <th className="px-3 py-2 text-right font-medium">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {journal.data.data.map((item) => (
-                      <tr key={item.id} className="border-b border-zinc-100 last:border-0">
-                        <td className="px-3 py-2 text-xs text-zinc-500">
-                          {formatDateTime(item.createdAt)}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <TokenIcon
-                              logoUrl={item.asset.logoUrl}
-                              symbol={item.asset.symbol}
-                              className="h-5 w-5 text-[9px]"
-                            />
-                            <span className="font-medium">{item.asset.symbol}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-zinc-500">{item.days} дн.</td>
-                        <td
-                          className={`px-3 py-2 text-right font-mono ${pnlTone(item.stats.totalPnlUsd)}`}
-                        >
-                          {formatSignedUsd(item.stats.totalPnlUsd)}
-                        </td>
-                        <td className="px-3 py-2 text-right font-mono">
-                          {item.stats.profitFactor ?? '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              className="h-7 px-2 text-xs"
-                              onClick={() => void openRun(item.id)}
-                              disabled={loadingRunId === item.id}
-                            >
-                              {loadingRunId === item.id ? 'Открываю…' : 'Открыть'}
-                            </Button>
-                            <a
-                              href={botBacktestReportUrl(item.id)}
-                              className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
-                            >
-                              PDF
-                            </a>
-                            <button
-                              type="button"
-                              className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                              onClick={() => void removeRun(item.id)}
-                              disabled={deletingRunId === item.id}
-                            >
-                              {deletingRunId === item.id ? '…' : 'Удалить'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {(journal.data?.data.length ?? 0) >= journalLimit && journalLimit < 100 ? (
-                  <div className="flex justify-center border-t border-zinc-100 py-2">
-                    <Button
-                      variant="secondary"
-                      className="h-8 px-3 text-xs"
-                      onClick={() => setJournalLimit((current) => Math.min(current + 20, 100))}
-                    >
-                      Ещё
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            )}
+      <div className="mt-6 border-t border-zinc-200 pt-5">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-sm font-medium text-zinc-800">Журнал прогонов</div>
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-zinc-500">{journal.data?.data.length ?? 0}</div>
+            {(journal.data?.data.length ?? 0) > 0 ? (
+              <Button
+                variant="ghost"
+                className="h-7 px-2 text-xs text-red-700"
+                onClick={() => void clearRuns()}
+                disabled={clearing}
+              >
+                {clearing ? 'Очищаю…' : 'Очистить'}
+              </Button>
+            ) : null}
           </div>
         </div>
+        {journal.isPending ? (
+          <p className="text-xs text-zinc-500">Загрузка журнала…</p>
+        ) : journal.isError ? (
+          <p className="text-xs text-red-700">
+            {toRussianError(journal.error, 'Не удалось загрузить журнал')}
+          </p>
+        ) : !journal.data || journal.data.data.length === 0 ? (
+          <p className="text-xs text-zinc-500">Прогонов ещё не было.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-zinc-200">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-xs text-zinc-500">
+                  <th className="px-3 py-2 font-medium">Дата</th>
+                  <th className="px-3 py-2 font-medium">Токен</th>
+                  <th className="px-3 py-2 font-medium">Период</th>
+                  <th className="px-3 py-2 text-right font-medium">P&L</th>
+                  <th className="px-3 py-2 text-right font-medium">PF</th>
+                  <th className="px-3 py-2 text-right font-medium">Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {journal.data.data.map((item) => (
+                  <tr key={item.id} className="border-b border-zinc-100 last:border-0">
+                    <td className="px-3 py-2 text-xs text-zinc-500">
+                      {formatDateTime(item.createdAt)}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <TokenIcon
+                          logoUrl={item.asset.logoUrl}
+                          symbol={item.asset.symbol}
+                          className="h-5 w-5 text-[9px]"
+                        />
+                        <span className="font-medium">{item.asset.symbol}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-zinc-500">{item.days} дн.</td>
+                    <td
+                      className={`px-3 py-2 text-right font-mono ${pnlTone(item.stats.totalPnlUsd)}`}
+                    >
+                      {formatSignedUsd(item.stats.totalPnlUsd)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono">
+                      {item.stats.profitFactor ?? '—'}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => void openRun(item.id)}
+                          disabled={loadingRunId === item.id}
+                        >
+                          {loadingRunId === item.id ? 'Открываю…' : 'Открыть'}
+                        </Button>
+                        <a
+                          href={botBacktestReportUrl(item.id)}
+                          className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                        >
+                          PDF
+                        </a>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 items-center rounded-md px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                          onClick={() => void removeRun(item.id)}
+                          disabled={deletingRunId === item.id}
+                        >
+                          {deletingRunId === item.id ? '…' : 'Удалить'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {(journal.data?.data.length ?? 0) >= journalLimit && journalLimit < 100 ? (
+              <div className="flex justify-center border-t border-zinc-100 py-2">
+                <Button
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setJournalLimit((current) => Math.min(current + 20, 100))}
+                >
+                  Ещё
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
     </Card>
   );
