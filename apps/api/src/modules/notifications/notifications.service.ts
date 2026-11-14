@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { notifications, type Database, type NotificationRecord } from '@nexter/db';
 import type {
   Notification,
+  NotificationsClearResponse,
   NotificationsReadAllResponse,
   NotificationsResponse,
   NotificationUnreadCount,
@@ -36,11 +37,12 @@ export class NotificationsService {
   constructor(@Inject(DB) private readonly db: Database) {}
 
   async list(userId: string, limit: number): Promise<NotificationsResponse> {
+    const notCleared = sql`coalesce(${notifications.payload}->>'cleared', 'false') <> 'true'`;
     const [rows, unreadCount] = await Promise.all([
       this.db
         .select()
         .from(notifications)
-        .where(eq(notifications.userId, userId))
+        .where(and(eq(notifications.userId, userId), notCleared))
         .orderBy(desc(notifications.createdAt))
         .limit(limit),
       this.unreadCountValue(userId),
@@ -57,13 +59,32 @@ export class NotificationsService {
   }
 
   async markAllRead(userId: string): Promise<NotificationsReadAllResponse> {
+    const notCleared = sql`coalesce(${notifications.payload}->>'cleared', 'false') <> 'true'`;
     const updated = await this.db
       .update(notifications)
       .set({ readAt: new Date() })
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)))
+      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt), notCleared))
       .returning({ id: notifications.id });
 
     return { updated: updated.length };
+  }
+
+  async clear(userId: string): Promise<NotificationsClearResponse> {
+    const updated = await this.db
+      .update(notifications)
+      .set({
+        readAt: new Date(),
+        payload: sql`${notifications.payload} || '{"cleared": true}'::jsonb`,
+      })
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          sql`coalesce(${notifications.payload}->>'cleared', 'false') <> 'true'`,
+        ),
+      )
+      .returning({ id: notifications.id });
+
+    return { cleared: updated.length };
   }
 
   async create(input: CreateNotificationInput): Promise<Notification> {
@@ -87,7 +108,13 @@ export class NotificationsService {
     const [row] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(notifications)
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          isNull(notifications.readAt),
+          sql`coalesce(${notifications.payload}->>'cleared', 'false') <> 'true'`,
+        ),
+      );
 
     return Number(row?.count ?? 0);
   }

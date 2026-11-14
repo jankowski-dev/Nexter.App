@@ -104,19 +104,19 @@ describe('aggregateTokenSummaries', () => {
       }),
     ]);
 
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       asset: alpha,
       investedUsd: '2100.00000000',
-      realizedPnlUsd: '400.00000000',
+      realizedPnlUsd: '100.00000000',
       unrealizedPnlUsd: '70.00000000',
       positiveUnrealizedUsd: '150.00000000',
       negativeUnrealizedUsd: '80.00000000',
-      totalPnlUsd: '470.00000000',
-      turnoverUsd: '4800.00000000',
+      totalPnlUsd: '170.00000000',
+      turnoverUsd: '3500.00000000',
       breakEvenPriceUsd: '70.000000000000000000',
       openOrdersCount: 2,
-      ordersCount: 3,
+      ordersCount: 2,
       remainingAmount: '30.000000000000000000',
     });
 
@@ -132,19 +132,6 @@ describe('aggregateTokenSummaries', () => {
       breakEvenPriceUsd: '10.000000000000000000',
       openOrdersCount: 1,
       ordersCount: 1,
-    });
-
-    expect(rows[2]).toMatchObject({
-      asset: beta,
-      investedUsd: '0.00000000',
-      realizedPnlUsd: '100.00000000',
-      unrealizedPnlUsd: null,
-      totalPnlUsd: '100.00000000',
-      turnoverUsd: '1100.00000000',
-      breakEvenPriceUsd: null,
-      openOrdersCount: 0,
-      ordersCount: 1,
-      remainingAmount: '0.000000000000000000',
     });
   });
 });

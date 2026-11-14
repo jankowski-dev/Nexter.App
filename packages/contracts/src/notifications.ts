@@ -24,6 +24,10 @@ export const notificationsReadAllResponseSchema = z.object({
   updated: z.number().int().nonnegative(),
 });
 
+export const notificationsClearResponseSchema = z.object({
+  cleared: z.number().int().nonnegative(),
+});
+
 export const notificationsListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
@@ -32,4 +36,5 @@ export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationsResponse = z.infer<typeof notificationsResponseSchema>;
 export type NotificationUnreadCount = z.infer<typeof notificationUnreadCountSchema>;
 export type NotificationsReadAllResponse = z.infer<typeof notificationsReadAllResponseSchema>;
+export type NotificationsClearResponse = z.infer<typeof notificationsClearResponseSchema>;
 export type NotificationsListQuery = z.infer<typeof notificationsListQuerySchema>;

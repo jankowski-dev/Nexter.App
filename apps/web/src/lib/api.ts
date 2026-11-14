@@ -44,6 +44,7 @@ import {
   notificationsResponseSchema,
   notificationsReadAllResponseSchema,
   notificationUnreadCountSchema,
+  notificationsClearResponseSchema,
   notesResponseSchema,
   portfolioAssetDetailSchema,
   portfolioTokenSummariesResponseSchema,
@@ -133,6 +134,7 @@ import {
   type NoteImage,
   type NotificationUnreadCount,
   type NotificationsResponse,
+  type NotificationsClearResponse,
   type NotificationsReadAllResponse,
   type NoteImageCreateRequest,
   type NoteListQuery,
@@ -1077,4 +1079,8 @@ export async function fetchNotificationUnreadCount(): Promise<NotificationUnread
 
 export async function markAllNotificationsRead(): Promise<NotificationsReadAllResponse> {
   return apiPost('/api/v1/notifications/read-all', {}, notificationsReadAllResponseSchema);
+}
+
+export async function clearNotifications(): Promise<NotificationsClearResponse> {
+  return apiPost('/api/v1/notifications/clear', {}, notificationsClearResponseSchema);
 }

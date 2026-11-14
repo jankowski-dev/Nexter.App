@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
+  NotificationsClearResponse,
   NotificationsReadAllResponse,
   NotificationsResponse,
   NotificationUnreadCount,
@@ -32,5 +33,10 @@ export class NotificationsController {
   @Post('read-all')
   markAllRead(@CurrentAuth() auth: AuthContext): Promise<NotificationsReadAllResponse> {
     return this.notifications.markAllRead(auth.user.id);
+  }
+
+  @Post('clear')
+  clear(@CurrentAuth() auth: AuthContext): Promise<NotificationsClearResponse> {
+    return this.notifications.clear(auth.user.id);
   }
 }

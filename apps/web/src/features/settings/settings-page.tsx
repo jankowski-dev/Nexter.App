@@ -99,12 +99,6 @@ export function SettingsPage() {
             <CardDescription>Журнал действий и изменений.</CardDescription>
           </Card>
         </Link>
-        <Link to="/settings/data-quality" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Качество данных</CardTitle>
-            <CardDescription>Цены, сети, сборы и сверка.</CardDescription>
-          </Card>
-        </Link>
         <Link to="/import" className="block">
           <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Импорт Notion</CardTitle>

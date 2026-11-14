@@ -1,6 +1,11 @@
 import type { PortfolioTokenSummary, TradeGroupSummary } from '@nexter/contracts';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
 
+/**
+ * Consolidates only currently open trade groups. Closed groups and their realized
+ * P&L/turnover are deliberately excluded: the portfolio cards describe active
+ * deals, not the token's all-time history.
+ */
 export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioTokenSummary[] {
   const byAsset = new Map<
     string,
@@ -13,14 +18,15 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
       negativeUnrealized: Decimal;
       turnover: Decimal;
       remainingAmount: Decimal;
-      remainingCost: Decimal;
-      openOrders: number;
       orders: number;
       hasUnrealized: boolean;
     }
   >();
 
   for (const group of groups) {
+    const remainingAmount = decimal(group.remainingAmount);
+    if (group.status === 'closed' || remainingAmount.lte(0)) continue;
+
     const entry = byAsset.get(group.asset.id) ?? {
       asset: group.asset,
       invested: new Decimal(0),
@@ -30,8 +36,6 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
       negativeUnrealized: new Decimal(0),
       turnover: new Decimal(0),
       remainingAmount: new Decimal(0),
-      remainingCost: new Decimal(0),
-      openOrders: 0,
       orders: 0,
       hasUnrealized: false,
     };
@@ -39,20 +43,15 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
     entry.orders += 1;
     entry.realized = entry.realized.plus(decimal(group.realizedPnlUsd));
     entry.turnover = entry.turnover.plus(decimal(group.buyUsd)).plus(decimal(group.sellUsd));
+    entry.remainingAmount = entry.remainingAmount.plus(remainingAmount);
+    entry.invested = entry.invested.plus(decimal(group.remainingCostBasisUsd));
 
-    const active = group.status !== 'closed' && decimal(group.remainingAmount).gt(0);
-    if (active) {
-      entry.openOrders += 1;
-      entry.remainingAmount = entry.remainingAmount.plus(decimal(group.remainingAmount));
-      entry.remainingCost = entry.remainingCost.plus(decimal(group.remainingCostBasisUsd));
-      entry.invested = entry.invested.plus(decimal(group.remainingCostBasisUsd));
-      if (group.unrealizedPnlUsd !== null) {
-        const pnl = decimal(group.unrealizedPnlUsd);
-        entry.hasUnrealized = true;
-        entry.unrealized = entry.unrealized.plus(pnl);
-        if (pnl.gt(0)) entry.positiveUnrealized = entry.positiveUnrealized.plus(pnl);
-        else if (pnl.lt(0)) entry.negativeUnrealized = entry.negativeUnrealized.plus(pnl.abs());
-      }
+    if (group.unrealizedPnlUsd !== null) {
+      const pnl = decimal(group.unrealizedPnlUsd);
+      entry.hasUnrealized = true;
+      entry.unrealized = entry.unrealized.plus(pnl);
+      if (pnl.gt(0)) entry.positiveUnrealized = entry.positiveUnrealized.plus(pnl);
+      else if (pnl.lt(0)) entry.negativeUnrealized = entry.negativeUnrealized.plus(pnl.abs());
     }
 
     byAsset.set(group.asset.id, entry);
@@ -70,9 +69,9 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
       totalPnlUsd: usdString(entry.realized.plus(entry.unrealized)),
       turnoverUsd: usdString(entry.turnover),
       breakEvenPriceUsd: entry.remainingAmount.gt(0)
-        ? entry.remainingCost.div(entry.remainingAmount).toFixed(18)
+        ? entry.invested.div(entry.remainingAmount).toFixed(18)
         : null,
-      openOrdersCount: entry.openOrders,
+      openOrdersCount: entry.orders,
       ordersCount: entry.orders,
       remainingAmount: amountString(entry.remainingAmount),
     }));

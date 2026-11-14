@@ -263,6 +263,15 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     const afterRead = await agent.get('/api/v1/notifications/unread-count').expect(200);
     expect(afterRead.body.count).toBe(0);
 
+    const clear = await agent
+      .post('/api/v1/notifications/clear')
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    expect(clear.body.cleared).toBeGreaterThan(0);
+    const afterClear = await agent.get('/api/v1/notifications').expect(200);
+    expect(afterClear.body.data).toHaveLength(0);
+    expect(afterClear.body.unreadCount).toBe(0);
+
     const closeBot = await agent
       .post('/api/v1/trading-bots/bots')
       .set('x-csrf-token', owner.csrf)
@@ -353,6 +362,36 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .expect(200);
     expect(updated.body.bot.strategy.key).toBe('mean_reversion');
     expect(updated.body.strategyParams).toMatchObject({ lookback: 30, entryDropPct: 2 });
+
+    const fullUpdate = await agent
+      .patch(`/api/v1/trading-bots/bots/${botId}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'Momentum bot edited',
+        description: 'Full edit payload',
+        strategyKey: 'mean_reversion',
+        strategyParams: {
+          lookback: 30,
+          entryDropPct: 2,
+          exitAbovePct: 0.5,
+          takeProfitPct: 5,
+          stopLossPct: 5,
+        },
+        tokenAssetIds: [asset.id],
+        maxPositions: 4,
+        positionSizePct: 25,
+        feeBps: 20,
+        slippageBps: 15,
+        maxDailyLossPct: 12,
+        cooldownMinutes: 5,
+      })
+      .expect(200);
+    expect(fullUpdate.body.bot.name).toBe('Momentum bot edited');
+    expect(fullUpdate.body.bot.maxPositions).toBe(4);
+    const updatedSignals = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/signals`)
+      .expect(200);
+    expect(updatedSignals.body.data[0]?.reason).toBe('Ожидает первого тика');
 
     await agent
       .delete(`/api/v1/trading-bots/bots/${botId}`)
