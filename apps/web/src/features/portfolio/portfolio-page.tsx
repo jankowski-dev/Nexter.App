@@ -320,7 +320,7 @@ export function PortfolioPage() {
                           >
                             <div className="text-[10px] text-zinc-500">P&L</div>
                             <div
-                              className={`mt-0.5 font-mono text-2xl font-semibold tracking-tight ${pnlTone(
+                              className={`mt-0.5 font-mono text-xl font-semibold tracking-tight ${pnlTone(
                                 item.totalPnlUsd,
                               )}`}
                             >
