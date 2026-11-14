@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { NavIcon } from '@/components/nav-icon';
+import { NavIcon, type NavIconName } from '@/components/nav-icon';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
@@ -32,17 +32,82 @@ function PortfolioMetric({
   value,
   tone,
   hint,
+  className,
 }: {
   label: string;
   value: string;
   tone?: string;
   hint?: string;
+  className?: string;
 }) {
   return (
-    <div title={hint}>
+    <div title={hint} className={className}>
       <div className="text-[10px] text-zinc-500">{label}</div>
       <div className={`mt-0.5 font-mono text-xs ${tone ?? 'text-zinc-800'}`}>{value}</div>
     </div>
+  );
+}
+
+const statTones = {
+  emerald: {
+    card: 'border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white',
+    title: 'text-emerald-800',
+    icon: 'bg-emerald-100 text-emerald-700',
+    value: 'text-emerald-950',
+    description: 'text-emerald-800/60',
+  },
+  sky: {
+    card: 'border-sky-200 bg-gradient-to-br from-sky-50 via-white to-white',
+    title: 'text-sky-800',
+    icon: 'bg-sky-100 text-sky-700',
+    value: 'text-sky-950',
+    description: 'text-sky-800/60',
+  },
+  amber: {
+    card: 'border-amber-200 bg-gradient-to-br from-amber-50 via-white to-white',
+    title: 'text-amber-800',
+    icon: 'bg-amber-100 text-amber-700',
+    value: 'text-amber-950',
+    description: 'text-amber-800/60',
+  },
+  violet: {
+    card: 'border-violet-200 bg-gradient-to-br from-violet-50 via-white to-white',
+    title: 'text-violet-800',
+    icon: 'bg-violet-100 text-violet-700',
+    value: 'text-violet-950',
+    description: 'text-violet-800/60',
+  },
+} as const;
+
+function PortfolioStatCard({
+  title,
+  value,
+  description,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: string;
+  description: string;
+  icon: NavIconName;
+  tone: keyof typeof statTones;
+}) {
+  const styles = statTones[tone];
+  return (
+    <Card className={`relative overflow-hidden border ${styles.card}`}>
+      <div className="flex items-start justify-between gap-3">
+        <CardTitle className={styles.title}>{title}</CardTitle>
+        <span
+          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}
+        >
+          <NavIcon name={icon} className="h-4 w-4" />
+        </span>
+      </div>
+      <div className={`mt-1 font-mono text-3xl font-semibold tracking-tight ${styles.value}`}>
+        {value}
+      </div>
+      <CardDescription className={styles.description}>{description}</CardDescription>
+    </Card>
   );
 }
 
@@ -178,39 +243,34 @@ export function PortfolioPage() {
       {tab === 'portfolio' && data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white">
-              <div className="flex items-start justify-between gap-3">
-                <CardTitle className="text-emerald-800">Стоимость позиций</CardTitle>
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                  <NavIcon name="portfolio" className="h-4 w-4" />
-                </span>
-              </div>
-              <div className="mt-1 font-mono text-3xl font-semibold tracking-tight text-emerald-950">
-                {formatUsd(data.positionsValueUsd)}
-              </div>
-              <CardDescription className="text-emerald-800/60">По последним ценам</CardDescription>
-            </Card>
-            <Card>
-              <CardTitle>Капитал</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-                {formatUsd(data.equityUsd)}
-              </div>
-              <CardDescription>Стоимость позиций + кэш</CardDescription>
-            </Card>
-            <Card>
-              <CardTitle>Кэш</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-                {formatUsd(data.cashUsd)}
-              </div>
-              <CardDescription>Свободные USDT / USDC вне позиций</CardDescription>
-            </Card>
-            <Card>
-              <CardTitle>Вложено из фиата</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
-                {dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'}
-              </div>
-              <CardDescription>Пополнения минус выводы</CardDescription>
-            </Card>
+            <PortfolioStatCard
+              title="Стоимость позиций"
+              value={formatUsd(data.positionsValueUsd)}
+              description="По последним ценам"
+              icon="portfolio"
+              tone="emerald"
+            />
+            <PortfolioStatCard
+              title="Капитал"
+              value={formatUsd(data.equityUsd)}
+              description="Стоимость позиций + свободный капитал"
+              icon="statistics"
+              tone="sky"
+            />
+            <PortfolioStatCard
+              title="Свободный капитал"
+              value={formatUsd(data.cashUsd)}
+              description="USDT / USDC вне позиций"
+              icon="finance"
+              tone="amber"
+            />
+            <PortfolioStatCard
+              title="Мои инвестиции"
+              value={dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'}
+              description="Пополнения минус выводы"
+              icon="operations"
+              tone="violet"
+            />
           </div>
 
           {tokenSummaries.isPending ? <LoadingRows rows={4} /> : null}
@@ -238,21 +298,36 @@ export function PortfolioPage() {
                         onClick={() => setSelectedAssetId(item.asset.id)}
                         className="block w-full cursor-pointer rounded-xl border border-zinc-200 p-3.5 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       >
-                        <div className="flex flex-wrap items-center gap-3">
-                          <TokenIcon
-                            logoUrl={watchlistLogos.get(item.asset.id) ?? item.asset.logoUrl}
-                            symbol={item.asset.symbol}
-                            className="h-9 w-9 text-[10px]"
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-semibold text-zinc-900">
-                              {item.asset.symbol}
-                            </div>
-                            <div className="truncate text-[11px] text-zinc-500">
-                              {item.asset.name} · {item.asset.chainCode}
+                        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 xl:flex-nowrap">
+                          <div className="flex min-w-[150px] max-w-[210px] items-center gap-2.5">
+                            <TokenIcon
+                              logoUrl={watchlistLogos.get(item.asset.id) ?? item.asset.logoUrl}
+                              symbol={item.asset.symbol}
+                              className="h-9 w-9 text-[10px]"
+                            />
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-zinc-900">
+                                {item.asset.symbol}
+                              </div>
+                              <div className="truncate text-[11px] text-zinc-500">
+                                {item.asset.name} · {item.asset.chainCode}
+                              </div>
                             </div>
                           </div>
-                          <span className="ml-auto text-xs text-zinc-500">
+                          <div
+                            className="min-w-[130px]"
+                            title="Реализованный + нереализованный по активным ордерам"
+                          >
+                            <div className="text-[10px] text-zinc-500">P&L</div>
+                            <div
+                              className={`mt-0.5 font-mono text-2xl font-semibold tracking-tight ${pnlTone(
+                                item.totalPnlUsd,
+                              )}`}
+                            >
+                              {formatSignedUsd(item.totalPnlUsd)}
+                            </div>
+                          </div>
+                          <div className="whitespace-nowrap text-sm font-medium text-zinc-600">
                             {item.openOrdersCount}{' '}
                             {pluralizeRu(
                               item.openOrdersCount,
@@ -260,46 +335,36 @@ export function PortfolioPage() {
                               'активных ордера',
                               'активных ордеров',
                             )}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
-                          <div
-                            className="min-w-[150px]"
-                            title="Реализованный + нереализованный по активным ордерам"
-                          >
-                            <div className="text-[10px] text-zinc-500">P&L</div>
-                            <div
-                              className={`mt-0.5 font-mono text-xl font-semibold tracking-tight ${pnlTone(
-                                item.totalPnlUsd,
-                              )}`}
-                            >
-                              {formatSignedUsd(item.totalPnlUsd)}
-                            </div>
                           </div>
-                          <div className="ml-auto grid flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+                          <div className="ml-auto grid min-w-0 flex-1 grid-cols-2 gap-x-5 gap-y-2 text-right sm:grid-cols-3 xl:grid-cols-5">
                             <PortfolioMetric
+                              className="text-right"
                               label="Инвестировано"
                               value={formatUsd(item.investedUsd)}
                               hint="Себестоимость открытых ордеров"
                             />
                             <PortfolioMetric
+                              className="text-right"
                               label="Капитал"
                               value={formatUsd(item.currentValueUsd)}
                               hint="Текущая стоимость активных токенов по рынку"
                             />
                             <PortfolioMetric
+                              className="text-right"
                               label="Плюс"
                               value={formatUsd(item.positiveUnrealizedUsd)}
                               tone="text-emerald-700"
                               hint="Нереализованная прибыль прибыльных активных ордеров"
                             />
                             <PortfolioMetric
+                              className="text-right"
                               label="Минус"
                               value={formatUsd(item.negativeUnrealizedUsd)}
                               tone="text-red-700"
                               hint="Нереализованный убыток убыточных активных ордеров"
                             />
                             <PortfolioMetric
+                              className="text-right"
                               label="Средний курс"
                               value={
                                 item.breakEvenPriceUsd ? formatPrice(item.breakEvenPriceUsd) : '—'
