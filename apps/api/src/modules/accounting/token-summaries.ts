@@ -12,6 +12,7 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
     {
       asset: TradeGroupSummary['asset'];
       invested: Decimal;
+      currentValue: Decimal;
       realized: Decimal;
       unrealized: Decimal;
       positiveUnrealized: Decimal;
@@ -30,6 +31,7 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
     const entry = byAsset.get(group.asset.id) ?? {
       asset: group.asset,
       invested: new Decimal(0),
+      currentValue: new Decimal(0),
       realized: new Decimal(0),
       unrealized: new Decimal(0),
       positiveUnrealized: new Decimal(0),
@@ -45,6 +47,11 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
     entry.turnover = entry.turnover.plus(decimal(group.buyUsd)).plus(decimal(group.sellUsd));
     entry.remainingAmount = entry.remainingAmount.plus(remainingAmount);
     entry.invested = entry.invested.plus(decimal(group.remainingCostBasisUsd));
+    entry.currentValue = entry.currentValue.plus(
+      decimal(group.remainingCostBasisUsd).plus(
+        group.unrealizedPnlUsd !== null ? decimal(group.unrealizedPnlUsd) : 0,
+      ),
+    );
 
     if (group.unrealizedPnlUsd !== null) {
       const pnl = decimal(group.unrealizedPnlUsd);
@@ -62,6 +69,7 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
     .map((entry) => ({
       asset: entry.asset,
       investedUsd: usdString(entry.invested),
+      currentValueUsd: usdString(entry.currentValue),
       realizedPnlUsd: usdString(entry.realized),
       unrealizedPnlUsd: entry.hasUnrealized ? usdString(entry.unrealized) : null,
       positiveUnrealizedUsd: usdString(entry.positiveUnrealized),

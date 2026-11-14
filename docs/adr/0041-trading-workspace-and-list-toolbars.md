@@ -44,3 +44,5 @@ The logo/login redesign was explicitly deferred because the source files were no
 ## Update (UI-49, 2026-11-14)
 
 The portfolio token cards now aggregate **only active trade groups**. Closed groups are excluded, and realized P&L and buy+sell turnover are calculated only from the currently open groups. The card count is the number of active orders. `ordersCount` remains in the response for compatibility but equals the active count.
+
+UI-50 later replaced the displayed active turnover with `Капитал` (`currentValueUsd`: active remaining cost basis plus active unrealized P&L), laid the metrics out in one row with a prominent P&L, removed the card descriptions, and added sorting to the main token list.

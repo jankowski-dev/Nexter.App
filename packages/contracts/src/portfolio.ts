@@ -276,6 +276,7 @@ export type PortfolioSnapshot = z.infer<typeof portfolioSnapshotSchema>;
 export const portfolioTokenSummarySchema = z.object({
   asset: assetSchema,
   investedUsd: z.string(),
+  currentValueUsd: z.string(),
   realizedPnlUsd: z.string(),
   unrealizedPnlUsd: z.string().nullable(),
   positiveUnrealizedUsd: z.string(),
