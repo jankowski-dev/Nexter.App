@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
+import { ExpressionInput } from '@/components/ui/expression-input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -14,6 +15,7 @@ import {
   updateFinanceTransfer,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import { normalizeAmountInput } from '@/lib/expression';
 import { useState } from 'react';
 import type {
   FinanceAccount,
@@ -97,7 +99,8 @@ export function FinanceTransactionDialog({
   );
 
   async function save(): Promise<void> {
-    if (!title.trim() || !amount.trim() || !accountId) {
+    const normalizedAmount = normalizeAmountInput(amount);
+    if (!title.trim() || !normalizedAmount || !accountId) {
       setError('Заполните название, сумму и счёт.');
       return;
     }
@@ -111,7 +114,7 @@ export function FinanceTransactionDialog({
         occurredOn,
         accountId,
         categoryId: categoryId || null,
-        amount,
+        amount: normalizedAmount,
         title: title.trim(),
         description: description.trim() || null,
       };
@@ -202,11 +205,10 @@ export function FinanceTransactionDialog({
         </div>
         <label className="block text-sm text-zinc-600">
           Сумма
-          <Input
+          <ExpressionInput
             className="mt-1"
-            inputMode="decimal"
             value={amount}
-            onChange={(event) => setAmount(event.target.value)}
+            onChange={setAmount}
             placeholder="0.00"
           />
         </label>
@@ -266,7 +268,9 @@ export function FinanceTransferDialog({
   const [saving, setSaving] = useState(false);
 
   async function save(): Promise<void> {
-    if (!fromAccountId || !toAccountId || !fromAmount || !toAmount) {
+    const normalizedFromAmount = normalizeAmountInput(fromAmount);
+    const normalizedToAmount = normalizeAmountInput(toAmount);
+    if (!fromAccountId || !toAccountId || !normalizedFromAmount || !normalizedToAmount) {
       setError('Заполните счета и суммы.');
       return;
     }
@@ -280,8 +284,8 @@ export function FinanceTransferDialog({
         occurredOn,
         fromAccountId,
         toAccountId,
-        fromAmount,
-        toAmount,
+        fromAmount: normalizedFromAmount,
+        toAmount: normalizedToAmount,
         description: description.trim() || null,
       };
       if (transfer) await updateFinanceTransfer(transfer.id, body);
@@ -355,11 +359,10 @@ export function FinanceTransferDialog({
           </label>
           <label className="block text-sm text-zinc-600">
             Сумма списания
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={fromAmount}
-              onChange={(event) => setFromAmount(event.target.value)}
+              onChange={setFromAmount}
               placeholder="0.00"
             />
           </label>
@@ -381,11 +384,10 @@ export function FinanceTransferDialog({
           </label>
           <label className="block text-sm text-zinc-600">
             Сумма зачисления
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={toAmount}
-              onChange={(event) => setToAmount(event.target.value)}
+              onChange={setToAmount}
               placeholder="0.00"
             />
           </label>
@@ -430,6 +432,10 @@ export function FinanceAccountDialog({
       return;
     }
 
+    const normalizedOpeningBalance = normalizeAmountInput(openingBalance);
+    const normalizedFxRate = normalizeAmountInput(fxRate);
+    const normalizedCreditLimit = creditLimit.trim() ? normalizeAmountInput(creditLimit) : '';
+
     setSaving(true);
     setError(null);
 
@@ -438,10 +444,10 @@ export function FinanceAccountDialog({
         name: name.trim(),
         kind,
         currency,
-        openingBalance,
+        openingBalance: normalizedOpeningBalance,
         openingDate,
-        fxRate,
-        creditLimit: creditLimit.trim() || null,
+        fxRate: normalizedFxRate,
+        creditLimit: normalizedCreditLimit || null,
       };
       if (account) await updateFinanceAccount(account.id, body);
       else await createFinanceAccount(body);
@@ -511,12 +517,7 @@ export function FinanceAccountDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">
             Начальный остаток
-            <Input
-              className="mt-1"
-              inputMode="decimal"
-              value={openingBalance}
-              onChange={(event) => setOpeningBalance(event.target.value)}
-            />
+            <ExpressionInput className="mt-1" value={openingBalance} onChange={setOpeningBalance} />
           </label>
           <label className="block text-sm text-zinc-600">
             Дата начала
@@ -531,21 +532,19 @@ export function FinanceAccountDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">
             Курс к BYN
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={currency === 'BYN' ? '1' : fxRate}
               disabled={currency === 'BYN'}
-              onChange={(event) => setFxRate(event.target.value)}
+              onChange={setFxRate}
             />
           </label>
           <label className="block text-sm text-zinc-600">
             Кредитный лимит
-            <Input
+            <ExpressionInput
               className="mt-1"
-              inputMode="decimal"
               value={creditLimit}
-              onChange={(event) => setCreditLimit(event.target.value)}
+              onChange={setCreditLimit}
               placeholder="Необязательно"
             />
           </label>

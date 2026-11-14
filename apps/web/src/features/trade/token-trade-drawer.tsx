@@ -10,6 +10,7 @@ import {
   buildSwapApproval,
   cancelSwap,
   cancelSwapSigning,
+  fetchSwapBalances,
   fetchSwapConfig,
   fetchPortfolioAsset,
   fetchSwapOrder,
@@ -33,6 +34,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useWallet } from '@/lib/wallet-context';
+import { StablecoinSelect } from './stablecoin-select';
 import {
   isBuildRetryable,
   isStepUpRequired,
@@ -142,6 +144,17 @@ export function TokenTradeDrawer({
   const queryClient = useQueryClient();
   const wallet = useWallet();
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
+  const balances = useQuery({
+    queryKey: ['swap-balances', wallet.chain, wallet.address],
+    queryFn: () => fetchSwapBalances({ chain: wallet.chain, wallet: wallet.address as string }),
+    enabled: Boolean(wallet.connected && wallet.address),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  });
+  const balanceBySymbol = new Map(
+    (balances.data?.balances ?? []).map((item) => [item.symbol, item.balance]),
+  );
   const [mode, setMode] = useState<Mode>(initialMode);
   const [quoteSymbol, setQuoteSymbol] = useState('USDC');
   const [amount, setAmount] = useState('');
@@ -667,21 +680,16 @@ export function TokenTradeDrawer({
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm text-zinc-600">
+            <div className="block text-sm text-zinc-600">
               {isBuy ? 'Плачу' : 'Получаю'}
-              <Select
-                className="mt-1"
-                value={quoteSymbol}
-                onChange={(event) => setQuoteSymbol(event.target.value)}
+              <StablecoinSelect
+                options={quoteOptions}
+                value={quoteDisplay}
+                onChange={setQuoteSymbol}
+                balances={balanceBySymbol}
                 disabled={executing}
-              >
-                {quoteOptions.map((item) => (
-                  <option key={item.symbol} value={item.symbol}>
-                    {item.symbol}
-                  </option>
-                ))}
-              </Select>
-            </label>
+              />
+            </div>
             <label className="block text-sm text-zinc-600">
               Сеть
               <div className="mt-1 flex h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">

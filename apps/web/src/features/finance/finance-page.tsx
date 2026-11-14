@@ -136,14 +136,16 @@ function Kpi({
   value,
   hint,
   tone,
+  surface,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: string;
+  surface?: 'emerald' | 'sky' | 'amber' | 'violet' | 'rose';
 }) {
   return (
-    <Card>
+    <Card className={surface ? `tone-surface tone-surface-${surface}` : undefined}>
       <CardTitle>{label}</CardTitle>
       <div
         className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
@@ -494,23 +496,27 @@ export function FinancePage() {
               value={money(summary.data?.incomeBase, 'BYN')}
               hint={periodRange.label}
               tone="text-emerald-700"
+              surface="emerald"
             />
             <Kpi
               label="Расходы"
               value={money(summary.data?.expenseBase, 'BYN')}
               hint={periodRange.label}
               tone="text-red-700"
+              surface="rose"
             />
             <Kpi
               label="Чистый поток"
               value={money(summary.data?.netBase, 'BYN')}
               hint="Доходы − расходы"
               tone={Number(summary.data?.netBase ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}
+              surface="sky"
             />
             <Kpi
               label="Чистый капитал"
               value={money(summary.data?.netWorthBase, 'BYN')}
               hint={`Активы ${money(summary.data?.assetsBase, 'BYN')} · кредит ${money(summary.data?.liabilitiesBase, 'BYN')}`}
+              surface="violet"
             />
           </div>
           <p className="text-xs text-zinc-500">

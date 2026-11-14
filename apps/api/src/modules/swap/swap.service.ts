@@ -23,6 +23,7 @@ import type {
   SwapBuildRequest,
   SwapBuildResponse,
   SwapChainCode,
+  SwapBalancesResponse,
   SwapConfigResponse,
   SwapOrderDetail,
   SwapOrderSummary,
@@ -189,6 +190,38 @@ export class SwapService {
       defaultSlippageBps: env.SWAP_DEFAULT_SLIPPAGE_BPS,
       maxSlippageBps: env.SWAP_MAX_SLIPPAGE_BPS,
     };
+  }
+
+  async balances(chain: string, wallet: string): Promise<SwapBalancesResponse> {
+    const chainConfig = getSwapChain(chain);
+    if (!chainConfig) {
+      throw new BadRequestException({ code: 'VALIDATION_ERROR', message: 'Unknown chain' });
+    }
+
+    const stablecoins = chainConfig.tokens.filter(
+      (token) => token.symbol === 'USDC' || token.symbol === 'USDT',
+    );
+    const balances = await Promise.all(
+      stablecoins.map(async (token) => {
+        let raw: string | null = null;
+        try {
+          raw = token.native
+            ? await this.rpc.getNativeBalance(chain, wallet)
+            : await this.rpc.getErc20Balance(chain, token.address, wallet);
+        } catch {
+          raw = null;
+        }
+
+        return {
+          symbol: token.symbol,
+          address: token.address,
+          decimals: token.decimals,
+          balance: raw === null ? null : fromBaseUnits(raw, token.decimals),
+        };
+      }),
+    );
+
+    return { chain: chainConfig.code, wallet: wallet.toLowerCase(), balances };
   }
 
   async preview(input: SwapQuoteRequest): Promise<SwapPreview> {

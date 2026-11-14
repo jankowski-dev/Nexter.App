@@ -1,13 +1,13 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { NavIcon } from '@/components/nav-icon';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
-import { PriceFreshness } from '@/components/ui/price-freshness';
 import {
   createHabit,
   fetchDashboardPnl,
@@ -230,17 +230,16 @@ export function DashboardPage() {
       {summary.isPending ? <LoadingRows rows={4} /> : null}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
+        <Card className="tone-surface tone-surface-emerald relative overflow-hidden">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Крипта</CardTitle>
-              <CardDescription>
-                Ключевые показатели портфеля. Цены:{' '}
-                <PriceFreshness
-                  updatedAt={summary.data?.priceUpdatedAt}
-                  fetchedAt={summary.data?.priceFetchedAt}
-                />
-              </CardDescription>
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                <NavIcon name="crypto" className="h-4 w-4" />
+              </span>
+              <div>
+                <CardTitle>Крипта</CardTitle>
+                <CardDescription>Ключевые показатели портфеля.</CardDescription>
+              </div>
             </div>
             <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
               <Link to="/portfolio">Торговля</Link>
@@ -273,11 +272,16 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card>
+        <Card className="tone-surface tone-surface-amber relative overflow-hidden">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle>Финансы</CardTitle>
-              <CardDescription>Текущий месяц в BYN.</CardDescription>
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+                <NavIcon name="finance" className="h-4 w-4" />
+              </span>
+              <div>
+                <CardTitle>Финансы</CardTitle>
+                <CardDescription>Текущий месяц в BYN.</CardDescription>
+              </div>
             </div>
             <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
               <Link to="/finance">Финансы</Link>

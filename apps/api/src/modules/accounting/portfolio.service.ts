@@ -28,7 +28,21 @@ export class PortfolioService {
   ) {}
 
   async tokenSummaries(userId: string): Promise<PortfolioTokenSummariesResponse> {
-    return { data: aggregateTokenSummaries(await this.allTradeGroups(userId)) };
+    const summaries = aggregateTokenSummaries(await this.allTradeGroups(userId));
+    if (summaries.length === 0) return { data: summaries };
+
+    const quotes = await this.pricing.latestForAssets(summaries.map((item) => item.asset.id));
+
+    return {
+      data: summaries.map((item) => {
+        const quote = quotes.get(item.asset.id);
+        return {
+          ...item,
+          priceUsd: quote?.priceUsd ?? null,
+          change24hPct: quote?.change24hPct ?? null,
+        };
+      }),
+    };
   }
 
   async assetDetail(userId: string, assetId: string): Promise<PortfolioAssetDetail> {

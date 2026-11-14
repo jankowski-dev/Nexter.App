@@ -70,6 +70,8 @@ export function aggregateTokenSummaries(groups: TradeGroupSummary[]): PortfolioT
       asset: entry.asset,
       investedUsd: usdString(entry.invested),
       currentValueUsd: usdString(entry.currentValue),
+      priceUsd: null,
+      change24hPct: null,
       realizedPnlUsd: usdString(entry.realized),
       unrealizedPnlUsd: entry.hasUnrealized ? usdString(entry.unrealized) : null,
       positiveUnrealizedUsd: usdString(entry.positiveUnrealized),
