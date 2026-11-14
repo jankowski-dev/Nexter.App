@@ -2,10 +2,22 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const require = createRequire(
-  join(dirname(fileURLToPath(import.meta.url)), '..', 'packages', 'db', 'package.json'),
-);
-const { Client } = require('pg');
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const requireCandidates = [
+  join(scriptDir, '..', 'packages', 'db', 'package.json'),
+  join(process.cwd(), 'package.json'),
+  join(scriptDir, 'package.json'),
+];
+let Client;
+for (const candidate of requireCandidates) {
+  try {
+    Client = createRequire(candidate)('pg').Client;
+    break;
+  } catch {
+    // Try the next resolution root.
+  }
+}
+if (!Client) throw new Error('Cannot resolve pg; run from the repository or packages/db');
 
 /**
  * One-off enrichment for the tokens in the default "Основная" watchlist group.
