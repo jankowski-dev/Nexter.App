@@ -78,7 +78,11 @@ export function BacktestPanel({
   const supportsStopLoss = template.paramFields.some((field) => field.key === 'stopLossPct');
   const supportsTakeProfit = template.paramFields.some((field) => field.key === 'takeProfitPct');
   const missingDays = preview ? countMissingDays(preview.candles) : 0;
-  const syntheticCandles = preview?.candles.some((candle) => candle.synthetic === true) ?? false;
+  const syntheticCandles = preview
+    ? preview.candles.some((candle) => candle.synthetic === true) ||
+      (preview.source === 'coingecko' &&
+        preview.candles.every((candle) => candle.synthetic === undefined))
+    : false;
   const periodChangePct =
     preview && preview.candles.length > 1
       ? (() => {
