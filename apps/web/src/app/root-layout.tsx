@@ -212,15 +212,18 @@ function RootLayoutContent() {
       </a>
 
       <div className="flex min-h-dvh w-full">
-        <aside className="hidden w-56 shrink-0 border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
-          <Link to="/dashboard" className="mb-8 block px-2">
+        <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 overflow-hidden border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
+          <Link to="/dashboard" className="mb-6 block shrink-0 px-2">
             <div className="text-lg font-semibold tracking-tight text-white">
               {messages.app.name}
             </div>
             <div className="text-xs text-zinc-400">{messages.app.tagline}</div>
           </Link>
 
-          <nav aria-label="Основная навигация" className="flex flex-col gap-1">
+          <nav
+            aria-label="Основная навигация"
+            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1"
+          >
             {topNavigation.map((item) => (
               <Link
                 key={item.to}
@@ -284,7 +287,7 @@ function RootLayoutContent() {
             ))}
           </nav>
 
-          <div className="mt-auto">
+          <div className="mt-4 shrink-0">
             <Button
               className="w-full justify-center bg-red-700 text-white hover:bg-red-800"
               variant="danger"
@@ -296,7 +299,7 @@ function RootLayoutContent() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="relative flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
             <div className="hidden text-sm text-zinc-500 sm:block">{messages.app.header}</div>
             <div className="flex items-center gap-2 sm:gap-3">
               <LiveRefreshIndicator />

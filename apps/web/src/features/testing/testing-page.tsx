@@ -722,7 +722,6 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                   );
                 })}
               </div>
-              <p className="mt-3 text-sm text-zinc-700">{standTemplate.description}</p>
             </Card>
             <BacktestPanel
               key={standTemplate.key}
