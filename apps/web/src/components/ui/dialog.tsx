@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 export function Dialog({
   open,
@@ -50,7 +51,7 @@ export function Dialog({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className="dialog-overlay-enter fixed inset-0 z-50 flex items-end justify-center bg-zinc-900/30 p-0 sm:items-center sm:p-6"
       role="presentation"
@@ -88,6 +89,7 @@ export function Dialog({
         {children}
         {footer ? <div className="mt-5 flex justify-end gap-2">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
