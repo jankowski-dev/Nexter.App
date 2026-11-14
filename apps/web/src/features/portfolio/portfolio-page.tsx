@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { NavIcon } from '@/components/nav-icon';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
@@ -177,12 +178,17 @@ export function PortfolioPage() {
       {tab === 'portfolio' && data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Card>
-              <CardTitle>Стоимость позиций</CardTitle>
-              <div className="mt-1 font-mono text-2xl font-semibold text-zinc-900">
+            <Card className="relative overflow-hidden border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-white">
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle className="text-emerald-800">Стоимость позиций</CardTitle>
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
+                  <NavIcon name="portfolio" className="h-4 w-4" />
+                </span>
+              </div>
+              <div className="mt-1 font-mono text-3xl font-semibold tracking-tight text-emerald-950">
                 {formatUsd(data.positionsValueUsd)}
               </div>
-              <CardDescription>По последним ценам</CardDescription>
+              <CardDescription className="text-emerald-800/60">По последним ценам</CardDescription>
             </Card>
             <Card>
               <CardTitle>Капитал</CardTitle>
@@ -217,10 +223,6 @@ export function PortfolioPage() {
           {!tokenSummaries.isPending && !tokenSummaries.isError ? (
             <Card>
               <CardTitle>Портфель по токенам</CardTitle>
-              <CardDescription>
-                Консолидированные данные только по активным ордерам: P&L, инвестиции, текущий плюс и
-                минус, оборот, средневзвешенный курс и количество активных ордеров.
-              </CardDescription>
               {(tokenSummaries.data?.data ?? []).filter((item) => item.openOrdersCount > 0)
                 .length === 0 ? (
                 <p className="mt-4 text-sm text-zinc-600">Открытых ордеров нет.</p>
@@ -234,7 +236,7 @@ export function PortfolioPage() {
                         type="button"
                         aria-label={`Открыть статистику ${item.asset.symbol}`}
                         onClick={() => setSelectedAssetId(item.asset.id)}
-                        className="block w-full cursor-pointer rounded-xl border border-zinc-200 p-4 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                        className="block w-full cursor-pointer rounded-xl border border-zinc-200 p-3.5 text-left transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
                       >
                         <div className="flex flex-wrap items-center gap-3">
                           <TokenIcon
@@ -260,42 +262,51 @@ export function PortfolioPage() {
                             )}
                           </span>
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs sm:grid-cols-3 xl:grid-cols-6">
-                          <PortfolioMetric
-                            label="P&L"
-                            value={formatSignedUsd(item.totalPnlUsd)}
-                            tone={pnlTone(item.totalPnlUsd)}
-                            hint="Реализованный + нереализованный по активным ордерам"
-                          />
-                          <PortfolioMetric
-                            label="Инвестировано"
-                            value={formatUsd(item.investedUsd)}
-                            hint="Себестоимость открытых ордеров"
-                          />
-                          <PortfolioMetric
-                            label="Плюс"
-                            value={formatUsd(item.positiveUnrealizedUsd)}
-                            tone="text-emerald-700"
-                            hint="Нереализованная прибыль прибыльных активных ордеров"
-                          />
-                          <PortfolioMetric
-                            label="Минус"
-                            value={formatUsd(item.negativeUnrealizedUsd)}
-                            tone="text-red-700"
-                            hint="Нереализованный убыток убыточных активных ордеров"
-                          />
-                          <PortfolioMetric
-                            label="Оборот"
-                            value={formatUsd(item.turnoverUsd)}
-                            hint="Покупки и продажи активных ордеров"
-                          />
-                          <PortfolioMetric
-                            label="Средний курс"
-                            value={
-                              item.breakEvenPriceUsd ? formatPrice(item.breakEvenPriceUsd) : '—'
-                            }
-                            hint="Курс выхода в ноль при закрытии всех сделок"
-                          />
+                        <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
+                          <div
+                            className="min-w-[150px]"
+                            title="Реализованный + нереализованный по активным ордерам"
+                          >
+                            <div className="text-[10px] text-zinc-500">P&L</div>
+                            <div
+                              className={`mt-0.5 font-mono text-xl font-semibold tracking-tight ${pnlTone(
+                                item.totalPnlUsd,
+                              )}`}
+                            >
+                              {formatSignedUsd(item.totalPnlUsd)}
+                            </div>
+                          </div>
+                          <div className="ml-auto grid flex-1 grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-5">
+                            <PortfolioMetric
+                              label="Инвестировано"
+                              value={formatUsd(item.investedUsd)}
+                              hint="Себестоимость открытых ордеров"
+                            />
+                            <PortfolioMetric
+                              label="Капитал"
+                              value={formatUsd(item.currentValueUsd)}
+                              hint="Текущая стоимость активных токенов по рынку"
+                            />
+                            <PortfolioMetric
+                              label="Плюс"
+                              value={formatUsd(item.positiveUnrealizedUsd)}
+                              tone="text-emerald-700"
+                              hint="Нереализованная прибыль прибыльных активных ордеров"
+                            />
+                            <PortfolioMetric
+                              label="Минус"
+                              value={formatUsd(item.negativeUnrealizedUsd)}
+                              tone="text-red-700"
+                              hint="Нереализованный убыток убыточных активных ордеров"
+                            />
+                            <PortfolioMetric
+                              label="Средний курс"
+                              value={
+                                item.breakEvenPriceUsd ? formatPrice(item.breakEvenPriceUsd) : '—'
+                              }
+                              hint="Курс выхода в ноль при закрытии всех сделок"
+                            />
+                          </div>
                         </div>
                       </button>
                     ))}
@@ -305,7 +316,6 @@ export function PortfolioPage() {
           ) : null}
 
           <TokenBuyList
-            positions={data.positions}
             onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
             onManual={(asset) => {
               setManual({ assetId: asset.id, side: 'entry' });

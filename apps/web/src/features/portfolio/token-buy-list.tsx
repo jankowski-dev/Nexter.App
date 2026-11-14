@@ -1,22 +1,30 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
 import { PeriodChange } from '@/components/period-change';
+import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import {
-  formatPct,
-  formatPrice,
-  formatTokenAmount,
-  formatUsd,
-  formatUsdCompact,
-  pnlTone,
-} from '@/lib/format';
+import { formatPct, formatPrice, formatUsdCompact, pnlTone } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import type { Asset, Position, SwapConfigResponse } from '@nexter/contracts';
+import { useState } from 'react';
+import type { Asset, SwapConfigResponse, WatchlistEntry } from '@nexter/contracts';
+
+type TokenListSort =
+  'default' | 'price' | 'change24h' | 'change7d' | 'change30d' | 'change1y' | 'marketCap';
+
+const sortLabels: Record<TokenListSort, string> = {
+  default: 'По умолчанию',
+  price: 'По цене',
+  change24h: 'По 24ч',
+  change7d: 'По 7д',
+  change30d: 'По 30д',
+  change1y: 'По 1г',
+  marketCap: 'По капитализации',
+};
 
 function isOnchainAllowed(asset: Asset, config: SwapConfigResponse | undefined): boolean {
   const chain = config?.chains.find((item) => item.code === asset.chainCode);
@@ -30,19 +38,37 @@ function isOnchainAllowed(asset: Asset, config: SwapConfigResponse | undefined):
   return chain.tokens.some((token) => token.native && token.symbol === asset.symbol);
 }
 
+function sortValue(entry: WatchlistEntry, key: Exclude<TokenListSort, 'default'>): number | null {
+  const value =
+    key === 'price'
+      ? entry.priceUsd
+      : key === 'change24h'
+        ? entry.change24hPct
+        : key === 'change7d'
+          ? entry.change7dPct
+          : key === 'change30d'
+            ? entry.change30dPct
+            : key === 'change1y'
+              ? entry.change1yPct
+              : entry.marketCapUsd;
+  if (value === null) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function TokenBuyList({
-  positions,
   onBuy,
   onManual,
   showHeading = true,
 }: {
-  positions: Position[];
   onBuy: (asset: Asset, marketPriceUsd: string | null) => void;
   onManual?: (asset: Asset, marketPriceUsd: string | null) => void;
   showHeading?: boolean;
 }) {
   const groups = useQuery({ queryKey: ['watchlist-groups'], queryFn: fetchWatchlistGroups });
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
+  const [sortKey, setSortKey] = useState<TokenListSort>('default');
+  const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
   const defaultGroup = groups.data?.groups.find((group) => group.isDefault);
   const watchlist = useQuery({
     queryKey: ['buy-list', defaultGroup?.id],
@@ -71,15 +97,47 @@ export function TokenBuyList({
   }
 
   const entries = watchlist.data?.data ?? [];
-  const positionByAsset = new Map(positions.map((position) => [position.asset.id, position]));
+  const sortedEntries =
+    sortKey === 'default'
+      ? entries
+      : [...entries].sort((left, right) => {
+          const leftValue = sortValue(left, sortKey);
+          const rightValue = sortValue(right, sortKey);
+          if (leftValue === null && rightValue === null) return 0;
+          if (leftValue === null) return 1;
+          if (rightValue === null) return -1;
+          return sortDirection === 'desc' ? rightValue - leftValue : leftValue - rightValue;
+        });
 
   return (
     <Card>
-      {showHeading ? <CardTitle>Основной список</CardTitle> : null}
-      <CardDescription>
-        Токены из группы «Основная». On-chain покупка доступна только для токенов из разрешённого
-        списка (allowlist); для остальных доступна ручная запись.
-      </CardDescription>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {showHeading ? <CardTitle>Основной список</CardTitle> : null}
+        <div className="ml-auto flex items-center gap-2">
+          <Select
+            className="h-9 w-44"
+            value={sortKey}
+            onChange={(event) => setSortKey(event.target.value as TokenListSort)}
+            aria-label="Сортировка основного списка"
+          >
+            {(Object.keys(sortLabels) as TokenListSort[]).map((key) => (
+              <option key={key} value={key}>
+                {sortLabels[key]}
+              </option>
+            ))}
+          </Select>
+          <Button
+            variant="secondary"
+            className="h-9 px-2"
+            aria-label={sortDirection === 'desc' ? 'По убыванию' : 'По возрастанию'}
+            title={sortDirection === 'desc' ? 'По убыванию' : 'По возрастанию'}
+            disabled={sortKey === 'default'}
+            onClick={() => setSortDirection((value) => (value === 'desc' ? 'asc' : 'desc'))}
+          >
+            {sortDirection === 'desc' ? '↓' : '↑'}
+          </Button>
+        </div>
+      </div>
       {config.isError ? (
         <p className="mt-2 text-xs text-amber-700">
           Не удалось проверить разрешённый список токенов. Доступна только ручная запись.
@@ -91,8 +149,8 @@ export function TokenBuyList({
           В группе «Основная» пока нет токенов. Добавьте их в базе токенов.
         </p>
       ) : (
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[1080px] text-sm">
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[920px] text-sm">
             <thead>
               <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                 <th className="py-2 pr-3 font-medium">Токен</th>
@@ -103,14 +161,11 @@ export function TokenBuyList({
                 <th className="py-2 pr-3 text-right font-medium">7д</th>
                 <th className="py-2 pr-3 text-right font-medium">30д</th>
                 <th className="py-2 pr-3 text-right font-medium">1г</th>
-                <th className="py-2 pr-3 text-right font-medium">Кап.</th>
-                <th className="py-2 pr-3 text-right font-medium">В портфеле</th>
-                <th className="py-2 text-right font-medium">Стоимость</th>
+                <th className="py-2 text-right font-medium">Кап.</th>
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => {
-                const position = positionByAsset.get(entry.asset.id);
+              {sortedEntries.map((entry) => {
                 const onchainAllowed = isOnchainAllowed(entry.asset, config.data);
                 return (
                   <tr
@@ -155,7 +210,7 @@ export function TokenBuyList({
                         </Button>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-800">
+                    <td className="py-2 pr-3 text-right font-mono text-base font-medium tabular-nums text-zinc-800">
                       <LiveValue value={formatPrice(entry.priceUsd)}>
                         {formatPrice(entry.priceUsd)}
                       </LiveValue>
@@ -179,16 +234,8 @@ export function TokenBuyList({
                     <PeriodChange value={entry.change7dPct} />
                     <PeriodChange value={entry.change30dPct} />
                     <PeriodChange value={entry.change1yPct} />
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
+                    <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
                       {entry.marketCapUsd ? formatUsdCompact(entry.marketCapUsd) : '—'}
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono tabular-nums text-zinc-600">
-                      {position ? formatTokenAmount(position.amount, 8) : '—'}
-                    </td>
-                    <td className="py-2 text-right font-mono tabular-nums text-zinc-700">
-                      <LiveValue value={position ? formatUsd(position.valueUsd) : '—'}>
-                        {position ? formatUsd(position.valueUsd) : '—'}
-                      </LiveValue>
                     </td>
                   </tr>
                 );

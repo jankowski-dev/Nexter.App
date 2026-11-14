@@ -108,6 +108,7 @@ describe('aggregateTokenSummaries', () => {
     expect(rows[0]).toMatchObject({
       asset: alpha,
       investedUsd: '2100.00000000',
+      currentValueUsd: '2170.00000000',
       realizedPnlUsd: '100.00000000',
       unrealizedPnlUsd: '70.00000000',
       positiveUnrealizedUsd: '150.00000000',
@@ -123,6 +124,7 @@ describe('aggregateTokenSummaries', () => {
     expect(rows[1]).toMatchObject({
       asset: gamma,
       investedUsd: '50.00000000',
+      currentValueUsd: '50.00000000',
       realizedPnlUsd: '10.00000000',
       unrealizedPnlUsd: null,
       positiveUnrealizedUsd: '0.00000000',
