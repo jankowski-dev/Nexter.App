@@ -413,6 +413,14 @@ interface StrategyDefinition {
 - Strategy metadata adds `bestFor` and `risks`; the strategy drawer shows description, best-use cases, guide, risks and defaults.
 - Deployment `b138c1ea-af5b-4b31-9f9b-cd17c5e87c94`; bundle `assets/index-pQAOvbq_.js`; `/ready` 200. No migration, no real-ledger changes.
 
+### UI-47 (2026-11-14)
+
+- GeckoTerminal true daily OHLC is preferred for BSC/Ethereum contract tokens when it covers the requested period; otherwise the longer CoinGecko series is used and marked `synthetic`.
+- Synthetic take-profit fills at the threshold; synthetic stop-loss fills at the close. Real OHLC keeps intrabar/gap/stop-first execution. Protective exits still call `evaluate` so stateful strategies advance their high-water mark/mode/add counters.
+- Stored CYCLE 365-day replay: +5.82% (52 trades, 18 TP, max DD 48.13%, buy-and-hold +171.03%) instead of +1462.39%. 180-day true-OHLC replay: −6.75% (34 trades, 14 TP, max DD 31.46%, buy-and-hold +501.70%).
+- Existing runs are immutable; run CYCLE again for the corrected result.
+- Deployment `6ebf2d82-a47a-4e77-a937-dbfd0d6d2686`; bundle `assets/index-C5881s6H.js`; `/ready` 200. No migration, no real-ledger changes.
+
 ### UI-46 (2026-11-14)
 
 - `Портфель` переименован в `Торговля`; вкладки: `Портфель`, `Ордера`, `Роботы`, `Стратегии`.
