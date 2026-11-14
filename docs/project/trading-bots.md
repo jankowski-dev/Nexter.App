@@ -421,6 +421,11 @@ interface StrategyDefinition {
 - Existing runs are immutable; run CYCLE again for the corrected result.
 - Deployment `6ebf2d82-a47a-4e77-a937-dbfd0d6d2686`; bundle `assets/index-C5881s6H.js`; `/ready` 200. No migration, no real-ledger changes.
 
+### UI-49 (2026-11-14)
+
+- Bot editing and reset now reset diagnostic `bot_signals` rows in place via `UPDATE`; `nexter_app` intentionally has no DELETE on that table, and the previous `DELETE` caused every edit save to fail. The full edit payload is covered by an e2e test.
+- Deployment `616e07de-2296-449e-8e1f-8b5d8e9a5129`; bundle `assets/index-O3vgA4eB.js`; `/ready` 200. No migration.
+
 ### UI-46 (2026-11-14)
 
 - `Портфель` переименован в `Торговля`; вкладки: `Портфель`, `Ордера`, `Роботы`, `Стратегии`.
