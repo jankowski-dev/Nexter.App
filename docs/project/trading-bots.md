@@ -353,13 +353,16 @@ interface StrategyDefinition {
 - Paper fill не учитывает глубину пула; slippage фиксированный.
 - Токены без котировки/свежести пропускаются; причина видна в `bot_signals`.
 - Исторический бэктест — дневные бары, не тиковый/HFT. Он не учитывает глубину пула и внутридневные движения; результаты сравнительные, не гарантия будущей доходности.
+- Бесплатное окно GeckoTerminal daily OHLCV — около 184 дней. Запросы на 365/730 дней падают в более длинный CoinGecko-ряд, помеченный `synthetic`; такие прогоны консервативнее, но всё равно зависят от качества дневных точек.
+- Существующие immutable-прогоны не пересчитываются; для исправленного результата нужен новый прогон.
 - Нет уведомлений вне приложения; журнал событий внутри drawer.
 - Будущий live-режим: отдельный `ExecutionVenue` adapter, allowlist, симуляция, лимиты, kill switch, аудит и подписант на стороне владельца. До этого боты остаются paper.
 
 ## 12. Проверка
 
 - Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для пяти стратегий.
-- Unit: `apps/api/src/modules/trading-bots/backtest/backtest.engine.spec.ts` — buy/sell-циклы, принудительное закрытие, drawdown, buy-and-hold, stateful crash-grid (пауза, закрытие, resume, TP).
+- Unit: `apps/api/src/modules/trading-bots/backtest/backtest.engine.spec.ts` — buy/sell-циклы, принудительное закрытие, drawdown, buy-and-hold, stateful crash-grid (пауза, закрытие, resume, TP), synthetic TP/SL и вызов `evaluate` на защитном выходе.
+- Unit: `apps/api/src/modules/trading-bots/backtest/historical-data.service.spec.ts` — выбор GeckoTerminal/CoinGecko, synthetic-флаг и fallback при неполном покрытии периода.
 - Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — six strategies, including `crash_protected_grid` state transitions.
 - Unit: `apps/web/src/lib/search.test.ts` — общий поиск (регистр, `ё`, несколько слов).
 - UI: журналы бота загружают по 20 записей с `limit/offset`; журнал бэктеста — первые 20 с кнопкой `Ещё`.
@@ -418,6 +421,7 @@ interface StrategyDefinition {
 - Стенд выбирает стратегию карточками, поддерживает `/testing?strategy=<key>` и двухколоночный layout; карточки и drawer получили `Тестировать`.
 - Общие `Select`/`ListToolbar`/`TabGroup` унифицируют поиск слева и сортировку справа в заметках, задачах, операциях, базе токенов и хранилище; архивные фильтры и восстановление убраны с этих страниц.
 - Загрузчик страниц ограничен `<main>`, индикатор синхронизации работает на всех страницах.
+- Бэктест различает настоящие OHLC (GeckoTerminal) и синтетические дневные точки (CoinGecko). Для синтетики TP исполняется по порогу, SL — по закрытию; в интерфейсе и PDF показывается предупреждение. GeckoTerminal сейчас покрывает около 180 дней; для 365 дней используется более длинный CoinGecko-ряд с консервативным исполнением.
 - No migration, no real-ledger changes.
 - Production release 2026-11-14: PR #117, merge `8a105ee`, deployment `fc54e20f-ddf9-4542-88f9-e0138b859bb8`, bundle `assets/index-DdwtK4WO.js`, `/ready` 200.
 

@@ -78,6 +78,7 @@ export function BacktestPanel({
   const supportsStopLoss = template.paramFields.some((field) => field.key === 'stopLossPct');
   const supportsTakeProfit = template.paramFields.some((field) => field.key === 'takeProfitPct');
   const missingDays = preview ? countMissingDays(preview.candles) : 0;
+  const syntheticCandles = preview?.candles.some((candle) => candle.synthetic === true) ?? false;
   const periodChangePct =
     preview && preview.candles.length > 1
       ? (() => {
@@ -268,8 +269,9 @@ export function BacktestPanel({
     <Card>
       <CardTitle>Прогон по историческим данным</CardTitle>
       <CardDescription>
-        Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Стоп-лосс и тейк-профит срабатывают
-        внутри дня по high/low; открытая позиция закрывается в конце периода.
+        Дневные свечи, комиссия 25 bps и проскальзывание 10 bps. Для настоящих OHLC стоп-лосс и
+        тейк-профит срабатывают внутри дня по high/low; для синтетических свечей — по
+        закрытию/порогу. Открытая позиция закрывается в конце периода.
       </CardDescription>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[370px_1fr]">
@@ -432,8 +434,15 @@ export function BacktestPanel({
               {missingDays > 0 ? (
                 <p className="text-xs leading-5 text-amber-700">
                   В данных {missingDays} пропущенных дн. Для низколиквидных токенов источник может
-                  отдавать неполный ряд: стоп/тейк могут сработать с задержкой, а гэп — исполниться
-                  по цене открытия.
+                  отдавать неполный ряд: стоп/тейк могут сработать с задержкой.
+                </p>
+              ) : null}
+              {syntheticCandles ? (
+                <p className="text-xs leading-5 text-amber-700">
+                  Источник {preview?.source} отдаёт дневные точки без настоящих high/low. Для таких
+                  свечей тейк-профит исполняется по порогу, а стоп-лосс — по закрытию; результат
+                  консервативнее. Для настоящих OHLC выберите период до 180 дней, если GeckoTerminal
+                  покрывает историю пула.
                 </p>
               ) : null}
             </div>

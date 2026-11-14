@@ -236,6 +236,8 @@ export const botCandleSchema = z.object({
   lowUsd: z.string(),
   closeUsd: z.string(),
   volumeUsd: z.string().nullable(),
+  /** True when the source only provides sampled daily points, not true OHLC. */
+  synthetic: z.boolean().optional(),
 });
 
 export const botBacktestTradeSchema = z.object({
