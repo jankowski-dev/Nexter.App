@@ -75,6 +75,8 @@ function truncate(value: string, max = 500): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
 }
 
+const ROUTE_MIN_INTERVAL_MS = 1500;
+
 async function readCapped(response: Response, maxBytes: number): Promise<string> {
   const contentLength = response.headers.get('content-length');
 
@@ -119,6 +121,8 @@ export class KyberSwapClient {
   private readonly apiKey: string | undefined;
   private readonly clientId: string;
   private readonly fetchImpl: typeof fetch;
+  private routeChain: Promise<unknown> = Promise.resolve();
+  private lastRouteAt = 0;
 
   constructor(
     private readonly apiCalls: ExternalApiCallService,
@@ -155,11 +159,13 @@ export class KyberSwapClient {
       params.set('to', input.walletAddress);
     }
 
-    const data = await this.request(
-      'GET',
-      `/${input.chain}/api/v1/routes?${params.toString()}`,
-      undefined,
-      'routes',
+    const data = await this.scheduleRoute(() =>
+      this.request(
+        'GET',
+        `/${input.chain}/api/v1/routes?${params.toString()}`,
+        undefined,
+        'routes',
+      ),
     );
     const routeSummary = record(data.routeSummary);
     const routerAddress = stringValue(data.routerAddress);
@@ -217,6 +223,20 @@ export class KyberSwapClient {
       gas: stringValue(data.gas),
       gasUsd: stringValue(data.gasUsd),
     };
+  }
+
+  private scheduleRoute<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.routeChain.then(async () => {
+      const wait = Math.max(0, this.lastRouteAt + ROUTE_MIN_INTERVAL_MS - Date.now());
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      this.lastRouteAt = Date.now();
+      return task();
+    });
+    this.routeChain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   private async request(
@@ -286,7 +306,7 @@ export class KyberSwapClient {
             stringValue(parsed.message) ?? `KyberSwap request failed (${response.status})`,
           );
 
-          if ((response.status === 429 || response.status >= 500) && attempt < 2) {
+          if (response.status >= 500 && attempt < 2) {
             await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
             continue;
           }

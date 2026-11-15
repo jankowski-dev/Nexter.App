@@ -76,6 +76,12 @@ export function formatTokenAmount(value: string, maxDigits = 6): string {
   }).format(number);
 }
 
+export function normalizeDecimalInput(value: string, maxDigits = 18): string {
+  const [whole, fraction = ''] = value.split('.');
+  const trimmed = fraction.slice(0, maxDigits).replace(/0+$/, '');
+  return trimmed ? `${whole}.${trimmed}` : whole;
+}
+
 export function formatDate(value: string | null | undefined): string {
   if (!value) return '—';
   return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' }).format(new Date(value));

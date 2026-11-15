@@ -32,6 +32,7 @@ import {
   formatSignedUsd,
   formatTokenAmount,
   formatUsd,
+  normalizeDecimalInput,
   pnlTone,
 } from '@/lib/format';
 import { useWallet } from '@/lib/wallet-context';
@@ -248,7 +249,9 @@ export function TokenTradeDrawer({
       !executing &&
       !pendingSubmit,
     ),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
+    refetchOnWindowFocus: false,
     retry: false,
   });
 
@@ -314,7 +317,7 @@ export function TokenTradeDrawer({
 
   useEffect(() => {
     if (mode === 'sell' && trade && !amount) {
-      setAmount(trade.group.remainingAmount);
+      setAmount(normalizeDecimalInput(trade.group.remainingAmount));
     }
   }, [mode, trade, amount]);
 
@@ -338,7 +341,7 @@ export function TokenTradeDrawer({
       if (!mountedRef.current) return;
       setTrade(detail);
       setMode('sell');
-      setAmount(detail.group.remainingAmount);
+      setAmount(normalizeDecimalInput(detail.group.remainingAmount));
     } catch (err) {
       if (mountedRef.current) {
         setError(toRussianError(err, 'Не удалось загрузить данные сделки'));
@@ -923,7 +926,24 @@ export function TokenTradeDrawer({
 
             {preview.isError ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                {toRussianError(preview.error, 'Не удалось получить котировку')}
+                <p>{toRussianError(preview.error, 'Не удалось получить котировку')}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    className="h-8 px-3 text-xs"
+                    variant="secondary"
+                    onClick={() => void preview.refetch()}
+                    disabled={preview.isFetching}
+                  >
+                    {preview.isFetching ? 'Обновляю…' : 'Обновить котировку'}
+                  </Button>
+                  <Button
+                    className="h-8 px-3 text-xs"
+                    variant="ghost"
+                    onClick={() => setChannel('manual')}
+                  >
+                    Ручной ввод
+                  </Button>
+                </div>
               </div>
             ) : null}
 

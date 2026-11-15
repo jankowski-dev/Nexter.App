@@ -179,3 +179,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Unified trade and operation modals
 
 - **UI-59** — buy only from the main token list; sell/close from orders or the asset drawer; both order modals have `Ончейн`/`Вручную` tabs and fixed footer actions; operations has four manual tabs. See ADR 0049.
+
+## Readable amounts and swap provider limits
+
+- **UI-60** — token quantities no longer show raw 18-decimal tails; USD stays two-decimal and prices keep precision. Kyber 429s are not retried, route calls are throttled, previews are cached/polled less, and provider errors are specific with retry/manual actions. See ADR 0050.

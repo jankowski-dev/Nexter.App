@@ -2,7 +2,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createManualTransaction, fetchAccounts, fetchAssets } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPrice, formatTokenAmount, formatUsd } from '@/lib/format';
+import { formatPrice, formatTokenAmount, formatUsd, normalizeDecimalInput } from '@/lib/format';
 import { idempotencyForPayload } from '@/lib/idempotency';
 import { localDateKey } from '@/lib/tasks';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -71,7 +71,8 @@ export function ManualOrderForm({
   }, [cashAssets, quoteAssetId]);
 
   useEffect(() => {
-    if (side === 'sell' && trade && !amount) setAmount(trade.group.remainingAmount);
+    if (side === 'sell' && trade && !amount)
+      setAmount(normalizeDecimalInput(trade.group.remainingAmount));
   }, [side, trade, amount]);
 
   function submitManual(request: ManualTransactionRequest) {
@@ -214,7 +215,8 @@ export function ManualOrderForm({
           />
           {side === 'sell' && remaining ? (
             <span className="mt-1 block text-xs text-zinc-500">
-              Остаток ордера: {formatTokenAmount(remaining.toFixed(8), 8)} {token.symbol}
+              Остаток ордера: {formatTokenAmount(trade?.group.remainingAmount ?? '0', 8)}{' '}
+              {token.symbol}
             </span>
           ) : null}
         </label>
@@ -237,10 +239,10 @@ export function ManualOrderForm({
         </div>
         <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
           <span className="font-mono text-2xl font-semibold text-emerald-900">
-            {amount || '—'} {token.symbol}
+            {amount ? `${formatTokenAmount(amount, 8)} ${token.symbol}` : '—'}
           </span>
           <span className="font-mono text-sm text-emerald-800">
-            {side === 'buy' ? 'за' : 'получу'} {quoteAmount || '—'} {quoteAsset?.symbol ?? ''}
+            {side === 'buy' ? 'за' : 'получу'} {formatUsd(quoteAmount)} {quoteAsset?.symbol ?? ''}
           </span>
         </div>
         <div className="mt-1 text-xs text-emerald-700">
