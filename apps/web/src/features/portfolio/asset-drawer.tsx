@@ -1,16 +1,15 @@
-import { Drawer } from '@/components/ui/drawer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Drawer } from '@/components/ui/drawer';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchPortfolioAsset } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatDate,
-  formatDateTime,
-  formatSignedUsd,
   formatPrice,
+  formatSignedUsd,
   formatTokenAmount,
   formatUsd,
   pnlTone,
@@ -18,6 +17,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import type { Asset } from '@nexter/contracts';
+import { TokenPriceChart } from '../watchlist/token-price-chart';
 
 const statusLabels: Record<string, string> = {
   open: 'Открыта',
@@ -27,19 +27,31 @@ const statusLabels: Record<string, string> = {
   for_sale: 'В продажу',
 };
 
+const statusTones: Record<string, 'success' | 'warning' | 'neutral' | 'info'> = {
+  open: 'success',
+  partial: 'warning',
+  closed: 'neutral',
+  reserve: 'info',
+  for_sale: 'warning',
+};
+
+type MetricSurface = 'emerald' | 'sky' | 'amber' | 'violet' | 'rose';
+
 function Metric({
   label,
   value,
   hint,
   tone,
+  surface,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: string;
+  surface: MetricSurface;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-200 p-3">
+    <div className={`tone-surface tone-surface-${surface} rounded-xl border p-3`}>
       <div className="text-xs text-zinc-500">{label}</div>
       <div
         className={`mt-1 font-mono text-lg font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
@@ -91,26 +103,16 @@ export function AssetDrawer({
       }
       footer={
         data ? (
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
             {onBuy ? (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  onClose();
-                  onBuy(data.asset);
-                }}
-              >
+              <Button variant="secondary" onClick={() => onBuy(data.asset)}>
                 Купить
               </Button>
-            ) : null}
-            <Button variant="secondary" asChild>
-              <Link
-                to="/portfolio/assets/$assetId"
-                params={{ assetId: data.asset.id }}
-                onClick={onClose}
-              >
-                Открыть полную карточку
-              </Link>
+            ) : (
+              <span />
+            )}
+            <Button variant="secondary" onClick={onClose}>
+              Готово
             </Button>
           </div>
         ) : null
@@ -126,10 +128,16 @@ export function AssetDrawer({
 
       {data ? (
         <div className="space-y-5">
+          <Card>
+            <div className="mt-1">
+              <TokenPriceChart entryId={data.watchlistId} assetId={data.asset.id} />
+            </div>
+          </Card>
+
           {data.thesis || data.tags.length > 0 ? (
             <Card>
-              <CardTitle>Тезис наблюдения</CardTitle>
-              <CardDescription>{data.thesis ?? 'Тезис не заполнен.'}</CardDescription>
+              <CardTitle>Описание</CardTitle>
+              <CardDescription>{data.thesis ?? 'Описание не заполнено.'}</CardDescription>
               {data.tags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {data.tags.map((tag) => (
@@ -144,21 +152,25 @@ export function AssetDrawer({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Metric
+              surface="emerald"
               label="Количество"
               value={position ? formatTokenAmount(position.amount) : '—'}
               hint={data.asset.symbol}
             />
             <Metric
+              surface="sky"
               label="Цена"
-              value={formatPrice(position?.priceUsd ?? null)}
+              value={formatPrice(position?.priceUsd ?? data.quote?.priceUsd ?? null)}
               hint="Последняя цена"
             />
             <Metric
+              surface="amber"
               label="Стоимость"
               value={formatUsd(position?.valueUsd ?? null)}
               hint="По текущей цене"
             />
             <Metric
+              surface="violet"
               label="Нереализованный P&L"
               value={formatSignedUsd(position?.unrealizedPnlUsd ?? null)}
               hint={`Себестоимость ${formatUsd(position?.costBasisUsd ?? null)}`}
@@ -167,104 +179,74 @@ export function AssetDrawer({
           </div>
 
           <Card>
-            <CardTitle>Лоты</CardTitle>
-            <CardDescription>Оставшиеся лоты и себестоимость.</CardDescription>
-            {data.lots.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-600">Лотов нет.</p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {data.lots.slice(0, 8).map((lot) => (
-                  <div
-                    key={lot.id}
-                    className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-2 text-sm last:border-0 last:pb-0"
-                  >
-                    <div>
-                      <div className="text-zinc-700">{formatDate(lot.acquiredAt)}</div>
-                      <div className="text-xs text-zinc-500">
-                        {formatTokenAmount(lot.remainingAmount)} из {formatTokenAmount(lot.amount)}
-                      </div>
-                    </div>
-                    <div className="text-right font-mono tabular-nums text-zinc-600">
-                      {formatUsd(lot.remainingCostBasisUsd)}
-                    </div>
-                  </div>
-                ))}
-                {data.lots.length > 8 ? (
-                  <div className="text-xs text-zinc-500">И ещё {data.lots.length - 8} лотов.</div>
-                ) : null}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <CardTitle>Сделки</CardTitle>
-            <CardDescription>{data.tradeGroups.length} торговых групп по активу.</CardDescription>
+            <CardTitle>Ордера</CardTitle>
+            <CardDescription>{data.tradeGroups.length} ордеров по активу.</CardDescription>
             {data.tradeGroups.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-600">Сделок нет.</p>
+              <p className="mt-3 text-sm text-zinc-600">Ордеров нет.</p>
             ) : (
               <div className="mt-3 space-y-2">
-                {data.tradeGroups.slice(0, 8).map((group) => (
+                {data.tradeGroups.map((group, index) => (
                   <Link
                     key={group.id}
                     to="/trades/$tradeId"
                     params={{ tradeId: group.id }}
-                    className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-2 text-sm last:border-0 last:pb-0 hover:text-emerald-800"
+                    className="block rounded-xl border border-zinc-200 p-3 text-sm transition-colors hover:border-emerald-300 hover:bg-zinc-50/60"
                   >
-                    <div>
-                      <div className="text-zinc-700">{formatDate(group.openedAt)}</div>
-                      <div className="text-xs text-zinc-500">
-                        {statusLabels[group.status] ?? group.status}
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <TokenIcon
+                          logoUrl={data.asset.logoUrl ?? logoFallback ?? null}
+                          symbol={data.asset.symbol}
+                          className="h-9 w-9 text-[10px]"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-zinc-900">Ордер #{index + 1}</span>
+                            <Badge tone={statusTones[group.status] ?? 'neutral'}>
+                              {statusLabels[group.status] ?? group.status}
+                            </Badge>
+                            <span className="text-[11px] text-zinc-500">{group.source}</span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-zinc-500">
+                            Открыт {formatDate(group.openedAt)} · {group.holdingDays} дн.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div
+                          className={`font-mono text-lg font-semibold ${pnlTone(group.totalPnlUsd)}`}
+                        >
+                          {formatSignedUsd(group.totalPnlUsd)}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          {group.returnPct ? `${group.returnPct}%` : '—'}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className={`font-mono tabular-nums ${pnlTone(group.totalPnlUsd)}`}>
-                        {formatSignedUsd(group.totalPnlUsd)}
+                    <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-zinc-100 bg-zinc-50/60 p-2 text-[11px] sm:grid-cols-4">
+                      <div>
+                        <div className="text-zinc-500">Вложено</div>
+                        <div className="font-mono text-zinc-800">
+                          {formatUsd(group.remainingCostBasisUsd)}
+                        </div>
                       </div>
-                      <div className="text-xs text-zinc-500">
-                        {group.returnPct ? `${group.returnPct}%` : '—'}
+                      <div>
+                        <div className="text-zinc-500">Остаток</div>
+                        <div className="font-mono text-zinc-800">
+                          {formatTokenAmount(group.remainingAmount, 8)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">Куплено</div>
+                        <div className="font-mono text-zinc-800">{formatUsd(group.buyUsd)}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">Продано</div>
+                        <div className="font-mono text-zinc-800">{formatUsd(group.sellUsd)}</div>
                       </div>
                     </div>
                   </Link>
                 ))}
-                {data.tradeGroups.length > 8 ? (
-                  <div className="text-xs text-zinc-500">
-                    И ещё {data.tradeGroups.length - 8} сделок.
-                  </div>
-                ) : null}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <CardTitle>Транзакции</CardTitle>
-            <CardDescription>Последние операции по активу.</CardDescription>
-            {data.transactions.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-600">Транзакций нет.</p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {data.transactions.slice(0, 8).map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-2 text-sm last:border-0 last:pb-0"
-                  >
-                    <div>
-                      <div className="text-zinc-700">
-                        {transaction.type} / {transaction.subtype}
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        {formatDateTime(transaction.occurredAt)}
-                      </div>
-                    </div>
-                    <Badge tone={transaction.source === 'notion' ? 'info' : 'neutral'}>
-                      {transaction.source}
-                    </Badge>
-                  </div>
-                ))}
-                {data.transactions.length > 8 ? (
-                  <div className="text-xs text-zinc-500">
-                    И ещё {data.transactions.length - 8} операций.
-                  </div>
-                ) : null}
               </div>
             )}
           </Card>

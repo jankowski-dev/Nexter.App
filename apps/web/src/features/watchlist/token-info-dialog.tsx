@@ -49,8 +49,8 @@ export function TokenInfoDialog({
       description={`${entry.asset.chainCode} · данные из базы токенов`}
       size="lg"
       footer={
-        <Button variant="ghost" onClick={onClose}>
-          Закрыть
+        <Button variant="secondary" onClick={onClose}>
+          Готово
         </Button>
       }
     >
@@ -103,34 +103,6 @@ export function TokenInfoDialog({
             ) : null}
           </div>
         </div>
-
-        <div>
-          <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Инвесторы</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {entry.investors.length > 0 ? (
-              entry.investors.map((investor, index) => (
-                <Badge key={`${investor}-${index}`} tone="neutral">
-                  {investor}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-sm text-zinc-500">Не указаны.</span>
-            )}
-          </div>
-        </div>
-
-        {entry.tags.length > 0 ? (
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">Теги</div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {entry.tags.map((tag) => (
-                <Badge key={tag} tone="info">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        ) : null}
       </div>
     </Dialog>
   );

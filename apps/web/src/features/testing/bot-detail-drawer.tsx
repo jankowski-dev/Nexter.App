@@ -11,6 +11,7 @@ import {
   fetchBotEquity,
   fetchBotEvents,
   fetchBotSignals,
+  fetchBotTradeSummaries,
   fetchBotTrades,
   fetchTradingBot,
 } from '@/lib/api';
@@ -25,6 +26,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { BotUptimeText } from './bot-uptime';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
@@ -33,7 +35,7 @@ const statusLabels: Record<BotStatus, string> = {
   stopped: 'Остановлен',
 };
 
-const HISTORY_PAGE_SIZE = 20;
+const HISTORY_PAGE_SIZE = 10;
 
 const eventLabels: Record<string, string> = {
   created: 'создан',
@@ -46,6 +48,20 @@ const eventLabels: Record<string, string> = {
   archived: 'архив',
   closed_all: 'закрытие позиций',
 };
+
+function BotUptimeCard({ startedAt, running }: { startedAt: string | null; running: boolean }) {
+  return (
+    <Card className="tone-surface tone-surface-emerald">
+      <CardTitle>В работе</CardTitle>
+      <BotUptimeText
+        startedAt={startedAt}
+        running={running}
+        className="mt-1 block font-mono text-xl font-semibold tabular-nums text-emerald-800"
+      />
+      <CardDescription>{running ? 'С момента запуска' : 'Счётчик сброшен'}</CardDescription>
+    </Card>
+  );
+}
 
 export function BotDetailDrawer({
   botId,
@@ -108,6 +124,12 @@ export function BotDetailDrawer({
     enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
+  const tradeSummaries = useQuery({
+    queryKey: ['trading-bot-trade-summaries', botId],
+    queryFn: () => fetchBotTradeSummaries(botId as string),
+    enabled: Boolean(botId) && open,
+    refetchInterval: 15_000,
+  });
 
   if (!botId) return null;
   if (detail.isPending) {
@@ -146,8 +168,7 @@ export function BotDetailDrawer({
       footer={
         <div className="flex w-full flex-wrap items-center justify-between gap-2">
           <Button
-            variant="ghost"
-            className="text-red-700"
+            variant="danger"
             onClick={() => onArchive(bot.id)}
             disabled={busy || positions.length > 0}
             title={positions.length > 0 ? 'Сначала закройте позиции' : undefined}
@@ -182,8 +203,8 @@ export function BotDetailDrawer({
             >
               Изменить
             </Button>
-            <Button variant="ghost" onClick={onClose}>
-              Закрыть
+            <Button variant="secondary" onClick={onClose}>
+              Готово
             </Button>
           </div>
         </div>
@@ -209,40 +230,41 @@ export function BotDetailDrawer({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Card>
+          <BotUptimeCard startedAt={bot.startedAt} running={bot.status === 'running'} />
+          <Card className="tone-surface tone-surface-sky">
             <CardTitle>Капитал</CardTitle>
             <div className="mt-1 font-mono text-xl font-semibold">{formatUsd(stats.equityUsd)}</div>
             <CardDescription>
               Кэш {formatUsd(stats.cashUsd)} · просадка {stats.maxDrawdownPct ?? '—'}%
             </CardDescription>
           </Card>
-          <Card>
+          <Card className="tone-surface tone-surface-violet">
             <CardTitle>Общий P&L</CardTitle>
             <div className={`mt-1 font-mono text-xl font-semibold ${pnlTone(stats.totalPnlUsd)}`}>
               {formatSignedUsd(stats.totalPnlUsd)}
             </div>
             <CardDescription>Бюджет {formatUsd(stats.budgetUsd)}</CardDescription>
           </Card>
-          <Card>
+          <Card className="tone-surface tone-surface-amber">
             <CardTitle>Профит-фактор</CardTitle>
             <div className="mt-1 font-mono text-xl font-semibold">{stats.profitFactor ?? '—'}</div>
             <CardDescription>Win rate {stats.winRate ? `${stats.winRate}%` : '—'}</CardDescription>
           </Card>
-          <Card>
+          <Card className="tone-surface tone-surface-emerald">
             <CardTitle>Прибыль</CardTitle>
             <div className="mt-1 font-mono text-xl font-semibold text-emerald-700">
               {formatUsd(stats.grossProfitUsd)}
             </div>
             <CardDescription>Реализованная</CardDescription>
           </Card>
-          <Card>
+          <Card className="tone-surface tone-surface-rose">
             <CardTitle>Убыток</CardTitle>
             <div className="mt-1 font-mono text-xl font-semibold text-red-700">
               {formatUsd(stats.grossLossUsd)}
             </div>
             <CardDescription>Реализованный</CardDescription>
           </Card>
-          <Card>
+          <Card className="tone-surface tone-surface-sky">
             <CardTitle>Сделки</CardTitle>
             <div className="mt-1 font-mono text-xl font-semibold">{stats.tradesCount}</div>
             <CardDescription>
@@ -252,13 +274,72 @@ export function BotDetailDrawer({
         </div>
 
         <Card>
+          <CardTitle>Статистика по токенам</CardTitle>
+          <CardDescription>Только сделки, которые уже совершил робот.</CardDescription>
+          {tradeSummaries.isError ? (
+            <p className="mt-3 text-sm text-red-700">
+              {toRussianError(tradeSummaries.error, 'Не удалось загрузить статистику по токенам')}
+            </p>
+          ) : !tradeSummaries.data || tradeSummaries.data.data.length === 0 ? (
+            <CardDescription>Сделок пока нет.</CardDescription>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {tradeSummaries.data.data.map((row) => (
+                <div
+                  key={row.asset.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3"
+                >
+                  <div className="flex min-w-[150px] items-center gap-2.5">
+                    <TokenIcon
+                      logoUrl={row.asset.logoUrl}
+                      symbol={row.asset.symbol}
+                      className="h-8 w-8 text-[10px]"
+                    />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-zinc-900">
+                        {row.asset.symbol}
+                      </div>
+                      <div className="truncate text-[11px] text-zinc-500">
+                        {row.asset.name} · {row.asset.chainCode}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="ml-auto grid grid-cols-2 gap-x-6 gap-y-1 text-right text-xs sm:grid-cols-4">
+                    <div>
+                      <div className="text-zinc-500">P&L</div>
+                      <div className={`font-mono ${pnlTone(row.realizedPnlUsd)}`}>
+                        {formatSignedUsd(row.realizedPnlUsd)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Доход</div>
+                      <div className="font-mono text-emerald-700">
+                        {formatUsd(row.grossProfitUsd)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Убыток</div>
+                      <div className="font-mono text-red-700">{formatUsd(row.grossLossUsd)}</div>
+                    </div>
+                    <div>
+                      <div className="text-zinc-500">Сделок</div>
+                      <div className="font-mono text-zinc-800">{row.tradesCount}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <Card>
           <CardTitle>Капитал</CardTitle>
           {equity.isError ? (
             <p className="py-6 text-sm text-red-700">
               {toRussianError(equity.error, 'Не удалось загрузить equity')}
             </p>
           ) : (
-            <LineChart points={equityPoints} height={180} />
+            <LineChart points={equityPoints} height={180} strokeWidth={2} />
           )}
         </Card>
 

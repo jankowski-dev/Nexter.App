@@ -13,6 +13,7 @@ import {
   botEventsResponseSchema,
   botStrategiesResponseSchema,
   botSignalsResponseSchema,
+  botTradeSummariesResponseSchema,
   botTradesResponseSchema,
   tradingBotsResponseSchema,
   dashboardActivePositionsSchema,
@@ -91,6 +92,7 @@ import {
   type BotEventsResponse,
   type BotSignalsResponse,
   type BotStrategiesResponse,
+  type BotTradeSummariesResponse,
   type BotTradesResponse,
   type BotUpdateRequest,
   type TradingBotsResponse,
@@ -495,6 +497,17 @@ export async function sellTradeGroup(
 
 export async function fetchPortfolioAsset(id: string): Promise<PortfolioAssetDetail> {
   return apiFetch(`/api/v1/portfolio/assets/${id}`, {}, portfolioAssetDetailSchema);
+}
+
+export async function fetchPortfolioAssetChart(
+  assetId: string,
+  days: number,
+): Promise<WatchlistChartResponse> {
+  return apiFetch(
+    `/api/v1/portfolio/assets/${assetId}/chart${queryString({ days })}`,
+    {},
+    watchlistChartResponseSchema,
+  );
 }
 
 export async function setPrice(assetId: string, priceUsd: string): Promise<void> {
@@ -1006,6 +1019,14 @@ export async function closeTradingBotPositions(id: string): Promise<BotDetailRes
 
 export async function archiveTradingBot(id: string): Promise<void> {
   await apiDelete(`/api/v1/trading-bots/bots/${id}`);
+}
+
+export async function fetchBotTradeSummaries(id: string): Promise<BotTradeSummariesResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots/${id}/trade-summaries`,
+    {},
+    botTradeSummariesResponseSchema,
+  );
 }
 
 export async function fetchBotTrades(

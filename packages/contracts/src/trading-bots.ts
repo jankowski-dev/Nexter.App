@@ -197,6 +197,20 @@ export const botUpdateRequestSchema = z
     { message: 'Token list must not contain duplicates', path: ['tokenAssetIds'] },
   );
 
+export const botTradeSummarySchema = z.object({
+  asset: assetSchema,
+  realizedPnlUsd: z.string(),
+  grossProfitUsd: z.string(),
+  grossLossUsd: z.string(),
+  tradesCount: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+});
+
+export const botTradeSummariesResponseSchema = z.object({
+  data: z.array(botTradeSummarySchema),
+});
+
 export const botTradesResponseSchema = z.object({
   data: z.array(botTradeSchema),
 });
@@ -390,6 +404,8 @@ export type BotDetailResponse = z.infer<typeof botDetailResponseSchema>;
 export type TradingBotsResponse = z.infer<typeof tradingBotsResponseSchema>;
 export type BotCreateRequest = z.infer<typeof botCreateRequestSchema>;
 export type BotUpdateRequest = z.infer<typeof botUpdateRequestSchema>;
+export type BotTradeSummary = z.infer<typeof botTradeSummarySchema>;
+export type BotTradeSummariesResponse = z.infer<typeof botTradeSummariesResponseSchema>;
 export type BotTradesResponse = z.infer<typeof botTradesResponseSchema>;
 export type BotEventsResponse = z.infer<typeof botEventsResponseSchema>;
 export type BotEquityResponse = z.infer<typeof botEquityResponseSchema>;

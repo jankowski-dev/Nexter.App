@@ -101,7 +101,7 @@ export function Drawer({
           resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900">
               {titleIcon}
@@ -119,9 +119,9 @@ export function Drawer({
             ✕
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">{children}</div>
         {footer ? (
-          <div className="flex justify-end gap-2 border-t border-zinc-200 px-5 py-3">{footer}</div>
+          <div className="flex justify-end gap-2 border-t border-zinc-200 px-6 py-3">{footer}</div>
         ) : null}
       </div>
     </div>,

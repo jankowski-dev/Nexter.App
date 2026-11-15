@@ -17,7 +17,6 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useMemo, useState } from 'react';
 
 type PeriodPreset = '30d' | '90d' | '365d' | 'ytd' | 'all' | 'custom';
@@ -477,13 +476,7 @@ export function ReportsPage() {
                               className="h-7 w-7 text-[10px]"
                             />
                             <div className="min-w-0">
-                              <Link
-                                to="/portfolio/assets/$assetId"
-                                params={{ assetId: row.asset.id }}
-                                className="font-medium text-zinc-800 hover:text-emerald-800"
-                              >
-                                {row.asset.symbol}
-                              </Link>
+                              <span className="font-medium text-zinc-800">{row.asset.symbol}</span>
                               <div className="text-xs text-zinc-500">{row.asset.chainCode}</div>
                             </div>
                           </div>

@@ -163,3 +163,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Unified selects and header clock
 
 - **UI-55** — every `Select` uses the custom dropdown, dashboard metric boxes are transparent over their gradient parents, auth/lock accents use emerald, the header shows a live date and clock, and the PIN screen unlocks automatically after the sixth digit. See ADR 0046.
+
+## Robot uptime and modal system
+
+- **UI-56** — robot start resets the live uptime counter; bot cards use tone surfaces; equity lines are thinner; bot trades/events paginate 10 rows at a time; a per-token completed-trade summary endpoint feeds a new bot drawer section. Modals now have fixed footers and consistent 24 px padding, read-only actions say `Готово`, and delete actions are full danger buttons on the left. The portfolio asset drawer gains a chart from `watchlistId`, drops lots/transactions, renders richer orders and colored metrics, and keeps the base drawer open while buying. The separate full asset page is removed. See ADR 0047.

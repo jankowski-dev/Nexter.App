@@ -1,6 +1,6 @@
 import { LineChart } from '@/components/charts/line-chart';
 import { Button } from '@/components/ui/button';
-import { fetchWatchlistChart } from '@/lib/api';
+import { fetchPortfolioAssetChart, fetchWatchlistChart } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPrice } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
@@ -8,11 +8,22 @@ import { useState } from 'react';
 
 const RANGES = [30, 90, 180, 365] as const;
 
-export function TokenPriceChart({ entryId }: { entryId: string }) {
+export function TokenPriceChart({
+  entryId,
+  assetId,
+}: {
+  entryId?: string | null;
+  assetId?: string;
+}) {
   const [days, setDays] = useState<(typeof RANGES)[number]>(90);
+  const chartKey = entryId ?? assetId ?? '';
   const chart = useQuery({
-    queryKey: ['watchlist-chart', entryId, days],
-    queryFn: () => fetchWatchlistChart(entryId, days),
+    queryKey: ['token-chart', chartKey, days],
+    queryFn: () =>
+      entryId
+        ? fetchWatchlistChart(entryId, days)
+        : fetchPortfolioAssetChart(assetId as string, days),
+    enabled: Boolean(chartKey),
     staleTime: 5 * 60 * 1000,
   });
 

@@ -157,6 +157,7 @@ export const portfolioQuoteSchema = z.object({
 
 export const portfolioAssetDetailSchema = z.object({
   asset: assetSchema,
+  watchlistId: z.uuid().nullable(),
   position: positionSchema.nullable(),
   quote: portfolioQuoteSchema.nullable(),
   thesis: z.string().nullable(),

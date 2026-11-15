@@ -10,12 +10,14 @@ export function LineChart({
   points,
   height = 220,
   color = '#059669',
+  strokeWidth = 2,
   formatValue = (value) => formatUsd(String(value)),
   formatTick = (value) => formatUsdCompact(String(value)),
 }: {
   points: LinePoint[];
   height?: number;
   color?: string;
+  strokeWidth?: number;
   formatValue?: (value: number) => string;
   formatTick?: (value: number) => string;
 }) {
@@ -94,7 +96,7 @@ export function LineChart({
             points={path}
             fill="none"
             stroke={color}
-            strokeWidth="4"
+            strokeWidth={strokeWidth}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
