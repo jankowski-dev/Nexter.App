@@ -35,3 +35,7 @@ The owner asked for a final consistency pass after UI-54:
 - Existing E2E `selectOption` flows continue to work against the native overlay; manually checked a finance account dropdown opening the custom list.
 - Auto-unlock was smoke-tested with a real lock setup and a correct six-digit code.
 - `format:check`, `typecheck`, `lint`, web tests and build pass.
+
+## Production release (2026-11-15)
+
+PR #137 merged as `4aa08ce`; deployment `70eeff01-8c6f-47bc-a14a-fb92ff9f9642`; bundle `assets/index-B289aDL0.js`; `/health` and `/ready` 200. No migration.
