@@ -56,3 +56,7 @@ The old `ManualTradeDialog` was replaced by `ManualOrderForm`, embedded in the o
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
 - E2E flows were updated for the new buy/sell tabs, the four-tab operation dialog and the removed on-chain exchange entry.
 - The footer is rendered by `Drawer`, outside the scrollable body.
+
+## Production release (2026-11-15)
+
+PR #145 merged as `2403d662`; deployment `130a3e50-66d6-447a-a038-45507cb77aba`; bundle `assets/index-CVqMeRiW.js`; `/health` and `/ready` 200. No migration.
