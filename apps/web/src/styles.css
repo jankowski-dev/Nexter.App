@@ -412,11 +412,11 @@ button:focus-visible,
 }
 
 .nexter-logo .nexter-ray.is-lit {
-  fill: #c2e32f;
+  fill: #34d399;
 }
 
 .nexter-logo.is-ok .nexter-ray {
-  fill: #c2e32f;
+  fill: #34d399;
 }
 
 .nexter-logo.is-error .nexter-ray {
@@ -447,7 +447,7 @@ button:focus-visible,
 
 .auth-shell .text-emerald-700,
 .auth-shell .text-emerald-800 {
-  color: #c2e32f !important;
+  color: #34d399 !important;
 }
 
 .auth-shell .bg-white,
@@ -472,11 +472,11 @@ button:focus-visible,
 }
 
 .auth-shell .bg-emerald-50 {
-  background-color: rgba(194, 227, 47, 0.1) !important;
+  background-color: rgba(16, 185, 129, 0.12) !important;
 }
 
 .auth-shell .border-emerald-200 {
-  border-color: rgba(194, 227, 47, 0.35) !important;
+  border-color: rgba(52, 211, 153, 0.35) !important;
 }
 
 .auth-shell input {
@@ -495,7 +495,7 @@ button:focus-visible,
 
 .auth-shell input:focus {
   border: 0 !important;
-  outline: 2px solid rgba(194, 227, 47, 0.55) !important;
+  outline: 2px solid rgba(16, 185, 129, 0.55) !important;
   outline-offset: 0 !important;
   box-shadow: none !important;
 }
@@ -509,13 +509,13 @@ button:focus-visible,
 }
 
 .auth-shell .bg-emerald-600 {
-  background-color: #c2e32f !important;
-  color: #1f2410 !important;
+  background-color: #059669 !important;
+  color: #ffffff !important;
   box-shadow: none !important;
 }
 
 .auth-shell .hover\:bg-emerald-700:hover {
-  background-color: #d2f044 !important;
+  background-color: #047857 !important;
 }
 
 .auth-shell button {
@@ -780,4 +780,8 @@ button:focus-visible,
 
 [data-theme='dark'] .bg-zinc-300 {
   background-color: #4b5563 !important;
+}
+
+[data-theme='dark'] .text-emerald-900 {
+  color: #a7f3d0 !important;
 }

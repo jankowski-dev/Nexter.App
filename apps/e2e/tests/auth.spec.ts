@@ -95,11 +95,9 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
 
   await expect(page.getByText('Приложение заблокировано')).toBeVisible();
   await page.getByLabel('Код блокировки').fill('000000');
-  await page.getByRole('button', { name: 'Разблокировать' }).click();
   await expect(page.getByRole('alert')).toContainText('Неверный код');
 
   await page.getByLabel('Код блокировки').fill('123456');
-  await page.getByRole('button', { name: 'Разблокировать' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/settings/security');

@@ -131,10 +131,10 @@ function UnlockScreen({
 
   const cooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
-  async function submit() {
+  async function submit(value = pin) {
     if (busy || success) return;
     if (cooldownSeconds > 0) return;
-    if (!isValidLockPin(pin)) {
+    if (!isValidLockPin(value)) {
       setError('Введите 6 цифр');
       return;
     }
@@ -143,7 +143,7 @@ function UnlockScreen({
     setError('');
 
     try {
-      const ok = await onUnlock(pin);
+      const ok = await onUnlock(value);
       if (!ok) {
         const attempts = failedAttempts + 1;
         setFailedAttempts(attempts);
@@ -233,24 +233,22 @@ function UnlockScreen({
               const next = event.target.value.replace(/\D/g, '');
               setPin(next);
               setError('');
+              if (next.length === 6 && !busy && !success && cooldownSeconds === 0) {
+                void submit(next);
+              }
             }}
             autoFocus
             disabled={busy || success || cooldownSeconds > 0}
           />
-
-          <Button
-            className="w-full"
-            type="submit"
-            disabled={busy || success || cooldownSeconds > 0 || pin.length !== 6}
-          >
+          <div className="h-4 text-xs text-[#a8a8a8]" role="status" aria-live="polite">
             {success
-              ? 'Открываем…'
+              ? 'Разблокировано'
               : cooldownSeconds > 0
                 ? `Подождите ${cooldownSeconds} с`
                 : busy
                   ? 'Проверяем…'
-                  : 'Разблокировать'}
-          </Button>
+                  : ''}
+          </div>
         </form>
 
         <button

@@ -159,3 +159,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Finance arithmetic, metric surfaces and portfolio rates
 
 - **UI-54** — finance amount fields evaluate small arithmetic expressions safely on blur/Enter; dashboard, Finance, Statistics and portfolio metrics share the same tinted surfaces in light and dark themes; the sidebar uses the 12-ray brand; auth is reduced to the minimal logo/fields layout. Portfolio token rows show current price, 24h change and an invested-share bar. The buy drawer has a custom stablecoin selector with on-chain wallet balances. The monthly realized P&L bar chart was rebuilt with gradients, grid, hover and tooltip. See ADR 0045.
+
+## Unified selects and header clock
+
+- **UI-55** — every `Select` uses the custom dropdown, dashboard metric boxes are transparent over their gradient parents, auth/lock accents use emerald, the header shows a live date and clock, and the PIN screen unlocks automatically after the sixth digit. See ADR 0046.

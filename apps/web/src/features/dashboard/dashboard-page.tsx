@@ -65,7 +65,7 @@ function SummaryMetric({
   tone?: string;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+    <div className="rounded-xl border border-zinc-200/80 bg-transparent p-3">
       <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
       <div
         className={`mt-1 font-mono text-xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
