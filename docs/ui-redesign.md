@@ -191,3 +191,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## System status
 
 - **UI-61/W3** — `Настройки → Система` shows quote freshness, bot ticks, swap accounting/stuck states, provider error rates, snapshots, reconciliation and indexer state. Owner-only, read-only, 30s refresh. See ADR 0052.
+
+## Data quality
+
+- **UI-61/W4** — `Настройки → Качество данных` shows grouped read-only checks with severity, count, samples and links, plus a manual re-check. No automatic ledger corrections. See ADR 0053.

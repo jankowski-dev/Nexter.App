@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
 import { sql } from 'drizzle-orm';
-import { createDb, type Database } from '@nexter/db';
+import { createDb, tradeGroups, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -46,7 +46,7 @@ describe.runIf(canRun)('System status e2e', () => {
       .set('x-csrf-token', csrfFrom(setup))
       .send({ code: generateSync({ secret: totpSetup.body.secret }) })
       .expect(200);
-    return { csrf: csrfFrom(enabled) };
+    return { userId: setup.body.user.id as string, csrf: csrfFrom(enabled) };
   }
 
   beforeAll(async () => {
@@ -115,5 +115,39 @@ describe.runIf(canRun)('System status e2e', () => {
     expect(JSON.stringify(response.body)).not.toContain('postgres://');
     expect(JSON.stringify(response.body)).not.toContain('DATABASE_URL');
     expect(JSON.stringify(response.body)).not.toContain('KYBERSWAP_API_KEY');
+  }, 60_000);
+
+  it('reports an order without lots', async () => {
+    const agent = request.agent(app.getHttpServer());
+    await agent.get('/api/v1/settings/data-quality').expect(401);
+    const owner = await setupOwner(agent);
+
+    const assets = await agent.get('/api/v1/assets').expect(200);
+    const asset = (assets.body.assets as Array<{ id: string; symbol: string }>)[0];
+    expect(asset).toBeDefined();
+
+    await db.insert(tradeGroups).values({
+      userId: owner.userId,
+      assetId: asset.id,
+      status: 'open',
+      openedAt: new Date(),
+    });
+
+    const response = await agent.get('/api/v1/settings/data-quality').expect(200);
+    expect(response.body.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(response.body.summary.errors).toBeGreaterThanOrEqual(1);
+    const fifo = (
+      response.body.sections as Array<{
+        key: string;
+        checks: Array<{
+          code: string;
+          count: number;
+          samples: Array<{ href: string | null }>;
+        }>;
+      }>
+    ).find((section) => section.key === 'fifo');
+    const check = fifo?.checks.find((item) => item.code === 'group_without_lots');
+    expect(check?.count).toBe(1);
+    expect(check?.samples[0]?.href).toMatch(/^\/trades\//);
   }, 60_000);
 });
