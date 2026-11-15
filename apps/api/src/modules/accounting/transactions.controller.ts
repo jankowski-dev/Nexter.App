@@ -53,6 +53,8 @@ export class TransactionsController {
     body: ManualTransactionRequest,
     @Req() request: FastifyRequest,
     @Headers('idempotency-key') idempotencyKey?: string,
+    @Headers('x-intent-id') intentId?: string,
+    @Headers('x-trade-source') tradeSource?: string,
   ): Promise<ManualTransactionResponse> {
     return this.ledger.createManual(
       auth.user.id,
@@ -60,6 +62,8 @@ export class TransactionsController {
       {
         ip: request.ip,
         userAgent: request.headers['user-agent'],
+        intentId: intentId?.trim().slice(0, 200) || undefined,
+        tradeSource: tradeSource?.trim().slice(0, 80) || undefined,
       },
       idempotencyKey?.trim().slice(0, 200) || undefined,
     );

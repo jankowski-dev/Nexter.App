@@ -53,6 +53,7 @@ import {
 import { executorAllowlist, routerAllowlist, selectorAllowlist } from './swap-allowlists';
 import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
+import { TradeIntentService } from '../accounting/trade-intent.service';
 import {
   SWAP_CHAINS,
   getSwapChain,
@@ -159,6 +160,7 @@ export class SwapService {
     private readonly audit: AuditService,
     private readonly accounts: AccountsService,
     private readonly assets: AssetsService,
+    private readonly intents: TradeIntentService,
   ) {}
 
   config(): SwapConfigResponse {
@@ -668,6 +670,7 @@ export class SwapService {
             amountOut: created.amountOut,
             closeGroupIds: input.closeGroupIds ?? [],
             status: 'QUOTED',
+            ...this.intentAudit(created.id),
           },
           ip: meta.ip,
           userAgent: meta.userAgent,
@@ -1097,6 +1100,7 @@ export class SwapService {
             calldataRecipient: decoded.dstReceiver,
             calldataMinOut: decoded.minReturnAmount,
             deadlineSource: calldataValidation.deadlineSource,
+            ...this.intentAudit(order.id),
           },
           ip: meta.ip,
           userAgent: meta.userAgent,
@@ -1362,7 +1366,7 @@ export class SwapService {
           action: 'swap.order_ready',
           entityType: 'swap_order',
           entityId: order.id,
-          after: { status: 'READY', allowance },
+          after: { status: 'READY', allowance, ...this.intentAudit(order.id) },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
@@ -1473,7 +1477,7 @@ export class SwapService {
           entityType: 'swap_order',
           entityId: order.id,
           before: { status: order.status },
-          after: { status: 'AWAITING_SIGNATURE' },
+          after: { status: 'AWAITING_SIGNATURE', ...this.intentAudit(order.id) },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
@@ -1536,7 +1540,7 @@ export class SwapService {
           entityType: 'swap_order',
           entityId: order.id,
           before: { status: 'AWAITING_SIGNATURE' },
-          after: { status: 'READY' },
+          after: { status: 'READY', ...this.intentAudit(order.id) },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
@@ -1622,7 +1626,7 @@ export class SwapService {
             entityType: 'swap_order',
             entityId: orderId,
             before: { status: order.status },
-            after: { status: 'SUBMITTED', txHash },
+            after: { status: 'SUBMITTED', txHash, ...this.intentAudit(orderId) },
             ip: meta.ip,
             userAgent: meta.userAgent,
           },
@@ -2324,6 +2328,12 @@ export class SwapService {
         message: 'Wallet is not in the swap allowlist',
       });
     }
+  }
+
+  private intentAudit(orderId: string) {
+    return this.intents.audit(
+      this.intents.create({ channel: 'onchain', kind: 'swap', intentId: orderId }),
+    );
   }
 
   private providerError(error: unknown, fallbackCode: string): Error {

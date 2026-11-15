@@ -1174,6 +1174,8 @@ describe.runIf(canRun)('Accounting e2e', () => {
     const buy = await agent
       .post('/api/v1/transactions')
       .set('x-csrf-token', owner.csrf)
+      .set('x-intent-id', 'intent-policy-test')
+      .set('x-trade-source', 'main-list')
       .send({
         type: 'buy',
         accountId: wallet?.id,
@@ -1184,6 +1186,22 @@ describe.runIf(canRun)('Accounting e2e', () => {
       })
       .expect(201);
     const groupId = buy.body.transaction.tradeGroupId as string;
+
+    const intentAudit = await agent
+      .get('/api/v1/audit-log?action=accounting.transaction_created&limit=5')
+      .expect(200);
+    const intentEntry = (
+      intentAudit.body.data as Array<{
+        entityId: string;
+        after: Record<string, unknown>;
+      }>
+    ).find((entry) => entry.entityId === buy.body.transaction.id);
+    expect(intentEntry?.after).toMatchObject({
+      intentId: 'intent-policy-test',
+      channel: 'manual',
+      kind: 'buy',
+      tradeSource: 'main-list',
+    });
 
     const oversell = await agent
       .post('/api/v1/transactions')

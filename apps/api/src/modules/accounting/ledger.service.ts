@@ -38,6 +38,7 @@ import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsService } from './accounts.service';
 import { AssetsService } from './assets.service';
 import { FifoService } from './fifo.service';
+import { TradeIntentService } from './trade-intent.service';
 import { TradePolicyService } from './trade-policy.service';
 
 interface PostingDraft {
@@ -68,6 +69,8 @@ type LotWork =
 export interface LedgerMeta {
   ip?: string;
   userAgent?: string;
+  intentId?: string;
+  tradeSource?: string;
 }
 
 export interface LedgerSourceOverride {
@@ -85,6 +88,7 @@ export class LedgerService {
     private readonly fifo: FifoService,
     private readonly audit: AuditService,
     private readonly policy: TradePolicyService,
+    private readonly intents: TradeIntentService,
   ) {}
 
   async createManual(
@@ -98,6 +102,12 @@ export class LedgerService {
     const key = idempotencyKey?.trim() || undefined;
     const source = sourceOverride?.source ?? 'manual';
     const sourceId = sourceOverride?.sourceId ?? key;
+    const intent = this.intents.create({
+      channel: 'manual',
+      kind: input.type,
+      source: meta.tradeSource,
+      intentId: meta.intentId ?? key,
+    });
 
     const result = await this.db.transaction(async (tx) => {
       await tx.execute(
@@ -838,6 +848,7 @@ export class LedgerService {
             subtype: input.type,
             source,
             sourceId: sourceId ?? null,
+            ...this.intents.audit(intent),
             occurredAt: occurredAt.toISOString(),
             feesUsd: usdString(feesUsd),
             reason: input.type === 'adjustment' ? input.reason : null,

@@ -41,3 +41,7 @@ The report is read-only. It does not rewrite postings, delete transactions, reca
 - Complex queries were run read-only against production data before release.
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
 - No migration.
+
+## Production release (2026-11-15)
+
+PR #152 merged as `1a604f39`; deployment `e7b98f02-753e-4865-86b5-5984ba7046d1`; bundle `assets/index-B98DwDEq.js`; `/health` and `/ready` 200. No migration.
