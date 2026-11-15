@@ -14,13 +14,12 @@ import { Decimal } from 'decimal.js';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Account, Asset, ManualTransactionRequest } from '@nexter/contracts';
 
-type Mode = 'exchange' | 'deposit' | 'withdrawal' | 'income' | 'adjustment';
+type Mode = 'exchange' | 'deposit' | 'withdrawal' | 'adjustment';
 
 const modeLabels: Record<Mode, string> = {
   exchange: 'Обмен',
   deposit: 'Пополнение',
   withdrawal: 'Вывод',
-  income: 'Доход',
   adjustment: 'Корректировка',
 };
 
@@ -219,22 +218,6 @@ export function ManualOperationDialog({
           signaturePayload,
         );
       }
-      if (mode === 'income') {
-        const value = usdValue || autoUsd;
-        if (!value || !positive(value)) throw new Error('Укажите USD-стоимость дохода.');
-        return submitManual(
-          {
-            type: 'income',
-            accountId: effectiveAccountId,
-            assetId,
-            amount,
-            usdValue: value,
-            ...occurred,
-            ...note,
-          },
-          signaturePayload,
-        );
-      }
       if (!reason.trim()) throw new Error('Укажите причину корректировки.');
       const value = usdValue || autoUsd;
       if (!value || !positive(value)) throw new Error('Укажите USD-стоимость корректировки.');
@@ -289,7 +272,7 @@ export function ManualOperationDialog({
       open={open}
       onClose={onClose}
       title="Новая операция"
-      description="Обмен, пополнение, вывод, доход или корректировка. Только ручной ввод."
+      description="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
       size="lg"
       footer={
         <>
@@ -418,7 +401,7 @@ export function ManualOperationDialog({
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
-              {mode === 'income' || mode === 'adjustment' ? (
+              {mode === 'adjustment' ? (
                 <span className="mt-1 block text-xs text-zinc-500">
                   {autoUsd ? `≈ ${formatUsd(autoUsd)}` : 'Введите USD-стоимость вручную'}
                 </span>
@@ -448,7 +431,7 @@ export function ManualOperationDialog({
                 />
               </label>
             ) : null}
-            {mode === 'income' || mode === 'adjustment' ? (
+            {mode === 'adjustment' ? (
               <label className="block text-sm text-zinc-600">
                 USD-стоимость
                 <Input

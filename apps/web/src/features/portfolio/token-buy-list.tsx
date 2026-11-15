@@ -6,12 +6,12 @@ import { PriceFreshness } from '@/components/ui/price-freshness';
 import { PeriodChange } from '@/components/period-change';
 import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
-import { fetchSwapConfig, fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
+import { fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatUsdCompact, pnlTone } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { Asset, SwapConfigResponse, WatchlistEntry } from '@nexter/contracts';
+import type { Asset, WatchlistEntry } from '@nexter/contracts';
 import { TokenInfoDialog } from '../watchlist/token-info-dialog';
 
 type TokenListSort =
@@ -26,18 +26,6 @@ const sortLabels: Record<TokenListSort, string> = {
   change1y: 'По 1г',
   marketCap: 'По капитализации',
 };
-
-function isOnchainAllowed(asset: Asset, config: SwapConfigResponse | undefined): boolean {
-  const chain = config?.chains.find((item) => item.code === asset.chainCode);
-  if (!chain) return false;
-  if (asset.contractAddress) {
-    return chain.tokens.some(
-      (token) =>
-        !token.native && token.address.toLowerCase() === asset.contractAddress?.toLowerCase(),
-    );
-  }
-  return chain.tokens.some((token) => token.native && token.symbol === asset.symbol);
-}
 
 function sortValue(entry: WatchlistEntry, key: Exclude<TokenListSort, 'default'>): number | null {
   const value =
@@ -59,15 +47,12 @@ function sortValue(entry: WatchlistEntry, key: Exclude<TokenListSort, 'default'>
 
 export function TokenBuyList({
   onBuy,
-  onManual,
   showHeading = true,
 }: {
   onBuy: (asset: Asset, marketPriceUsd: string | null) => void;
-  onManual?: (asset: Asset, marketPriceUsd: string | null) => void;
   showHeading?: boolean;
 }) {
   const groups = useQuery({ queryKey: ['watchlist-groups'], queryFn: fetchWatchlistGroups });
-  const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
   const [sortKey, setSortKey] = useState<TokenListSort>('default');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
   const [selectedEntry, setSelectedEntry] = useState<WatchlistEntry | null>(null);
@@ -140,11 +125,6 @@ export function TokenBuyList({
           </Button>
         </div>
       </div>
-      {config.isError ? (
-        <p className="mt-2 text-xs text-amber-700">
-          Не удалось проверить разрешённый список токенов. Доступна только ручная запись.
-        </p>
-      ) : null}
 
       {entries.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-600">
@@ -178,7 +158,6 @@ export function TokenBuyList({
                   ...entry.asset,
                   contractAddress: entry.asset.contractAddress ?? chainAddress,
                 };
-                const onchainAllowed = isOnchainAllowed(tradeAsset, config.data);
                 return (
                   <tr
                     key={entry.id}
@@ -207,34 +186,15 @@ export function TokenBuyList({
                       </div>
                     </td>
                     <td className="whitespace-nowrap py-2 pr-3">
-                      {config.isPending ? (
-                        <Button className="h-8 px-3 text-xs" disabled>
-                          Проверяю…
-                        </Button>
-                      ) : onchainAllowed ? (
-                        <Button
-                          className="h-8 px-3 text-xs"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onBuy(tradeAsset, entry.priceUsd);
-                          }}
-                        >
-                          Купить
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          className="h-8 px-3 text-xs"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onManual?.(tradeAsset, entry.priceUsd);
-                          }}
-                          disabled={!onManual}
-                          title="On-chain покупка недоступна: токен не в разрешённом списке. Откроется ручная запись."
-                        >
-                          Купить
-                        </Button>
-                      )}
+                      <Button
+                        className="h-8 px-3 text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onBuy(tradeAsset, entry.priceUsd);
+                        }}
+                      >
+                        Купить
+                      </Button>
                     </td>
                     <td className="py-2 pr-3 text-right font-mono text-base font-medium tabular-nums text-zinc-800">
                       <LiveValue value={formatPrice(entry.priceUsd)}>

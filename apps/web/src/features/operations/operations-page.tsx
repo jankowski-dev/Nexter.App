@@ -10,7 +10,6 @@ import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
 import { filterBySearch } from '@/lib/search';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useCallback, useState } from 'react';
-import { ExchangeDrawer } from '../trade/exchange-drawer';
 import { ManualOperationDialog } from './manual-operation-dialog';
 
 type OperationFilter = 'all' | 'deposit' | 'withdrawal' | 'swap';
@@ -48,7 +47,6 @@ export function OperationsPage() {
   const [filter, setFilter] = useState<OperationFilter>('all');
   const [search, setSearch] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
-  const [onchainOpen, setOnchainOpen] = useState(false);
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: fetchAccounts });
 
@@ -97,15 +95,8 @@ export function OperationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Операции"
-        subtitle="Пополнения, выводы и обмены. Сделки ведутся в Торговле."
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setOnchainOpen(true)}>
-              Обмен on-chain
-            </Button>
-            <Button onClick={() => setManualOpen(true)}>Новая операция</Button>
-          </>
-        }
+        subtitle="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
+        actions={<Button onClick={() => setManualOpen(true)}>Новая операция</Button>}
       />
 
       <ListToolbar
@@ -238,20 +229,6 @@ export function OperationsPage() {
         onClose={() => setManualOpen(false)}
         onSaved={refreshOperations}
       />
-
-      {onchainOpen ? (
-        <ExchangeDrawer
-          onClose={() => {
-            setOnchainOpen(false);
-            refreshOperations();
-          }}
-          onManual={() => {
-            setOnchainOpen(false);
-            setManualOpen(true);
-          }}
-          onCompleted={refreshOperations}
-        />
-      ) : null}
     </div>
   );
 }

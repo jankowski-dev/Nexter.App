@@ -17,7 +17,7 @@ import {
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { Asset, TradeGroupSummary } from '@nexter/contracts';
+import type { TradeGroupSummary } from '@nexter/contracts';
 import { TokenPriceChart } from '../watchlist/token-price-chart';
 
 const statusLabels: Record<string, string> = {
@@ -67,13 +67,11 @@ function Metric({
 export function AssetDrawer({
   assetId,
   onClose,
-  onBuy,
   onOpenOrder,
   logoFallback,
 }: {
   assetId: string | null;
   onClose: () => void;
-  onBuy?: (asset: Asset) => void;
   onOpenOrder?: (group: TradeGroupSummary) => void;
   logoFallback?: string | null;
 }) {
@@ -112,18 +110,9 @@ export function AssetDrawer({
       }
       footer={
         data ? (
-          <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            {onBuy ? (
-              <Button variant="secondary" onClick={() => onBuy(data.asset)}>
-                Купить
-              </Button>
-            ) : (
-              <span />
-            )}
-            <Button variant="secondary" onClick={onClose}>
-              Готово
-            </Button>
-          </div>
+          <Button variant="secondary" onClick={onClose}>
+            Готово
+          </Button>
         ) : null
       }
     >

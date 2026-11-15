@@ -82,16 +82,22 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     },
   });
 
-  async function openManualTrade() {
+  async function openBuyDrawer() {
     await page.goto('/portfolio');
-    await page.getByRole('button', { name: 'Ручная сделка' }).click();
+    await page
+      .getByRole('row')
+      .filter({ hasText: 'BASED' })
+      .first()
+      .getByRole('button', { name: 'Купить' })
+      .click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
+    await dialog.getByRole('tab', { name: 'Вручную' }).click();
     await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('hidden');
     return dialog;
   }
 
-  async function openOperation(mode: 'Доход' | 'Корректировка' | 'Пополнение') {
+  async function openOperation(mode: 'Корректировка' | 'Пополнение') {
     await page.goto('/operations');
     await page.getByRole('button', { name: 'Новая операция' }).click();
     const dialog = page.getByRole('dialog');
@@ -100,37 +106,28 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     return dialog;
   }
 
-  // Manual buy through the dedicated manual trade dialog.
-  let dialog = await openManualTrade();
-  await dialog
-    .locator('select')
-    .nth(0)
-    .selectOption(based?.id ?? '');
-  await dialog.getByLabel('Количество BASED').fill('100');
-  await dialog
-    .locator('select')
-    .nth(1)
-    .selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Сумма покупки').fill('100');
-  await dialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('');
-
-  // Income and adjustment live in the manual operation dialog.
-  dialog = await openOperation('Доход');
-  await dialog
+  // Manual buy through the buy order modal.
+  await page.request.post('/api/v1/watchlist', {
+    headers: { 'x-csrf-token': csrf },
+    data: { assetId: based?.id },
+  });
+  let dialog = await openBuyDrawer();
+  const manualForm = dialog.locator('#manual-order-form');
+  await manualForm
     .locator('select')
     .nth(0)
     .selectOption(wallet?.id ?? '');
-  await dialog
+  await manualForm
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
-  await dialog.getByLabel('Количество USDT').fill('10');
-  await dialog.getByLabel('USD-стоимость').fill('10');
-  await dialog.getByRole('button', { name: 'Сохранить' }).click();
+  await manualForm.getByLabel('Количество BASED').fill('100');
+  await manualForm.getByLabel('Сумма оплаты').fill('100');
+  await dialog.getByRole('button', { name: 'Сохранить покупку' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect.poll(() => page.evaluate('document.body.style.overflow')).toBe('');
 
+  // Adjustment lives in the unified manual operation dialog.
   dialog = await openOperation('Корректировка');
   await dialog
     .locator('select')
@@ -152,7 +149,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await expect(page.getByText('Активные ордера')).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   let sellDrawer = page.getByRole('dialog');
-  await expect(sellDrawer.getByRole('heading', { name: 'Продать BASED' })).toBeVisible();
+  await expect(sellDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(sellDrawer.getByText('Текущая сделка')).toBeVisible();
   await sellDrawer.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
@@ -164,30 +161,37 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await page.getByRole('tab', { name: 'Ордера' }).click();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
-  await sellDrawer.getByRole('button', { name: 'Записать продажу вручную' }).click();
-  const firstSellDialog = page.getByRole('dialog');
-  await expect(firstSellDialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
-  await firstSellDialog
+  await sellDrawer.getByRole('tab', { name: 'Вручную' }).click();
+  const firstManualForm = sellDrawer.locator('#manual-order-form');
+  await firstManualForm
+    .locator('select')
+    .nth(0)
+    .selectOption(wallet?.id ?? '');
+  await firstManualForm
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
-  await firstSellDialog.getByLabel('Количество BASED').fill('40');
-  await firstSellDialog.getByLabel('Сумма продажи').fill('100');
-  await firstSellDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await firstManualForm.getByLabel('Количество BASED').fill('40');
+  await firstManualForm.getByLabel('Сумма получения').fill('100');
+  await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByText('60 BASED', { exact: true }).first()).toBeVisible();
-  await sellDrawer.getByRole('button', { name: 'Записать продажу вручную' }).click();
-  const secondSellDialog = page.getByRole('dialog');
-  await secondSellDialog
+  await sellDrawer.getByRole('tab', { name: 'Вручную' }).click();
+  const secondManualForm = sellDrawer.locator('#manual-order-form');
+  await secondManualForm
+    .locator('select')
+    .nth(0)
+    .selectOption(wallet?.id ?? '');
+  await secondManualForm
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
-  await secondSellDialog.getByLabel('Количество BASED').fill('10');
-  await secondSellDialog.getByLabel('Сумма продажи').fill('25');
-  await secondSellDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await secondManualForm.getByLabel('Количество BASED').fill('10');
+  await secondManualForm.getByLabel('Сумма получения').fill('25');
+  await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
