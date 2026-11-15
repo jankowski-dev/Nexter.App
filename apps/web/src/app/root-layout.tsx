@@ -144,6 +144,35 @@ function WalletControls() {
   );
 }
 
+function HeaderClock() {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const date = new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(now);
+  const time = new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(now);
+
+  return (
+    <div className="hidden items-center gap-2.5 sm:flex">
+      <span className="text-sm text-zinc-600">{date.charAt(0).toUpperCase() + date.slice(1)}</span>
+      <span className="h-3.5 w-px bg-zinc-200" />
+      <span className="font-mono text-xs tabular-nums text-zinc-500">{time}</span>
+    </div>
+  );
+}
+
 function RouteLoadingOverlay() {
   const active = useRouterState({
     select: (state) => state.status === 'pending' || state.isLoading,
@@ -340,7 +369,7 @@ function RootLayoutContent() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
-            <div className="hidden text-sm text-zinc-500 sm:block">{messages.app.header}</div>
+            <HeaderClock />
             <div className="flex items-center gap-2 sm:gap-3">
               <LiveRefreshIndicator />
               <div
