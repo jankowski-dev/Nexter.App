@@ -12,12 +12,12 @@ import {
   formatSignedUsd,
   formatTokenAmount,
   formatUsd,
+  pluralizeRu,
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import type { Asset } from '@nexter/contracts';
+import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TokenPriceChart } from '../watchlist/token-price-chart';
 
 const statusLabels: Record<string, string> = {
@@ -68,11 +68,13 @@ export function AssetDrawer({
   assetId,
   onClose,
   onBuy,
+  onOpenOrder,
   logoFallback,
 }: {
   assetId: string | null;
   onClose: () => void;
   onBuy?: (asset: Asset) => void;
+  onOpenOrder?: (group: TradeGroupSummary) => void;
   logoFallback?: string | null;
 }) {
   const detail = useQuery({
@@ -88,6 +90,7 @@ export function AssetDrawer({
 
   const data = detail.data;
   const position = data?.position;
+  const activeOrders = (data?.tradeGroups ?? []).filter((group) => group.status !== 'closed');
 
   return (
     <Drawer
@@ -186,17 +189,41 @@ export function AssetDrawer({
 
           <Card>
             <CardTitle>Ордера</CardTitle>
-            <CardDescription>{data.tradeGroups.length} ордеров по активу.</CardDescription>
-            {data.tradeGroups.length === 0 ? (
-              <p className="mt-3 text-sm text-zinc-600">Ордеров нет.</p>
+            <CardDescription>
+              {activeOrders.length === 0
+                ? 'Активных ордеров нет.'
+                : `${activeOrders.length} ${pluralizeRu(activeOrders.length, 'активный ордер', 'активных ордера', 'активных ордеров')} по активу.`}
+            </CardDescription>
+            {activeOrders.length === 0 ? (
+              <p className="mt-3 text-sm text-zinc-600">
+                Закрытые ордера доступны в журнале ордеров.
+              </p>
             ) : (
               <div className="mt-3 space-y-2">
-                {data.tradeGroups.slice(0, ordersLimit).map((group, index) => (
-                  <Link
+                {activeOrders.slice(0, ordersLimit).map((group, index) => (
+                  <div
                     key={group.id}
-                    to="/trades/$tradeId"
-                    params={{ tradeId: group.id }}
-                    className="block rounded-xl border border-zinc-200 p-3 text-sm transition-colors hover:border-emerald-300 hover:bg-zinc-50/60"
+                    role={onOpenOrder ? 'button' : undefined}
+                    tabIndex={onOpenOrder ? 0 : undefined}
+                    aria-label={
+                      onOpenOrder
+                        ? `Открыть закрытие ордера ${data.asset.symbol} №${index + 1}`
+                        : undefined
+                    }
+                    title={onOpenOrder ? 'Открыть закрытие ордера' : undefined}
+                    onClick={() => onOpenOrder?.(group)}
+                    onKeyDown={(event) => {
+                      if (!onOpenOrder) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onOpenOrder(group);
+                      }
+                    }}
+                    className={`rounded-xl border border-zinc-200 p-3 text-sm ${
+                      onOpenOrder
+                        ? 'cursor-pointer transition-colors hover:border-emerald-300 hover:bg-zinc-50/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40'
+                        : ''
+                    }`}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-2.5">
@@ -230,32 +257,34 @@ export function AssetDrawer({
                       </div>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-zinc-100 bg-zinc-50/60 p-2 text-[11px] sm:grid-cols-4">
-                      <div>
-                        <div className="text-zinc-500">Вложено</div>
+                      <div title="Часть вложений, которая ещё не продана">
+                        <div className="text-zinc-500">Вложено в остаток</div>
                         <div className="font-mono text-zinc-800">
                           {formatUsd(group.remainingCostBasisUsd)}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-zinc-500">Остаток</div>
+                      <div title="Сколько токена осталось в этом ордере">
+                        <div className="text-zinc-500">Остаток токена</div>
                         <div className="font-mono text-zinc-800">
-                          {formatTokenAmount(group.remainingAmount, 8)}
+                          {formatTokenAmount(group.remainingAmount, 8)} {data.asset.symbol}
                         </div>
                       </div>
-                      <div>
-                        <div className="text-zinc-500">Куплено</div>
+                      <div title="Сумма всех покупок по ордеру">
+                        <div className="text-zinc-500">Куплено всего</div>
                         <div className="font-mono text-zinc-800">{formatUsd(group.buyUsd)}</div>
                       </div>
-                      <div>
-                        <div className="text-zinc-500">Продано</div>
-                        <div className="font-mono text-zinc-800">{formatUsd(group.sellUsd)}</div>
+                      <div title="Сумма всех продаж по ордеру; у активного ордера может быть частичная продажа">
+                        <div className="text-zinc-500">Продано всего</div>
+                        <div className="font-mono text-zinc-800">
+                          {Number(group.sellUsd) > 0 ? formatUsd(group.sellUsd) : '—'}
+                        </div>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}
-            {data.tradeGroups.length > ordersLimit ? (
+            {activeOrders.length > ordersLimit ? (
               <div className="mt-3 flex justify-center">
                 <Button
                   variant="secondary"

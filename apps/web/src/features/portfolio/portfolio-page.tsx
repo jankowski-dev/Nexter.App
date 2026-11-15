@@ -461,6 +461,7 @@ export function PortfolioPage() {
             marketPriceUsd: positionByAsset.get(asset.id)?.priceUsd ?? null,
           });
         }}
+        onOpenOrder={(group) => setSellGroup(group)}
       />
 
       {buyTarget ? (
