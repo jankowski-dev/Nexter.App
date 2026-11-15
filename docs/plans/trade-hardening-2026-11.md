@@ -149,6 +149,43 @@ Catch the failure modes that caused the recent UI and provider bugs.
 - Avoid real wallet signatures; mock the wallet boundary.
 - Keep E2E database cleanup scoped to the test database.
 
+### Prioritized tests from the coverage audit
+
+Highest value and cheapest first:
+
+1. `accounting.e2e.spec.ts` — manual sell above the selected group remaining → `INSUFFICIENT_LOTS`, no drift.
+2. `accounting.e2e.spec.ts` — trade-group sell with the same idempotency key twice → one transaction, one remaining reduction, one audit row.
+3. `accounting.e2e.spec.ts` — same idempotency key with a changed payload → documented first-write-wins behavior.
+4. `auth.e2e.spec.ts` — CSRF matrix for `/transactions`, `/trade-groups/:id/sells`, `/swap/quote`, `/swap/build`, `/swap/orders/:id/submitted`.
+5. `swap.e2e.spec.ts` — provider 429 maps to `SWAP_RATE_LIMITED`, provider called once, failures are not cached.
+6. `swap.e2e.spec.ts` — repeated preview is served from the 15s cache; different amount/wallet reaches the provider.
+7. `swap.spec.ts` (E2E) — on-chain ↔ manual tab switch preserves amount/account/notes.
+8. `manual-flows.spec.ts` (E2E) — manual sell above remaining shows an inline error and writes nothing.
+9. New portfolio E2E — a token in a second watchlist group has no `Купить` in `Основной список`.
+
+Then:
+
+- cancel signature returns `READY` and allows re-sign;
+- executed output below `minOut` is accounted as executed, not quoted;
+- `/portfolio/token-summaries` HTTP e2e;
+- foreign/unknown group and swap order return 404;
+- double-click manual save creates one transaction;
+- all four operation tabs submit, including `Вывод`;
+- first bot E2E: create from `Основная`, start, journal, stop/reset;
+- `/swap/balances` RPC failure fallback.
+
+### Helper work
+
+Before adding many E2E tests, extract:
+
+- `apps/api/test/helpers/owner.ts` — `csrfFrom` + `setupOwner`;
+- `apps/api/test/helpers/swap-harness.ts` — Kyber/RPC mocks, `makeBuildData`, `swappedLog`;
+- `apps/e2e/tests/helpers/owner.ts` — UI setup + CSRF + truncate;
+- `apps/e2e/tests/helpers/seed.ts` — price, deposit, buy, group, watchlist, row count;
+- `apps/e2e/tests/helpers/swap-mocks.ts` — config/preview/quote routes.
+
+Also reset the swap preview cache in `beforeEach` so a 15s cached preview cannot leak between API tests.
+
 ## W3 — Observability
 
 ### Objective

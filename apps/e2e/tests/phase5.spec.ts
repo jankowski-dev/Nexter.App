@@ -94,6 +94,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
     amount: '1000',
     usdValue: '1000',
   });
+  await post('/api/v1/watchlist', { assetId: based?.id });
   await post('/api/v1/transactions', {
     type: 'buy',
     accountId: wallet?.id,
@@ -220,9 +221,10 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/watchlist');
   await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
-  await page.getByRole('button', { name: 'Добавить актив' }).first().click();
+  await page.getByRole('button', { name: /BASED/ }).first().click();
+  const existingTokenDrawer = page.getByRole('dialog');
+  await existingTokenDrawer.getByRole('button', { name: 'Изменить' }).click();
   const watchDialog = page.getByRole('dialog');
-  await watchDialog.getByLabel('Актив').selectOption(based?.id ?? '');
   await watchDialog.getByLabel('Описание').fill('Playwright thesis');
   await watchDialog.getByLabel('Теги (через запятую)').fill('Топ, тест');
   await watchDialog.getByLabel('Twitter / X').fill('https://x.com/based');

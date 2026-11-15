@@ -320,11 +320,14 @@ export class TradeGroupsService {
       .limit(1);
 
     if (!group) {
-      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Trade group not found' });
+      throw new NotFoundException({
+        code: 'TRADE_GROUP_NOT_FOUND',
+        message: 'Trade group not found',
+      });
     }
     if (group.status === 'closed') {
       throw new BadRequestException({
-        code: 'VALIDATION_ERROR',
+        code: 'TRADE_GROUP_CLOSED',
         message: 'Cannot sell from a closed trade group',
       });
     }

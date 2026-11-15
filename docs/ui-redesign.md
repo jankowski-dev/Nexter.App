@@ -183,3 +183,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Readable amounts and swap provider limits
 
 - **UI-60** — token quantities no longer show raw 18-decimal tails; USD stays two-decimal and prices keep precision. Kyber 429s are not retried, route calls are throttled, previews are cached/polled less, and provider errors are specific with retry/manual actions. See ADR 0050.
+
+## Server-side trade policy
+
+- **UI-61/W1** — manual buys are server-restricted to the default `Основная` watchlist group; manual sells require an owned open order and cannot exceed its remaining amount. New `TRADE_*` errors surface in the UI. See ADR 0051.

@@ -60,6 +60,24 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     csrf: string,
     body: Record<string, unknown>,
   ) {
+    if (body.type === 'buy' && typeof body.assetId === 'string') {
+      const watchlist = await agent
+        .post('/api/v1/watchlist')
+        .set('x-csrf-token', csrf)
+        .send({ assetId: body.assetId });
+      if (watchlist.status !== 201 && watchlist.status !== 409) {
+        throw new Error(`Failed to prepare watchlist for buy: ${watchlist.status}`);
+      }
+    }
+    if (body.type === 'sell' && !body.tradeGroupId && typeof body.assetId === 'string') {
+      const groups = await agent
+        .get(`/api/v1/trade-groups?assetId=${body.assetId}&limit=100`)
+        .expect(200);
+      const group = (
+        groups.body.data as Array<{ id: string; status: string; remainingAmount: string }>
+      ).find((item) => item.status !== 'closed' && Number(item.remainingAmount) > 0);
+      if (group) body = { ...body, tradeGroupId: group.id };
+    }
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
   }
 

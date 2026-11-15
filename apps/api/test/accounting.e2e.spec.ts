@@ -83,6 +83,26 @@ describe.runIf(canRun)('Accounting e2e', () => {
   }
 
   async function create(agent: SuperAgentTest, csrf: string, body: Record<string, unknown>) {
+    if (body.type === 'buy' && typeof body.assetId === 'string') {
+      const watchlist = await agent
+        .post('/api/v1/watchlist')
+        .set('x-csrf-token', csrf)
+        .send({ assetId: body.assetId });
+      if (watchlist.status !== 201 && watchlist.status !== 409) {
+        throw new Error(`Failed to prepare watchlist for buy: ${watchlist.status}`);
+      }
+    }
+
+    if (body.type === 'sell' && !body.tradeGroupId && typeof body.assetId === 'string') {
+      const groups = await agent
+        .get(`/api/v1/trade-groups?assetId=${body.assetId}&limit=100`)
+        .expect(200);
+      const group = (
+        groups.body.data as Array<{ id: string; status: string; remainingAmount: string }>
+      ).find((item) => item.status !== 'closed' && Number(item.remainingAmount) > 0);
+      if (group) body = { ...body, tradeGroupId: group.id };
+    }
+
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
   }
 
@@ -1085,6 +1105,142 @@ describe.runIf(canRun)('Accounting e2e', () => {
       .select({ count: sql<number>`count(*)::int` })
       .from(transactions);
     expect(transactionCount?.count).toBe(3);
+  }, 60_000);
+
+  it('enforces server-side buy and sell policy', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdt = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdt?.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+
+    const secondGroup = await agent
+      .post('/api/v1/watchlist/groups')
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'Наблюдение' })
+      .expect(201);
+    const watchlistEntry = await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link?.id, groupId: secondGroup.body.id })
+      .expect(201);
+
+    const blockedBuy = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '10',
+        quoteAssetId: usdt?.id,
+        quoteAmount: '100',
+      })
+      .expect(403);
+    expect(blockedBuy.body.error.code).toBe('TRADE_ASSET_NOT_ALLOWED');
+
+    await agent
+      .patch(`/api/v1/watchlist/${watchlistEntry.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ groupId: null })
+      .expect(200);
+
+    const buy = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '10',
+        quoteAssetId: usdt?.id,
+        quoteAmount: '100',
+      })
+      .expect(201);
+    const groupId = buy.body.transaction.tradeGroupId as string;
+
+    const oversell = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '11',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '110',
+        tradeGroupId: groupId,
+      })
+      .expect(400);
+    expect(oversell.body.error.code).toBe('TRADE_AMOUNT_EXCEEDS_REMAINING');
+
+    const noGroup = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '1',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '10',
+      })
+      .expect(400);
+    expect(noGroup.body.error.code).toBe('TRADE_GROUP_REQUIRED');
+
+    const unknownGroup = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '1',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '10',
+        tradeGroupId: '11111111-1111-4111-8111-111111111111',
+      })
+      .expect(404);
+    expect(unknownGroup.body.error.code).toBe('TRADE_GROUP_NOT_FOUND');
+
+    await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '10',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '100',
+        tradeGroupId: groupId,
+      })
+      .expect(201);
+
+    const closed = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '1',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '10',
+        tradeGroupId: groupId,
+      })
+      .expect(400);
+    expect(closed.body.error.code).toBe('TRADE_GROUP_CLOSED');
   }, 60_000);
 
   it('keeps lots equal to balances across generated buy/sell sequences', async () => {

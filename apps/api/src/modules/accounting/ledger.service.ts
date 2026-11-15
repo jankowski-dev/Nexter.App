@@ -38,6 +38,7 @@ import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsService } from './accounts.service';
 import { AssetsService } from './assets.service';
 import { FifoService } from './fifo.service';
+import { TradePolicyService } from './trade-policy.service';
 
 interface PostingDraft {
   accountId: string;
@@ -83,6 +84,7 @@ export class LedgerService {
     private readonly assets: AssetsService,
     private readonly fifo: FifoService,
     private readonly audit: AuditService,
+    private readonly policy: TradePolicyService,
   ) {}
 
   async createManual(
@@ -282,6 +284,12 @@ export class LedgerService {
           const base = await this.assets.require(input.assetId, tx);
           const quote = await this.assets.require(input.quoteAssetId, tx);
 
+          this.policy.assertAccountAssetChain(account, base);
+          this.policy.assertAccountAssetChain(account, quote);
+          if (!sourceOverride) {
+            await this.policy.assertBuyAssetInDefaultGroup(userId, base.id, tx);
+          }
+
           if (!quote.isCashEquivalent) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
@@ -347,6 +355,9 @@ export class LedgerService {
           const base = await this.assets.require(input.assetId, tx);
           const proceedsAsset = await this.assets.require(input.proceedsAssetId, tx);
 
+          this.policy.assertAccountAssetChain(account, base);
+          this.policy.assertAccountAssetChain(account, proceedsAsset);
+
           if (!proceedsAsset.isCashEquivalent) {
             throw new BadRequestException({
               code: 'VALIDATION_ERROR',
@@ -358,6 +369,23 @@ export class LedgerService {
           const proceedsAmount = decimal(input.proceedsAmount);
           assertAmount(base, baseAmount, 'amount');
           assertAmount(proceedsAsset, proceedsAmount, 'proceedsAmount');
+
+          if (!input.tradeGroupId && !sourceOverride) {
+            throw new BadRequestException({
+              code: 'TRADE_GROUP_REQUIRED',
+              message: 'Select the trade group to sell from',
+            });
+          }
+          if (input.tradeGroupId) {
+            await this.policy.assertSellableGroup(
+              userId,
+              input.tradeGroupId,
+              base.id,
+              baseAmount,
+              tx,
+            );
+          }
+
           const proceedsUsd = resolveUsd(proceedsAsset, proceedsAmount, input.usdValue, 'usdValue');
 
           if (proceedsUsd.lte(0)) {
