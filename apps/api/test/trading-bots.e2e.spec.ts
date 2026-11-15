@@ -240,6 +240,12 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     const equity = await agent.get(`/api/v1/trading-bots/bots/${botId}/equity`).expect(200);
     expect(equity.body.data.length).toBeGreaterThanOrEqual(2);
 
+    const equityWeek = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/equity?days=7`)
+      .expect(200);
+    expect(equityWeek.body.data.length).toBeGreaterThanOrEqual(1);
+    expect(equityWeek.body.data[0].capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
     await agent
       .post(`/api/v1/trading-bots/bots/${botId}/stop`)
       .set('x-csrf-token', owner.csrf)
@@ -528,6 +534,35 @@ describe.runIf(canRun)('Trading bots e2e', () => {
           trade.side === 'sell' && trade.asset.id === removedAsset.id,
       ),
     ).toBe(true);
+
+    await agent
+      .post(`/api/v1/trading-bots/bots/${botId}/stop`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+
+    const readded = await agent
+      .patch(`/api/v1/trading-bots/bots/${botId}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ tokenAssetIds: [keptAsset.id, removedAsset.id] })
+      .expect(200);
+    expect(readded.body.tokens).toHaveLength(2);
+    expect(readded.body.tokens.map((token: { assetId: string }) => token.assetId)).toEqual(
+      expect.arrayContaining([keptAsset.id, removedAsset.id]),
+    );
+
+    await agent
+      .post(`/api/v1/trading-bots/bots/${botId}/start`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    await runner.runOnce();
+
+    const signalsAfterAdd = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/signals`)
+      .expect(200);
+    expect(signalsAfterAdd.body.data).toHaveLength(2);
+    expect(signalsAfterAdd.body.data.map((signal: { assetId: string }) => signal.assetId)).toEqual(
+      expect.arrayContaining([keptAsset.id, removedAsset.id]),
+    );
   }, 60_000);
 
   it('previews historical candles, runs a backtest, lists it and downloads the PDF', async () => {

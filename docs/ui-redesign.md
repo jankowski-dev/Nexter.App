@@ -171,3 +171,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Robot polish and internal confirmations
 
 - **UI-57** — robot tokens come from the default `Основная` watchlist group; custom bot icons use migration `0040` and fall back to the strategy icon; removing a token keeps its open position managed exit-only; uptime reads `2 д 1 ч` / `5 мин 7 с`; the equity chart matches the portfolio chart with ranges and downsampling; bot/asset journals and orders show 10 rows with centered `Ещё`; closed orders open `/trades/$tradeId`. All browser confirmations were replaced by the internal `ConfirmProvider`. See ADR 0048.
+
+## Equity ranges and active orders
+
+- **UI-58** — bot equity ranges 7d/30d/1y no longer 500; the portfolio asset drawer lists only active orders; clicking a card opens the sell/close drawer, and the labels clarify cost/quantity/buy/sell; the bot journal is a table. See `docs/decisions.md`.

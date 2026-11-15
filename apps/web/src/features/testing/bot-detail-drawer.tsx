@@ -641,18 +641,38 @@ export function BotDetailDrawer({
           ) : eventRows.length === 0 ? (
             <CardDescription>Событий нет.</CardDescription>
           ) : (
-            <div className="mt-2 space-y-1.5">
-              {eventRows.map((event) => (
-                <div key={event.id} className="flex items-start gap-2 text-xs">
-                  <span className="shrink-0 text-zinc-400">{formatDateTime(event.createdAt)}</span>
-                  <Badge tone={event.type === 'error' ? 'warning' : 'info'}>
-                    {eventLabels[event.type] ?? event.type}
-                  </Badge>
-                  <span className="text-zinc-600">{event.message}</span>
-                </div>
-              ))}
+            <>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                      <th className="py-2 pr-3 font-medium">Время</th>
+                      <th className="py-2 pr-3 font-medium">Событие</th>
+                      <th className="py-2 font-medium">Сообщение</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {eventRows.map((event) => (
+                      <tr
+                        key={event.id}
+                        className="border-b border-zinc-100 align-top last:border-0"
+                      >
+                        <td className="whitespace-nowrap py-2 pr-3 text-xs text-zinc-500">
+                          {formatDateTime(event.createdAt)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Badge tone={event.type === 'error' ? 'warning' : 'info'}>
+                            {eventLabels[event.type] ?? event.type}
+                          </Badge>
+                        </td>
+                        <td className="py-2 text-xs text-zinc-600">{event.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               {events.hasNextPage ? (
-                <div className="flex justify-center pt-2">
+                <div className="mt-3 flex justify-center">
                   <Button
                     variant="secondary"
                     className="h-8 px-3 text-xs"
@@ -663,7 +683,7 @@ export function BotDetailDrawer({
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </>
           )}
         </Card>
         <CardDescription>

@@ -882,7 +882,7 @@ export class TradingBotsService {
           : sql`date_trunc('day', ${botEquitySnapshots.capturedAt})`;
       const rows = await this.db
         .select({
-          capturedAt: sql<Date>`max(${botEquitySnapshots.capturedAt})`,
+          capturedAt: sql<string>`max(${botEquitySnapshots.capturedAt})::text`,
           cashUsd: sql<string>`(array_agg(${botEquitySnapshots.cashUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
           positionsValueUsd: sql<string>`(array_agg(${botEquitySnapshots.positionsValueUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
           equityUsd: sql<string>`(array_agg(${botEquitySnapshots.equityUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
@@ -901,7 +901,7 @@ export class TradingBotsService {
 
       return {
         data: rows.map((row) => ({
-          capturedAt: row.capturedAt.toISOString(),
+          capturedAt: new Date(row.capturedAt).toISOString(),
           cashUsd: row.cashUsd,
           positionsValueUsd: row.positionsValueUsd,
           equityUsd: row.equityUsd,
