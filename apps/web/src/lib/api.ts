@@ -499,6 +499,17 @@ export async function fetchPortfolioAsset(id: string): Promise<PortfolioAssetDet
   return apiFetch(`/api/v1/portfolio/assets/${id}`, {}, portfolioAssetDetailSchema);
 }
 
+export async function fetchPortfolioAssetChart(
+  assetId: string,
+  days: number,
+): Promise<WatchlistChartResponse> {
+  return apiFetch(
+    `/api/v1/portfolio/assets/${assetId}/chart${queryString({ days })}`,
+    {},
+    watchlistChartResponseSchema,
+  );
+}
+
 export async function setPrice(assetId: string, priceUsd: string): Promise<void> {
   await apiPost(`/api/v1/prices/${assetId}`, { priceUsd });
 }

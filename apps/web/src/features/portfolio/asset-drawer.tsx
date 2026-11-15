@@ -4,7 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
-import { fetchPortfolioAsset, fetchWatchlist } from '@/lib/api';
+import { fetchPortfolioAsset } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatDate,
@@ -82,15 +82,6 @@ export function AssetDrawer({
 
   const data = detail.data;
   const position = data?.position;
-  const chartEntry = useQuery({
-    queryKey: ['asset-watchlist-entry', assetId],
-    queryFn: async () => {
-      const response = await fetchWatchlist(false, undefined, undefined, 100);
-      return response.data.find((entry) => entry.asset.id === assetId)?.id ?? null;
-    },
-    enabled: Boolean(assetId) && Boolean(data) && !data?.watchlistId,
-  });
-  const chartEntryId = data?.watchlistId ?? chartEntry.data ?? null;
 
   return (
     <Drawer
@@ -137,13 +128,11 @@ export function AssetDrawer({
 
       {data ? (
         <div className="space-y-5">
-          {chartEntryId ? (
-            <Card>
-              <div className="mt-1">
-                <TokenPriceChart entryId={chartEntryId} />
-              </div>
-            </Card>
-          ) : null}
+          <Card>
+            <div className="mt-1">
+              <TokenPriceChart entryId={data.watchlistId} assetId={data.asset.id} />
+            </div>
+          </Card>
 
           {data.thesis || data.tags.length > 0 ? (
             <Card>

@@ -7,6 +7,7 @@ import type {
   Position,
   TradeGroupSummary,
   Transaction,
+  WatchlistChartResponse,
 } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { AssetsService } from './assets.service';
@@ -15,6 +16,8 @@ import { PricingService } from './pricing.service';
 import { ReportingService } from './reporting.service';
 import { aggregateTokenSummaries } from './token-summaries';
 import { TradeGroupsService } from './trade-groups.service';
+import { GeckoTerminalClient } from '../market-data/geckoterminal.client';
+import { CoinGeckoClient } from '../market-data/coingecko.client';
 
 @Injectable()
 export class PortfolioService {
@@ -25,6 +28,8 @@ export class PortfolioService {
     private readonly pricing: PricingService,
     private readonly tradeGroups: TradeGroupsService,
     private readonly ledger: LedgerService,
+    private readonly geckoterminal: GeckoTerminalClient,
+    private readonly coingecko: CoinGeckoClient,
   ) {}
 
   async tokenSummaries(userId: string): Promise<PortfolioTokenSummariesResponse> {
@@ -43,6 +48,33 @@ export class PortfolioService {
         };
       }),
     };
+  }
+
+  async assetChart(assetId: string, days: number): Promise<WatchlistChartResponse> {
+    const asset = await this.assets.get(assetId);
+    let source = 'coingecko';
+    let candles =
+      asset.contractAddress && (asset.chainCode === 'bsc' || asset.chainCode === 'ethereum')
+        ? await this.geckoterminal.getDailyCandles(asset.chainCode, asset.contractAddress, days)
+        : [];
+
+    if (candles.length > 0) source = 'geckoterminal';
+
+    if (candles.length < days && asset.coingeckoId) {
+      const coingeckoCandles = await this.coingecko.getDailyCandles(asset.coingeckoId, days);
+      if (coingeckoCandles.length > candles.length) {
+        candles = coingeckoCandles;
+        source = 'coingecko';
+      }
+    }
+
+    const points = candles
+      .filter((candle) => Number(candle.closeUsd) > 0)
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .slice(-days)
+      .map((candle) => ({ date: candle.date, priceUsd: candle.closeUsd }));
+
+    return { days, source: points.length > 0 ? source : 'none', points };
   }
 
   async assetDetail(userId: string, assetId: string): Promise<PortfolioAssetDetail> {
