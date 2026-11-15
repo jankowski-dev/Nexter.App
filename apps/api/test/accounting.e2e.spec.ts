@@ -724,6 +724,11 @@ describe.runIf(canRun)('Accounting e2e', () => {
       amount: '10',
       usdValue: '10',
     });
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link?.id })
+      .expect(201);
 
     const response = await agent
       .post('/api/v1/transactions')
@@ -764,6 +769,11 @@ describe.runIf(canRun)('Accounting e2e', () => {
       amount: '100',
       usdValue: '100',
     });
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link?.id })
+      .expect(201);
 
     const body = {
       type: 'buy',
@@ -982,6 +992,12 @@ describe.runIf(canRun)('Accounting e2e', () => {
       })
       .expect(400);
     expect(cashMismatch.body.error.code).toBe('VALIDATION_ERROR');
+
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: bscLink?.id })
+      .expect(201);
 
     const zeroFee = await agent
       .post('/api/v1/transactions')
