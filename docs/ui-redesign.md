@@ -187,3 +187,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Server-side trade policy
 
 - **UI-61/W1** — manual buys are server-restricted to the default `Основная` watchlist group; manual sells require an owned open order and cannot exceed its remaining amount. New `TRADE_*` errors surface in the UI. See ADR 0051.
+
+## System status
+
+- **UI-61/W3** — `Настройки → Система` shows quote freshness, bot ticks, swap accounting/stuck states, provider error rates, snapshots, reconciliation and indexer state. Owner-only, read-only, 30s refresh. See ADR 0052.

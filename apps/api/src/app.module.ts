@@ -13,6 +13,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { TasksModule } from './modules/tasks/tasks.module';
 import { VaultModule } from './modules/vault/vault.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { SystemModule } from './modules/system/system.module';
 import { ReconciliationModule } from './modules/reconciliation/reconciliation.module';
 import { TradingBotsModule } from './modules/trading-bots/trading-bots.module';
 import { SwapModule } from './modules/swap/swap.module';
@@ -41,6 +42,7 @@ import { loggerModule } from './shared/logging/logger.module';
     TasksModule,
     VaultModule,
     SettingsModule,
+    SystemModule,
     AuditLogModule,
     SwapModule,
     ReconciliationModule,

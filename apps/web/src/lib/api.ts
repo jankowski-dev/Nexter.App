@@ -53,6 +53,7 @@ import {
   positionsResponseSchema,
   reportsResponseSchema,
   settingsSchema,
+  systemStatusSchema,
   stepUpResponseSchema,
   taskImageSchema,
   taskSchema,
@@ -150,6 +151,7 @@ import {
   type PositionsResponse,
   type ReportsResponse,
   type Settings,
+  type SystemStatus,
   type StepUpResponse,
   type Task,
   type TaskCreateRequest,
@@ -616,6 +618,10 @@ export async function createWatchlistFromContract(
 
 export async function fetchSettings(): Promise<Settings> {
   return apiFetch('/api/v1/settings', {}, settingsSchema);
+}
+
+export async function fetchSystemStatus(): Promise<SystemStatus> {
+  return apiFetch('/api/v1/settings/system-status', {}, systemStatusSchema);
 }
 
 export async function updateSettings(body: UpdateSettingsRequest): Promise<Settings> {
