@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrice, formatRelativeTime } from './format';
+import { formatPrice, formatRelativeTime, normalizeDecimalInput } from './format';
 
 describe('formatPrice', () => {
   it('keeps small token prices visible', () => {
@@ -16,6 +16,14 @@ describe('formatPrice', () => {
     expect(formatPrice(null)).toBe('—');
     expect(formatPrice('')).toBe('—');
     expect(formatPrice('not-a-number')).toBe('—');
+  });
+});
+
+describe('normalizeDecimalInput', () => {
+  it('removes trailing zeros without losing meaningful precision', () => {
+    expect(normalizeDecimalInput('17648.000000000000000000')).toBe('17648');
+    expect(normalizeDecimalInput('0.000406000000000000')).toBe('0.000406');
+    expect(normalizeDecimalInput('0.000000001234')).toBe('0.000000001234');
   });
 });
 

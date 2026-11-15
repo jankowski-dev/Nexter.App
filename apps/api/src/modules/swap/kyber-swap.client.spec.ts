@@ -100,33 +100,25 @@ describe('KyberSwapClient', () => {
     expect(body.source).toBe('nexter');
   });
 
-  it('retries a 429 and surfaces provider errors without raw bodies', async () => {
+  it('does not retry a 429 and surfaces the rate limit', async () => {
     const calls = fakeCalls();
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ message: 'rate limited' }, 429))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          code: 0,
-          data: {
-            routeSummary,
-            routerAddress: '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5',
-          },
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: 'rate limited' }, 429));
     const client = new KyberSwapClient(calls, fetchMock as unknown as typeof fetch);
 
-    const result = await client.getRoutes({
-      chain: 'bsc',
-      tokenIn: routeSummary.tokenIn,
-      tokenOut: routeSummary.tokenOut,
-      amountInBase: routeSummary.amountIn,
-      slippageBps: 50,
-    });
+    await expect(
+      client.getRoutes({
+        chain: 'bsc',
+        tokenIn: routeSummary.tokenIn,
+        tokenOut: routeSummary.tokenOut,
+        amountInBase: routeSummary.amountIn,
+        slippageBps: 50,
+      }),
+    ).rejects.toMatchObject({ code: 'SWAP_RATE_LIMITED', status: 429 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 
-    expect(result.routeSummary).toEqual(routeSummary);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
+  it('surfaces provider errors without raw bodies', async () => {
+    const calls = fakeCalls();
     const failing = new KyberSwapClient(
       calls,
       vi

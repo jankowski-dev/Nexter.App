@@ -402,7 +402,7 @@ export class SwapService {
       const oldest = this.previewCache.keys().next().value;
       if (oldest) this.previewCache.delete(oldest);
     }
-    this.previewCache.set(cacheKey, { expiresAt: Date.now() + 5_000, value: preview });
+    this.previewCache.set(cacheKey, { expiresAt: Date.now() + 15_000, value: preview });
 
     return preview;
   }
