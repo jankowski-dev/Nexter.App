@@ -45,3 +45,7 @@ The public Kyber aggregator is used when `KYBERSWAP_API_KEY` is not configured; 
 - Kyber client unit tests cover the no-retry 429 behavior.
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
 - E2E manual buy/sell flows continue to use the embedded form and fixed footer.
+
+## Production release (2026-11-15)
+
+PR #147 merged as `65a94dda`; deployment `79c922b3-dcb1-42dd-a30f-3ffcb7887017`; bundle `assets/index-De_jjhCd.js`; `/health` and `/ready` 200. No migration.
