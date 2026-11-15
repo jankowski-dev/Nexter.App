@@ -42,3 +42,7 @@ No table or background-service changes are required. Missing persisted job telem
 - API e2e checks owner-only access, response shape and absence of secret strings.
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
 - No migration.
+
+## Production release (2026-11-15)
+
+Production release on 2026-11-15: PR #150 merged as `bc713d9d`, deployment `d54fc068-2f6f-4463-9c62-8d69fb809c64`, bundle `assets/index-DYL4XPtC.js`, `/health` and `/ready` 200. No migration.

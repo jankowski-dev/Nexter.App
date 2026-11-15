@@ -186,6 +186,15 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   await expect(buyDrawer.getByText('KyberSwap')).toBeVisible();
   await expect(buyDrawer.getByRole('tab', { name: 'Вручную' })).toBeVisible();
   await expect(buyDrawer.getByRole('button', { name: 'Купить BASED' })).toBeDisabled();
+
+  const manualForm = buyDrawer.locator('#manual-order-form');
+  await buyDrawer.getByRole('tab', { name: 'Вручную' }).click();
+  await manualForm.getByLabel('Количество BASED').fill('2');
+  await buyDrawer.getByRole('tab', { name: 'Ончейн' }).click();
+  await expect(buyDrawer.getByLabel('Сколько USDC потратить')).toHaveValue('1');
+  await buyDrawer.getByRole('tab', { name: 'Вручную' }).click();
+  await expect(manualForm.getByLabel('Количество BASED')).toHaveValue('2');
+
   await buyDrawer.getByRole('button', { name: 'Закрыть' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
