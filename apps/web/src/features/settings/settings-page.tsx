@@ -80,7 +80,7 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Link to="/settings/security" className="block">
           <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Безопасность</CardTitle>
@@ -103,6 +103,12 @@ export function SettingsPage() {
           <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Система</CardTitle>
             <CardDescription>Котировки, задачи, свопы и провайдеры.</CardDescription>
+          </Card>
+        </Link>
+        <Link to="/settings/data-quality" className="block">
+          <Card className="h-full transition-colors hover:border-emerald-300">
+            <CardTitle>Качество данных</CardTitle>
+            <CardDescription>Расхождения учёта, ордеров и котировок.</CardDescription>
           </Card>
         </Link>
         <Link to="/import" className="block">

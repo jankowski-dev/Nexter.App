@@ -22,6 +22,7 @@ import {
   dashboardPnlSchema,
   dashboardRecentTradesSchema,
   dashboardSummarySchema,
+  dataQualityReportSchema,
   equityCurveSchema,
   errorEnvelopeSchema,
   financeAccountsResponseSchema,
@@ -100,6 +101,7 @@ import {
   type DashboardActivePositions,
   type DashboardAllocation,
   type DashboardDataQuality,
+  type DataQualityReport,
   type DashboardPnl,
   type DashboardRecentTrades,
   type DashboardSummary,
@@ -622,6 +624,10 @@ export async function fetchSettings(): Promise<Settings> {
 
 export async function fetchSystemStatus(): Promise<SystemStatus> {
   return apiFetch('/api/v1/settings/system-status', {}, systemStatusSchema);
+}
+
+export async function fetchDataQuality(): Promise<DataQualityReport> {
+  return apiFetch('/api/v1/settings/data-quality', {}, dataQualityReportSchema);
 }
 
 export async function updateSettings(body: UpdateSettingsRequest): Promise<Settings> {

@@ -7,7 +7,8 @@ Status: accepted 2026-11-15. Owner approved the default order and constraints.
 - W1 completed: PR #149, merge `b1ce42e1`, deployment `eee5f492-5344-4b17-b8b1-bfd125e0f499`, bundle `assets/index-CtjhSgZd.js`.
 - W2 partial: server policy API test and fixture seeding landed with W1; the remaining P0/P1 matrix is still open.
 - W3 completed: PR #150, merge `bc713d9d`, deployment `d54fc068-2f6f-4463-9c62-8d69fb809c64`, bundle `assets/index-DYL4XPtC.js` (ADR 0052).
-- W2 next: tab-state E2E is added in the follow-up tests PR; remaining P0/P1 matrix is still open.
+- W2 next: tab-state E2E is merged (PR #151); remaining P0/P1 matrix is still open.
+- W4 implemented: read-only data-quality report (ADR 0053), pending release documentation.
   Baseline: `main` at `e835511`, UI-60 deployed (`assets/index-De_jjhCd.js`).
   Working branch: `trade-hardening-phase-1`.
 

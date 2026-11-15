@@ -93,3 +93,42 @@ export const systemStatusSchema = z.object({
 
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 export type SystemJobState = z.infer<typeof systemJobStateSchema>;
+
+export const dataQualitySeveritySchema = z.enum(['info', 'warning', 'error']);
+
+export const dataQualitySampleSchema = z.object({
+  label: z.string(),
+  href: z.string().nullable(),
+});
+
+export const dataQualityCheckSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  severity: dataQualitySeveritySchema,
+  count: z.number().int().nonnegative(),
+  hint: z.string().nullable(),
+  samples: z.array(dataQualitySampleSchema),
+});
+
+export const dataQualitySectionSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  checks: z.array(dataQualityCheckSchema),
+});
+
+export const dataQualityReportSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  summary: z.object({
+    errors: z.number().int().nonnegative(),
+    warnings: z.number().int().nonnegative(),
+    info: z.number().int().nonnegative(),
+    healthy: z.boolean(),
+  }),
+  sections: z.array(dataQualitySectionSchema),
+});
+
+export type DataQualitySeverity = z.infer<typeof dataQualitySeveritySchema>;
+export type DataQualitySample = z.infer<typeof dataQualitySampleSchema>;
+export type DataQualityCheck = z.infer<typeof dataQualityCheckSchema>;
+export type DataQualitySection = z.infer<typeof dataQualitySectionSchema>;
+export type DataQualityReport = z.infer<typeof dataQualityReportSchema>;
