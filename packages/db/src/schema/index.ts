@@ -1143,6 +1143,7 @@ export const tradingBots = pgTable(
     strategyParams: jsonb('strategy_params').$type<Record<string, unknown>>().notNull().default({}),
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
+    icon: text('icon'),
     status: text('status').notNull().default('draft'),
     budgetUsd: numeric('budget_usd', { precision: 24, scale: 8 }).notNull(),
     cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),

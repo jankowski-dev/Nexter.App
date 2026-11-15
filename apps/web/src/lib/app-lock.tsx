@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiPost } from '@/lib/api';
 import { useBodyScrollLock } from '@/lib/use-body-scroll-lock';
+import { useConfirm } from './confirm';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -112,6 +113,7 @@ function UnlockScreen({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -171,9 +173,13 @@ function UnlockScreen({
 
   async function resetAndLogout() {
     if (
-      !window.confirm(
-        'Сбросить код блокировки и выйти? Для входа снова понадобятся пароль и код 2FA.',
-      )
+      !(await confirm({
+        title: 'Сбросить код блокировки?',
+        description:
+          'Код будет удалён, приложение выйдет из аккаунта. Для входа снова понадобятся пароль и код 2FA.',
+        confirmLabel: 'Сбросить и выйти',
+        variant: 'danger',
+      }))
     ) {
       return;
     }

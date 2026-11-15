@@ -16,6 +16,7 @@ import {
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
 import type { Asset } from '@nexter/contracts';
 import { TokenPriceChart } from '../watchlist/token-price-chart';
 
@@ -79,6 +80,11 @@ export function AssetDrawer({
     queryFn: () => fetchPortfolioAsset(assetId as string),
     enabled: Boolean(assetId),
   });
+  const [ordersLimit, setOrdersLimit] = useState(10);
+
+  useEffect(() => {
+    setOrdersLimit(10);
+  }, [assetId]);
 
   const data = detail.data;
   const position = data?.position;
@@ -185,7 +191,7 @@ export function AssetDrawer({
               <p className="mt-3 text-sm text-zinc-600">Ордеров нет.</p>
             ) : (
               <div className="mt-3 space-y-2">
-                {data.tradeGroups.map((group, index) => (
+                {data.tradeGroups.slice(0, ordersLimit).map((group, index) => (
                   <Link
                     key={group.id}
                     to="/trades/$tradeId"
@@ -249,6 +255,17 @@ export function AssetDrawer({
                 ))}
               </div>
             )}
+            {data.tradeGroups.length > ordersLimit ? (
+              <div className="mt-3 flex justify-center">
+                <Button
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setOrdersLimit((current) => current + 10)}
+                >
+                  Ещё
+                </Button>
+              </div>
+            ) : null}
           </Card>
         </div>
       ) : null}

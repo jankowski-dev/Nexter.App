@@ -17,6 +17,18 @@ export const botTradeSideSchema = z.enum(['buy', 'sell']);
 
 const paramsSchema = z.record(z.string(), z.unknown());
 
+const botIconSchema = z
+  .string()
+  .trim()
+  .max(400_000)
+  .refine((value) => {
+    if (!/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(value)) return false;
+    const base64 = value.slice(value.indexOf(',') + 1);
+    const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
+    const sizeBytes = Math.floor((base64.length * 3) / 4) - padding;
+    return sizeBytes > 0 && sizeBytes <= 250_000;
+  }, 'Иконка должна быть PNG/JPEG/WebP до 250 КБ');
+
 export const botStrategyParamFieldSchema = z.object({
   key: z.string(),
   label: z.string(),
@@ -64,6 +76,7 @@ export const botSummarySchema = z.object({
   id: z.uuid(),
   name: z.string(),
   description: z.string(),
+  icon: z.string().nullable(),
   status: botStatusSchema,
   strategy: z.object({
     key: botStrategyKeySchema,
@@ -155,6 +168,7 @@ export const botCreateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120),
     description: z.string().max(2000).optional(),
+    icon: botIconSchema.nullable().optional(),
     strategyKey: botStrategyKeySchema,
     strategyParams: paramsSchema.optional(),
     tokenAssetIds: z.array(z.uuid()).min(1).max(50),
@@ -179,6 +193,7 @@ export const botUpdateRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().max(2000).optional(),
+    icon: botIconSchema.nullable().optional(),
     strategyKey: botStrategyKeySchema.optional(),
     strategyParams: paramsSchema.optional(),
     tokenAssetIds: z.array(z.uuid()).min(1).max(50).optional(),
@@ -372,6 +387,12 @@ export const botHistoryQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
 });
 
+export const botEquityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(1500).default(500),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+  days: z.coerce.number().int().min(1).max(365).optional(),
+});
+
 export type BotStrategyKey = z.infer<typeof botStrategyKeySchema>;
 export type BotStatus = z.infer<typeof botStatusSchema>;
 export type BotStrategyTemplate = z.infer<typeof botStrategyTemplateSchema>;
@@ -412,3 +433,4 @@ export type BotEquityResponse = z.infer<typeof botEquityResponseSchema>;
 export type BotStrategiesResponse = z.infer<typeof botStrategiesResponseSchema>;
 export type BotListQuery = z.infer<typeof botListQuerySchema>;
 export type BotHistoryQuery = z.infer<typeof botHistoryQuerySchema>;
+export type BotEquityQuery = z.infer<typeof botEquityQuerySchema>;

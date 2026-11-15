@@ -253,10 +253,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await updatedDrawer.getByLabel('Закрыть').click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
 
-  page.on('dialog', (dialog) => {
-    void dialog.accept();
-  });
-
   await page.goto('/settings');
   await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
   await expect(page.getByText('Общие').first()).toBeVisible();
@@ -299,6 +295,9 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const drawerToDelete = page.getByRole('dialog');
   await expect(drawerToDelete.getByText('Updated Playwright thesis')).toBeVisible();
   await drawerToDelete.getByRole('button', { name: 'Удалить' }).click();
+  const deleteTokenDialog = page.getByRole('dialog', { name: 'Удалить токен из базы?' });
+  await expect(deleteTokenDialog).toBeVisible();
+  await deleteTokenDialog.getByRole('button', { name: 'Удалить' }).click();
   await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'Показать архивные токены' })).toHaveCount(0);
 });

@@ -101,7 +101,9 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/settings/security');
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Удалить код' }).click();
+  const deletePinDialog = page.getByRole('dialog', { name: 'Удалить код блокировки?' });
+  await expect(deletePinDialog).toBeVisible();
+  await deletePinDialog.getByRole('button', { name: 'Удалить код' }).click();
   await expect(page.getByText('Код не установлен')).toBeVisible();
 });

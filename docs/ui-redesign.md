@@ -167,3 +167,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Robot uptime and modal system
 
 - **UI-56** — robot start resets the live uptime counter; bot cards use tone surfaces; equity lines are thinner; bot trades/events paginate 10 rows at a time; a per-token completed-trade summary endpoint feeds a new bot drawer section. Modals now have fixed footers and consistent 24 px padding, read-only actions say `Готово`, and delete actions are full danger buttons on the left. The portfolio asset drawer gains a chart from `watchlistId`, drops lots/transactions, renders richer orders and colored metrics, and keeps the base drawer open while buying. The separate full asset page is removed. See ADR 0047.
+
+## Robot polish and internal confirmations
+
+- **UI-57** — robot tokens come from the default `Основная` watchlist group; custom bot icons use migration `0040` and fall back to the strategy icon; removing a token keeps its open position managed exit-only; uptime reads `2 д 1 ч` / `5 мин 7 с`; the equity chart matches the portfolio chart with ranges and downsampling; bot/asset journals and orders show 10 rows with centered `Ещё`; closed orders open `/trades/$tradeId`. All browser confirmations were replaced by the internal `ConfirmProvider`. See ADR 0048.

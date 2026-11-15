@@ -29,6 +29,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatPct, formatPrice, formatUsd, formatUsdCompact, pnlTone } from '@/lib/format';
 import { filterBySearch } from '@/lib/search';
 import { compressTokenIcon } from '@/lib/image';
+import { useConfirm } from '@/lib/confirm';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import type { WatchlistEntry, WatchlistTokenSearchResult } from '@nexter/contracts';
@@ -104,6 +105,7 @@ function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>)
 
 export function WatchlistPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<TokenSortKey>('default');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
@@ -450,11 +452,16 @@ export function WatchlistPage() {
             aria-label="Удалить группу"
             title="Удалить группу"
             disabled={deleteGroupMutation.isPending}
-            onClick={() => {
+            onClick={async () => {
               const group = groupsToRender.find((item) => item.id === selectedGroupId);
               if (
                 group &&
-                window.confirm(`Удалить группу «${group.name}»? Токены перейдут в «Основную».`)
+                (await confirm({
+                  title: 'Удалить группу?',
+                  description: `Группа «${group.name}» будет удалена. Её токены перейдут в «Основную».`,
+                  confirmLabel: 'Удалить группу',
+                  variant: 'danger',
+                }))
               ) {
                 deleteGroupMutation.mutate(group.id);
               }
@@ -713,11 +720,14 @@ export function WatchlistPage() {
         groupBusy={changeGroupMutation.isPending}
         onClose={closeDrawer}
         onEdit={openEdit}
-        onDelete={(entry) => {
+        onDelete={async (entry) => {
           if (
-            window.confirm(
-              `Удалить ${entry.asset.symbol} из базы? Транзакции и сделки с токеном сохранятся.`,
-            )
+            await confirm({
+              title: 'Удалить токен из базы?',
+              description: `${entry.asset.symbol} будет убран из Базы токенов. Транзакции и сделки с ним сохранятся.`,
+              confirmLabel: 'Удалить',
+              variant: 'danger',
+            })
           ) {
             deleteMutation.mutate(entry);
           }

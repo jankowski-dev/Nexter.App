@@ -1057,9 +1057,10 @@ export async function fetchBotEquity(
   id: string,
   limit = 500,
   offset = 0,
+  days?: number,
 ): Promise<BotEquityResponse> {
   return apiFetch(
-    `/api/v1/trading-bots/bots/${id}/equity${queryString({ limit, offset })}`,
+    `/api/v1/trading-bots/bots/${id}/equity${queryString({ limit, offset, days })}`,
     {},
     botEquityResponseSchema,
   );

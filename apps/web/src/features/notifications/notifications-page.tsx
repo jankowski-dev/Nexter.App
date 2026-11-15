@@ -7,12 +7,14 @@ import { NavIcon } from '@/components/nav-icon';
 import { clearNotifications, fetchNotifications, markAllNotificationsRead } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
+import { useConfirm } from '@/lib/confirm';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { NotificationsResponse } from '@nexter/contracts';
 
 export function NotificationsPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const notifications = useQuery({
     queryKey: ['notifications'],
     queryFn: () => fetchNotifications(100),
@@ -66,8 +68,17 @@ export function NotificationsPage() {
               variant="secondary"
               className="text-red-700"
               disabled={clearAll.isPending || (notifications.data?.data.length ?? 0) === 0}
-              onClick={() => {
-                if (window.confirm('Очистить все уведомления?')) clearAll.mutate();
+              onClick={async () => {
+                if (
+                  await confirm({
+                    title: 'Очистить уведомления?',
+                    description: 'Все уведомления будут скрыты из списка.',
+                    confirmLabel: 'Очистить',
+                    variant: 'danger',
+                  })
+                ) {
+                  clearAll.mutate();
+                }
               }}
             >
               {clearAll.isPending ? 'Очищаю…' : 'Очистить'}
