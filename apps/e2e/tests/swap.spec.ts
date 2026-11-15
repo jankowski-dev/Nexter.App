@@ -163,7 +163,11 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   const basedAssetId = assets.find(
     (asset) => asset.symbol === 'BASED' && asset.chainCode === 'bsc',
   )?.id;
+  const linkAssetId = assets.find(
+    (asset) => asset.symbol === 'LINK' && asset.chainCode === 'bsc',
+  )?.id;
   expect(basedAssetId).toBeDefined();
+  expect(linkAssetId).toBeDefined();
 
   const csrf =
     (await page.context().cookies()).find((cookie) => cookie.name === 'nexter_csrf')?.value ?? '';
@@ -209,4 +213,20 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   await expect(operationDrawer.getByRole('button', { name: 'Доход' })).toHaveCount(0);
   await operationDrawer.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  const secondGroup = await page.request.post('/api/v1/watchlist/groups', {
+    headers: { 'x-csrf-token': csrf },
+    data: { name: 'Наблюдение' },
+  });
+  expect(secondGroup.status()).toBe(201);
+  const secondGroupId = ((await secondGroup.json()) as { id: string }).id;
+  await page.request.post('/api/v1/watchlist', {
+    headers: { 'x-csrf-token': csrf },
+    data: { assetId: linkAssetId, groupId: secondGroupId },
+  });
+
+  await page.goto('/portfolio');
+  const mainList = page.getByRole('table').filter({ hasText: 'Действие' });
+  await expect(mainList).toBeVisible();
+  await expect(mainList.getByText('LINK', { exact: true })).toHaveCount(0);
 });

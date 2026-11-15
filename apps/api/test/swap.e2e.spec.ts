@@ -1086,11 +1086,15 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .update(swapOrders)
       .set({ quoteExpiresAt: new Date(Date.now() - 1000) })
       .where(eq(swapOrders.id, orderId));
-    await agent
+    const expired = await agent
       .post('/api/v1/swap/build')
       .set('x-csrf-token', owner.csrf)
       .send({ orderId, walletAddress: wallet })
       .expect(409);
+    expect(expired.body.error.code).toBe('SWAP_STATE_INVALID');
+
+    const expiredDetail = await agent.get(`/api/v1/swap/orders/${orderId}`).expect(200);
+    expect(expiredDetail.body.status).toBe('EXPIRED');
 
     env.SWAP_KILL_SWITCH = true;
     const disabled = await agent.get('/api/v1/swap/config').expect(200);

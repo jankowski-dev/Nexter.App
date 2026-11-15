@@ -19,6 +19,7 @@ import { Decimal } from 'decimal.js';
 import fc from 'fast-check';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { TradePolicyService } from '../src/modules/accounting/trade-policy.service';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
 const canRun = Boolean(
@@ -1130,7 +1131,10 @@ describe.runIf(canRun)('Accounting e2e', () => {
     const assets = await getAssets(agent);
     const usdt = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
     const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
-    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+    const based = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'BASED');
+    const accounts = await getAccounts(agent);
+    const wallet = accounts.find((account) => account.name === 'Tangem BSC');
+    const ethWallet = accounts.find((account) => account.name === 'Tangem Ethereum');
 
     await create(agent, owner.csrf, {
       type: 'deposit',
@@ -1139,6 +1143,20 @@ describe.runIf(canRun)('Accounting e2e', () => {
       amount: '1000',
       usdValue: '1000',
     });
+
+    const noEntryBuy = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: wallet?.id,
+        assetId: link?.id,
+        amount: '1',
+        quoteAssetId: usdt?.id,
+        quoteAmount: '10',
+      })
+      .expect(403);
+    expect(noEntryBuy.body.error.code).toBe('TRADE_ASSET_NOT_ALLOWED');
 
     const secondGroup = await agent
       .post('/api/v1/watchlist/groups')
@@ -1201,6 +1219,52 @@ describe.runIf(canRun)('Accounting e2e', () => {
       channel: 'manual',
       kind: 'buy',
       tradeSource: 'main-list',
+    });
+
+    const chainMismatch = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'buy',
+        accountId: ethWallet?.id,
+        assetId: link?.id,
+        amount: '1',
+        quoteAssetId: usdt?.id,
+        quoteAmount: '10',
+      })
+      .expect(400);
+    expect(chainMismatch.body.error.code).toBe('TRADE_ACCOUNT_CHAIN_MISMATCH');
+
+    const groupAssetMismatch = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        type: 'sell',
+        accountId: wallet?.id,
+        assetId: based?.id,
+        amount: '1',
+        proceedsAssetId: usdt?.id,
+        proceedsAmount: '10',
+        tradeGroupId: groupId,
+      })
+      .expect(400);
+    expect(groupAssetMismatch.body.error.code).toBe('TRADE_GROUP_ASSET_MISMATCH');
+
+    // The users table is a singleton, so a foreign user cannot be seeded through
+    // the API. Call the policy directly with another user id to prove the
+    // ownership filter treats a foreign group exactly like an unknown one.
+    const policy = app.get(TradePolicyService);
+    const foreignGroup = await policy
+      .assertSellableGroup(
+        '22222222-2222-4222-8222-222222222222',
+        groupId,
+        link?.id ?? '',
+        new Decimal(1),
+      )
+      .catch((error: unknown) => error);
+    expect(foreignGroup).toBeInstanceOf(Error);
+    expect((foreignGroup as { getResponse?: () => unknown }).getResponse?.()).toMatchObject({
+      code: 'TRADE_GROUP_NOT_FOUND',
     });
 
     const oversell = await agent
@@ -1275,6 +1339,176 @@ describe.runIf(canRun)('Accounting e2e', () => {
       })
       .expect(400);
     expect(closed.body.error.code).toBe('TRADE_GROUP_CLOSED');
+  }, 60_000);
+
+  it('serves consolidated token summaries over HTTP', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdt = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdt?.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+    await setPrice(agent, owner.csrf, link?.id, '10');
+
+    const firstBuy = await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '10',
+      quoteAssetId: usdt?.id,
+      quoteAmount: '100',
+    });
+    const firstGroupId = firstBuy.body.transaction.tradeGroupId as string;
+
+    await setPrice(agent, owner.csrf, link?.id, '12');
+    const secondBuy = await create(agent, owner.csrf, {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '5',
+      quoteAssetId: usdt?.id,
+      quoteAmount: '60',
+    });
+    const secondGroupId = secondBuy.body.transaction.tradeGroupId as string;
+
+    await create(agent, owner.csrf, {
+      type: 'sell',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '4',
+      proceedsAssetId: usdt?.id,
+      proceedsAmount: '48',
+      tradeGroupId: firstGroupId,
+    });
+    await create(agent, owner.csrf, {
+      type: 'sell',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '5',
+      proceedsAssetId: usdt?.id,
+      proceedsAmount: '60',
+      tradeGroupId: secondGroupId,
+    });
+
+    await setPrice(agent, owner.csrf, link?.id, '15');
+
+    await request(app.getHttpServer()).get('/api/v1/portfolio/token-summaries').expect(401);
+
+    const response = await agent.get('/api/v1/portfolio/token-summaries').expect(200);
+    expect(response.body.data).toHaveLength(1);
+    expect(response.body.data[0]).toMatchObject({
+      asset: expect.objectContaining({ symbol: 'LINK' }),
+      investedUsd: '60.00000000',
+      currentValueUsd: '90.00000000',
+      priceUsd: '15.00000000',
+      change24hPct: null,
+      realizedPnlUsd: '8.00000000',
+      unrealizedPnlUsd: '30.00000000',
+      positiveUnrealizedUsd: '30.00000000',
+      negativeUnrealizedUsd: '0.00000000',
+      totalPnlUsd: '38.00000000',
+      turnoverUsd: '148.00000000',
+      breakEvenPriceUsd: '10.000000000000000000',
+      openOrdersCount: 1,
+      ordersCount: 1,
+      remainingAmount: '6.000000000000000000',
+    });
+  }, 60_000);
+
+  it('deduplicates a concurrent manual buy and keeps the first write', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assets = await getAssets(agent);
+    const usdt = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const wallet = (await getAccounts(agent)).find((account) => account.name === 'Tangem BSC');
+
+    await create(agent, owner.csrf, {
+      type: 'deposit',
+      accountId: wallet?.id,
+      assetId: usdt?.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link?.id })
+      .expect(201);
+
+    const idempotencyKey = `manual-double-${Date.now()}`;
+    const purchase = {
+      type: 'buy',
+      accountId: wallet?.id,
+      assetId: link?.id,
+      amount: '2',
+      quoteAssetId: usdt?.id,
+      quoteAmount: '20',
+    };
+
+    const [first, second] = await Promise.all([
+      agent
+        .post('/api/v1/transactions')
+        .set('x-csrf-token', owner.csrf)
+        .set('idempotency-key', idempotencyKey)
+        .send(purchase),
+      agent
+        .post('/api/v1/transactions')
+        .set('x-csrf-token', owner.csrf)
+        .set('idempotency-key', idempotencyKey)
+        .send(purchase),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.transaction.id).toBe(first.body.transaction.id);
+
+    const [written] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, owner.userId),
+          eq(transactions.source, 'manual'),
+          eq(transactions.sourceId, idempotencyKey),
+        ),
+      );
+    expect(written?.count).toBe(1);
+
+    const [audited] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.action, 'accounting.transaction_created'),
+          eq(auditLog.entityId, first.body.transaction.id as string),
+        ),
+      );
+    expect(audited?.count).toBe(1);
+
+    const replay = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .set('idempotency-key', idempotencyKey)
+      .send({ ...purchase, amount: '3', quoteAmount: '30' })
+      .expect(201);
+    expect(replay.body.transaction.id).toBe(first.body.transaction.id);
+
+    const positions = await agent.get('/api/v1/positions').expect(200);
+    const position = (
+      positions.body.positions as Array<{ asset: { id: string }; amount: string }>
+    ).find((item) => item.asset.id === link?.id);
+    expect(position?.amount).toBe('2.000000000000000000');
   }, 60_000);
 
   it('keeps lots equal to balances across generated buy/sell sequences', async () => {
