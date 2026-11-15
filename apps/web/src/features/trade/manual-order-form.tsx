@@ -84,7 +84,7 @@ export function ManualOrderForm({
     );
     idempotencyKey.current = next.key;
     lastPayloadSignature.current = next.signature;
-    return createManualTransaction(request, next.key);
+    return createManualTransaction(request, next.key, side === 'buy' ? 'main-list' : 'order');
   }
 
   const save = useMutation({

@@ -137,7 +137,7 @@ export function ManualOperationDialog({
     );
     idempotencyKey.current = next.key;
     lastPayloadSignature.current = next.signature;
-    return createManualTransaction(request, next.key);
+    return createManualTransaction(request, next.key, 'operations');
   }
 
   const save = useMutation({

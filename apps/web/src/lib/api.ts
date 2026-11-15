@@ -521,6 +521,7 @@ export async function setPrice(assetId: string, priceUsd: string): Promise<void>
 export async function createManualTransaction(
   body: ManualTransactionRequest,
   idempotencyKey: string = crypto.randomUUID(),
+  tradeSource?: string,
 ): Promise<ManualTransactionResponse> {
   return apiFetch(
     '/api/v1/transactions',
@@ -529,6 +530,8 @@ export async function createManualTransaction(
       headers: {
         'Content-Type': 'application/json',
         'Idempotency-Key': idempotencyKey,
+        'x-intent-id': idempotencyKey,
+        ...(tradeSource ? { 'x-trade-source': tradeSource } : {}),
       },
       body: JSON.stringify(body),
     },

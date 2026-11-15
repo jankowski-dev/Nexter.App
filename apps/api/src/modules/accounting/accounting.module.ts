@@ -21,6 +21,7 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { TradeGroupsController } from './trade-groups.controller';
 import { TradeGroupsService } from './trade-groups.service';
+import { TradeIntentService } from './trade-intent.service';
 import { TradePolicyService } from './trade-policy.service';
 import { TransactionsController } from './transactions.controller';
 
@@ -51,6 +52,7 @@ import { TransactionsController } from './transactions.controller';
     ReportingService,
     ReportsService,
     TradeGroupsService,
+    TradeIntentService,
     TradePolicyService,
   ],
   exports: [
@@ -59,6 +61,7 @@ import { TransactionsController } from './transactions.controller';
     AssetsService,
     LedgerService,
     PricingService,
+    TradeIntentService,
     TradePolicyService,
   ],
 })
