@@ -1,5 +1,12 @@
 import { ApiError } from './api';
 
+export class ClientValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClientValidationError';
+  }
+}
+
 const messages: Record<string, string> = {
   AUTH_REQUIRED: 'Требуется вход. Войдите заново.',
   INVALID_CREDENTIALS: 'Неверный email или пароль.',
@@ -118,6 +125,10 @@ export function apiErrorReason(error: unknown): string | undefined {
 }
 
 export function toRussianError(error: unknown, fallback: string): string {
+  if (error instanceof ClientValidationError) {
+    return error.message;
+  }
+
   if (error instanceof ApiError) {
     const reason = reasonFrom(error);
 
