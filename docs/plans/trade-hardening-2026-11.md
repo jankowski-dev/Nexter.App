@@ -5,12 +5,10 @@ Status: accepted 2026-11-15. Owner approved the default order and constraints.
 ## Progress
 
 - W1 completed: PR #149, merge `b1ce42e1`, deployment `eee5f492-5344-4b17-b8b1-bfd125e0f499`, bundle `assets/index-CtjhSgZd.js`.
-- W2 partial: server policy API test and fixture seeding landed with W1.
 - W3 completed: PR #150, merge `bc713d9d`, deployment `d54fc068-2f6f-4463-9c62-8d69fb809c64`, bundle `assets/index-DYL4XPtC.js` (ADR 0052).
-- W2 next: tab-state E2E is merged (PR #151).
-- W4 completed: read-only data-quality report (ADR 0053).
-- W5A implemented: canonical trade intent audit metadata without schema (ADR 0054).
-- W2 added: `/portfolio/token-summaries` HTTP e2e, concurrent double-submit/idempotency replay, no-entry buy, chain and group-asset mismatch, foreign-group ownership check, expired-quote code/state, second-group `Купить` absence and deposit/withdrawal operation tabs. Wallet-rejection E2E stays blocked: WalletConnect has no browser test seam and execution is disabled in the test environment.
+- W4 completed: PR #152, merge `1a604f39`, deployment `e7b98f02-753e-4865-86b5-5984ba7046d1`, bundle `assets/index-B98DwDEq.js` (ADR 0053).
+- W5A completed: PR #153, merge `b51633ee`, deployment `b066fb0f-0cad-4546-86ee-09fc01dbe7ce`, bundle `assets/index-CXiWpnWT.js` (ADR 0054).
+- W2 completed: tab-state E2E (PR #151) plus PR #154, merge `b3cb94bb`, deployment `fa96f893-2491-4c29-b560-1e38455a7566`, bundle unchanged `assets/index-CXiWpnWT.js`. Added `/portfolio/token-summaries` HTTP e2e, concurrent double-submit/idempotency replay, no-entry buy, chain and group-asset mismatch, foreign-group ownership check, expired-quote code/state, second-group `Купить` absence and deposit/withdrawal operation tabs. Wallet-rejection E2E stays blocked: WalletConnect has no browser test seam and execution is disabled in the test environment.
   Baseline: `main` at `e835511`, UI-60 deployed (`assets/index-De_jjhCd.js`).
   Working branch: `trade-hardening-phase-1`.
 
@@ -413,9 +411,23 @@ This requires:
 - W5A: unified validation/audit path without schema.
 - W5B: only if approved, with ADR, migration, backup and rollback.
 
+## W5B assessment (2026-11-15)
+
+**Decision: do not add a `trade_intents` table now.**
+
+Reasons:
+
+- Manual intents are already durable: the ledger transaction row, its `sourceId`/idempotency key and the W5A audit envelope identify the intent and its outcome. The transaction is the state.
+- On-chain intents are already durable: `swap_orders` holds status, expiry, calldata, tx hash, confirmations and errors; `swap_events` holds the transitions. `swap_order.id` is the intent id.
+- A `trade_intents` table would add value only for cross-channel reservations/expiry (for example, blocking a manual sell while an on-chain close is pending) or a unified intent history UI. Neither is required by current workflows.
+- The current data-quality findings (old POP→USDC accounting errors and stuck swaps) live in swap state and accounting; missing intent rows are not the cause, so the table would not fix them.
+- No audit evidence from W5A shows duplicate writes or lost intents.
+
+Revisit only when a concrete requirement appears: cross-channel in-flight conflict prevention, a unified order/intent list, or resumable multi-step intents across channels. That work needs an ADR, backup and migration.
+
 ## Open decisions
 
 1. W1: should `sell` without `tradeGroupId` be rejected for all new API calls, or only for the UI? Recommended: reject for new manual sells; keep an explicit import/admin path if needed.
 2. W3: alerts only in-app for now? Recommended: yes.
 3. W4: confirm no auto-fixes in phase 1. Recommended: yes.
-4. W5B: start with W5A and decide on the table after seeing the gaps. Recommended: yes.
+4. W5B: decided 2026-11-15 — no table now; revisit on a concrete cross-channel need (see the W5B assessment).
