@@ -68,3 +68,7 @@ Rows in the portfolio order journal still open the trade drawer for active order
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
 - New API coverage removes a token with an open position, verifies the position survives, then runs the runner and verifies the orphaned position closes on a sell signal.
 - E2E flows use the internal confirmation dialogs for import commit/rollback, pin removal, vault deletion and token deletion.
+
+## Production release (2026-11-15)
+
+PR #141 merged as `cb8401de`; deployment `37b3e47f-f1ff-461b-9423-690181b35787`; bundle `assets/index-DnsbDszM.js`; migration `0040` applied; `/health` and `/ready` 200. Targeted `trading_bots` backup before migration: 7 rows, SHA-256 `59ad00a372ca51f317bb9363410ebad4e49ea80fb8cb01c228b2a74271fbc541`. Rollback: restore the JSON backup if needed and drop the nullable `icon` column.
