@@ -40,3 +40,7 @@ New codes are added to the exception filter’s contract-code whitelist and to t
 - New API test: buy from a second watchlist group is rejected; moving the asset to the default group allows it; oversell, missing group, unknown group and closed group are rejected.
 - Existing accounting, swap and import flows remain green.
 - `format:check`, `typecheck`, `lint`, web tests, API tests and build pass.
+
+## Production release (2026-11-15)
+
+Production release on 2026-11-15: PR #149 merged as `b1ce42e1`, deployment `eee5f492-5344-4b17-b8b1-bfd125e0f499`, bundle `assets/index-CtjhSgZd.js`, `/health` and `/ready` 200. No migration.
