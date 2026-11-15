@@ -3,7 +3,9 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { sql } from 'drizzle-orm';
+import { createDb, type Database } from '@nexter/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -25,6 +27,8 @@ function csrfFrom(response: request.Response): string {
 
 describe.runIf(canRun)('System status e2e', () => {
   let app: NestFastifyApplication;
+  let db: Database;
+  let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
   async function setupOwner(agent: SuperAgentTest) {
@@ -53,10 +57,18 @@ describe.runIf(canRun)('System status e2e', () => {
     app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
     await app.getHttpAdapter().getInstance().ready();
+    const created = createDb(process.env.DATABASE_URL ?? '');
+    db = created.db;
+    pool = created.pool;
   }, 30_000);
+
+  beforeEach(async () => {
+    await db.execute(sql`truncate table users restart identity cascade`);
+  });
 
   afterAll(async () => {
     await app.close();
+    await pool.end();
   });
 
   it('returns an owner-only, secret-free status snapshot', async () => {
