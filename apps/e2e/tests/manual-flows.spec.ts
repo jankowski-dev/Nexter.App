@@ -205,6 +205,11 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
+  await firstManualForm.getByLabel('Количество BASED').fill('999');
+  await firstManualForm.getByLabel('Сумма получения').fill('2000');
+  await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();
+  await expect(sellDrawer.getByText(/Нельзя продать больше остатка/)).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(1);
   await firstManualForm.getByLabel('Количество BASED').fill('40');
   await firstManualForm.getByLabel('Сумма получения').fill('100');
   await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();

@@ -3,7 +3,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createManualTransaction, fetchAccounts, fetchAssets } from '@/lib/api';
-import { toRussianError } from '@/lib/error-messages';
+import { ClientValidationError, toRussianError } from '@/lib/error-messages';
 import { formatPrice, formatUsd } from '@/lib/format';
 import { idempotencyForPayload } from '@/lib/idempotency';
 import { useWallet } from '@/lib/wallet-context';
@@ -142,7 +142,7 @@ export function ManualOperationDialog({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!effectiveAccountId) throw new Error('Выберите кошелёк.');
+      if (!effectiveAccountId) throw new ClientValidationError('Выберите кошелёк.');
       const occurred = occurredAt
         ? { occurredAt: new Date(`${occurredAt}T12:00:00`).toISOString() }
         : {};
@@ -163,10 +163,12 @@ export function ManualOperationDialog({
 
       if (mode === 'exchange') {
         if (!assetInId || !assetOutId || !positive(amount) || !positive(amountOut)) {
-          throw new Error('Заполните оба актива и количества.');
+          throw new ClientValidationError('Заполните оба актива и количества.');
         }
         if (!autoUsdIn || !autoUsdOut) {
-          throw new Error('Не удалось определить USD-стоимость. Проверьте цены активов.');
+          throw new ClientValidationError(
+            'Не удалось определить USD-стоимость. Проверьте цены активов.',
+          );
         }
         return submitManual(
           {
@@ -186,10 +188,10 @@ export function ManualOperationDialog({
       }
 
       if (!assetId || !positive(amount)) {
-        throw new Error('Выберите актив и количество.');
+        throw new ClientValidationError('Выберите актив и количество.');
       }
       if (mode === 'deposit') {
-        if (!positive(usdValue)) throw new Error('Укажите, сколько USD потрачено.');
+        if (!positive(usdValue)) throw new ClientValidationError('Укажите, сколько USD потрачено.');
         return submitManual(
           {
             type: 'deposit',
@@ -204,7 +206,7 @@ export function ManualOperationDialog({
         );
       }
       if (mode === 'withdrawal') {
-        if (!positive(usdValue)) throw new Error('Укажите, сколько USD получено.');
+        if (!positive(usdValue)) throw new ClientValidationError('Укажите, сколько USD получено.');
         return submitManual(
           {
             type: 'withdrawal',
@@ -218,9 +220,10 @@ export function ManualOperationDialog({
           signaturePayload,
         );
       }
-      if (!reason.trim()) throw new Error('Укажите причину корректировки.');
+      if (!reason.trim()) throw new ClientValidationError('Укажите причину корректировки.');
       const value = usdValue || autoUsd;
-      if (!value || !positive(value)) throw new Error('Укажите USD-стоимость корректировки.');
+      if (!value || !positive(value))
+        throw new ClientValidationError('Укажите USD-стоимость корректировки.');
       return submitManual(
         {
           type: 'adjustment',

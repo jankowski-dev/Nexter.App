@@ -162,6 +162,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let buildGasUsd: string | null = '0.05';
   let quoteAmountInUsd: string | number | null = '1.00';
   let quoteAmountOutUsd: string | number | null = '0.999';
+  let routeCalls = 0;
   let allowance = '1000000000000000000000';
   let chainTx: RpcTransaction | null = null;
   let replacementTx: RpcTransaction | null = null;
@@ -174,10 +175,22 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
 
   const kyber = {
     configured: true,
-    getRoutes: async (input: { tokenIn: string; tokenOut: string; amountInBase: string }) => ({
-      routeSummary: {
-        tokenIn: input.tokenIn,
-        tokenOut: input.tokenOut,
+    getRoutes: async (input: { tokenIn: string; tokenOut: string; amountInBase: string }) => {
+      routeCalls += 1;
+      return {
+        routeSummary: {
+          tokenIn: input.tokenIn,
+          tokenOut: input.tokenOut,
+          amountIn: input.amountInBase,
+          amountOut: '2000000000000000000',
+          amountInUsd: quoteAmountInUsd,
+          amountOutUsd: quoteAmountOutUsd,
+          gas: '120000',
+          gasUsd: quoteGasUsd,
+          priceImpact: quotePriceImpact,
+          routeID: 'route-test-1',
+        },
+        routerAddress: router,
         amountIn: input.amountInBase,
         amountOut: '2000000000000000000',
         amountInUsd: quoteAmountInUsd,
@@ -185,17 +198,8 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         gas: '120000',
         gasUsd: quoteGasUsd,
         priceImpact: quotePriceImpact,
-        routeID: 'route-test-1',
-      },
-      routerAddress: router,
-      amountIn: input.amountInBase,
-      amountOut: '2000000000000000000',
-      amountInUsd: quoteAmountInUsd,
-      amountOutUsd: quoteAmountOutUsd,
-      gas: '120000',
-      gasUsd: quoteGasUsd,
-      priceImpact: quotePriceImpact,
-    }),
+      };
+    },
     buildRoute: async (input: { sender: string; recipient: string; slippageBps: number }) => ({
       data: buildData,
       routerAddress: buildRouter,
@@ -324,6 +328,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     buildGasUsd = '0.05';
     quoteAmountInUsd = '1.00';
     quoteAmountOutUsd = '0.999';
+    routeCalls = 0;
     allowance = '1000000000000000000000';
     chainTx = null;
     replacementTx = null;
@@ -457,6 +462,42 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(cancelled.body.status).toBe('CANCELLED');
+  }, 60_000);
+
+  it('serves an unchanged preview from the 15s cache and calls the provider once', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const body = {
+      chain: 'bsc',
+      tokenIn,
+      tokenOut,
+      amountIn: '2.345678',
+      slippageBps: 50,
+      walletAddress: wallet,
+    };
+
+    const first = await agent
+      .post('/api/v1/swap/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send(body)
+      .expect(200);
+    const second = await agent
+      .post('/api/v1/swap/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send(body)
+      .expect(200);
+
+    expect(second.body).toEqual(first.body);
+    expect(routeCalls).toBe(1);
+
+    const changed = await agent
+      .post('/api/v1/swap/preview')
+      .set('x-csrf-token', owner.csrf)
+      .send({ ...body, amountIn: '2.345679' })
+      .expect(200);
+
+    expect(routeCalls).toBe(2);
+    expect(changed.body.amountIn).not.toBe(first.body.amountIn);
   }, 60_000);
 
   it('links a swap to selected close groups and fails when a group changes', async () => {

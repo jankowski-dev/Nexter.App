@@ -1,7 +1,7 @@
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createManualTransaction, fetchAccounts, fetchAssets } from '@/lib/api';
-import { toRussianError } from '@/lib/error-messages';
+import { ClientValidationError, toRussianError } from '@/lib/error-messages';
 import { formatPrice, formatTokenAmount, formatUsd, normalizeDecimalInput } from '@/lib/format';
 import { idempotencyForPayload } from '@/lib/idempotency';
 import { localDateKey } from '@/lib/tasks';
@@ -89,15 +89,15 @@ export function ManualOrderForm({
 
   const save = useMutation({
     mutationFn: async () => {
-      if (!effectiveAccountId) throw new Error('Выберите кошелёк на этой сети.');
-      if (!quoteAssetId) throw new Error('Выберите валюту оплаты или получения.');
+      if (!effectiveAccountId) throw new ClientValidationError('Выберите кошелёк на этой сети.');
+      if (!quoteAssetId) throw new ClientValidationError('Выберите валюту оплаты или получения.');
       if (!positive(amount) || !positive(quoteAmount)) {
-        throw new Error('Введите положительные количества.');
+        throw new ClientValidationError('Введите положительные количества.');
       }
       if (side === 'sell') {
-        if (!trade) throw new Error('Не удалось загрузить ордер для продажи.');
+        if (!trade) throw new ClientValidationError('Не удалось загрузить ордер для продажи.');
         if (remaining && new Decimal(amount).gt(remaining)) {
-          throw new Error(
+          throw new ClientValidationError(
             `Нельзя продать больше остатка: ${formatTokenAmount(trade.group.remainingAmount, 8)} ${token.symbol}.`,
           );
         }
