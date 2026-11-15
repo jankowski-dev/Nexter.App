@@ -107,6 +107,10 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   }
 
   // Manual buy through the buy order modal.
+  await page.request.post('/api/v1/watchlist', {
+    headers: { 'x-csrf-token': csrf },
+    data: { assetId: based?.id },
+  });
   let dialog = await openBuyDrawer();
   const manualForm = dialog.locator('#manual-order-form');
   await manualForm

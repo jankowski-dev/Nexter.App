@@ -72,9 +72,11 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
     }
   ).accounts;
   const based = assets.find((asset) => asset.symbol === 'BASED');
+  const xny = assets.find((asset) => asset.symbol === 'XNY');
   const usdt = assets.find((asset) => asset.symbol === 'USDT');
   const wallet = accounts.find((account) => account.name === 'Tangem BSC');
   expect(based).toBeDefined();
+  expect(xny).toBeDefined();
   expect(usdt).toBeDefined();
   expect(wallet).toBeDefined();
 
@@ -190,15 +192,17 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Playwright trade note')).toBeVisible();
 
+  await post('/api/v1/watchlist', { assetId: xny?.id });
+
   await page.goto('/portfolio');
   await page
     .getByRole('row')
-    .filter({ hasText: 'BASED' })
+    .filter({ hasText: 'XNY' })
     .first()
     .getByRole('button', { name: 'Купить' })
     .click();
   const tradeDialog = page.getByRole('dialog');
-  await expect(tradeDialog.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
+  await expect(tradeDialog.getByRole('heading', { name: 'Создание ордера · XNY' })).toBeVisible();
   await tradeDialog.getByRole('tab', { name: 'Вручную' }).click();
   const manualOrderForm = tradeDialog.locator('#manual-order-form');
   await manualOrderForm
@@ -209,7 +213,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
-  await manualOrderForm.getByLabel('Количество BASED').fill('1');
+  await manualOrderForm.getByLabel('Количество XNY').fill('1');
   await manualOrderForm.getByLabel('Сумма оплаты').fill('2');
   await tradeDialog.getByRole('button', { name: 'Сохранить покупку' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
