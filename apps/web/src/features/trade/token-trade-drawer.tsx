@@ -35,6 +35,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useWallet } from '@/lib/wallet-context';
+import { ManualOrderForm } from './manual-order-form';
 import { StablecoinSelect } from './stablecoin-select';
 import {
   isBuildRetryable,
@@ -132,7 +133,6 @@ export function TokenTradeDrawer({
   marketPriceUsd = null,
   onClose,
   onCompleted,
-  onManual,
 }: {
   token: Asset;
   initialMode?: Mode;
@@ -140,7 +140,6 @@ export function TokenTradeDrawer({
   marketPriceUsd?: string | null;
   onClose: () => void;
   onCompleted?: () => void;
-  onManual?: (input: { asset: Asset; side: Mode; tradeGroupId: string | null }) => void;
 }) {
   const queryClient = useQueryClient();
   const wallet = useWallet();
@@ -158,6 +157,8 @@ export function TokenTradeDrawer({
     (balances.data?.balances ?? []).map((item) => [item.symbol, item.balance]),
   );
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [channel, setChannel] = useState<'onchain' | 'manual'>('onchain');
+  const [manualPending, setManualPending] = useState(false);
   const [quoteSymbol, setQuoteSymbol] = useState('USDC');
   const [amount, setAmount] = useState('');
   const [slippageBps, setSlippageBps] = useState<number | null>(null);
@@ -198,6 +199,7 @@ export function TokenTradeDrawer({
       ? config.data.chains.find((item) => item.code === chainCode)!
       : null;
   const assetAddress = swapTokenAddress(token, config.data);
+  const onchainConfigured = Boolean(config.data?.enabled && assetAddress);
   const quoteOptions = chainCode ? quoteAssetOptions(config.data, chainCode) : [];
   const quoteAsset = quoteOptions.find((item) => item.symbol === quoteSymbol) ?? quoteOptions[0];
   const quoteAddress = quoteAsset?.address ?? null;
@@ -235,6 +237,7 @@ export function TokenTradeDrawer({
         walletAddress: wallet.address ?? undefined,
       }),
     enabled: Boolean(
+      channel === 'onchain' &&
       config.data?.enabled &&
       chainCode &&
       tokenIn &&
@@ -324,6 +327,10 @@ export function TokenTradeDrawer({
     }, 15_000);
     return () => window.clearInterval(timer);
   }, [tradeGroupId]);
+
+  useEffect(() => {
+    if (!config.isPending && !onchainConfigured) setChannel('manual');
+  }, [config.isPending, onchainConfigured]);
 
   async function loadTrade(groupId: string): Promise<void> {
     try {
@@ -648,12 +655,65 @@ export function TokenTradeDrawer({
         open
         onClose={onClose}
         closeDisabled={closeBlocked}
-        title={`${isBuy ? 'Купить' : 'Продать'} ${assetSymbol}`}
+        title={`${isBuy ? 'Создание ордера' : 'Закрытие ордера'} · ${assetSymbol}`}
         titleIcon={
           <TokenIcon logoUrl={token.logoUrl} symbol={token.symbol} className="h-7 w-7 text-xs" />
         }
         description={`${token.name} · ${token.chainCode.toUpperCase()}`}
         size="third"
+        footer={
+          channel === 'manual' ? (
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Button variant="secondary" onClick={onClose} disabled={manualPending}>
+                Отмена
+              </Button>
+              <Button type="submit" form="manual-order-form" disabled={manualPending}>
+                {manualPending ? 'Сохраняю…' : isBuy ? 'Сохранить покупку' : 'Сохранить продажу'}
+              </Button>
+            </div>
+          ) : (
+            <div className="w-full">
+              {pendingSubmit ? (
+                <div className="space-y-2">
+                  <Button className="w-full" onClick={() => void retrySubmit()}>
+                    Повторить отправку подписи
+                  </Button>
+                  <p className="text-xs text-amber-700">
+                    Транзакция уже подписана. Повторная отправка использует тот же hash и не создаёт
+                    дубль.
+                  </p>
+                </div>
+              ) : phase === 'success' ? (
+                <div className="flex w-full justify-end">
+                  <Button onClick={onClose}>Готово</Button>
+                </div>
+              ) : (
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <Button variant="secondary" onClick={onClose} disabled={closeBlocked}>
+                    Отмена
+                  </Button>
+                  <Button className="flex-1" onClick={() => void execute()} disabled={!canSubmit}>
+                    {executing
+                      ? phase === 'quoting'
+                        ? 'Получаю котировку…'
+                        : phase === 'building'
+                          ? 'Проверяю сборку…'
+                          : phase === 'approval'
+                            ? 'Подтверждаю approval…'
+                            : phase === 'signing'
+                              ? 'Подписываю…'
+                              : phase === 'submitting'
+                                ? 'Отправляю…'
+                                : 'Ожидаю подтверждение…'
+                      : isBuy
+                        ? `Купить ${assetSymbol}`
+                        : `Продать ${assetSymbol}`}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )
+        }
       >
         <div className="space-y-5">
           {trade ? (
@@ -662,274 +722,253 @@ export function TokenTradeDrawer({
             <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />
           ) : null}
 
-          <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-            <div>
-              <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
-                Рынок
-              </div>
-              <div className="font-mono text-lg font-semibold text-zinc-900">
-                {formatPrice(effectiveMarketPrice)}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-zinc-500">KyberSwap</div>
-              <div className="font-mono text-lg font-semibold text-zinc-900">
-                {kyberPrice ? formatPrice(kyberPrice) : '—'}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-zinc-500">Разница</div>
-              <div className={`font-mono text-sm ${pnlTone(difference?.toString())}`}>
-                {difference === null ? '—' : formatPct(difference.toFixed(2))}
-              </div>
-            </div>
-          </div>
+          <TradeChannelTabs
+            value={channel}
+            onChange={setChannel}
+            disabled={executing || pendingSubmit || manualPending}
+            onchainConfigured={onchainConfigured}
+          />
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="block text-sm text-zinc-600">
-              {isBuy ? 'Плачу' : 'Получаю'}
-              <StablecoinSelect
-                options={quoteOptions}
-                value={quoteDisplay}
-                onChange={setQuoteSymbol}
-                balances={balanceBySymbol}
-                disabled={executing}
-              />
+          <div className={channel === 'onchain' ? 'space-y-5' : 'hidden'}>
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+              <div>
+                <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
+                  Рынок
+                </div>
+                <div className="font-mono text-lg font-semibold text-zinc-900">
+                  {formatPrice(effectiveMarketPrice)}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-zinc-500">KyberSwap</div>
+                <div className="font-mono text-lg font-semibold text-zinc-900">
+                  {kyberPrice ? formatPrice(kyberPrice) : '—'}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-zinc-500">Разница</div>
+                <div className={`font-mono text-sm ${pnlTone(difference?.toString())}`}>
+                  {difference === null ? '—' : formatPct(difference.toFixed(2))}
+                </div>
+              </div>
             </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="block text-sm text-zinc-600">
+                {isBuy ? 'Плачу' : 'Получаю'}
+                <StablecoinSelect
+                  options={quoteOptions}
+                  value={quoteDisplay}
+                  onChange={setQuoteSymbol}
+                  balances={balanceBySymbol}
+                  disabled={executing}
+                />
+              </div>
+              <label className="block text-sm text-zinc-600">
+                Сеть
+                <div className="mt-1 flex h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
+                  {chain?.name ?? '—'}
+                </div>
+              </label>
+            </div>
+
             <label className="block text-sm text-zinc-600">
-              Сеть
-              <div className="mt-1 flex h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
-                {chain?.name ?? '—'}
-              </div>
+              {isBuy ? `Сколько ${quoteDisplay} потратить` : `Сколько ${assetSymbol} продать`}
+              <Input
+                className="mt-1 font-mono"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="0.00"
+                disabled={executing}
+                aria-invalid={sellExceedsRemaining}
+              />
+              {sellExceedsRemaining && trade ? (
+                <p className="mt-1 text-xs text-red-700">
+                  Нельзя продать больше остатка: {formatTokenAmount(trade.group.remainingAmount, 8)}{' '}
+                  {assetSymbol}.
+                </p>
+              ) : null}
             </label>
-          </div>
 
-          <label className="block text-sm text-zinc-600">
-            {isBuy ? `Сколько ${quoteDisplay} потратить` : `Сколько ${assetSymbol} продать`}
-            <Input
-              className="mt-1 font-mono"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0.00"
-              disabled={executing}
-              aria-invalid={sellExceedsRemaining}
-            />
-            {sellExceedsRemaining && trade ? (
-              <p className="mt-1 text-xs text-red-700">
-                Нельзя продать больше остатка: {formatTokenAmount(trade.group.remainingAmount, 8)}{' '}
-                {assetSymbol}.
-              </p>
-            ) : null}
-          </label>
-
-          <div className={`grid gap-2 ${!isBuy ? 'sm:grid-cols-2' : ''}`}>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
-                {isBuy ? `Получите ${assetSymbol}` : `Получите ${quoteDisplay}`}
+            <div className={`grid gap-2 ${!isBuy ? 'sm:grid-cols-2' : ''}`}>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide text-emerald-700">
+                  {isBuy ? `Получите ${assetSymbol}` : `Получите ${quoteDisplay}`}
+                </div>
+                <div className="mt-1 font-mono text-2xl font-semibold text-emerald-900">
+                  {amountOut ? `${formatTokenAmount(amountOut, 8)}` : '—'}
+                </div>
+                {minimumOut ? (
+                  <div className="mt-1 text-xs text-emerald-700">
+                    Минимум с учётом проскальзывания: {formatTokenAmount(minimumOut, 8)}
+                  </div>
+                ) : null}
               </div>
-              <div className="mt-1 font-mono text-2xl font-semibold text-emerald-900">
-                {amountOut ? `${formatTokenAmount(amountOut, 8)}` : '—'}
-              </div>
-              {minimumOut ? (
-                <div className="mt-1 text-xs text-emerald-700">
-                  Минимум с учётом проскальзывания: {formatTokenAmount(minimumOut, 8)}
+              {!isBuy ? (
+                <div
+                  className={`rounded-xl border p-3 ${
+                    sellPnl?.gt(0)
+                      ? 'border-emerald-200 bg-emerald-50'
+                      : sellPnl?.lt(0)
+                        ? 'border-red-200 bg-red-50'
+                        : 'border-zinc-200 bg-zinc-50'
+                  }`}
+                >
+                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    P&L по продаже
+                  </div>
+                  <div
+                    className={`mt-1 font-mono text-2xl font-semibold ${
+                      sellPnl?.gt(0)
+                        ? 'text-emerald-900'
+                        : sellPnl?.lt(0)
+                          ? 'text-red-900'
+                          : 'text-zinc-800'
+                    }`}
+                  >
+                    {sellPnl ? formatSignedUsd(sellPnl.toFixed(2)) : '—'}
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    Вложено:{' '}
+                    {showPreview && sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
+                  </div>
                 </div>
               ) : null}
             </div>
-            {!isBuy ? (
-              <div
-                className={`rounded-xl border p-3 ${
-                  sellPnl?.gt(0)
-                    ? 'border-emerald-200 bg-emerald-50'
-                    : sellPnl?.lt(0)
-                      ? 'border-red-200 bg-red-50'
-                      : 'border-zinc-200 bg-zinc-50'
-                }`}
-              >
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  P&L по продаже
+
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Газ</div>
+                <div className="font-mono text-zinc-800">
+                  {previewData?.gasUsd ? formatUsd(previewData.gasUsd) : '—'}
                 </div>
-                <div
-                  className={`mt-1 font-mono text-2xl font-semibold ${
-                    sellPnl?.gt(0)
-                      ? 'text-emerald-900'
-                      : sellPnl?.lt(0)
-                        ? 'text-red-900'
-                        : 'text-zinc-800'
-                  }`}
+              </div>
+              <div className="rounded-lg border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Price impact</div>
+                <div className="font-mono text-zinc-800">
+                  {previewData?.priceImpactBps == null
+                    ? '—'
+                    : formatPct((previewData.priceImpactBps / 100).toFixed(2))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Проскальзывание</div>
+                <Select
+                  className="mt-1 h-8 border-0 bg-transparent px-0 pr-6 font-mono text-xs"
+                  value={String(slippageBps ?? config.data?.defaultSlippageBps ?? 50)}
+                  onChange={(event) => setSlippageBps(Number(event.target.value))}
+                  disabled={executing}
                 >
-                  {sellPnl ? formatSignedUsd(sellPnl.toFixed(2)) : '—'}
+                  {[10, 50, 100, 200].map((value) => (
+                    <option key={value} value={value}>
+                      {(value / 100).toFixed(2)}%
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="rounded-lg border border-zinc-200 p-2">
+                <div className="text-xs text-zinc-500">Остаток</div>
+                <div className="font-mono text-zinc-800">
+                  {trade
+                    ? `${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}`
+                    : '—'}
                 </div>
-                <div className="mt-1 text-xs text-zinc-500">
-                  Вложено:{' '}
-                  {showPreview && sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs text-zinc-500">Газ</div>
-              <div className="font-mono text-zinc-800">
-                {previewData?.gasUsd ? formatUsd(previewData.gasUsd) : '—'}
               </div>
             </div>
-            <div className="rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs text-zinc-500">Price impact</div>
-              <div className="font-mono text-zinc-800">
-                {previewData?.priceImpactBps == null
-                  ? '—'
-                  : formatPct((previewData.priceImpactBps / 100).toFixed(2))}
-              </div>
-            </div>
-            <div className="rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs text-zinc-500">Проскальзывание</div>
-              <Select
-                className="mt-1 h-8 border-0 bg-transparent px-0 pr-6 font-mono text-xs"
-                value={String(slippageBps ?? config.data?.defaultSlippageBps ?? 50)}
-                onChange={(event) => setSlippageBps(Number(event.target.value))}
-                disabled={executing}
-              >
-                {[10, 50, 100, 200].map((value) => (
-                  <option key={value} value={value}>
-                    {(value / 100).toFixed(2)}%
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="rounded-lg border border-zinc-200 p-2">
-              <div className="text-xs text-zinc-500">Остаток</div>
-              <div className="font-mono text-zinc-800">
-                {trade
-                  ? `${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}`
-                  : '—'}
-              </div>
-            </div>
-          </div>
 
-          {!wallet.connected ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Подключите кошелёк в шапке, чтобы подписать сделку.
-              <Button
-                className="ml-2"
-                variant="secondary"
-                onClick={() => void wallet.connect()}
-                disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
-              >
-                {wallet.restoring
-                  ? 'Восстанавливаю…'
-                  : wallet.connecting
-                    ? 'Подключаю…'
-                    : 'Подключить'}
-              </Button>
-            </div>
-          ) : null}
-
-          {!config.data?.enabled || !chain?.executionEnabled ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              On-chain исполнение для этой сети выключено. Используйте ручной ввод в разделе
-              «Сделки».
-            </div>
-          ) : null}
-
-          {config.data && chainCode && !assetAddress ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Токен не входит в on-chain allowlist. Доступна только ручная запись сделки.
-            </div>
-          ) : null}
-
-          {preview.isError ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              {toRussianError(preview.error, 'Не удалось получить котировку')}
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </div>
-          ) : null}
-
-          {phase === 'signing' || phase === 'approval' ? (
-            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              <p>Ожидаю ответ кошелька. Если вы отклонили запрос, нажмите «Отменить ожидание».</p>
-              <Button
-                variant="secondary"
-                className="h-8 px-3 text-xs"
-                onClick={() => void cancelWalletWait()}
-              >
-                Отменить ожидание
-              </Button>
-            </div>
-          ) : null}
-
-          {phase === 'success' ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-              {mode === 'buy' ? 'Покупка учтена.' : 'Продажа учтена.'}{' '}
-              {trade
-                ? trade.group.status === 'closed'
-                  ? 'Позиция закрыта.'
-                  : `Остаток: ${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}.`
-                : 'Операция записана в журнал.'}
-            </div>
-          ) : null}
-
-          <div className="sticky bottom-0 -mx-5 -mb-5 border-t border-zinc-200 bg-white px-5 py-3">
-            {pendingSubmit ? (
-              <div className="space-y-2">
-                <Button className="w-full" onClick={() => void retrySubmit()}>
-                  Повторить отправку подписи
+            {!wallet.connected ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                Подключите кошелёк в шапке, чтобы подписать сделку.
+                <Button
+                  className="ml-2"
+                  variant="secondary"
+                  onClick={() => void wallet.connect()}
+                  disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
+                >
+                  {wallet.restoring
+                    ? 'Восстанавливаю…'
+                    : wallet.connecting
+                      ? 'Подключаю…'
+                      : 'Подключить'}
                 </Button>
-                <p className="text-xs text-amber-700">
-                  Транзакция уже подписана. Повторная отправка использует тот же hash и не создаёт
-                  дубль.
-                </p>
               </div>
-            ) : mode === 'sell' && trade && trade.group.status === 'closed' ? (
-              <Button
-                className="w-full"
-                onClick={() => {
-                  setMode('buy');
-                  setTradeGroupId(null);
-                  setTrade(null);
-                  setAmount('');
-                  setPhase('idle');
-                }}
-              >
-                Купить ещё
-              </Button>
-            ) : (
-              <Button className="w-full" onClick={() => void execute()} disabled={!canSubmit}>
-                {executing
-                  ? phase === 'quoting'
-                    ? 'Получаю котировку…'
-                    : phase === 'building'
-                      ? 'Проверяю сборку…'
-                      : phase === 'approval'
-                        ? 'Подтверждаю approval…'
-                        : phase === 'signing'
-                          ? 'Подписываю…'
-                          : phase === 'submitting'
-                            ? 'Отправляю…'
-                            : 'Ожидаю подтверждение…'
-                  : isBuy
-                    ? `Купить ${assetSymbol}`
-                    : `Продать ${assetSymbol}`}
-              </Button>
-            )}
-
-            {onManual ? (
-              <Button
-                variant="ghost"
-                className="mt-1 w-full text-xs"
-                onClick={() => onManual({ asset: token, side: mode, tradeGroupId })}
-                disabled={executing || pendingSubmit}
-              >
-                Записать {isBuy ? 'покупку' : 'продажу'} вручную
-              </Button>
             ) : null}
+
+            {!config.data?.enabled || !chain?.executionEnabled ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <p>On-chain исполнение для этой сети выключено. Используйте вкладку «Вручную».</p>
+                <Button
+                  className="mt-2 h-8 px-3 text-xs"
+                  variant="secondary"
+                  onClick={() => setChannel('manual')}
+                >
+                  Перейти к ручному вводу
+                </Button>
+              </div>
+            ) : null}
+
+            {config.data && chainCode && !assetAddress ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <p>Токен не входит в on-chain allowlist. Доступна вкладка «Вручную».</p>
+                <Button
+                  className="mt-2 h-8 px-3 text-xs"
+                  variant="secondary"
+                  onClick={() => setChannel('manual')}
+                >
+                  Перейти к ручному вводу
+                </Button>
+              </div>
+            ) : null}
+
+            {preview.isError ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                {toRussianError(preview.error, 'Не удалось получить котировку')}
+              </div>
+            ) : null}
+
+            {error ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+
+            {phase === 'signing' || phase === 'approval' ? (
+              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <p>Ожидаю ответ кошелька. Если вы отклонили запрос, нажмите «Отменить ожидание».</p>
+                <Button
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => void cancelWalletWait()}
+                >
+                  Отменить ожидание
+                </Button>
+              </div>
+            ) : null}
+
+            {phase === 'success' ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                {mode === 'buy' ? 'Покупка учтена.' : 'Продажа учтена.'}{' '}
+                {trade
+                  ? trade.group.status === 'closed'
+                    ? 'Позиция закрыта.'
+                    : `Остаток: ${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}.`
+                  : 'Операция записана в журнал.'}
+              </div>
+            ) : null}
+          </div>
+
+          <div className={channel === 'manual' ? '' : 'hidden'}>
+            <ManualOrderForm
+              key={`${mode}-${token.id}-${tradeGroupId ?? 'new'}`}
+              token={token}
+              side={mode}
+              trade={trade}
+              marketPriceUsd={effectiveMarketPrice}
+              onSaved={() => onCompletedRef.current?.()}
+              onClose={onClose}
+              onPendingChange={setManualPending}
+            />
           </div>
         </div>
       </Drawer>
@@ -963,6 +1002,58 @@ export function TokenTradeDrawer({
         </div>
       ) : null}
     </>
+  );
+}
+
+function TradeChannelTabs({
+  value,
+  onChange,
+  disabled,
+  onchainConfigured,
+}: {
+  value: 'onchain' | 'manual';
+  onChange: (value: 'onchain' | 'manual') => void;
+  disabled: boolean;
+  onchainConfigured: boolean;
+}) {
+  return (
+    <div
+      className="flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1"
+      role="tablist"
+      aria-label="Способ сделки"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={value === 'onchain'}
+        disabled={disabled}
+        title={
+          onchainConfigured ? undefined : 'On-chain исполнение недоступно для этого токена или сети'
+        }
+        onClick={() => onChange('onchain')}
+        className={`flex-1 rounded-lg px-3 py-1.5 text-sm ${
+          value === 'onchain'
+            ? 'bg-white font-medium text-zinc-900 shadow-sm'
+            : 'text-zinc-500 hover:text-zinc-900'
+        }`}
+      >
+        Ончейн
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={value === 'manual'}
+        disabled={disabled}
+        onClick={() => onChange('manual')}
+        className={`flex-1 rounded-lg px-3 py-1.5 text-sm ${
+          value === 'manual'
+            ? 'bg-white font-medium text-zinc-900 shadow-sm'
+            : 'text-zinc-500 hover:text-zinc-900'
+        }`}
+      >
+        Вручную
+      </button>
+    </div>
   );
 }
 

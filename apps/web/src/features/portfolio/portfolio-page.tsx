@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { NavIcon, type NavIconName } from '@/components/nav-icon';
 import { PageHeader } from '@/components/ui/page-header';
@@ -19,7 +18,6 @@ import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
-import { ManualTradeDialog } from '../trade/manual-trade-dialog';
 import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
@@ -128,11 +126,6 @@ export function PortfolioPage() {
     marketPriceUsd: string | null;
   } | null>(null);
   const [sellGroup, setSellGroup] = useState<TradeGroupSummary | null>(null);
-  const [manual, setManual] = useState<{
-    assetId?: string;
-    side?: 'entry' | 'exit';
-    tradeGroupId?: string;
-  } | null>(null);
   const positions = useQuery({
     queryKey: ['positions'],
     queryFn: fetchPositions,
@@ -224,13 +217,6 @@ export function PortfolioPage() {
             : tab === 'strategies'
               ? 'Встроенные стратегии и подробные описания.'
               : 'Позиции, ордера и покупка токенов.'
-        }
-        actions={
-          tab === 'portfolio' || tab === 'trades' ? (
-            <Button variant="secondary" onClick={() => setManual({})}>
-              Ручная сделка
-            </Button>
-          ) : undefined
         }
       />
 
@@ -438,9 +424,6 @@ export function PortfolioPage() {
 
           <TokenBuyList
             onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
-            onManual={(asset) => {
-              setManual({ assetId: asset.id, side: 'entry' });
-            }}
           />
         </>
       ) : null}
@@ -455,12 +438,6 @@ export function PortfolioPage() {
         assetId={selectedAssetId}
         logoFallback={selectedAssetId ? (watchlistLogos.get(selectedAssetId) ?? null) : null}
         onClose={() => setSelectedAssetId(null)}
-        onBuy={(asset) => {
-          setBuyTarget({
-            asset,
-            marketPriceUsd: positionByAsset.get(asset.id)?.priceUsd ?? null,
-          });
-        }}
         onOpenOrder={(group) => setSellGroup(group)}
       />
 
@@ -471,14 +448,6 @@ export function PortfolioPage() {
           marketPriceUsd={buyTarget.marketPriceUsd}
           onClose={() => setBuyTarget(null)}
           onCompleted={refetchPositions}
-          onManual={(input) => {
-            setBuyTarget(null);
-            setManual({
-              assetId: input.asset.id,
-              side: input.side === 'buy' ? 'entry' : 'exit',
-              tradeGroupId: input.tradeGroupId ?? undefined,
-            });
-          }}
         />
       ) : null}
 
@@ -490,26 +459,8 @@ export function PortfolioPage() {
           marketPriceUsd={positionByAsset.get(sellGroup.asset.id)?.priceUsd ?? null}
           onClose={() => setSellGroup(null)}
           onCompleted={refetchPositions}
-          onManual={(input) => {
-            setSellGroup(null);
-            setManual({
-              assetId: input.asset.id,
-              side: 'exit',
-              tradeGroupId: input.tradeGroupId ?? undefined,
-            });
-          }}
         />
       ) : null}
-
-      <ManualTradeDialog
-        key={`${manual?.assetId ?? 'none'}-${manual?.side ?? 'entry'}-${manual?.tradeGroupId ?? 'none'}`}
-        open={Boolean(manual)}
-        initialAssetId={manual?.assetId}
-        initialSide={manual?.side}
-        initialTradeGroupId={manual?.tradeGroupId}
-        onClose={() => setManual(null)}
-        onSaved={refetchPositions}
-      />
     </div>
   );
 }

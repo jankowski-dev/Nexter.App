@@ -175,7 +175,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Активные ордера')).toBeVisible();
   await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
   const tradeDrawer = page.getByRole('dialog');
-  await expect(tradeDrawer.getByRole('heading', { name: 'Продать BASED' })).toBeVisible();
+  await expect(tradeDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(tradeDrawer.getByText('Текущая сделка')).toBeVisible();
   await tradeDrawer.getByRole('link', { name: 'Полная карточка' }).click();
   await expect(page).toHaveURL(/\/trades\//);
@@ -191,20 +191,27 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Playwright trade note')).toBeVisible();
 
   await page.goto('/portfolio');
-  await page.getByRole('button', { name: 'Ручная сделка' }).click();
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'BASED' })
+    .first()
+    .getByRole('button', { name: 'Купить' })
+    .click();
   const tradeDialog = page.getByRole('dialog');
-  await expect(tradeDialog.getByRole('heading', { name: 'Ручная сделка' })).toBeVisible();
-  await tradeDialog
+  await expect(tradeDialog.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
+  await tradeDialog.getByRole('tab', { name: 'Вручную' }).click();
+  const manualOrderForm = tradeDialog.locator('#manual-order-form');
+  await manualOrderForm
     .locator('select')
     .nth(0)
-    .selectOption(based?.id ?? '');
-  await tradeDialog.getByLabel('Количество BASED').fill('1');
-  await tradeDialog
+    .selectOption(wallet?.id ?? '');
+  await manualOrderForm
     .locator('select')
     .nth(1)
     .selectOption(usdt?.id ?? '');
-  await tradeDialog.getByLabel('Сумма покупки').fill('2');
-  await tradeDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await manualOrderForm.getByLabel('Количество BASED').fill('1');
+  await manualOrderForm.getByLabel('Сумма оплаты').fill('2');
+  await tradeDialog.getByRole('button', { name: 'Сохранить покупку' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/watchlist');

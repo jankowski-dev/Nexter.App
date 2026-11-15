@@ -175,3 +175,7 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Equity ranges and active orders
 
 - **UI-58** — bot equity ranges 7d/30d/1y no longer 500; the portfolio asset drawer lists only active orders; clicking a card opens the sell/close drawer, and the labels clarify cost/quantity/buy/sell; the bot journal is a table. See `docs/decisions.md`.
+
+## Unified trade and operation modals
+
+- **UI-59** — buy only from the main token list; sell/close from orders or the asset drawer; both order modals have `Ончейн`/`Вручную` tabs and fixed footer actions; operations has four manual tabs. See ADR 0049.
