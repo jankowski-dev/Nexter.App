@@ -8,7 +8,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = 'Удалить',
-  cancelLabel = 'Нет',
+  cancelLabel = 'Отмена',
   confirmAriaLabel,
   cancelAriaLabel,
   busy = false,
@@ -91,7 +91,7 @@ export function ConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="dialog-panel-enter w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl"
+        className="dialog-panel-enter w-full max-w-sm rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
       >
         <h3 className="text-lg font-semibold text-zinc-900">{title}</h3>
         <p className="mt-2 text-sm text-zinc-600">{description}</p>

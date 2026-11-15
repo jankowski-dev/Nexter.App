@@ -165,17 +165,10 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Портфель по токенам')).toBeVisible();
   await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
   const assetDrawer = page.getByRole('dialog');
-  await expect(assetDrawer.getByRole('heading', { name: 'Лоты' })).toBeVisible();
-  await expect(assetDrawer.getByRole('heading', { name: 'Сделки' })).toBeVisible();
-  await expect(assetDrawer.getByRole('heading', { name: 'Транзакции' })).toBeVisible();
-  await assetDrawer.getByRole('link', { name: 'Открыть полную карточку' }).click();
-  await expect(page).toHaveURL(/\/portfolio\/assets\//);
-  await expect(page.getByRole('heading', { name: /BASED/ })).toBeVisible();
-  await expect(page.getByTitle(/Данные обновляются автоматически/)).toHaveCount(0);
-  await expect(page.getByText('Установить цену')).toHaveCount(0);
-  await expect(page.getByText('Лоты')).toHaveCount(0);
-  await expect(page.getByText('Сделки').first()).toBeVisible();
-  await expect(page.getByText('Транзакции').first()).toBeVisible();
+  await expect(assetDrawer.getByRole('heading', { name: 'Ордера' })).toBeVisible();
+  await expect(assetDrawer.getByText('График стоимости')).toBeVisible();
+  await expect(assetDrawer.getByRole('link', { name: 'Открыть полную карточку' })).toHaveCount(0);
+  await expect(assetDrawer.getByRole('button', { name: 'Готово' })).toBeVisible();
 
   await page.goto('/portfolio');
   await page.getByRole('tab', { name: 'Ордера' }).click();

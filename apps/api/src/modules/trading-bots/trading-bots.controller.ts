@@ -18,6 +18,7 @@ import type {
   BotEventsResponse,
   BotSignalsResponse,
   BotStrategiesResponse,
+  BotTradeSummariesResponse,
   BotTradesResponse,
   BotUpdateRequest,
   TradingBotsResponse,
@@ -135,6 +136,14 @@ export class TradingBotsController {
     @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
   ): Promise<BotTradesResponse> {
     return this.bots.trades(auth.user.id, id, query.limit, query.offset);
+  }
+
+  @Get('bots/:id/trade-summaries')
+  tradeSummaries(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<BotTradeSummariesResponse> {
+    return this.bots.tradeSummaries(auth.user.id, id);
   }
 
   @Get('bots/:id/events')

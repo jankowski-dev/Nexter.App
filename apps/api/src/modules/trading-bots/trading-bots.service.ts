@@ -39,6 +39,7 @@ import type {
   BotSummary,
   BotToken,
   BotTrade,
+  BotTradeSummariesResponse,
   BotTradesResponse,
   TradingBotsResponse,
   BotUpdateRequest,
@@ -453,7 +454,7 @@ export class TradingBotsService {
         .update(tradingBots)
         .set({
           status: 'running',
-          startedAt: bot.startedAt ?? new Date(),
+          startedAt: new Date(),
           stoppedAt: null,
           updatedAt: new Date(),
         })
@@ -784,6 +785,39 @@ export class TradingBotsService {
 
     return {
       data: rows.map((row) => toTrade(row.trade, assetContract(row.asset, row.chainCode))),
+    };
+  }
+
+  async tradeSummaries(userId: string, id: string): Promise<BotTradeSummariesResponse> {
+    await this.requireBot(userId, id);
+    const rows = await this.db
+      .select({
+        asset: assets,
+        chainCode: chains.code,
+        realizedPnl: sql<string>`coalesce(sum(case when ${botTrades.side} = 'sell' then ${botTrades.realizedPnlUsd} else 0 end), 0)::text`,
+        grossProfit: sql<string>`coalesce(sum(case when ${botTrades.side} = 'sell' and ${botTrades.realizedPnlUsd} > 0 then ${botTrades.realizedPnlUsd} else 0 end), 0)::text`,
+        grossLoss: sql<string>`coalesce(sum(case when ${botTrades.side} = 'sell' and ${botTrades.realizedPnlUsd} < 0 then -1 * ${botTrades.realizedPnlUsd} else 0 end), 0)::text`,
+        tradesCount: sql<number>`count(*)::int`,
+        wins: sql<number>`(count(*) filter (where ${botTrades.side} = 'sell' and ${botTrades.realizedPnlUsd} > 0))::int`,
+        losses: sql<number>`(count(*) filter (where ${botTrades.side} = 'sell' and ${botTrades.realizedPnlUsd} < 0))::int`,
+      })
+      .from(botTrades)
+      .innerJoin(assets, eq(botTrades.assetId, assets.id))
+      .innerJoin(chains, eq(assets.chainId, chains.id))
+      .where(eq(botTrades.botId, id))
+      .groupBy(assets.id, chains.code)
+      .orderBy(desc(sql`count(*)`));
+
+    return {
+      data: rows.map((row) => ({
+        asset: assetContract(row.asset, row.chainCode),
+        realizedPnlUsd: row.realizedPnl,
+        grossProfitUsd: row.grossProfit,
+        grossLossUsd: row.grossLoss,
+        tradesCount: Number(row.tradesCount),
+        wins: Number(row.wins),
+        losses: Number(row.losses),
+      })),
     };
   }
 

@@ -4,7 +4,6 @@ import { Drawer } from '@/components/ui/drawer';
 import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
 import { formatPct, formatPrice, pnlTone } from '@/lib/format';
-import { Link } from '@tanstack/react-router';
 import type { WatchlistEntry, WatchlistGroup } from '@nexter/contracts';
 import { TokenPriceChart } from './token-price-chart';
 
@@ -75,20 +74,17 @@ export function TokenDrawer({
       description={`${entry.asset.name} · ${chainLabel}`}
       wide
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Закрыть
-          </Button>
-          <Button
-            variant="ghost"
-            className="text-red-700"
-            onClick={() => onDelete(entry)}
-            disabled={deleteBusy}
-          >
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <Button variant="danger" onClick={() => onDelete(entry)} disabled={deleteBusy}>
             Удалить
           </Button>
-          <Button onClick={() => onEdit(entry)}>Изменить</Button>
-        </>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              Готово
+            </Button>
+            <Button onClick={() => onEdit(entry)}>Изменить</Button>
+          </div>
+        </div>
       }
     >
       <div className="space-y-5">
@@ -267,15 +263,8 @@ export function TokenDrawer({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600">
-          <span>Приоритет: {entry.priority}</span>
-          <Link
-            to="/portfolio/assets/$assetId"
-            params={{ assetId: entry.asset.id }}
-            className="text-emerald-800 hover:underline"
-          >
-            Полная карточка актива
-          </Link>
+        <div className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600">
+          Приоритет: {entry.priority}
         </div>
       </div>
     </Drawer>

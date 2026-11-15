@@ -444,7 +444,6 @@ export function PortfolioPage() {
         logoFallback={selectedAssetId ? (watchlistLogos.get(selectedAssetId) ?? null) : null}
         onClose={() => setSelectedAssetId(null)}
         onBuy={(asset) => {
-          setSelectedAssetId(null);
           setBuyTarget({
             asset,
             marketPriceUsd: positionByAsset.get(asset.id)?.priceUsd ?? null,

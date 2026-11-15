@@ -355,20 +355,9 @@ export function NoteDrawer({
         inert={confirmDelete}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
-            <span role="status" className="text-xs">
-              {saveState === 'error' ? (
-                <span className="text-red-700">Ошибка сохранения</span>
-              ) : showSaving ? (
-                <span className="inline-flex items-center gap-1.5 text-emerald-700">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
-                  Сохранение…
-                </span>
-              ) : null}
-            </span>
-            <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
-                variant="ghost"
-                className="text-red-700"
+                variant="danger"
                 onClick={() => {
                   if (noteIdRef.current) setConfirmDelete(true);
                 }}
@@ -377,6 +366,18 @@ export function NoteDrawer({
                 <TrashIcon />
                 Удалить
               </Button>
+              <span role="status" className="text-xs">
+                {saveState === 'error' ? (
+                  <span className="text-red-700">Ошибка сохранения</span>
+                ) : showSaving ? (
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                    Сохранение…
+                  </span>
+                ) : null}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {mode === 'view' ? (
                 <Button onClick={() => setMode('edit')}>
                   <PencilIcon />

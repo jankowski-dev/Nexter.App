@@ -66,13 +66,13 @@ export function Dialog({
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          'dialog-panel-enter max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-2xl border border-zinc-200 bg-white p-5 shadow-2xl outline-none sm:rounded-xl',
+          'dialog-panel-enter flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white shadow-2xl outline-none sm:rounded-xl',
           resolvedSize === 'md' && 'sm:max-w-xl',
           resolvedSize === 'lg' && 'sm:max-w-3xl',
           resolvedSize === 'xl' && 'sm:max-w-5xl',
         )}
       >
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-5">
           <div>
             <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
             {description ? <p className="mt-1 text-sm text-zinc-500">{description}</p> : null}
@@ -86,8 +86,12 @@ export function Dialog({
             ✕
           </button>
         </div>
-        {children}
-        {footer ? <div className="mt-5 flex justify-end gap-2">{footer}</div> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-1">
+          {children}
+        </div>
+        {footer ? (
+          <div className="flex justify-end gap-2 border-t border-zinc-200 px-6 py-3">{footer}</div>
+        ) : null}
       </div>
     </div>,
     document.body,

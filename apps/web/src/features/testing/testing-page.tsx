@@ -38,6 +38,7 @@ import type {
 } from '@nexter/contracts';
 import { BacktestPanel } from './backtest-panel';
 import { BotDetailDrawer } from './bot-detail-drawer';
+import { BotUptimeText } from './bot-uptime';
 import { StrategyIcon } from './strategy-icon';
 import { StrategyParamInputs } from './strategy-param-inputs';
 import { formToParams, paramsToForm } from './strategy-params';
@@ -550,6 +551,16 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                         <div className="mt-1 text-xs text-zinc-500">
                           {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}
                           {bot.lastTickAt ? ` · тик ${formatDateTime(bot.lastTickAt)}` : ''}
+                          {bot.status === 'running' ? (
+                            <>
+                              {' · в работе '}
+                              <BotUptimeText
+                                startedAt={bot.startedAt}
+                                running
+                                className="font-mono text-zinc-700"
+                              />
+                            </>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -992,8 +1003,8 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
         size="lg"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setStrategyDetail(null)}>
-              Закрыть
+            <Button variant="secondary" onClick={() => setStrategyDetail(null)}>
+              Готово
             </Button>
             {strategyDetail ? (
               <Button

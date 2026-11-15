@@ -2,7 +2,6 @@ import { DashboardPage } from '@/features/dashboard/dashboard-page';
 import { FinancePage } from '@/features/finance/finance-page';
 import { ImportPage } from '@/features/import/import-page';
 import { LoginPage } from '@/features/auth/login-page';
-import { AssetDetailPage } from '@/features/portfolio/asset-detail-page';
 import { PortfolioPage } from '@/features/portfolio/portfolio-page';
 import { RecoveryPage } from '@/features/auth/recovery-page';
 import { ResetPasswordPage } from '@/features/auth/reset-password-page';
@@ -128,12 +127,6 @@ const portfolioRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/portfolio',
   component: PortfolioPage,
-});
-
-const assetDetailRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/portfolio/assets/$assetId',
-  component: AssetDetailPage,
 });
 
 const tradesRoute = createRoute({
@@ -263,7 +256,6 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     dashboardRoute,
     portfolioRoute,
-    assetDetailRoute,
     tradesRoute,
     tradeDetailRoute,
     operationsRoute,

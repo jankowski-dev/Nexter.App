@@ -75,6 +75,7 @@ export class PortfolioService {
 
     return {
       asset,
+      watchlistId: watched?.id ?? null,
       position,
       quote: quote
         ? {
