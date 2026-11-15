@@ -4,11 +4,10 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { FanIcon } from '@/components/live-refresh-indicator';
-import { LineChart } from '@/components/charts/line-chart';
 import { TokenIcon } from '@/components/token-icon';
-import { StrategyIcon } from './strategy-icon';
+import { BotIcon } from './bot-icon';
+import { BotEquityChart } from './bot-equity-chart';
 import {
-  fetchBotEquity,
   fetchBotEvents,
   fetchBotSignals,
   fetchBotTradeSummaries,
@@ -26,6 +25,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 import { BotUptimeText } from './bot-uptime';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
@@ -47,6 +47,7 @@ const eventLabels: Record<string, string> = {
   reset: 'сброс',
   archived: 'архив',
   closed_all: 'закрытие позиций',
+  token_removed: 'токен удалён',
 };
 
 function BotUptimeCard({ startedAt, running }: { startedAt: string | null; running: boolean }) {
@@ -58,7 +59,7 @@ function BotUptimeCard({ startedAt, running }: { startedAt: string | null; runni
         running={running}
         className="mt-1 block font-mono text-xl font-semibold tabular-nums text-emerald-800"
       />
-      <CardDescription>{running ? 'С момента запуска' : 'Счётчик сброшен'}</CardDescription>
+      <CardDescription>{running ? 'С момента запуска' : 'Робот остановлен'}</CardDescription>
     </Card>
   );
 }
@@ -112,12 +113,6 @@ export function BotDetailDrawer({
   });
   const tradeRows = trades.data?.pages.flatMap((page) => page.data) ?? [];
   const eventRows = events.data?.pages.flatMap((page) => page.data) ?? [];
-  const equity = useQuery({
-    queryKey: ['trading-bot-equity', botId],
-    queryFn: () => fetchBotEquity(botId as string),
-    enabled: Boolean(botId) && open,
-    refetchInterval: 15_000,
-  });
   const signals = useQuery({
     queryKey: ['trading-bot-signals', botId],
     queryFn: () => fetchBotSignals(botId as string),
@@ -130,6 +125,11 @@ export function BotDetailDrawer({
     enabled: Boolean(botId) && open,
     refetchInterval: 15_000,
   });
+  const [positionsLimit, setPositionsLimit] = useState(10);
+
+  useEffect(() => {
+    setPositionsLimit(10);
+  }, [botId, open]);
 
   if (!botId) return null;
   if (detail.isPending) {
@@ -152,17 +152,13 @@ export function BotDetailDrawer({
 
   const { bot, strategy, strategyParams, tokens, positions } = detail.data;
   const stats = bot.stats;
-  const equityPoints = (equity.data?.data ?? []).map((point) => ({
-    label: formatDateTime(point.capturedAt),
-    value: Number(point.equityUsd),
-  }));
 
   return (
     <Drawer
       open={open}
       onClose={onClose}
       title={bot.name}
-      titleIcon={<StrategyIcon icon={strategy.icon} className="h-8 w-8" />}
+      titleIcon={<BotIcon icon={bot.icon} strategyIcon={strategy.icon} className="h-8 w-8" />}
       description={`${strategy.name} · ${statusLabels[bot.status]}`}
       size="lg"
       footer={
@@ -332,16 +328,7 @@ export function BotDetailDrawer({
           )}
         </Card>
 
-        <Card>
-          <CardTitle>Капитал</CardTitle>
-          {equity.isError ? (
-            <p className="py-6 text-sm text-red-700">
-              {toRussianError(equity.error, 'Не удалось загрузить equity')}
-            </p>
-          ) : (
-            <LineChart points={equityPoints} height={180} strokeWidth={2} />
-          )}
-        </Card>
+        <BotEquityChart botId={botId} open={open} />
 
         <Card>
           <CardTitle>Токены</CardTitle>
@@ -512,52 +499,68 @@ export function BotDetailDrawer({
           {positions.length === 0 ? (
             <CardDescription>Позиций нет.</CardDescription>
           ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Токен</th>
-                    <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                    <th className="py-2 pr-3 text-right font-medium">Средняя</th>
-                    <th className="py-2 pr-3 text-right font-medium">Сейчас</th>
-                    <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                    <th className="py-2 text-right font-medium">P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {positions.map((position) => (
-                    <tr key={position.asset.id} className="border-b border-zinc-100 last:border-0">
-                      <td className="py-2 pr-3">
-                        <div className="flex items-center gap-2">
-                          <TokenIcon
-                            logoUrl={position.asset.logoUrl}
-                            symbol={position.asset.symbol}
-                          />
-                          <span className="font-medium">{position.asset.symbol}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatTokenAmount(position.amount, 8)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatPrice(position.avgCostUsd)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatPrice(position.currentPriceUsd)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatUsd(position.valueUsd)}
-                      </td>
-                      <td
-                        className={`py-2 text-right font-mono ${pnlTone(position.unrealizedPnlUsd)}`}
-                      >
-                        {formatSignedUsd(position.unrealizedPnlUsd)}
-                      </td>
+            <>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                      <th className="py-2 pr-3 font-medium">Токен</th>
+                      <th className="py-2 pr-3 text-right font-medium">Количество</th>
+                      <th className="py-2 pr-3 text-right font-medium">Средняя</th>
+                      <th className="py-2 pr-3 text-right font-medium">Сейчас</th>
+                      <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
+                      <th className="py-2 text-right font-medium">P&L</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {positions.slice(0, positionsLimit).map((position) => (
+                      <tr
+                        key={position.asset.id}
+                        className="border-b border-zinc-100 last:border-0"
+                      >
+                        <td className="py-2 pr-3">
+                          <div className="flex items-center gap-2">
+                            <TokenIcon
+                              logoUrl={position.asset.logoUrl}
+                              symbol={position.asset.symbol}
+                            />
+                            <span className="font-medium">{position.asset.symbol}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatTokenAmount(position.amount, 8)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatPrice(position.avgCostUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatPrice(position.currentPriceUsd)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatUsd(position.valueUsd)}
+                        </td>
+                        <td
+                          className={`py-2 text-right font-mono ${pnlTone(position.unrealizedPnlUsd)}`}
+                        >
+                          {formatSignedUsd(position.unrealizedPnlUsd)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {positions.length > positionsLimit ? (
+                <div className="mt-3 flex justify-center">
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setPositionsLimit((current) => current + 10)}
+                  >
+                    Ещё
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </Card>
 
@@ -649,7 +652,7 @@ export function BotDetailDrawer({
                 </div>
               ))}
               {events.hasNextPage ? (
-                <div className="pt-2">
+                <div className="flex justify-center pt-2">
                   <Button
                     variant="secondary"
                     className="h-8 px-3 text-xs"

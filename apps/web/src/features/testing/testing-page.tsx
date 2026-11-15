@@ -8,7 +8,6 @@ import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
 import { FanIcon } from '@/components/live-refresh-indicator';
-import { NavIcon } from '@/components/nav-icon';
 import { TokenIcon } from '@/components/token-icon';
 import {
   archiveTradingBot,
@@ -18,6 +17,7 @@ import {
   fetchTradingBot,
   fetchTradingBots,
   fetchWatchlist,
+  fetchWatchlistGroups,
   resetTradingBot,
   startTradingBot,
   stopTradingBot,
@@ -25,19 +25,23 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { useConfirm } from '@/lib/confirm';
 import { filterBySearch } from '@/lib/search';
 import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
+import { compressTokenIcon } from '@/lib/image';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   BotCreateRequest,
   BotStrategyTemplate,
   BotSummary,
+  BotToken,
   BotUpdateRequest,
 } from '@nexter/contracts';
 import { BacktestPanel } from './backtest-panel';
 import { BotDetailDrawer } from './bot-detail-drawer';
+import { BotIcon } from './bot-icon';
 import { BotUptimeText } from './bot-uptime';
 import { StrategyIcon } from './strategy-icon';
 import { StrategyParamInputs } from './strategy-param-inputs';
@@ -49,6 +53,7 @@ type Sort = 'pnl' | 'equity' | 'profitFactor';
 type BotFormState = {
   name: string;
   description: string;
+  icon: string | null;
   strategyKey: string;
   strategyParams: Record<string, string>;
   tokenAssetIds: string[];
@@ -73,6 +78,7 @@ function emptyBotForm(template?: BotStrategyTemplate): BotFormState {
   return {
     name: '',
     description: '',
+    icon: null,
     strategyKey: template?.key ?? 'momentum_breakout',
     strategyParams: paramsToForm(template?.defaultParams ?? defaultParams),
     tokenAssetIds: [],
@@ -146,6 +152,7 @@ function BotStats({ bot }: { bot: BotSummary }) {
 
 export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [sort, setSort] = useState<Sort>('pnl');
   const [standStrategyKey, setStandStrategyKey] = useState(
     () => new URLSearchParams(window.location.search).get('strategy') ?? '',
@@ -153,7 +160,10 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
+  const [editingTokens, setEditingTokens] = useState<BotToken[]>([]);
   const [tokenSearch, setTokenSearch] = useState('');
+  const [iconUploading, setIconUploading] = useState(false);
+  const botIconInputRef = useRef<HTMLInputElement>(null);
   const [botError, setBotError] = useState<string | null>(null);
   const [strategyDetail, setStrategyDetail] = useState<BotStrategyTemplate | null>(null);
   const [detailBotId, setDetailBotId] = useState<string | null>(null);
@@ -174,18 +184,46 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     enabled: mode === 'bots',
     refetchInterval: 15_000,
   });
-  const watchlist = useQuery({
-    queryKey: ['trading-bot-tokens'],
-    queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
+  const watchlistGroups = useQuery({
+    queryKey: ['watchlist-groups'],
+    queryFn: fetchWatchlistGroups,
+    staleTime: 60_000,
     enabled: botDialogOpen || mode === 'stand',
+  });
+  const defaultGroup =
+    watchlistGroups.data?.groups.find((group) => group.isDefault) ??
+    watchlistGroups.data?.groups[0] ??
+    null;
+  const watchlist = useQuery({
+    queryKey: ['trading-bot-tokens', defaultGroup?.id ?? null],
+    queryFn: () => fetchWatchlist(false, undefined, defaultGroup?.id, 100),
+    enabled: Boolean(defaultGroup?.id) && (botDialogOpen || mode === 'stand'),
   });
 
   const templates = strategies.data?.data ?? [];
   const tokenEntries = watchlist.data?.data ?? [];
-  const visibleTokenEntries = filterBySearch(tokenEntries, tokenSearch, (entry) => [
-    entry.asset.symbol,
-    entry.asset.name,
-    entry.asset.chainCode,
+  const tokenOptions = [
+    ...tokenEntries.map((entry) => ({
+      assetId: entry.asset.id,
+      symbol: entry.asset.symbol,
+      name: entry.asset.name,
+      chainCode: entry.asset.chainCode,
+      logoUrl: entry.logoUrl ?? entry.asset.logoUrl,
+    })),
+    ...editingTokens
+      .filter((token) => !tokenEntries.some((entry) => entry.asset.id === token.assetId))
+      .map((token) => ({
+        assetId: token.assetId,
+        symbol: token.symbol,
+        name: token.name,
+        chainCode: token.chainCode,
+        logoUrl: token.logoUrl,
+      })),
+  ];
+  const visibleTokenEntries = filterBySearch(tokenOptions, tokenSearch, (entry) => [
+    entry.symbol,
+    entry.name,
+    entry.chainCode,
   ]);
   const selectedTemplate = templates.find((template) => template.key === botForm.strategyKey);
   const sortedBots = [...(bots.data?.data ?? [])].sort((a, b) => compareBots(a, b, sort));
@@ -300,6 +338,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
       return;
     }
     setEditingBot(null);
+    setEditingTokens([]);
     setBotForm(emptyBotForm(templates[0]));
     setTokenSearch('');
     setBotError(null);
@@ -309,9 +348,13 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   async function openEditBot(bot: BotSummary): Promise<boolean> {
     if (bot.status === 'running') {
       if (
-        !window.confirm(
-          'Остановить робота, чтобы открыть настройки? Открытые позиции и история сохранятся.',
-        )
+        !(await confirm({
+          title: 'Остановить робота?',
+          description:
+            'Чтобы открыть настройки, робота нужно остановить. Открытые позиции и история сохранятся.',
+          confirmLabel: 'Остановить и открыть',
+          variant: 'primary',
+        }))
       ) {
         return false;
       }
@@ -329,9 +372,11 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
       return false;
     }
     setEditingBot(detail.bot);
+    setEditingTokens(detail.tokens);
     setBotForm({
       name: detail.bot.name,
       description: detail.bot.description,
+      icon: detail.bot.icon,
       strategyKey: detail.strategy.key,
       strategyParams: paramsToForm(detail.strategyParams),
       tokenAssetIds: detail.tokens.map((token) => token.assetId),
@@ -395,6 +440,21 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     }));
   }
 
+  async function handleBotIconFile(file: File | undefined): Promise<void> {
+    if (!file) return;
+    setIconUploading(true);
+    setBotError(null);
+    try {
+      const icon = await compressTokenIcon(file);
+      setBotForm((current) => ({ ...current, icon }));
+    } catch (error) {
+      setBotError(error instanceof Error ? error.message : 'Не удалось загрузить иконку');
+    } finally {
+      setIconUploading(false);
+      if (botIconInputRef.current) botIconInputRef.current.value = '';
+    }
+  }
+
   function submitBot() {
     setBotError(null);
     if (!botForm.name.trim()) {
@@ -427,6 +487,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     const common = {
       name: botForm.name.trim(),
       description: botForm.description.trim(),
+      icon: botForm.icon,
       strategyKey: template.key,
       strategyParams,
       tokenAssetIds: botForm.tokenAssetIds,
@@ -532,9 +593,12 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 flex-1 items-start gap-3 text-left">
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-700">
-                        <NavIcon name="testing" className="h-5 w-5" />
-                      </span>
+                      <BotIcon
+                        icon={bot.icon}
+                        strategyIcon={bot.strategy.icon}
+                        className="h-10 w-10"
+                        alt=""
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
                           {bot.status === 'running' ? <FanIcon spinning /> : null}
@@ -801,6 +865,51 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
               ) : null}
             </label>
           </div>
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <BotIcon
+                icon={botForm.icon}
+                strategyIcon={selectedTemplate?.icon ?? 'beaker'}
+                className="h-12 w-12"
+                alt=""
+              />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-zinc-800">Иконка робота</div>
+                <div className="text-xs text-zinc-500">
+                  По умолчанию используется иконка стратегии. Можно загрузить свою.
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => botIconInputRef.current?.click()}
+                  disabled={iconUploading}
+                >
+                  {iconUploading ? 'Загружаю…' : 'Загрузить иконку'}
+                </Button>
+                {botForm.icon ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => setBotForm((current) => ({ ...current, icon: null }))}
+                  >
+                    Сбросить
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <input
+              ref={botIconInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              aria-label="Файл иконки робота"
+              onChange={(event) => void handleBotIconFile(event.target.files?.[0])}
+            />
+          </div>
           <label className="block text-sm text-zinc-600">
             Описание
             <Textarea
@@ -840,7 +949,9 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
 
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm text-zinc-600">Токены из Базы токенов</div>
+              <div className="text-sm text-zinc-600">
+                Токены из группы «{defaultGroup?.name ?? 'Основная'}»
+              </div>
               <div className="text-xs text-zinc-500">Выбрано: {botForm.tokenAssetIds.length}</div>
             </div>
             <Input
@@ -851,22 +962,27 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
               aria-label="Поиск токена"
             />
             <div className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-xl border border-zinc-200 p-2">
-              {watchlist.isPending ? (
+              {watchlistGroups.isPending || watchlist.isPending ? (
                 <p className="text-xs text-zinc-500">Загрузка токенов…</p>
-              ) : watchlist.isError ? (
+              ) : watchlistGroups.isError || watchlist.isError ? (
                 <p className="text-xs text-red-700">
-                  {toRussianError(watchlist.error, 'Не удалось загрузить Базу токенов')}
+                  {toRussianError(
+                    watchlist.error ?? watchlistGroups.error,
+                    'Не удалось загрузить Базу токенов',
+                  )}
                 </p>
-              ) : tokenEntries.length === 0 ? (
-                <p className="text-xs text-zinc-500">В базе нет активных токенов.</p>
+              ) : tokenOptions.length === 0 ? (
+                <p className="text-xs text-zinc-500">
+                  В группе «{defaultGroup?.name ?? 'Основная'}» нет активных токенов.
+                </p>
               ) : visibleTokenEntries.length === 0 ? (
                 <p className="text-xs text-zinc-500">Ничего не найдено.</p>
               ) : (
                 visibleTokenEntries.map((entry) => {
-                  const checked = botForm.tokenAssetIds.includes(entry.asset.id);
+                  const checked = botForm.tokenAssetIds.includes(entry.assetId);
                   return (
                     <label
-                      key={entry.asset.id}
+                      key={entry.assetId}
                       className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-zinc-50"
                     >
                       <input
@@ -876,26 +992,30 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                           setBotForm((current) => ({
                             ...current,
                             tokenAssetIds: checked
-                              ? current.tokenAssetIds.filter((id) => id !== entry.asset.id)
-                              : [...current.tokenAssetIds, entry.asset.id],
+                              ? current.tokenAssetIds.filter((id) => id !== entry.assetId)
+                              : [...current.tokenAssetIds, entry.assetId],
                           }))
                         }
                       />
                       <TokenIcon
-                        logoUrl={entry.logoUrl ?? entry.asset.logoUrl}
-                        symbol={entry.asset.symbol}
+                        logoUrl={entry.logoUrl}
+                        symbol={entry.symbol}
                         className="h-5 w-5 text-[9px]"
                       />
-                      <span className="font-medium">{entry.asset.symbol}</span>
-                      <span className="truncate text-xs text-zinc-500">{entry.asset.name}</span>
+                      <span className="font-medium">{entry.symbol}</span>
+                      <span className="truncate text-xs text-zinc-500">{entry.name}</span>
                       <span className="ml-auto shrink-0 text-xs text-zinc-400">
-                        {entry.asset.chainCode}
+                        {entry.chainCode}
                       </span>
                     </label>
                   );
                 })
               )}
             </div>
+            <p className="mt-1 text-[11px] leading-4 text-zinc-500">
+              Если у токена есть открытая позиция, после удаления из робота она останется до
+              закрытия, но новые позиции по нему открываться не будут.
+            </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1089,22 +1209,40 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
         onEdit={openEditBotFromDetail}
         onStart={(id) => startMutation.mutate(id)}
         onStop={(id) => stopMutation.mutate(id)}
-        onReset={(id) => {
-          if (window.confirm('Сбросить бумажное состояние бота? Сделки и позиции будут удалены.')) {
+        onReset={async (id) => {
+          if (
+            await confirm({
+              title: 'Сбросить состояние робота?',
+              description: 'Сделки и позиции будут удалены, капитал вернётся к бюджету.',
+              confirmLabel: 'Сбросить',
+              variant: 'danger',
+            })
+          ) {
             resetMutation.mutate(id);
           }
         }}
-        onClosePositions={(id) => {
+        onClosePositions={async (id) => {
           if (
-            window.confirm(
-              'Закрыть все открытые позиции по текущим котировкам? Бот будет остановлен, сделки сохранятся.',
-            )
+            await confirm({
+              title: 'Закрыть все позиции?',
+              description:
+                'Позиции будут закрыты по текущим котировкам. Бот остановится, сделки сохранятся.',
+              confirmLabel: 'Закрыть позиции',
+              variant: 'danger',
+            })
           ) {
             closePositionsMutation.mutate(id);
           }
         }}
-        onArchive={(id) => {
-          if (window.confirm('Удалить бота в архив? История сохранится.')) {
+        onArchive={async (id) => {
+          if (
+            await confirm({
+              title: 'Удалить робота?',
+              description: 'Робот будет перемещён в архив. История сохранится.',
+              confirmLabel: 'В архив',
+              variant: 'danger',
+            })
+          ) {
             archiveMutation.mutate(id);
           }
         }}

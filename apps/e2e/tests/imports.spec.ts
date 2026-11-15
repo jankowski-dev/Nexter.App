@@ -196,11 +196,10 @@ test('previews, commits and rolls back a Notion import through the UI', async ({
   await page.getByRole('button', { name: 'Предпросмотр' }).click();
   await expect(page.getByRole('button', { name: 'Подтвердить импорт' })).toBeEnabled();
 
-  page.on('dialog', (dialog) => {
-    void dialog.accept();
-  });
-
   await page.getByRole('button', { name: 'Подтвердить импорт' }).click();
+  const commitDialog = page.getByRole('dialog', { name: 'Применить импорт?' });
+  await expect(commitDialog).toBeVisible();
+  await commitDialog.getByRole('button', { name: 'Применить' }).click();
   await expect(page.getByText('Результат в учёте')).toBeVisible();
   await expect(page.getByText(/370,00/).first()).toBeVisible();
   await expect(page.getByText(/430,00/).first()).toBeVisible();
@@ -208,6 +207,9 @@ test('previews, commits and rolls back a Notion import through the UI', async ({
   await expect(page.getByText(/-20,00/).first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Откатить импорт' }).click();
+  const rollbackDialog = page.getByRole('dialog', { name: 'Откатить импорт?' });
+  await expect(rollbackDialog).toBeVisible();
+  await rollbackDialog.getByRole('button', { name: 'Откатить' }).click();
   await expect(page.getByText('Результат в учёте')).toHaveCount(0);
 
   const history = page.getByRole('heading', { name: 'История импортов' });

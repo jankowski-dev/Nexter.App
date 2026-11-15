@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import {
   assets,
@@ -54,6 +54,11 @@ import { strategyByKey, strategyTemplates } from './strategies';
 interface BotMeta {
   ip?: string;
   userAgent?: string;
+}
+
+function iconForAudit(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value ? 'custom' : null;
 }
 
 function toEvent(row: BotEventRecord): BotEvent {
@@ -235,6 +240,7 @@ export class TradingBotsService {
             strategyParams,
             name: input.name,
             description: input.description ?? '',
+            icon: input.icon ?? null,
             status: 'draft',
             budgetUsd: cash,
             cashUsd: cash,
@@ -277,6 +283,7 @@ export class TradingBotsService {
               strategyParams,
               budgetUsd: cash,
               tokenAssetIds,
+              icon: iconForAudit(input.icon),
             },
             ip: meta.ip,
             userAgent: meta.userAgent,
@@ -329,6 +336,7 @@ export class TradingBotsService {
     const strategyChanged = input.strategyKey !== undefined || input.strategyParams !== undefined;
     const tokenAssetIds =
       input.tokenAssetIds !== undefined ? uniqueAssetIds(input.tokenAssetIds) : undefined;
+    let removedWithPosition: string[] = [];
     if (tokenAssetIds !== undefined) {
       await this.assertTokens(userId, tokenAssetIds, id);
       const openPositionRows = await this.db
@@ -336,16 +344,11 @@ export class TradingBotsService {
         .from(botPositions)
         .where(eq(botPositions.botId, id));
       const nextTokens = new Set(tokenAssetIds);
-      const removedWithPosition = openPositionRows
+      // Positions stay open after their token is removed. The runner keeps managing
+      // exits for them but will not open new positions in that asset.
+      removedWithPosition = openPositionRows
         .map((row) => row.assetId)
         .filter((assetId) => !nextTokens.has(assetId));
-      if (removedWithPosition.length > 0) {
-        throw new ConflictException({
-          code: 'CONFLICT',
-          message: 'Close open positions before removing their tokens from the bot',
-          details: { assetIds: removedWithPosition },
-        });
-      }
     }
 
     try {
@@ -355,6 +358,7 @@ export class TradingBotsService {
           .set({
             ...(input.name !== undefined ? { name: input.name } : {}),
             ...(input.description !== undefined ? { description: input.description } : {}),
+            ...(input.icon !== undefined ? { icon: input.icon } : {}),
             ...(nextStrategyKey !== undefined ? { strategyKey: nextStrategyKey } : {}),
             ...(nextStrategyParams !== undefined ? { strategyParams: nextStrategyParams } : {}),
             ...(input.maxPositions !== undefined ? { maxPositions: input.maxPositions } : {}),
@@ -378,9 +382,19 @@ export class TradingBotsService {
           await tx
             .insert(botTokens)
             .values(tokenAssetIds.map((assetId) => ({ botId: id, assetId })));
+
+          if (removedWithPosition.length > 0) {
+            await tx.insert(botEvents).values({
+              botId: id,
+              type: 'token_removed',
+              message:
+                'Токен удалён из робота. Открытая позиция остаётся и будет закрыта по сигналу стратегии.',
+              payload: { assetIds: removedWithPosition },
+            });
+          }
         }
 
-        if (strategyChanged || tokenAssetIds !== undefined) {
+        if (strategyChanged) {
           // bot_signals is diagnostic state and the application role has no DELETE
           // grant. Reset it in place so strategy/token edits remain possible.
           await tx
@@ -395,6 +409,21 @@ export class TradingBotsService {
               updatedAt: new Date(),
             })
             .where(eq(botSignals.botId, id));
+        } else if (tokenAssetIds !== undefined) {
+          // Removed tokens keep their strategy state so an orphaned position can
+          // still be closed by the same exit logic.
+          await tx
+            .update(botSignals)
+            .set({
+              priceUsd: null,
+              change24hPct: null,
+              action: 'hold',
+              reason: 'Ожидает первого тика',
+              hasPosition: false,
+              strategyState: {},
+              updatedAt: new Date(),
+            })
+            .where(and(eq(botSignals.botId, id), inArray(botSignals.assetId, tokenAssetIds)));
         }
 
         await this.audit.log(
@@ -404,7 +433,10 @@ export class TradingBotsService {
             entityType: 'trading_bot',
             entityId: id,
             before: { name: bot.name, status: bot.status },
-            after: input,
+            after: {
+              ...input,
+              ...(input.icon !== undefined ? { icon: iconForAudit(input.icon) } : {}),
+            },
             ip: meta.ip,
             userAgent: meta.userAgent,
           },
@@ -833,16 +865,65 @@ export class TradingBotsService {
     return { data: rows.map(toEvent) };
   }
 
-  async equity(userId: string, id: string, limit: number, offset = 0): Promise<BotEquityResponse> {
+  async equity(
+    userId: string,
+    id: string,
+    limit: number,
+    offset = 0,
+    days?: number,
+  ): Promise<BotEquityResponse> {
     await this.requireBot(userId, id);
+    const since = days ? new Date(Date.now() - days * 86_400_000) : null;
+
+    if (days && days > 2) {
+      const bucket =
+        days <= 45
+          ? sql`date_trunc('hour', ${botEquitySnapshots.capturedAt})`
+          : sql`date_trunc('day', ${botEquitySnapshots.capturedAt})`;
+      const rows = await this.db
+        .select({
+          capturedAt: sql<Date>`max(${botEquitySnapshots.capturedAt})`,
+          cashUsd: sql<string>`(array_agg(${botEquitySnapshots.cashUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
+          positionsValueUsd: sql<string>`(array_agg(${botEquitySnapshots.positionsValueUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
+          equityUsd: sql<string>`(array_agg(${botEquitySnapshots.equityUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
+          realizedPnlUsd: sql<string>`(array_agg(${botEquitySnapshots.realizedPnlUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
+          unrealizedPnlUsd: sql<string>`(array_agg(${botEquitySnapshots.unrealizedPnlUsd} order by ${botEquitySnapshots.capturedAt} desc))[1]::text`,
+        })
+        .from(botEquitySnapshots)
+        .where(
+          and(
+            eq(botEquitySnapshots.botId, id),
+            since ? gte(botEquitySnapshots.capturedAt, since) : undefined,
+          ),
+        )
+        .groupBy(bucket)
+        .orderBy(bucket);
+
+      return {
+        data: rows.map((row) => ({
+          capturedAt: row.capturedAt.toISOString(),
+          cashUsd: row.cashUsd,
+          positionsValueUsd: row.positionsValueUsd,
+          equityUsd: row.equityUsd,
+          realizedPnlUsd: row.realizedPnlUsd,
+          unrealizedPnlUsd: row.unrealizedPnlUsd,
+        })),
+      };
+    }
+
     const rows = await this.db
       .select()
       .from(botEquitySnapshots)
-      .where(eq(botEquitySnapshots.botId, id))
-      .orderBy(desc(botEquitySnapshots.capturedAt))
+      .where(
+        and(
+          eq(botEquitySnapshots.botId, id),
+          since ? gte(botEquitySnapshots.capturedAt, since) : undefined,
+        ),
+      )
+      .orderBy(asc(botEquitySnapshots.capturedAt))
       .limit(limit)
       .offset(offset);
-    return { data: rows.reverse().map(toEquityPoint) };
+    return { data: rows.map(toEquityPoint) };
   }
 
   async signals(userId: string, id: string): Promise<BotSignalsResponse> {
@@ -898,6 +979,7 @@ export class TradingBotsService {
       id: bot.id,
       name: bot.name,
       description: bot.description,
+      icon: bot.icon,
       status: bot.status as BotSummary['status'],
       strategy: {
         key: bot.strategyKey as BotSummary['strategy']['key'],

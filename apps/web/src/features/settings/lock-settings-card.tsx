@@ -2,9 +2,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { useAppLock } from '@/lib/app-lock';
+import { useConfirm } from '@/lib/confirm';
 
 export function LockSettingsCard() {
   const { hasPin, openSetup, removePin, lock } = useAppLock();
+  const confirm = useConfirm();
 
   return (
     <Card>
@@ -31,11 +33,15 @@ export function LockSettingsCard() {
             <Button
               variant="ghost"
               className="text-red-700"
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    'Удалить код блокировки? Приложение больше не будет блокироваться этим кодом.',
-                  )
+                  await confirm({
+                    title: 'Удалить код блокировки?',
+                    description:
+                      'Приложение больше не будет блокироваться этим кодом. Пароль и 2FA продолжат защищать вход.',
+                    confirmLabel: 'Удалить код',
+                    variant: 'danger',
+                  })
                 ) {
                   removePin();
                 }

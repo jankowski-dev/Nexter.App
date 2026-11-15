@@ -15,6 +15,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { useCallback, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
@@ -119,6 +120,7 @@ function PortfolioStatCard({
 }
 
 export function PortfolioPage() {
+  const navigate = useNavigate();
   const [tab, setTab] = useState<PortfolioTab>(tabFromHash);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [buyTarget, setBuyTarget] = useState<{
@@ -139,6 +141,14 @@ export function PortfolioPage() {
   const refetchPositions = useCallback(() => {
     void positions.refetch();
   }, [positions.refetch]);
+
+  function openTradeGroup(group: TradeGroupSummary): void {
+    if (group.status === 'closed') {
+      void navigate({ to: '/trades/$tradeId', params: { tradeId: group.id } });
+      return;
+    }
+    setSellGroup(group);
+  }
   const watchlistLogos = useWatchlistLogos();
   const tokenSummaries = useQuery({
     queryKey: ['portfolio-token-summaries'],
@@ -435,7 +445,9 @@ export function PortfolioPage() {
         </>
       ) : null}
 
-      {tab === 'trades' ? <TradesPanel onOpenTrade={setSellGroup} logos={watchlistLogos} /> : null}
+      {tab === 'trades' ? (
+        <TradesPanel onOpenTrade={openTradeGroup} logos={watchlistLogos} />
+      ) : null}
       {tab === 'robots' ? <TestingPage mode="bots" /> : null}
       {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
 

@@ -111,19 +111,22 @@ export function LineChart({
               strokeDasharray="4 4"
             />
           ) : null}
-          {coordinates.map((point, index) => (
-            <circle
-              key={points[index]?.label ?? index}
-              cx={point.x}
-              cy={point.y}
-              r={hovered === index ? 5 : 2.5}
-              fill={color}
-            >
-              <title>
-                {points[index]?.label}: {formatUsdCompact(String(points[index]?.value ?? 0))}
-              </title>
-            </circle>
-          ))}
+          {coordinates.map((point, index) => {
+            if (points.length > 140 && hovered !== index) return null;
+            return (
+              <circle
+                key={points[index]?.label ?? index}
+                cx={point.x}
+                cy={point.y}
+                r={hovered === index ? 5 : 2.5}
+                fill={color}
+              >
+                <title>
+                  {points[index]?.label}: {formatUsdCompact(String(points[index]?.value ?? 0))}
+                </title>
+              </circle>
+            );
+          })}
         </svg>
         {hovered !== null && points[hovered] && hoveredPoint ? (
           <div

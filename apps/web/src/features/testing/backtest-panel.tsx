@@ -16,6 +16,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { useConfirm } from '@/lib/confirm';
 import { filterBySearch } from '@/lib/search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -50,6 +51,7 @@ export function BacktestPanel({
   tokensError: unknown;
 }) {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [tokenSearch, setTokenSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -221,7 +223,16 @@ export function BacktestPanel({
   }
 
   async function removeRun(id: string) {
-    if (!window.confirm('Удалить этот прогон из журнала?')) return;
+    if (
+      !(await confirm({
+        title: 'Удалить прогон?',
+        description: 'Прогон исчезнет из журнала бэктестов.',
+        confirmLabel: 'Удалить',
+        variant: 'danger',
+      }))
+    ) {
+      return;
+    }
     setDeletingRunId(id);
     setError(null);
     try {
@@ -239,7 +250,16 @@ export function BacktestPanel({
   }
 
   async function clearRuns() {
-    if (!window.confirm('Удалить все прогоны этой стратегии? Это действие необратимо.')) return;
+    if (
+      !(await confirm({
+        title: 'Удалить все прогоны?',
+        description: `Все прогоны стратегии «${template.name}» будут удалены. Это действие необратимо.`,
+        confirmLabel: 'Удалить все',
+        variant: 'danger',
+      }))
+    ) {
+      return;
+    }
     setClearing(true);
     setError(null);
     try {

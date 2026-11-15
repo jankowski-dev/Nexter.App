@@ -10,6 +10,7 @@ import { CopyIcon, EyeIcon } from '@/components/ui/icons';
 import { createVaultItem, fetchVault, initializeVault, updateVaultItem } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
+import { useConfirm } from '@/lib/confirm';
 import { filterBySearch } from '@/lib/search';
 import {
   createSalt,
@@ -115,6 +116,7 @@ function safeUrl(value: string): string | null {
 
 export function VaultPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [sort, setSort] = useState<'updated' | 'title'>('updated');
   const vault = useQuery({
     queryKey: ['vault'],
@@ -555,8 +557,15 @@ export function VaultPage() {
                       <Button
                         variant="ghost"
                         className="h-8 px-3 text-xs text-red-700"
-                        onClick={() => {
-                          if (window.confirm(`Удалить запись «${row.data.title}»?`)) {
+                        onClick={async () => {
+                          if (
+                            await confirm({
+                              title: 'Удалить запись?',
+                              description: `Запись «${row.data.title}» будет удалена из хранилища.`,
+                              confirmLabel: 'Удалить',
+                              variant: 'danger',
+                            })
+                          ) {
                             archiveMutation.mutate(row.item);
                           }
                         }}

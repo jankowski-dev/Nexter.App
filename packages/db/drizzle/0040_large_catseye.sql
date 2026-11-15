@@ -1,0 +1,1 @@
+ALTER TABLE "trading_bots" ADD COLUMN "icon" text;

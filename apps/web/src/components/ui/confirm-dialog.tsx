@@ -11,6 +11,7 @@ export function ConfirmDialog({
   cancelLabel = 'Отмена',
   confirmAriaLabel,
   cancelAriaLabel,
+  confirmVariant = 'danger',
   busy = false,
   error,
   onConfirm,
@@ -23,6 +24,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   confirmAriaLabel?: string;
   cancelAriaLabel?: string;
+  confirmVariant?: 'danger' | 'primary';
   busy?: boolean;
   error?: string | null;
   onConfirm: () => void;
@@ -80,7 +82,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="dialog-overlay-enter fixed inset-0 z-[65] flex items-center justify-center bg-zinc-950/40 p-4"
+      className="dialog-overlay-enter fixed inset-0 z-[120] flex items-center justify-center bg-zinc-950/40 p-4"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onCancel();
@@ -110,7 +112,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </Button>
           <Button
-            variant="danger"
+            variant={confirmVariant}
             aria-label={confirmAriaLabel ?? confirmLabel}
             onClick={onConfirm}
             disabled={busy}

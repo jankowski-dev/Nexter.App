@@ -7,6 +7,7 @@ import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { messages } from '@/lib/i18n';
 import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { LockProvider, useAppLock } from '@/lib/app-lock';
+import { ConfirmProvider } from '@/lib/confirm';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -525,9 +526,11 @@ function RootLayoutContent() {
 export function RootLayout() {
   return (
     <WalletProvider>
-      <LockProvider>
-        <RootLayoutContent />
-      </LockProvider>
+      <ConfirmProvider>
+        <LockProvider>
+          <RootLayoutContent />
+        </LockProvider>
+      </ConfirmProvider>
     </WalletProvider>
   );
 }

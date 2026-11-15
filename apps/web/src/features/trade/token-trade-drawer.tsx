@@ -25,6 +25,7 @@ import {
   type SwapBuildResponse,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import { useConfirm } from '@/lib/confirm';
 import {
   formatPct,
   formatPrice,
@@ -143,6 +144,7 @@ export function TokenTradeDrawer({
 }) {
   const queryClient = useQueryClient();
   const wallet = useWallet();
+  const confirm = useConfirm();
   const config = useQuery({ queryKey: ['swap-config'], queryFn: fetchSwapConfig });
   const balances = useQuery({
     queryKey: ['swap-balances', wallet.chain, wallet.address],
@@ -542,9 +544,13 @@ export function TokenTradeDrawer({
 
   async function cancelWalletWait(): Promise<void> {
     if (
-      !window.confirm(
-        'Вы отклонили запрос в кошельке? Если транзакция уже подписана, не отменяйте ожидание.',
-      )
+      !(await confirm({
+        title: 'Отменить ожидание кошелька?',
+        description:
+          'Подтвердите, только если запрос отклонён в кошельке. Если транзакция уже подписана, не отменяйте ожидание.',
+        confirmLabel: 'Отменить ожидание',
+        variant: 'danger',
+      }))
     ) {
       return;
     }

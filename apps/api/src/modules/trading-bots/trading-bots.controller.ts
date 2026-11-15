@@ -15,6 +15,7 @@ import type {
   BotCreateRequest,
   BotDetailResponse,
   BotEquityResponse,
+  BotEquityQuery,
   BotEventsResponse,
   BotSignalsResponse,
   BotStrategiesResponse,
@@ -25,6 +26,7 @@ import type {
 } from '@nexter/contracts';
 import {
   botCreateRequestSchema,
+  botEquityQuerySchema,
   botHistoryQuerySchema,
   botListQuerySchema,
   botUpdateRequestSchema,
@@ -159,9 +161,9 @@ export class TradingBotsController {
   equity(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
+    @Query(new ZodValidationPipe(botEquityQuerySchema)) query: BotEquityQuery,
   ): Promise<BotEquityResponse> {
-    return this.bots.equity(auth.user.id, id, query.limit, query.offset);
+    return this.bots.equity(auth.user.id, id, query.limit, query.offset, query.days);
   }
 
   @Get('bots/:id/signals')

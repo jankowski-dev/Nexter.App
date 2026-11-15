@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle, CardValue } from '@/components/ui/card';
 import { toRussianError } from '@/lib/error-messages';
+import { useConfirm } from '@/lib/confirm';
 import {
   commitImport,
   fetchDashboardSummary,
@@ -450,6 +451,7 @@ export function ImportPage() {
   const [preview, setPreview] = useState<ImportResponse | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const importsQuery = useQuery({
     queryKey: ['imports'],
@@ -551,13 +553,17 @@ export function ImportPage() {
     }
   }
 
-  function handleCommit() {
+  async function handleCommit() {
     if (!preview) return;
 
     if (
-      !window.confirm(
-        'Применить импорт к учёту? Будут созданы проводки, лоты и цены. Действие можно откатить, пока нет более поздних операций.',
-      )
+      !(await confirm({
+        title: 'Применить импорт?',
+        description:
+          'Будут созданы проводки, лоты и цены. Действие можно откатить, пока нет более поздних операций.',
+        confirmLabel: 'Применить',
+        variant: 'primary',
+      }))
     ) {
       return;
     }
@@ -565,13 +571,17 @@ export function ImportPage() {
     commitMutation.mutate(preview.import.id);
   }
 
-  function handleRollback() {
+  async function handleRollback() {
     if (!preview) return;
 
     if (
-      !window.confirm(
-        'Откатить этот импорт? Все созданные им проводки, лоты, группы и цены будут удалены. Это возможно только для последнего импорта без более поздних операций.',
-      )
+      !(await confirm({
+        title: 'Откатить импорт?',
+        description:
+          'Все созданные им проводки, лоты, группы и цены будут удалены. Это возможно только для последнего импорта без более поздних операций.',
+        confirmLabel: 'Откатить',
+        variant: 'danger',
+      }))
     ) {
       return;
     }

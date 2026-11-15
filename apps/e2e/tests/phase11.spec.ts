@@ -118,8 +118,10 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await page.getByRole('button', { name: 'Разблокировать' }).click();
   await expect(page.getByText('Test Login')).toBeVisible();
 
-  page.once('dialog', (dialog) => dialog.accept());
   await page.getByRole('button', { name: 'Удалить' }).click();
+  const deleteVaultDialog = page.getByRole('dialog', { name: 'Удалить запись?' });
+  await expect(deleteVaultDialog).toBeVisible();
+  await deleteVaultDialog.getByRole('button', { name: 'Удалить' }).click();
   await expect(page.getByText('Test Login')).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'Показать архивные записи' })).toHaveCount(0);
 

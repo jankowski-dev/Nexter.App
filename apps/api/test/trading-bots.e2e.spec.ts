@@ -116,6 +116,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .send({
         name: 'Momentum paper bot',
         description: 'E2E paper bot',
+        icon: 'data:image/png;base64,iVBORw0KGgo=',
         strategyKey: 'momentum_breakout',
         tokenAssetIds: [asset.id],
         budgetUsd: '1000',
@@ -129,6 +130,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .expect(201);
     const botId = created.body.bot.id as string;
     expect(created.body.bot.status).toBe('draft');
+    expect(created.body.bot.icon).toBe('data:image/png;base64,iVBORw0KGgo=');
     expect(created.body.bot.stats.cashUsd).toBe('1000.00000000');
 
     await agent
@@ -369,6 +371,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .send({
         name: 'Momentum bot edited',
         description: 'Full edit payload',
+        icon: null,
         strategyKey: 'mean_reversion',
         strategyParams: {
           lookback: 30,
@@ -387,6 +390,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       })
       .expect(200);
     expect(fullUpdate.body.bot.name).toBe('Momentum bot edited');
+    expect(fullUpdate.body.bot.icon).toBeNull();
     expect(fullUpdate.body.bot.maxPositions).toBe(4);
     const updatedSignals = await agent
       .get(`/api/v1/trading-bots/bots/${botId}/signals`)
@@ -400,6 +404,130 @@ describe.runIf(canRun)('Trading bots e2e', () => {
 
     const list = await agent.get('/api/v1/trading-bots/bots').expect(200);
     expect(list.body.data).toHaveLength(0);
+  }, 60_000);
+
+  it('removes a token with an open position and keeps managing the exit', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const assets = assetsResponse.body.assets as Array<{
+      id: string;
+      symbol: string;
+      chainCode: string;
+      isCashEquivalent: boolean;
+    }>;
+    const candidates = assets.filter((item) => !item.isCashEquivalent).slice(0, 2);
+    if (candidates.length < 2) throw new Error('Need two non-cash assets for the bot test');
+    const [removedAsset, keptAsset] = candidates;
+
+    for (const asset of candidates) {
+      await agent
+        .post('/api/v1/watchlist')
+        .set('x-csrf-token', owner.csrf)
+        .send({ assetId: asset.id })
+        .expect(201);
+    }
+
+    const created = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'Orphan position bot',
+        description: 'Token removal with an open position',
+        strategyKey: 'momentum_breakout',
+        tokenAssetIds: [removedAsset.id, keptAsset.id],
+        budgetUsd: '1000',
+        maxPositions: 5,
+        positionSizePct: 20,
+        feeBps: 25,
+        slippageBps: 10,
+        maxDailyLossPct: 10,
+        cooldownMinutes: 0,
+      })
+      .expect(201);
+    const botId = created.body.bot.id as string;
+
+    const now = new Date();
+    for (const asset of candidates) {
+      await db.insert(botQuoteSamples).values(
+        Array.from({ length: 40 }, (_, index) => ({
+          assetId: asset.id,
+          priceUsd: (1 + index * 0.02).toFixed(8),
+          change24hPct: '5.0000',
+          capturedAt: new Date(now.getTime() - (40 - index) * 60_000),
+        })),
+      );
+      await db.insert(marketQuotes).values({
+        assetId: asset.id,
+        priceUsd: '1.78000000',
+        change24hPct: '5.0000',
+        change7dPct: null,
+        change30dPct: null,
+        change1yPct: null,
+        marketCapUsd: null,
+        source: 'test',
+        liquidityUsd: '1000000.00',
+        fetchedAt: now,
+        changedAt: now,
+      });
+    }
+
+    const runner = app.get(BotRunnerService);
+    await agent
+      .post(`/api/v1/trading-bots/bots/${botId}/start`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    await runner.runOnce();
+
+    const opened = await agent.get(`/api/v1/trading-bots/bots/${botId}`).expect(200);
+    expect(opened.body.positions).toHaveLength(2);
+
+    await agent
+      .post(`/api/v1/trading-bots/bots/${botId}/stop`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+
+    const updated = await agent
+      .patch(`/api/v1/trading-bots/bots/${botId}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ tokenAssetIds: [keptAsset.id] })
+      .expect(200);
+    expect(updated.body.tokens).toHaveLength(1);
+    expect(updated.body.tokens[0].assetId).toBe(keptAsset.id);
+    expect(updated.body.positions).toHaveLength(2);
+
+    const removedEvents = await agent.get(`/api/v1/trading-bots/bots/${botId}/events`).expect(200);
+    expect(removedEvents.body.data.map((event: { type: string }) => event.type)).toContain(
+      'token_removed',
+    );
+
+    await db
+      .update(marketQuotes)
+      .set({
+        priceUsd: '2.50000000',
+        change24hPct: '20.0000',
+        fetchedAt: new Date(),
+        changedAt: new Date(),
+      })
+      .where(eq(marketQuotes.assetId, removedAsset.id));
+
+    await agent
+      .post(`/api/v1/trading-bots/bots/${botId}/start`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(201);
+    await runner.runOnce();
+
+    const afterExit = await agent.get(`/api/v1/trading-bots/bots/${botId}`).expect(200);
+    expect(afterExit.body.positions).toHaveLength(1);
+    expect(afterExit.body.positions[0].asset.id).toBe(keptAsset.id);
+    const trades = await agent.get(`/api/v1/trading-bots/bots/${botId}/trades`).expect(200);
+    expect(
+      trades.body.data.some(
+        (trade: { side: string; asset: { id: string } }) =>
+          trade.side === 'sell' && trade.asset.id === removedAsset.id,
+      ),
+    ).toBe(true);
   }, 60_000);
 
   it('previews historical candles, runs a backtest, lists it and downloads the PDF', async () => {

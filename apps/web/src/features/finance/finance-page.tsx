@@ -20,6 +20,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
+import { useConfirm } from '@/lib/confirm';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
 import type {
@@ -159,6 +160,7 @@ function Kpi({
 
 export function FinancePage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [tab, setTab] = useState<FinanceTab>('overview');
   const [period, setPeriod] = useState<PeriodPreset>('current');
   const [customMonth, setCustomMonth] = useState(currentMonth);
@@ -763,13 +765,16 @@ export function FinancePage() {
                             className={`h-8 px-2 text-xs ${
                               row.archived ? 'text-zinc-600' : 'text-red-700'
                             }`}
-                            onClick={() => {
+                            onClick={async () => {
                               const archived = !row.archived;
                               if (
                                 archived &&
-                                !window.confirm(
-                                  'Отменить операцию? Она исчезнет из статистики, но останется в архиве.',
-                                )
+                                !(await confirm({
+                                  title: 'Отменить операцию?',
+                                  description: 'Она исчезнет из статистики, но останется в архиве.',
+                                  confirmLabel: 'Отменить операцию',
+                                  variant: 'danger',
+                                }))
                               ) {
                                 return;
                               }
@@ -836,8 +841,19 @@ export function FinancePage() {
                   <Button
                     variant="ghost"
                     className="h-8 px-3 text-xs"
-                    onClick={() => {
-                      if (window.confirm(`Архивировать счёт «${account.name}»?`)) {
+                    onClick={async () => {
+                      if (account.archivedAt) {
+                        archiveAccount.mutate(account);
+                        return;
+                      }
+                      if (
+                        await confirm({
+                          title: 'Архивировать счёт?',
+                          description: `Счёт «${account.name}» перейдёт в архив. История сохранится.`,
+                          confirmLabel: 'В архив',
+                          variant: 'danger',
+                        })
+                      ) {
                         archiveAccount.mutate(account);
                       }
                     }}
@@ -1007,8 +1023,16 @@ export function FinancePage() {
                     <Button
                       variant="ghost"
                       className="h-8 px-3 text-xs text-red-700"
-                      onClick={() => {
-                        if (window.confirm('Откатить этот импорт?')) {
+                      onClick={async () => {
+                        if (
+                          await confirm({
+                            title: 'Откатить импорт?',
+                            description:
+                              'Все созданные импортом операции, лоты, группы и цены будут удалены.',
+                            confirmLabel: 'Откатить',
+                            variant: 'danger',
+                          })
+                        ) {
                           rollbackImport.mutate(row.id);
                         }
                       }}

@@ -183,14 +183,28 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       .innerJoin(assets, eq(botTokens.assetId, assets.id))
       .where(and(eq(botTokens.botId, bot.id), eq(botTokens.enabled, true)));
 
-    if (tokenRows.length === 0) return;
-
-    const quoteMap = await this.quotes.getQuotes(tokenRows.map((row) => row.asset.id));
     const positionRows = await this.db
-      .select()
+      .select({ position: botPositions, asset: assets })
       .from(botPositions)
+      .innerJoin(assets, eq(botPositions.assetId, assets.id))
       .where(eq(botPositions.botId, bot.id));
-    const positionByAsset = new Map(positionRows.map((row) => [row.assetId, row]));
+
+    if (tokenRows.length === 0 && positionRows.length === 0) return;
+
+    const tokenByAsset = new Map(tokenRows.map((row) => [row.asset.id, row.asset] as const));
+    const assetByAsset = new Map<string, (typeof tokenRows)[number]['asset']>(
+      tokenRows.map((row) => [row.asset.id, row.asset] as const),
+    );
+    for (const row of positionRows) {
+      if (!assetByAsset.has(row.position.assetId)) {
+        assetByAsset.set(row.position.assetId, row.asset);
+      }
+    }
+    const assetsToProcess = [...assetByAsset.values()];
+    const quoteMap = await this.quotes.getQuotes(assetsToProcess.map((asset) => asset.id));
+    const positionByAsset = new Map(
+      positionRows.map((row) => [row.position.assetId, row.position] as const),
+    );
     const now = new Date();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
@@ -227,8 +241,9 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       signalStateRows.map((row) => [row.assetId, row.strategyState] as const),
     );
 
-    for (const row of tokenRows) {
-      const strategyState = stateByAsset.get(row.asset.id) ?? {};
+    for (const asset of assetsToProcess) {
+      const isActiveToken = tokenByAsset.has(asset.id);
+      const strategyState = stateByAsset.get(asset.id) ?? {};
       let nextState = strategyState;
       const record = (
         quote: MarketQuoteValue | null,
@@ -236,10 +251,10 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         reason: string,
         hasPosition: boolean,
       ): Promise<void> =>
-        this.recordSignal(bot.id, row.asset.id, quote, action, reason, hasPosition, nextState);
+        this.recordSignal(bot.id, asset.id, quote, action, reason, hasPosition, nextState);
 
-      const quote = quoteMap.get(row.asset.id);
-      const existingPosition = positionByAsset.get(row.asset.id) ?? null;
+      const quote = quoteMap.get(asset.id);
+      const existingPosition = positionByAsset.get(asset.id) ?? null;
       if (!quote) {
         await record(null, 'hold', 'Нет котировки от источника данных', Boolean(existingPosition));
         continue;
@@ -258,15 +273,13 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         continue;
       }
 
-      await this.sampleQuote(row.asset.id, quote, now);
-      const history = await this.loadHistory(row.asset.id);
-      const position = positionByAsset.get(row.asset.id) ?? null;
+      await this.sampleQuote(asset.id, quote, now);
+      const history = await this.loadHistory(asset.id);
+      const position = positionByAsset.get(asset.id) ?? null;
       const buyCount = countBuysSinceLastSell(
-        tradeRows.filter((trade) => trade.assetId === row.asset.id),
+        tradeRows.filter((trade) => trade.assetId === asset.id),
       );
-      const lastBuy = tradeRows.find(
-        (trade) => trade.assetId === row.asset.id && trade.side === 'buy',
-      );
+      const lastBuy = tradeRows.find((trade) => trade.assetId === asset.id && trade.side === 'buy');
       const inCooldown =
         lastBuy && now.getTime() - lastBuy.executedAt.getTime() < bot.cooldownMinutes * 60_000;
 
@@ -297,7 +310,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
               error instanceof Error ? error.message : 'unknown error'
             }`,
           ),
-          row.asset.id,
+          asset.id,
         );
         await record(
           quote,
@@ -309,6 +322,15 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       }
 
       if (decision.action === 'buy') {
+        if (!isActiveToken) {
+          await record(
+            quote,
+            'hold',
+            'Токен удалён из робота: новые позиции не открываются, открытая удерживается до сигнала на продажу',
+            Boolean(position),
+          );
+          continue;
+        }
         if (dailyLossBlocked || inCooldown) {
           await record(
             quote,
@@ -378,7 +400,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           } else {
             await tx.insert(botPositions).values({
               botId: bot.id,
-              assetId: row.asset.id,
+              assetId: asset.id,
               amount: amountString(amount),
               costBasisUsd: usdString(nextCost),
               avgCostUsd: usdString(nextCost.div(amount)),
@@ -390,7 +412,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
           await tx.insert(botTrades).values({
             botId: bot.id,
-            assetId: row.asset.id,
+            assetId: asset.id,
             side: 'buy',
             amount: amountString(amount),
             priceUsd: fillPrice.toFixed(18),
@@ -406,8 +428,8 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           await tx.insert(botEvents).values({
             botId: bot.id,
             type: 'buy',
-            message: `${row.asset.symbol}: ${decision.reason}`,
-            payload: { assetId: row.asset.id, amount: amountString(amount), usd: usdString(usd) },
+            message: `${asset.symbol}: ${decision.reason}`,
+            payload: { assetId: asset.id, amount: amountString(amount), usd: usdString(usd) },
           });
 
           await tx
@@ -441,7 +463,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           await tx.delete(botPositions).where(eq(botPositions.id, position.id));
           await tx.insert(botTrades).values({
             botId: bot.id,
-            assetId: row.asset.id,
+            assetId: asset.id,
             side: 'sell',
             amount: position.amount,
             priceUsd: fillPrice.toFixed(18),
@@ -456,9 +478,9 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           await tx.insert(botEvents).values({
             botId: bot.id,
             type: 'sell',
-            message: `${row.asset.symbol}: ${decision.reason}`,
+            message: `${asset.symbol}: ${decision.reason}`,
             payload: {
-              assetId: row.asset.id,
+              assetId: asset.id,
               amount: position.amount,
               realizedPnlUsd: usdString(realized),
             },
