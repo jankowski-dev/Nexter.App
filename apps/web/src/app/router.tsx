@@ -21,6 +21,7 @@ import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { SecuritySettingsPage } from '@/features/settings/security-settings-page';
 import { SettingsPage } from '@/features/settings/settings-page';
+import { SystemStatusPage } from '@/features/settings/system-status-page';
 import { ApiError, apiFetch } from '@/lib/api';
 import { authMeResponseSchema } from '@nexter/contracts';
 import {
@@ -243,6 +244,12 @@ const auditSettingsRoute = createRoute({
   component: AuditSettingsPage,
 });
 
+const systemSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/system',
+  component: SystemStatusPage,
+});
+
 const routeTree = rootRoute.addChildren([
   authLayoutRoute.addChildren([
     loginRoute,
@@ -274,6 +281,7 @@ const routeTree = rootRoute.addChildren([
     securitySettingsRoute,
     accountsSettingsRoute,
     auditSettingsRoute,
+    systemSettingsRoute,
   ]),
 ]);
 

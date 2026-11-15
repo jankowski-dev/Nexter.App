@@ -15,6 +15,7 @@ export * from './reconciliation';
 export * from './reports';
 export * from './settings';
 export * from './swap';
+export * from './system';
 export * from './tasks';
 export * from './trading-bots';
 export * from './vault';
