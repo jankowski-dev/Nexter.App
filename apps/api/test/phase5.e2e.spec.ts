@@ -60,6 +60,24 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     csrf: string,
     body: Record<string, unknown>,
   ) {
+    if (body.type === 'buy' && typeof body.assetId === 'string') {
+      const watchlist = await agent
+        .post('/api/v1/watchlist')
+        .set('x-csrf-token', csrf)
+        .send({ assetId: body.assetId });
+      if (watchlist.status !== 201 && watchlist.status !== 409) {
+        throw new Error(`Failed to prepare watchlist for buy: ${watchlist.status}`);
+      }
+    }
+    if (body.type === 'sell' && !body.tradeGroupId && typeof body.assetId === 'string') {
+      const groups = await agent
+        .get(`/api/v1/trade-groups?assetId=${body.assetId}&limit=100`)
+        .expect(200);
+      const group = (
+        groups.body.data as Array<{ id: string; status: string; remainingAmount: string }>
+      ).find((item) => item.status !== 'closed' && Number(item.remainingAmount) > 0);
+      if (group) body = { ...body, tradeGroupId: group.id };
+    }
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
   }
 
@@ -357,14 +375,13 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       .expect(200);
     expect(secondPage.body.transactions).toHaveLength(1);
 
-    const watchlistEmpty = await agent.get('/api/v1/watchlist').expect(200);
-    expect(watchlistEmpty.body.data).toEqual([]);
-
+    const watchlistExisting = await agent.get('/api/v1/watchlist').expect(200);
+    expect(watchlistExisting.body.data).toHaveLength(1);
+    expect(watchlistExisting.body.data[0].asset.id).toBe(based.id);
     const watchlistCreated = await agent
-      .post('/api/v1/watchlist')
+      .patch(`/api/v1/watchlist/${watchlistExisting.body.data[0].id}`)
       .set('x-csrf-token', owner.csrf)
       .send({
-        assetId: based.id,
         thesis: 'Test thesis',
         tags: ['test', 'bsc'],
         twitterUrl: 'https://x.com/based',
@@ -372,7 +389,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
         investors: ['Alpha Capital', 'Beta Ventures'],
         priority: 10,
       })
-      .expect(201);
+      .expect(200);
     expect(watchlistCreated.body).toMatchObject({
       thesis: 'Test thesis',
       tags: ['test', 'bsc'],

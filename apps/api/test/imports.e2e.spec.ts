@@ -737,6 +737,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
         proceedsAssetId: usdt?.id,
         proceedsAmount: '12',
         usdValue: '12',
+        tradeGroupId: openGroup?.id,
       })
       .expect(201);
 
@@ -809,6 +810,16 @@ describe.runIf(canRun)('Notion import e2e', () => {
         symbol: string;
       }>
     ).find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDT');
+    const [openGroup] = await db
+      .select()
+      .from(tradeGroups)
+      .where(
+        and(
+          eq(tradeGroups.userId, owner.userId),
+          eq(tradeGroups.assetId, tokenA?.id ?? ''),
+          eq(tradeGroups.status, 'open'),
+        ),
+      );
 
     await agent
       .post('/api/v1/transactions')
@@ -821,6 +832,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
         proceedsAssetId: usdt?.id,
         proceedsAmount: '12',
         usdValue: '12',
+        tradeGroupId: openGroup?.id,
       })
       .expect(201);
 

@@ -21,6 +21,7 @@ import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
 import { TradeGroupsController } from './trade-groups.controller';
 import { TradeGroupsService } from './trade-groups.service';
+import { TradePolicyService } from './trade-policy.service';
 import { TransactionsController } from './transactions.controller';
 
 @Module({
@@ -50,6 +51,7 @@ import { TransactionsController } from './transactions.controller';
     ReportingService,
     ReportsService,
     TradeGroupsService,
+    TradePolicyService,
   ],
   exports: [
     AccountingBootstrapService,
@@ -57,6 +59,7 @@ import { TransactionsController } from './transactions.controller';
     AssetsService,
     LedgerService,
     PricingService,
+    TradePolicyService,
   ],
 })
 export class AccountingModule {}

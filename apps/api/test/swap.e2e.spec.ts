@@ -497,6 +497,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       })
       .expect(201);
     await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: based?.id })
+      .expect(201);
+    await agent
       .post('/api/v1/transactions')
       .set('x-csrf-token', owner.csrf)
       .send({
@@ -690,6 +695,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
         amount: '1000',
         usdValue: '1000',
       })
+      .expect(201);
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: based?.id })
       .expect(201);
     await agent
       .post('/api/v1/transactions')
@@ -1988,6 +1998,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       },
       {},
     );
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: basedAsset.id })
+      .expect(201);
     const buy = await ledger.createManual(
       owner.userId,
       {
