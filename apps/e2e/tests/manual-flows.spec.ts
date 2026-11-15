@@ -97,7 +97,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
     return dialog;
   }
 
-  async function openOperation(mode: 'Корректировка' | 'Пополнение') {
+  async function openOperation(mode: 'Корректировка' | 'Пополнение' | 'Вывод') {
     await page.goto('/operations');
     await page.getByRole('button', { name: 'Новая операция' }).click();
     const dialog = page.getByRole('dialog');
@@ -142,6 +142,40 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await dialog.getByLabel('Причина').fill('Playwright adjustment');
   await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  // Deposit and withdrawal use the same operation dialog.
+  dialog = await openOperation('Пополнение');
+  await dialog
+    .locator('select')
+    .nth(0)
+    .selectOption(wallet?.id ?? '');
+  await dialog
+    .locator('select')
+    .nth(1)
+    .selectOption(usdt?.id ?? '');
+  await dialog.getByLabel('Количество USDT').fill('50');
+  await dialog.getByLabel('Сколько USD потрачено на токены').fill('50');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  dialog = await openOperation('Вывод');
+  await dialog
+    .locator('select')
+    .nth(0)
+    .selectOption(wallet?.id ?? '');
+  await dialog
+    .locator('select')
+    .nth(1)
+    .selectOption(usdt?.id ?? '');
+  await dialog.getByLabel('Количество USDT').fill('10');
+  await dialog.getByLabel('Сколько USD получено').fill('10');
+  await dialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'Пополнения' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Пополнение' }).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Выводы' }).click();
+  await expect(page.getByRole('row').filter({ hasText: 'Вывод' }).first()).toBeVisible();
 
   // The trade journal opens the sell drawer; the full card still has lots and legs.
   await page.goto('/portfolio');
