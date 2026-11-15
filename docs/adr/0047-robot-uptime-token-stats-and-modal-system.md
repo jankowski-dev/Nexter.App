@@ -39,3 +39,7 @@ The owner requested a robot/portfolio/modal consistency batch:
 - Bot trade-summary SQL was checked against production bot trades (grouped rows returned correctly).
 - Web typecheck, lint, web tests, API tests and build pass.
 - Manually checked the asset drawer layout, order cards, chart and buy layering; token-info modal now contains only header, chart, description and links.
+
+## Production release (2026-11-15)
+
+PR #139 merged as `8f33201`; deployment `21765285-4e1d-4bad-ac17-58a17ec9398e`; bundle `assets/index-DsnCxUo-.js`; `/health` and `/ready` 200. No migration.
