@@ -28,3 +28,5 @@ Status: completed 2026-11-16. PR #158 merged as `2351d771`; deployment `6c4620e6
 - Select checkmark layout fixed for narrow time selects.
 - Viber task reminder template simplified to `⏰ <task title>`.
 - `Портфель → Журнал ИИ`: read-only schema-v1 telemetry report per bot/period, JSON download for external AI analysis. See ADR 0059.
+
+UI-63 release 2026-11-16: PR #160 merged as `e284f234`; deployment `bc12d7c7-42ca-47aa-a277-3061c45cd69f`; bundle `assets/index-DMpw26aK.js`; bot deployment `1e2938d0-9f48-4da1-a6f9-bb050093aaeb` on `c860237b`.
