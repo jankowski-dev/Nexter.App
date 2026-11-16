@@ -95,7 +95,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     await pool.end();
   });
 
-  it('creates a strategy and bot, runs paper trades, reports stats, resets and archives', async () => {
+  it('creates a strategy and bot, runs paper trades, reports stats, resets and deletes', async () => {
     const agent = request.agent(app.getHttpServer());
     const owner = await setupOwner(agent);
 

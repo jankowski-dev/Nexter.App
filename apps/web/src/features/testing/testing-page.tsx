@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { FanIcon } from '@/components/live-refresh-indicator';
 import { TokenIcon } from '@/components/token-icon';
 import {
-  archiveTradingBot,
+  deleteTradingBot,
   closeTradingBotPositions,
   createTradingBot,
   fetchBotStrategies,
@@ -316,7 +316,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
     onError: (err) => notify(toRussianError(err, 'Не удалось закрыть позиции'), true),
   });
   const archiveMutation = useMutation({
-    mutationFn: archiveTradingBot,
+    mutationFn: deleteTradingBot,
     onSuccess: () => {
       setDetailOpen(false);
       setReturnToDetailBotId(null);

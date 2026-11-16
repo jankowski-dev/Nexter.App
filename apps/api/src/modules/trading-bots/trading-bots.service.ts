@@ -762,7 +762,7 @@ export class TradingBotsService {
     return this.getBot(userId, id);
   }
 
-  async archiveBot(userId: string, id: string, meta: BotMeta): Promise<void> {
+  async deleteBot(userId: string, id: string, meta: BotMeta): Promise<void> {
     const bot = await this.requireBot(userId, id);
     const [openPosition] = await this.db
       .select({ id: botPositions.id })
