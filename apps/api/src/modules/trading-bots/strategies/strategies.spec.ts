@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { botStrategyKeySchema } from '@nexter/contracts';
 import {
   crashProtectedGrid,
   dcaDip,
@@ -60,6 +61,10 @@ describe('trading bot strategy registry', () => {
         expect(definition.defaultParams).toHaveProperty(field.key);
       }
     }
+  });
+
+  it('is accepted by the shared contract', () => {
+    expect(botStrategyKeySchema.parse('trailing_stop')).toBe('trailing_stop');
   });
 
   it('rejects invalid parameters', () => {
