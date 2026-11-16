@@ -27,6 +27,11 @@ const SYSTEM_PROMPT = `Ты — ассистент личных заметок. 
 - не добавляй факты, которых нет в тексте;
 - если что-то непонятно, отметь это в разделе "Детали".`;
 
+function effectiveModel(settings: { model: string; reasoning: string }): string {
+  if (settings.reasoning === 'reasoning') return 'deepseek-v4-pro';
+  return settings.model;
+}
+
 function extractJson(content: string): unknown {
   const trimmed = content.trim();
   try {
@@ -54,9 +59,10 @@ export class AiService {
     const startedAt = Date.now();
 
     try {
+      const model = effectiveModel(settings);
       const response = await this.provider.complete({
         apiKey,
-        model: settings.model,
+        model,
         temperature: 0,
         maxTokens: 16,
         messages: [{ role: 'user', content: 'Ответь одним словом: ok' }],
@@ -64,7 +70,7 @@ export class AiService {
       return {
         ok: true,
         latencyMs: Date.now() - startedAt,
-        model: settings.model,
+        model,
         response: response.content.trim().slice(0, 200),
         error: null,
       };
@@ -72,7 +78,7 @@ export class AiService {
       return {
         ok: false,
         latencyMs: Date.now() - startedAt,
-        model: settings.model,
+        model: effectiveModel(settings),
         response: null,
         error: error instanceof Error ? error.message : 'Не удалось проверить подключение',
       };
@@ -84,9 +90,10 @@ export class AiService {
     const startedAt = Date.now();
 
     try {
+      const model = effectiveModel(settings);
       const response = await this.provider.complete({
         apiKey,
-        model: settings.model,
+        model,
         temperature: settings.temperature,
         maxTokens: settings.maxTokens,
         jsonMode: true,
@@ -113,7 +120,7 @@ export class AiService {
         entityType: 'note',
         entityId: null,
         after: {
-          model: settings.model,
+          model,
           reasoning: settings.reasoning,
           latencyMs: Date.now() - startedAt,
           promptTokens: response.promptTokens,
@@ -129,7 +136,7 @@ export class AiService {
         entityType: 'note',
         entityId: null,
         after: {
-          model: settings.model,
+          model: effectiveModel(settings),
           latencyMs: Date.now() - startedAt,
           code: error instanceof Error ? error.message.slice(0, 300) : 'unknown',
         },
