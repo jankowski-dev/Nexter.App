@@ -119,6 +119,19 @@ export const taskImageCreateRequestSchema = z.object({
 
 export const tasksResponseSchema = z.object({ data: z.array(taskSchema) });
 
+export const botUpcomingTaskSchema = z.object({
+  id: z.uuid(),
+  title: z.string(),
+  dueAt: z.iso.datetime(),
+  priority: z.number().int(),
+  tags: z.array(z.string()),
+});
+export const botUpcomingTasksResponseSchema = z.object({
+  data: z.array(botUpcomingTaskSchema),
+});
+export type BotUpcomingTask = z.infer<typeof botUpcomingTaskSchema>;
+export type BotUpcomingTasksResponse = z.infer<typeof botUpcomingTasksResponseSchema>;
+
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
 export type TaskRecurrence = z.infer<typeof taskRecurrenceSchema>;
 export type TaskImage = z.infer<typeof taskImageSchema>;

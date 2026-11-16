@@ -5,6 +5,7 @@ import {
   assets,
   taskImages,
   tasks,
+  users,
   type Database,
   type DbExecutor,
   type TaskRecord,
@@ -547,6 +548,58 @@ export class TasksService {
       },
       { strict: true },
     );
+  }
+
+  async upcomingForBot(withinMinutes: number): Promise<{
+    data: Array<{
+      id: string;
+      title: string;
+      dueAt: string;
+      priority: number;
+      tags: string[];
+    }>;
+  }> {
+    const [owner] = await this.db.select({ id: users.id }).from(users).limit(1);
+    if (!owner) return { data: [] };
+
+    const now = new Date();
+    const until = new Date(now.getTime() + withinMinutes * 60_000);
+    const rows = await this.db
+      .select({
+        id: tasks.id,
+        title: tasks.title,
+        dueAt: tasks.dueAt,
+        priority: tasks.priority,
+        tags: tasks.tags,
+      })
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.userId, owner.id),
+          eq(tasks.status, 'open'),
+          isNull(tasks.archivedAt),
+          isNotNull(tasks.dueAt),
+          gte(tasks.dueAt, now),
+          lte(tasks.dueAt, until),
+        ),
+      )
+      .orderBy(tasks.dueAt);
+
+    return {
+      data: rows.flatMap((row) =>
+        row.dueAt
+          ? [
+              {
+                id: row.id,
+                title: row.title,
+                dueAt: row.dueAt.toISOString(),
+                priority: row.priority,
+                tags: row.tags,
+              },
+            ]
+          : [],
+      ),
+    };
   }
 
   private async requireAsset(assetId: string | null | undefined): Promise<void> {

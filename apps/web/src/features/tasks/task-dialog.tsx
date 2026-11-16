@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { TimeField } from '@/components/ui/time-field';
 import { addTaskImage, createTask, removeTaskImage, updateTask } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
@@ -553,7 +554,7 @@ export function TaskDialog({
                   </Select>
                 </label>
                 <div className="sm:col-span-2">
-                  <div className="grid grid-cols-[1fr_120px] gap-2">
+                  <div className="grid grid-cols-[1fr_auto] gap-3">
                     <label className="block text-sm text-zinc-600">
                       Срок
                       <Input
@@ -563,16 +564,15 @@ export function TaskDialog({
                         onChange={(event) => setDue(event.target.value)}
                       />
                     </label>
-                    <label className="block text-sm text-zinc-600">
+                    <div className="block text-sm text-zinc-600">
                       Время
-                      <Input
-                        className="mt-1"
-                        type="time"
+                      <TimeField
                         value={dueTimeValue}
-                        onChange={(event) => setDueTimeValue(event.target.value)}
+                        onChange={setDueTimeValue}
                         disabled={!due}
+                        ariaLabel="Время задачи"
                       />
-                    </label>
+                    </div>
                   </div>
                   <p className="mt-1 text-[11px] text-zinc-500">
                     Время необязательно. Без него задача считается задачей на день (12:00).

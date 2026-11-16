@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Textarea } from '@/components/ui/textarea';
@@ -47,8 +46,16 @@ import { StrategyIcon } from './strategy-icon';
 import { StrategyParamInputs } from './strategy-param-inputs';
 import { formToParams, paramsToForm } from './strategy-params';
 
-export type TestingMode = 'stand' | 'bots' | 'strategies';
+export type TestingMode = 'bots' | 'strategies';
 type Sort = 'pnl' | 'equity' | 'profitFactor';
+
+type TestConfig = {
+  strategyKey: string;
+  assetId?: string;
+  params?: Record<string, string>;
+  useStopLoss?: boolean;
+  useTakeProfit?: boolean;
+};
 
 type BotFormState = {
   name: string;
@@ -150,13 +157,11 @@ function BotStats({ bot }: { bot: BotSummary }) {
   );
 }
 
-export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
+export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [sort, setSort] = useState<Sort>('pnl');
-  const [standStrategyKey, setStandStrategyKey] = useState(
-    () => new URLSearchParams(window.location.search).get('strategy') ?? '',
-  );
+  const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
@@ -188,7 +193,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     queryKey: ['watchlist-groups'],
     queryFn: fetchWatchlistGroups,
     staleTime: 60_000,
-    enabled: botDialogOpen || mode === 'stand',
+    enabled: botDialogOpen || Boolean(testConfig),
   });
   const defaultGroup =
     watchlistGroups.data?.groups.find((group) => group.isDefault) ??
@@ -197,7 +202,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
   const watchlist = useQuery({
     queryKey: ['trading-bot-tokens', defaultGroup?.id ?? null],
     queryFn: () => fetchWatchlist(false, undefined, defaultGroup?.id, 100),
-    enabled: Boolean(defaultGroup?.id) && (botDialogOpen || mode === 'stand'),
+    enabled: Boolean(defaultGroup?.id) && (botDialogOpen || Boolean(testConfig)),
   });
 
   const templates = strategies.data?.data ?? [];
@@ -239,14 +244,9 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     }));
   }, [botDialogOpen, templates, botForm.strategyKey]);
 
-  useEffect(() => {
-    if (templates.length === 0) return;
-    if (templates.some((template) => template.key === standStrategyKey)) return;
-    setStandStrategyKey(templates[0].key);
-  }, [templates, standStrategyKey]);
-
-  const standTemplate =
-    templates.find((template) => template.key === standStrategyKey) ?? templates[0];
+  const testTemplate = testConfig
+    ? (templates.find((template) => template.key === testConfig.strategyKey) ?? null)
+    : null;
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['trading-bots'] });
@@ -343,6 +343,21 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
     setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);
+  }
+
+  function openBotTest() {
+    setTestConfig({
+      strategyKey: botForm.strategyKey,
+      assetId: botForm.tokenAssetIds[0],
+      params: { ...botForm.strategyParams },
+      useStopLoss: true,
+      useTakeProfit: true,
+    });
+  }
+
+  function openStrategyTest(strategyKey: string) {
+    setStrategyDetail(null);
+    setTestConfig({ strategyKey });
   }
 
   async function openEditBot(bot: BotSummary): Promise<boolean> {
@@ -516,13 +531,6 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
 
   return (
     <div className="space-y-6">
-      {mode === 'stand' ? (
-        <PageHeader
-          title="Тестирование"
-          subtitle="Тестовый стенд для прогона стратегий по историческим данным. Реальные деньги не используются."
-        />
-      ) : null}
-
       {actionError ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           {actionError}
@@ -729,7 +737,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
                         className="h-8 px-3 text-xs"
                         onClick={(event) => {
                           event.stopPropagation();
-                          window.location.href = `/testing?strategy=${template.key}`;
+                          openStrategyTest(template.key);
                         }}
                       >
                         Тестировать
@@ -743,72 +751,6 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
         </>
       ) : null}
 
-      {mode === 'stand' ? (
-        strategies.isPending ? (
-          <LoadingRows rows={5} />
-        ) : strategies.isError ? (
-          <ErrorState
-            message={toRussianError(strategies.error, 'Не удалось загрузить стратегии')}
-            onRetry={() => void strategies.refetch()}
-          />
-        ) : standTemplate ? (
-          <div className="space-y-4">
-            <Card>
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <CardTitle>Тестовый стенд</CardTitle>
-                  <CardDescription>
-                    Выберите стратегию карточкой — параметры и гайд подстроятся автоматически.
-                  </CardDescription>
-                </div>
-                <Button variant="secondary" onClick={() => setStrategyDetail(standTemplate)}>
-                  Подробное описание
-                </Button>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                {templates.map((template) => {
-                  const selected = template.key === standTemplate.key;
-                  return (
-                    <button
-                      key={template.key}
-                      type="button"
-                      onClick={() => setStandStrategyKey(template.key)}
-                      className={`cursor-pointer rounded-xl border p-3 text-left transition-colors ${
-                        selected
-                          ? 'border-emerald-300 bg-emerald-50/70'
-                          : 'border-zinc-200 bg-white hover:border-emerald-200'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <StrategyIcon icon={template.icon} className="h-8 w-8" />
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-zinc-900">
-                            {template.name}
-                          </div>
-                          <div className="text-[11px] text-zinc-500">
-                            {template.kind === 'system' ? 'Системная' : 'Кастомная'}
-                          </div>
-                        </div>
-                      </div>
-                      <p className="mt-2 line-clamp-2 text-xs leading-4 text-zinc-500">
-                        {template.description}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </Card>
-            <BacktestPanel
-              key={standTemplate.key}
-              template={standTemplate}
-              tokenEntries={tokenEntries}
-              tokensPending={watchlist.isPending}
-              tokensError={watchlist.error}
-            />
-          </div>
-        ) : null
-      ) : null}
-
       <Drawer
         open={botDialogOpen}
         onClose={closeBotDialog}
@@ -817,6 +759,9 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
         size="lg"
         footer={
           <>
+            <Button variant="secondary" onClick={openBotTest} disabled={!selectedTemplate}>
+              Тестировать
+            </Button>
             <Button variant="ghost" onClick={closeBotDialog}>
               Отмена
             </Button>
@@ -1127,20 +1072,7 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
               Готово
             </Button>
             {strategyDetail ? (
-              <Button
-                onClick={() => {
-                  const key = strategyDetail.key;
-                  setStrategyDetail(null);
-                  if (mode === 'stand') {
-                    setStandStrategyKey(key);
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  } else {
-                    window.location.href = `/testing?strategy=${key}`;
-                  }
-                }}
-              >
-                Тестировать
-              </Button>
+              <Button onClick={() => openStrategyTest(strategyDetail.key)}>Тестировать</Button>
             ) : null}
           </>
         }
@@ -1199,6 +1131,29 @@ export function TestingPage({ mode = 'stand' }: { mode?: TestingMode }) {
               отдельно для каждого робота и для прогона на тестовом стенде.
             </p>
           </div>
+        ) : null}
+      </Drawer>
+
+      <Drawer
+        open={Boolean(testConfig && testTemplate)}
+        onClose={() => setTestConfig(null)}
+        title={testTemplate ? `Тестирование · ${testTemplate.name}` : 'Тестирование'}
+        description="Параметры и токен взяты из формы робота. Изменения в этом окне не меняют робота."
+        size="xl"
+        placement="beside"
+      >
+        {testTemplate && testConfig ? (
+          <BacktestPanel
+            key={`${testConfig.strategyKey}:${testConfig.assetId ?? 'none'}`}
+            template={testTemplate}
+            tokenEntries={tokenEntries}
+            tokensPending={watchlist.isPending}
+            tokensError={watchlist.error}
+            initialAssetId={testConfig.assetId}
+            initialParams={testConfig.params}
+            initialUseStopLoss={testConfig.useStopLoss}
+            initialUseTakeProfit={testConfig.useTakeProfit}
+          />
         ) : null}
       </Drawer>
 

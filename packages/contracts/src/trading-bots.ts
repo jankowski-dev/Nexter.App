@@ -7,6 +7,7 @@ export const botStrategyKeys = [
   'grid_range',
   'trend_pullback',
   'dca_dip',
+  'trailing_stop',
   'crash_protected_grid',
 ] as const;
 

@@ -87,6 +87,12 @@ export function SettingsPage() {
             <CardDescription>Пароль, 2FA, recovery codes, сессии.</CardDescription>
           </Card>
         </Link>
+        <Link to="/settings/interface" className="block">
+          <Card className="h-full transition-colors hover:border-emerald-300">
+            <CardTitle>Интерфейс и поведение</CardTitle>
+            <CardDescription>Тема, автоблокировка и сеть кошелька.</CardDescription>
+          </Card>
+        </Link>
         <Link to="/settings/accounts" className="block">
           <Card className="h-full transition-colors hover:border-emerald-300">
             <CardTitle>Счета</CardTitle>

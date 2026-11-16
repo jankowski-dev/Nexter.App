@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { botStrategyKeySchema } from '@nexter/contracts';
 import {
   crashProtectedGrid,
   dcaDip,
@@ -7,6 +8,7 @@ import {
   momentumBreakout,
   strategyDefinitions,
   strategyTemplates,
+  trailingStop,
   trendPullback,
 } from './index';
 import type { StrategyContext, StrategySample } from './types';
@@ -36,14 +38,15 @@ function risingHistory(): StrategySample[] {
 }
 
 describe('trading bot strategy registry', () => {
-  it('exposes five templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(6);
+  it('exposes seven templates with valid default params', () => {
+    expect(strategyDefinitions).toHaveLength(7);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
       'grid_range',
       'trend_pullback',
       'dca_dip',
+      'trailing_stop',
       'crash_protected_grid',
     ]);
 
@@ -58,6 +61,10 @@ describe('trading bot strategy registry', () => {
         expect(definition.defaultParams).toHaveProperty(field.key);
       }
     }
+  });
+
+  it('is accepted by the shared contract', () => {
+    expect(botStrategyKeySchema.parse('trailing_stop')).toBe('trailing_stop');
   });
 
   it('rejects invalid parameters', () => {
@@ -313,5 +320,77 @@ describe('crash_protected_grid', () => {
     );
     expect(resumed).toMatchObject({ action: 'buy', reason: 'возобновление сетки после обвала' });
     expect(resumed.nextState).toMatchObject({ highWaterMark: '0.7', mode: 'normal', adds: 1 });
+  });
+});
+
+describe('trailing_stop', () => {
+  const params = trailingStop.defaultParams;
+
+  it('buys a breakout above the prior range and resets the peak when flat', () => {
+    const prices = Array.from({ length: 25 }, () => 100);
+    const breakout = trailingStop.evaluate(
+      context({ params, priceUsd: '102.00000000', history: history([...prices, 102]) }),
+    );
+    expect(breakout).toMatchObject({ action: 'buy', reason: 'пробой диапазона' });
+    expect(breakout.nextState).toMatchObject({ peak: '102' });
+
+    const flat = trailingStop.evaluate(
+      context({ params, priceUsd: '99.00000000', history: history([...prices, 99]) }),
+    );
+    expect(flat).toMatchObject({ action: 'hold', reason: 'нет пробоя' });
+    expect(flat.nextState).toMatchObject({ peak: '99' });
+  });
+
+  it('holds before trailing activation and then sells on the trailing stop', () => {
+    const position = { amount: '10', avgCostUsd: '100.00000000', costBasisUsd: '1000.00000000' };
+
+    const beforeActivation = trailingStop.evaluate(
+      context({
+        params,
+        priceUsd: '101.00000000',
+        history: history([100, 101]),
+        position,
+        state: { peak: '101' },
+      }),
+    );
+    expect(beforeActivation).toMatchObject({
+      action: 'hold',
+      reason: 'ожидание активации трейлинга',
+    });
+
+    const afterActivation = trailingStop.evaluate(
+      context({
+        params,
+        priceUsd: '108.50000000',
+        history: history([100, 110, 108.5]),
+        position,
+        state: { peak: '110' },
+      }),
+    );
+    expect(afterActivation).toMatchObject({ action: 'hold', reason: 'трейлинг активен' });
+
+    const trailExit = trailingStop.evaluate(
+      context({
+        params,
+        priceUsd: '108.20000000',
+        history: history([100, 110, 108.2]),
+        position,
+        state: { peak: '110' },
+      }),
+    );
+    expect(trailExit).toMatchObject({ action: 'sell', reason: 'трейлинг-стоп' });
+  });
+
+  it('sells on the hard stop before activation', () => {
+    const hardStop = trailingStop.evaluate(
+      context({
+        params,
+        priceUsd: '94.90000000',
+        history: history([100, 94.9]),
+        position: { amount: '10', avgCostUsd: '100.00000000', costBasisUsd: '1000.00000000' },
+        state: { peak: '100' },
+      }),
+    );
+    expect(hardStop).toMatchObject({ action: 'sell', reason: 'жёсткий стоп' });
   });
 });

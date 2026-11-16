@@ -199,3 +199,13 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 ## Trade intent metadata
 
 - **UI-61/W5A** — manual and on-chain audit entries now share `intentId`, `channel`, `kind` and `tradeSource`; no schema or execution change. See ADR 0054.
+
+## Owner remarks UI-62
+
+- **Testing** — the standalone `/testing` page is removed. Bot create/edit opens a wider backtest drawer beside the bot drawer with the current strategy, token, params and protective-exit flags prefilled. Strategy cards use the same drawer.
+- **Strategies** — add `trailing_stop` (`Трейлинг-стоп`): breakout entry, hard stop before activation, then a peak-based trailing exit.
+- **Tasks** — due time is entered with hour/minute selects and `09:00`/`12:00`/`18:00` presets instead of the native time control.
+- **Portfolio** — `Средний курс` shows the percent difference between the current market price and the break-even rate.
+- **Settings** — new `Интерфейс и поведение` page groups theme, wallet chain and the idle auto-lock timeout (default 5 minutes).
+- **Header** — the chain toggle tooltip and settings copy now state that it selects the wallet/execution network and does not filter the portfolio.
+- **Backtests** — insufficient or unavailable historical data has dedicated `BACKTEST_*` messages.

@@ -8,6 +8,7 @@ import { messages } from '@/lib/i18n';
 import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { LockProvider, useAppLock } from '@/lib/app-lock';
 import { ConfirmProvider } from '@/lib/confirm';
+import { readTheme, subscribeUiPreference, writeTheme } from '@/lib/ui-preferences';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
@@ -18,7 +19,6 @@ const cryptoNavigation = [
   { to: '/operations', label: messages.nav.operations, icon: 'operations' },
   { to: '/watchlist', label: messages.nav.watchlist, icon: 'watchlist' },
   { to: '/statistics', label: messages.nav.reports, icon: 'statistics' },
-  { to: '/testing', label: messages.nav.testing, icon: 'testing' },
 ] as const;
 
 const topNavigation = [
@@ -216,14 +216,10 @@ function RootLayoutContent() {
     (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
   );
   const [cryptoOpen, setCryptoOpen] = useState(true);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    if (document.documentElement.dataset.theme === 'dark') return 'dark';
-    try {
-      return localStorage.getItem('nexter-theme') === 'dark' ? 'dark' : 'light';
-    } catch {
-      return 'light';
-    }
-  });
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => readTheme());
+  useEffect(() => {
+    return subscribeUiPreference('nexter-theme', () => setTheme(readTheme()));
+  }, []);
   const wallet = useWallet();
   const unreadNotifications = useQuery({
     queryKey: ['notifications-unread-count'],
@@ -239,11 +235,6 @@ function RootLayoutContent() {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try {
-      localStorage.setItem('nexter-theme', theme);
-    } catch {
-      // Storage may be unavailable; the current session still uses the theme.
-    }
     document
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', theme === 'dark' ? '#202329' : '#f6f7f9');
@@ -382,7 +373,10 @@ function RootLayoutContent() {
                   type="button"
                   aria-label="Светлая тема"
                   aria-pressed={theme === 'light'}
-                  onClick={() => setTheme('light')}
+                  onClick={() => {
+                    writeTheme('light');
+                    setTheme('light');
+                  }}
                   className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
                     theme === 'light'
                       ? 'bg-white text-zinc-900 shadow-sm'
@@ -395,7 +389,10 @@ function RootLayoutContent() {
                   type="button"
                   aria-label="Тёмная тема"
                   aria-pressed={theme === 'dark'}
-                  onClick={() => setTheme('dark')}
+                  onClick={() => {
+                    writeTheme('dark');
+                    setTheme('dark');
+                  }}
                   className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
                     theme === 'dark'
                       ? 'bg-zinc-800 text-white shadow-sm'
