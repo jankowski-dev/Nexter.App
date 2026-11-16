@@ -32,6 +32,7 @@ export function AiSettingsPage() {
   const [test, setTest] = useState<AiTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -41,6 +42,7 @@ export function AiSettingsPage() {
     setTemperature(String(settings.data.temperature));
     setMaxTokens(String(settings.data.maxTokens));
     setFallbackToRaw(settings.data.fallbackToRaw);
+    setDirty(false);
   }, [settings.data]);
 
   const save = useMutation({
@@ -58,7 +60,10 @@ export function AiSettingsPage() {
       queryClient.setQueryData(['ai-settings'], data);
       setApiKey('');
       setError(null);
-      setNotice('Настройки ИИ сохранены.');
+      setDirty(false);
+      setNotice(
+        data.enabled ? 'Настройки ИИ сохранены.' : 'Настройки сохранены, но модуль выключен.',
+      );
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось сохранить настройки ИИ')),
   });
@@ -77,10 +82,18 @@ export function AiSettingsPage() {
     onSuccess: (data) => {
       queryClient.setQueryData(['ai-settings'], data);
       setTest(null);
+      setDirty(false);
       setNotice('API-ключ удалён.');
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось удалить ключ')),
   });
+
+  function touch() {
+    setDirty(true);
+    setNotice(null);
+    setTest(null);
+    setError(null);
+  }
 
   if (settings.isPending) {
     return (
@@ -124,9 +137,14 @@ export function AiSettingsPage() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>Подключение</CardTitle>
-          <Badge tone={settings.data.hasApiKey ? 'success' : 'neutral'}>
-            {settings.data.hasApiKey ? 'Ключ сохранён' : 'Ключ не задан'}
-          </Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={settings.data.enabled ? 'success' : 'neutral'}>
+              {settings.data.enabled ? 'Модуль включён' : 'Модуль выключен'}
+            </Badge>
+            <Badge tone={settings.data.hasApiKey ? 'success' : 'neutral'}>
+              {settings.data.hasApiKey ? 'Ключ сохранён' : 'Ключ не задан'}
+            </Badge>
+          </div>
         </div>
         <CardDescription>
           Провайдер DeepSeek. Ключ шифруется на сервере и никогда не возвращается в интерфейс.
@@ -138,7 +156,10 @@ export function AiSettingsPage() {
               className="mt-1"
               type="password"
               value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
+              onChange={(event) => {
+                setApiKey(event.target.value);
+                touch();
+              }}
               placeholder={
                 settings.data.hasApiKey ? 'Ключ сохранён — введите новый для замены' : 'sk-...'
               }
@@ -149,7 +170,10 @@ export function AiSettingsPage() {
             <input
               type="checkbox"
               checked={enabled}
-              onChange={(event) => setEnabled(event.target.checked)}
+              onChange={(event) => {
+                setEnabled(event.target.checked);
+                touch();
+              }}
               className="h-4 w-4 rounded border-zinc-300 bg-white"
             />
             Включить ИИ-модуль
@@ -159,7 +183,10 @@ export function AiSettingsPage() {
             <Select
               className="mt-1"
               value={model}
-              onChange={(event) => setModel(event.target.value)}
+              onChange={(event) => {
+                setModel(event.target.value);
+                touch();
+              }}
               aria-label="Модель DeepSeek"
             >
               {models.map((item) => (
@@ -174,7 +201,10 @@ export function AiSettingsPage() {
             <Select
               className="mt-1"
               value={reasoning}
-              onChange={(event) => setReasoning(event.target.value as 'fast' | 'reasoning')}
+              onChange={(event) => {
+                setReasoning(event.target.value as 'fast' | 'reasoning');
+                touch();
+              }}
               aria-label="Режим мышления"
             >
               <option value="fast">Быстрый</option>
@@ -193,7 +223,10 @@ export function AiSettingsPage() {
               max={2}
               step={0.05}
               value={temperature}
-              onChange={(event) => setTemperature(event.target.value)}
+              onChange={(event) => {
+                setTemperature(event.target.value);
+                touch();
+              }}
             />
           </label>
           <label className="block text-sm text-zinc-600">
@@ -205,7 +238,10 @@ export function AiSettingsPage() {
               max={8192}
               step={128}
               value={maxTokens}
-              onChange={(event) => setMaxTokens(event.target.value)}
+              onChange={(event) => {
+                setMaxTokens(event.target.value);
+                touch();
+              }}
             />
           </label>
         </div>
@@ -214,7 +250,10 @@ export function AiSettingsPage() {
           <input
             type="checkbox"
             checked={fallbackToRaw}
-            onChange={(event) => setFallbackToRaw(event.target.checked)}
+            onChange={(event) => {
+              setFallbackToRaw(event.target.checked);
+              touch();
+            }}
             className="mt-0.5 h-4 w-4 rounded border-zinc-300 bg-white"
           />
           <span>
@@ -232,7 +271,18 @@ export function AiSettingsPage() {
           <Button
             variant="secondary"
             onClick={() => testMutation.mutate()}
-            disabled={testMutation.isPending || !settings.data.hasApiKey}
+            disabled={
+              testMutation.isPending || !settings.data.hasApiKey || !settings.data.enabled || dirty
+            }
+            title={
+              dirty
+                ? 'Сначала сохраните изменения'
+                : !settings.data.enabled
+                  ? 'Включите модуль и сохраните'
+                  : !settings.data.hasApiKey
+                    ? 'Сначала сохраните API-ключ'
+                    : undefined
+            }
           >
             {testMutation.isPending ? 'Проверяю…' : 'Проверить подключение'}
           </Button>
@@ -247,7 +297,9 @@ export function AiSettingsPage() {
             </Button>
           ) : null}
           <span className="text-xs text-zinc-500">
-            Обновлено {formatDateTime(settings.data.updatedAt)}
+            {dirty
+              ? 'Есть несохранённые изменения'
+              : `Обновлено ${formatDateTime(settings.data.updatedAt)}`}
           </span>
         </div>
 
