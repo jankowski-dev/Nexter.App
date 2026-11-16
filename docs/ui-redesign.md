@@ -222,3 +222,8 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - Settings hub cards use the strategy-card pattern with per-section icons.
 - Bot cooldown applies after any trade, including stop-loss and take-profit exits.
 - Telemetry is opened from `Телеметрия` inside the bot drawer; deleting a bot purges its telemetry source data and keeps only an archived parent row.
+
+## UI-65 AI settings and audio notes
+
+- `Настройки → ИИ`: DeepSeek key (masked), enable toggle, model, reasoning mode, temperature, max tokens, raw fallback and connection test.
+- Viber audio files are transcribed locally and saved as notes with an AI summary/structure; the original audio is attached and playable/downloadable in the notes drawer.

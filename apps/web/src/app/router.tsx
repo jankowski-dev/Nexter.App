@@ -17,6 +17,7 @@ import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
 import { VaultPage } from '@/features/vault/vault-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
+import { AiSettingsPage } from '@/features/settings/ai-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
 import { InterfaceSettingsPage } from '@/features/settings/interface-settings-page';
@@ -233,6 +234,12 @@ const interfaceSettingsRoute = createRoute({
   component: InterfaceSettingsPage,
 });
 
+const aiSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/ai',
+  component: AiSettingsPage,
+});
+
 const accountsSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/accounts',
@@ -286,6 +293,7 @@ const routeTree = rootRoute.addChildren([
     settingsRoute,
     securitySettingsRoute,
     interfaceSettingsRoute,
+    aiSettingsRoute,
     accountsSettingsRoute,
     auditSettingsRoute,
     systemSettingsRoute,

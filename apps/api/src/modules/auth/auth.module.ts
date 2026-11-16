@@ -39,6 +39,6 @@ import { TwoFactorGuard } from './two-factor.guard';
       useClass: CsrfGuard,
     },
   ],
-  exports: [SessionService],
+  exports: [CryptoService, SessionService],
 })
 export class AuthModule {}

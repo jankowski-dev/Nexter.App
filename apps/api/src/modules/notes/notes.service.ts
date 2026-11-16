@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { and, eq, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import {
   assets,
+  noteAudio,
   noteImages,
   notes,
   tradeGroups,
@@ -10,6 +11,7 @@ import {
   type NoteRecord,
 } from '@nexter/db';
 import type {
+  NoteAudio,
   Note,
   NoteCreateRequest,
   NoteImage,
@@ -64,10 +66,42 @@ async function loadImages(
   return byNote;
 }
 
+function toAudio(row: typeof noteAudio.$inferSelect): NoteAudio {
+  return {
+    id: row.id,
+    name: row.name,
+    mimeType: row.mimeType as NoteAudio['mimeType'],
+    dataUrl: row.dataUrl,
+    sizeBytes: row.sizeBytes,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+async function loadAudio(
+  executor: DbExecutor,
+  userId: string,
+  noteIds: string[],
+): Promise<Map<string, NoteAudio[]>> {
+  const byNote = new Map<string, NoteAudio[]>();
+  if (noteIds.length === 0) return byNote;
+  const rows = await executor
+    .select()
+    .from(noteAudio)
+    .where(and(eq(noteAudio.userId, userId), inArray(noteAudio.noteId, noteIds)))
+    .orderBy(noteAudio.createdAt);
+  for (const row of rows) {
+    const list = byNote.get(row.noteId) ?? [];
+    list.push(toAudio(row));
+    byNote.set(row.noteId, list);
+  }
+  return byNote;
+}
+
 function toContract(
   row: NoteRecord,
   images: NoteImage[] = [],
   attachmentCount = images.length,
+  audio: NoteAudio[] = [],
 ): Note {
   return {
     id: row.id,
@@ -75,6 +109,7 @@ function toContract(
     body: row.body,
     tags: row.tags,
     images,
+    audio,
     attachmentCount,
     pinned: row.pinned,
     relatedAssetId: row.relatedAssetId,
@@ -118,26 +153,26 @@ export class NotesService {
 
     const hasMore = rows.length > query.limit;
     const page = hasMore ? rows.slice(0, query.limit) : rows;
-    const countRows =
-      page.length === 0
-        ? []
-        : await this.db
-            .select({
-              noteId: noteImages.noteId,
-              count: sql<number>`count(*)::int`,
-            })
-            .from(noteImages)
-            .where(
-              and(
-                eq(noteImages.userId, userId),
-                inArray(
-                  noteImages.noteId,
-                  page.map((row) => row.id),
-                ),
-              ),
-            )
-            .groupBy(noteImages.noteId);
-    const countByNote = new Map(countRows.map((row) => [row.noteId, Number(row.count)]));
+    const noteIds = page.map((row) => row.id);
+    const [imageCounts, audioCounts] =
+      noteIds.length === 0
+        ? [[], []]
+        : await Promise.all([
+            this.db
+              .select({ noteId: noteImages.noteId, count: sql<number>`count(*)::int` })
+              .from(noteImages)
+              .where(and(eq(noteImages.userId, userId), inArray(noteImages.noteId, noteIds)))
+              .groupBy(noteImages.noteId),
+            this.db
+              .select({ noteId: noteAudio.noteId, count: sql<number>`count(*)::int` })
+              .from(noteAudio)
+              .where(and(eq(noteAudio.userId, userId), inArray(noteAudio.noteId, noteIds)))
+              .groupBy(noteAudio.noteId),
+          ]);
+    const countByNote = new Map<string, number>();
+    for (const row of [...imageCounts, ...audioCounts]) {
+      countByNote.set(row.noteId, (countByNote.get(row.noteId) ?? 0) + Number(row.count));
+    }
 
     return {
       data: page.map((row) => toContract(row, [], countByNote.get(row.id) ?? 0)),
@@ -156,8 +191,17 @@ export class NotesService {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'Note not found' });
     }
 
-    const images = await loadImages(this.db, userId, [id]);
-    return toContract(row, images.get(id) ?? []);
+    const [images, audio] = await Promise.all([
+      loadImages(this.db, userId, [id]),
+      loadAudio(this.db, userId, [id]),
+    ]);
+    const audioRows = audio.get(id) ?? [];
+    return toContract(
+      row,
+      images.get(id) ?? [],
+      (images.get(id) ?? []).length + audioRows.length,
+      audioRows,
+    );
   }
 
   async create(userId: string, input: NoteCreateRequest, meta: NoteMeta): Promise<Note> {
@@ -196,7 +240,70 @@ export class NotesService {
       { strict: true },
     );
 
-    return toContract(created, []);
+    return toContract(created, [], 0, []);
+  }
+
+  async createFromAudio(
+    userId: string,
+    input: {
+      title: string;
+      body: string;
+      tags: string[];
+      audio: { name: string; mimeType: string; dataUrl: string; sizeBytes: number };
+    },
+    meta: NoteMeta,
+  ): Promise<Note> {
+    return this.db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(notes)
+        .values({
+          userId,
+          title: input.title,
+          body: input.body,
+          tags: input.tags,
+          pinned: false,
+          relatedAssetId: null,
+          relatedTradeGroupId: null,
+        })
+        .returning();
+
+      if (!created) throw new Error('Failed to create note');
+
+      const [audio] = await tx
+        .insert(noteAudio)
+        .values({
+          userId,
+          noteId: created.id,
+          name: input.audio.name,
+          mimeType: input.audio.mimeType,
+          dataUrl: input.audio.dataUrl,
+          sizeBytes: input.audio.sizeBytes,
+        })
+        .returning();
+
+      if (!audio) throw new Error('Failed to attach audio');
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'note.created',
+          entityType: 'note',
+          entityId: created.id,
+          after: {
+            title: created.title,
+            tags: created.tags,
+            pinned: created.pinned,
+            source: 'viber_audio',
+            audio: { name: audio.name, mimeType: audio.mimeType, sizeBytes: audio.sizeBytes },
+          },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+
+      return toContract(created, [], 1, [toAudio(audio)]);
+    });
   }
 
   async update(

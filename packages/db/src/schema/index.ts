@@ -103,6 +103,23 @@ export const settings = pgTable('settings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const aiSettings = pgTable('ai_settings', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  enabled: boolean('enabled').notNull().default(false),
+  provider: text('provider').notNull().default('deepseek'),
+  model: text('model').notNull().default('deepseek-flash'),
+  reasoning: text('reasoning').notNull().default('fast'),
+  temperature: numeric('temperature', { precision: 3, scale: 2 }).notNull().default('0.30'),
+  maxTokens: integer('max_tokens').notNull().default(2000),
+  fallbackToRaw: boolean('fallback_to_raw').notNull().default(true),
+  apiKeyEncrypted: text('api_key_encrypted'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AiSettingsRecord = typeof aiSettings.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Session = typeof sessions.$inferSelect;
@@ -890,6 +907,53 @@ export const noteImages = pgTable(
   (table) => [index('note_images_user_note_idx').on(table.userId, table.noteId, table.createdAt)],
 );
 
+export const noteAudio = pgTable(
+  'note_audio',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    noteId: uuid('note_id')
+      .notNull()
+      .references(() => notes.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    mimeType: text('mime_type').notNull(),
+    dataUrl: text('data_url').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('note_audio_user_note_idx').on(table.userId, table.noteId, table.createdAt)],
+);
+
+export const audioNotes = pgTable(
+  'audio_notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    viberMessageId: text('viber_message_id').notNull(),
+    status: text('status').notNull().default('received'),
+    audioMime: text('audio_mime').notNull(),
+    audioName: text('audio_name').notNull().default(''),
+    audioSize: integer('audio_size').notNull().default(0),
+    durationSeconds: integer('duration_seconds'),
+    title: text('title'),
+    transcript: text('transcript'),
+    summary: text('summary'),
+    noteId: uuid('note_id').references(() => notes.id, { onDelete: 'set null' }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('audio_notes_viber_message_unique').on(table.viberMessageId),
+    index('audio_notes_user_time_idx').on(table.userId, table.createdAt),
+    index('audio_notes_status_time_idx').on(table.status, table.createdAt),
+  ],
+);
+
 export const habits = pgTable(
   'habits',
   {
@@ -1398,6 +1462,8 @@ export type VaultItem = typeof vaultItems.$inferSelect;
 export type TaskRecord = typeof tasks.$inferSelect;
 export type NoteRecord = typeof notes.$inferSelect;
 export type NoteImageRecord = typeof noteImages.$inferSelect;
+export type NoteAudioRecord = typeof noteAudio.$inferSelect;
+export type AudioNoteRecord = typeof audioNotes.$inferSelect;
 export type HabitRecord = typeof habits.$inferSelect;
 export type FinanceImport = typeof financeImports.$inferSelect;
 export type FinanceAccount = typeof financeAccounts.$inferSelect;

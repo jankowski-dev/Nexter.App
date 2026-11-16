@@ -4,6 +4,8 @@ import {
   assetsResponseSchema,
   auditLogResponseSchema,
   authMeResponseSchema,
+  aiSettingsSchema,
+  aiTestResponseSchema,
   botBacktestClearResponseSchema,
   botBacktestPreviewResponseSchema,
   botBacktestRunSchema,
@@ -91,6 +93,8 @@ import {
   type BotBacktestsResponse,
   type BotCreateRequest,
   type BotDetailResponse,
+  type AiSettings,
+  type AiTestResponse,
   type BotEquityResponse,
   type BotEventsResponse,
   type BotSignalsResponse,
@@ -99,6 +103,7 @@ import {
   type BotTradeSummariesResponse,
   type BotTradesResponse,
   type BotUpdateRequest,
+  type UpdateAiSettingsRequest,
   type TradingBotsResponse,
   type DashboardActivePositions,
   type DashboardAllocation,
@@ -621,6 +626,18 @@ export async function createWatchlistFromContract(
   body: WatchlistFromContractRequest,
 ): Promise<WatchlistEntry> {
   return apiPost('/api/v1/watchlist/from-contract', body, watchlistEntrySchema);
+}
+
+export async function fetchAiSettings(): Promise<AiSettings> {
+  return apiFetch('/api/v1/settings/ai', {}, aiSettingsSchema);
+}
+
+export async function updateAiSettings(body: UpdateAiSettingsRequest): Promise<AiSettings> {
+  return apiPatch('/api/v1/settings/ai', body, aiSettingsSchema);
+}
+
+export async function testAiConnection(): Promise<AiTestResponse> {
+  return apiPost('/api/v1/settings/ai/test', {}, aiTestResponseSchema);
 }
 
 export async function fetchSettings(): Promise<Settings> {
