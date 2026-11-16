@@ -244,3 +244,5 @@ Each phase is a separate PR. Migrations require an ADR, verified backup and roll
 - Voice quality/noise; VAD, language setting, duration limit.
 - Cost creep; token caps, usage audit, owner-only access.
 - Privacy expectations; local transcription and explicit AI opt-in.
+
+Release 2026-11-16: PR #166 merge `1e4152f6`; API deployment `fe58585d-2195-40a9-a09b-da0e7fc6aeff`; bundle `assets/index-M-nqXed5.js`; migration `0041`; bot deployment `2bc07121-3023-40d2-8e0b-bed63493fb4b` on `9c154e1`.
