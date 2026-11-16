@@ -180,6 +180,9 @@ export function AiSettingsPage() {
               <option value="fast">Быстрый</option>
               <option value="reasoning">Рассуждение</option>
             </Select>
+            <span className="mt-1 block text-xs text-zinc-500">
+              Режим рассуждения использует DeepSeek V4 Pro.
+            </span>
           </label>
           <label className="block text-sm text-zinc-600">
             Temperature
