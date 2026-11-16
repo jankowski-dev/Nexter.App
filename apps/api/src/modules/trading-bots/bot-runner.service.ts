@@ -279,9 +279,9 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       const buyCount = countBuysSinceLastSell(
         tradeRows.filter((trade) => trade.assetId === asset.id),
       );
-      const lastBuy = tradeRows.find((trade) => trade.assetId === asset.id && trade.side === 'buy');
+      const lastTrade = tradeRows.find((trade) => trade.assetId === asset.id);
       const inCooldown =
-        lastBuy && now.getTime() - lastBuy.executedAt.getTime() < bot.cooldownMinutes * 60_000;
+        lastTrade && now.getTime() - lastTrade.executedAt.getTime() < bot.cooldownMinutes * 60_000;
 
       let decision;
       try {
@@ -337,7 +337,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
             'hold',
             dailyLossBlocked
               ? 'Сигнал на покупку, но дневной лимит убытка исчерпан'
-              : 'Сигнал на покупку, но действует пауза после покупки',
+              : 'Сигнал на покупку, но действует пауза после сделки',
             Boolean(position),
           );
           continue;

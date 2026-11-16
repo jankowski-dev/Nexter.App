@@ -776,30 +776,29 @@ export class TradingBotsService {
       });
     }
     await this.db.transaction(async (tx) => {
-      const now = new Date();
-      await tx
-        .update(tradingBots)
-        .set({ status: 'stopped', stoppedAt: now, archivedAt: now, updatedAt: now })
-        .where(eq(tradingBots.id, id));
-      await tx.insert(botEvents).values({
-        botId: id,
-        type: 'archived',
-        message: 'Бот удалён (архив)',
-        payload: {},
-      });
       await this.audit.log(
         {
           userId,
-          action: 'bot.archived',
+          action: 'bot.deleted',
           entityType: 'trading_bot',
           entityId: id,
-          before: { status: bot.status, archivedAt: bot.archivedAt?.toISOString() ?? null },
-          after: { status: 'stopped', archivedAt: new Date().toISOString() },
+          before: {
+            name: bot.name,
+            status: bot.status,
+            strategyKey: bot.strategyKey,
+            strategyParams: bot.strategyParams,
+            budgetUsd: bot.budgetUsd,
+            startedAt: bot.startedAt?.toISOString() ?? null,
+            archivedAt: bot.archivedAt?.toISOString() ?? null,
+          },
+          after: { deleted: true },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
         { executor: tx, strict: true },
       );
+      // Child rows (tokens, positions, trades, equity, events, signals) cascade.
+      await tx.delete(tradingBots).where(eq(tradingBots.id, id));
     });
   }
 

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NavIcon, type NavIconName } from '@/components/nav-icon';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { downloadExport, fetchSettings, updateSettings } from '@/lib/api';
@@ -9,6 +10,55 @@ import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
+
+const settingsTones = {
+  emerald: {
+    card: 'hover:border-emerald-300',
+    icon: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  },
+  sky: { card: 'hover:border-sky-300', icon: 'border-sky-200 bg-sky-50 text-sky-700' },
+  amber: { card: 'hover:border-amber-300', icon: 'border-amber-200 bg-amber-50 text-amber-700' },
+  violet: {
+    card: 'hover:border-violet-300',
+    icon: 'border-violet-200 bg-violet-50 text-violet-700',
+  },
+  rose: { card: 'hover:border-rose-300', icon: 'border-rose-200 bg-rose-50 text-rose-700' },
+  zinc: { card: 'hover:border-zinc-300', icon: 'border-zinc-200 bg-zinc-100 text-zinc-600' },
+} as const;
+
+function SettingsNavCard({
+  to,
+  title,
+  description,
+  icon,
+  tone,
+}: {
+  to: string;
+  title: string;
+  description: string;
+  icon: NavIconName;
+  tone: keyof typeof settingsTones;
+}) {
+  const styles = settingsTones[tone];
+  return (
+    <Link to={to} className="block">
+      <Card className={`h-full p-4 transition-colors ${styles.card}`}>
+        <div className="flex items-start gap-3">
+          <span
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${styles.icon}`}
+          >
+            <NavIcon name={icon} className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <div className="font-medium text-zinc-900">{title}</div>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+          </div>
+        </div>
+        <div className="mt-3 flex justify-end text-[11px] text-zinc-400">Открыть →</div>
+      </Card>
+    </Link>
+  );
+}
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -81,48 +131,55 @@ export function SettingsPage() {
       ) : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Link to="/settings/security" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Безопасность</CardTitle>
-            <CardDescription>Пароль, 2FA, recovery codes, сессии.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/settings/interface" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Интерфейс и поведение</CardTitle>
-            <CardDescription>Тема, автоблокировка и сеть кошелька.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/settings/accounts" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Счета</CardTitle>
-            <CardDescription>Кошельки и системные счета учёта.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/settings/audit" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Аудит</CardTitle>
-            <CardDescription>Журнал действий и изменений.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/settings/system" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Система</CardTitle>
-            <CardDescription>Котировки, задачи, свопы и провайдеры.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/settings/data-quality" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Качество данных</CardTitle>
-            <CardDescription>Расхождения учёта, ордеров и котировок.</CardDescription>
-          </Card>
-        </Link>
-        <Link to="/import" className="block">
-          <Card className="h-full transition-colors hover:border-emerald-300">
-            <CardTitle>Импорт Notion</CardTitle>
-            <CardDescription>Legacy-инструмент до clean cutover.</CardDescription>
-          </Card>
-        </Link>
+        <SettingsNavCard
+          to="/settings/security"
+          title="Безопасность"
+          description="Пароль, 2FA, recovery codes и активные сессии."
+          icon="security"
+          tone="emerald"
+        />
+        <SettingsNavCard
+          to="/settings/interface"
+          title="Интерфейс и поведение"
+          description="Тема, автоблокировка и сеть кошелька."
+          icon="sliders"
+          tone="sky"
+        />
+        <SettingsNavCard
+          to="/settings/accounts"
+          title="Счета"
+          description="Кошельки и системные счета учёта."
+          icon="wallet"
+          tone="amber"
+        />
+        <SettingsNavCard
+          to="/settings/audit"
+          title="Аудит"
+          description="Журнал действий и изменений."
+          icon="audit"
+          tone="violet"
+        />
+        <SettingsNavCard
+          to="/settings/system"
+          title="Система"
+          description="Котировки, задачи, свопы и провайдеры."
+          icon="system"
+          tone="emerald"
+        />
+        <SettingsNavCard
+          to="/settings/data-quality"
+          title="Качество данных"
+          description="Расхождения учёта, ордеров и котировок."
+          icon="quality"
+          tone="rose"
+        />
+        <SettingsNavCard
+          to="/import"
+          title="Импорт Notion"
+          description="Legacy-инструмент до clean cutover."
+          icon="upload"
+          tone="zinc"
+        />
       </div>
 
       <Card>

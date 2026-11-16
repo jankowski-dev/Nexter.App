@@ -82,7 +82,32 @@ test('bot create modal keeps the form open while the backtest modal opens beside
   await botDialog.getByRole('button', { name: 'Отмена' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('tab', { name: 'Журнал ИИ' }).click();
-  await expect(page.getByRole('heading', { name: 'Журнал для ИИ' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Собрать отчёт' })).toBeVisible();
+  const created = await page.request.post('/api/v1/trading-bots/bots', {
+    headers: { 'x-csrf-token': csrf },
+    data: {
+      name: 'Telemetry bot',
+      strategyKey: 'momentum_breakout',
+      tokenAssetIds: [based?.id],
+      budgetUsd: '1000',
+      maxPositions: 5,
+      positionSizePct: 20,
+      feeBps: 25,
+      slippageBps: 10,
+      maxDailyLossPct: 10,
+      cooldownMinutes: 15,
+    },
+  });
+  expect(created.status()).toBe(201);
+
+  await page.reload();
+  await page.getByRole('tab', { name: 'Роботы' }).click();
+  await page.getByRole('button', { name: 'Открыть робота Telemetry bot' }).click();
+  const detailDialog = page.getByRole('dialog').filter({ hasText: 'Telemetry bot' });
+  await expect(detailDialog).toBeVisible();
+  await detailDialog.getByRole('button', { name: 'Телеметрия' }).click();
+  const telemetryDialog = page.getByRole('dialog').filter({ hasText: 'Телеметрия ·' });
+  await expect(telemetryDialog).toBeVisible();
+  await expect(telemetryDialog.getByRole('button', { name: 'Собрать отчёт' })).toBeVisible();
+  await telemetryDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(1);
 });

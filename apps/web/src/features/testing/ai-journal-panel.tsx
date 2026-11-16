@@ -48,20 +48,36 @@ function SummaryTile({ label, value, tone }: { label: string; value: string; ton
   );
 }
 
-export function AiJournalPanel() {
-  const bots = useQuery({ queryKey: ['trading-bots'], queryFn: () => fetchTradingBots(false) });
-  const [botId, setBotId] = useState('');
+export function AiJournalPanel({
+  botId: fixedBotId,
+  botName,
+}: {
+  botId?: string;
+  botName?: string;
+}) {
+  const bots = useQuery({
+    queryKey: ['trading-bots'],
+    queryFn: () => fetchTradingBots(false),
+    enabled: !fixedBotId,
+  });
+  const [botId, setBotId] = useState(fixedBotId ?? '');
   const [days, setDays] = useState('7');
   const [report, setReport] = useState<BotTelemetryResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (fixedBotId) {
+      setBotId(fixedBotId);
+      return;
+    }
     if (botId || !bots.data?.data.length) return;
     setBotId(bots.data.data[0]?.id ?? '');
-  }, [botId, bots.data]);
+  }, [botId, bots.data, fixedBotId]);
 
-  const selectedBot = bots.data?.data.find((bot) => bot.id === botId) ?? null;
+  const selectedBot = fixedBotId
+    ? { id: fixedBotId, name: botName ?? 'Робот' }
+    : (bots.data?.data.find((bot) => bot.id === botId) ?? null);
 
   async function buildReport() {
     if (!botId) return;
@@ -87,8 +103,8 @@ export function AiJournalPanel() {
     downloadJson(`nexter-ai-${safeName(selectedBot.name)}-${from}-${to}.json`, report);
   }
 
-  if (bots.isPending) return <LoadingRows rows={4} />;
-  if (bots.isError) {
+  if (!fixedBotId && bots.isPending) return <LoadingRows rows={4} />;
+  if (!fixedBotId && bots.isError) {
     return (
       <ErrorState
         message={toRussianError(bots.error, 'Не удалось загрузить роботов')}
@@ -97,38 +113,53 @@ export function AiJournalPanel() {
     );
   }
 
-  const botList = bots.data?.data ?? [];
+  const botList = fixedBotId ? [] : (bots.data?.data ?? []);
 
   return (
     <div className="space-y-4">
       <Card>
-        <CardTitle>Журнал для ИИ</CardTitle>
+        <CardTitle>Телеметрия для ИИ</CardTitle>
         <CardDescription>
           Соберите телеметрию робота за период и скачайте JSON. Внутри — конфигурация стратегии,
           сделки с сигналами, события, эквити и движение котировок. Готовый файл можно передать
           ИИ-агенту для анализа параметров.
         </CardDescription>
-        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end">
-          <label className="block text-sm text-zinc-600">
-            Робот
-            <Select
-              className="mt-1"
-              value={botId}
-              onChange={(event) => {
-                setBotId(event.target.value);
-                setReport(null);
-                setError(null);
-              }}
-              aria-label="Робот для телеметрии"
-            >
-              {botList.length === 0 ? <option value="">Нет роботов</option> : null}
-              {botList.map((bot: BotSummary) => (
-                <option key={bot.id} value={bot.id}>
-                  {bot.name} · {bot.strategy.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+        <div
+          className={
+            fixedBotId
+              ? 'mt-4 grid gap-3 md:grid-cols-[180px_auto] md:items-end'
+              : 'mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto] md:items-end'
+          }
+        >
+          {fixedBotId ? (
+            <div className="text-sm text-zinc-600">
+              Робот
+              <div className="mt-1 flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900">
+                {botName ?? 'Робот'}
+              </div>
+            </div>
+          ) : (
+            <label className="block text-sm text-zinc-600">
+              Робот
+              <Select
+                className="mt-1"
+                value={botId}
+                onChange={(event) => {
+                  setBotId(event.target.value);
+                  setReport(null);
+                  setError(null);
+                }}
+                aria-label="Робот для телеметрии"
+              >
+                {botList.length === 0 ? <option value="">Нет роботов</option> : null}
+                {botList.map((bot: BotSummary) => (
+                  <option key={bot.id} value={bot.id}>
+                    {bot.name} · {bot.strategy.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          )}
           <label className="block text-sm text-zinc-600">
             Период
             <Select

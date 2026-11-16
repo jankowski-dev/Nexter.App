@@ -27,6 +27,7 @@ import {
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { BotUptimeText } from './bot-uptime';
+import { AiJournalPanel } from './ai-journal-panel';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
@@ -126,9 +127,11 @@ export function BotDetailDrawer({
     refetchInterval: 15_000,
   });
   const [positionsLimit, setPositionsLimit] = useState(10);
+  const [telemetryOpen, setTelemetryOpen] = useState(false);
 
   useEffect(() => {
     setPositionsLimit(10);
+    if (!open) setTelemetryOpen(false);
   }, [botId, open]);
 
   if (!botId) return null;
@@ -154,543 +157,572 @@ export function BotDetailDrawer({
   const stats = bot.stats;
 
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      title={bot.name}
-      titleIcon={<BotIcon icon={bot.icon} strategyIcon={strategy.icon} className="h-8 w-8" />}
-      description={`${strategy.name} · ${statusLabels[bot.status]}`}
-      size="lg"
-      footer={
-        <div className="flex w-full flex-wrap items-center justify-between gap-2">
-          <Button
-            variant="danger"
-            onClick={() => onArchive(bot.id)}
-            disabled={busy || positions.length > 0}
-            title={positions.length > 0 ? 'Сначала закройте позиции' : undefined}
-          >
-            Удалить
-          </Button>
-          <div className="flex flex-wrap gap-2">
-            {positions.length > 0 ? (
-              <Button variant="secondary" onClick={() => onClosePositions(bot.id)} disabled={busy}>
-                Закрыть позиции
-              </Button>
-            ) : null}
-            <Button variant="secondary" onClick={() => onReset(bot.id)} disabled={busy}>
-              Сбросить
-            </Button>
-            {bot.status === 'running' ? (
-              <Button variant="secondary" onClick={() => onStop(bot.id)} disabled={busy}>
-                Остановить
-              </Button>
-            ) : (
-              <Button onClick={() => onStart(bot.id)} disabled={busy}>
-                Запустить
-              </Button>
-            )}
+    <>
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title={bot.name}
+        titleIcon={<BotIcon icon={bot.icon} strategyIcon={strategy.icon} className="h-8 w-8" />}
+        description={`${strategy.name} · ${statusLabels[bot.status]}`}
+        size="lg"
+        footer={
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <Button
-              variant="secondary"
-              onClick={() => onEdit(bot)}
-              disabled={busy}
-              title={
-                bot.status === 'running' ? 'Остановить робота и изменить настройки' : undefined
-              }
+              variant="danger"
+              onClick={() => onArchive(bot.id)}
+              disabled={busy || positions.length > 0}
+              title={positions.length > 0 ? 'Сначала закройте позиции' : undefined}
             >
-              Изменить
+              Удалить
             </Button>
-            <Button variant="secondary" onClick={onClose}>
-              Готово
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {positions.length > 0 ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => onClosePositions(bot.id)}
+                  disabled={busy}
+                >
+                  Закрыть позиции
+                </Button>
+              ) : null}
+              <Button variant="secondary" onClick={() => onReset(bot.id)} disabled={busy}>
+                Сбросить
+              </Button>
+              {bot.status === 'running' ? (
+                <Button variant="secondary" onClick={() => onStop(bot.id)} disabled={busy}>
+                  Остановить
+                </Button>
+              ) : (
+                <Button onClick={() => onStart(bot.id)} disabled={busy}>
+                  Запустить
+                </Button>
+              )}
+              <Button variant="secondary" onClick={() => setTelemetryOpen(true)}>
+                Телеметрия
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => onEdit(bot)}
+                disabled={busy}
+                title={
+                  bot.status === 'running' ? 'Остановить робота и изменить настройки' : undefined
+                }
+              >
+                Изменить
+              </Button>
+              <Button variant="secondary" onClick={onClose}>
+                Готово
+              </Button>
+            </div>
           </div>
-        </div>
-      }
-    >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-          <div>
-            <div className="text-sm font-medium text-zinc-800">{strategy.name}</div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-              <span className="font-mono">{strategy.key}</span>
-              <Badge tone={strategy.kind === 'system' ? 'info' : 'warning'}>
-                {strategy.kind === 'system' ? 'Системная' : 'Кастомная'}
+        }
+      >
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+            <div>
+              <div className="text-sm font-medium text-zinc-800">{strategy.name}</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+                <span className="font-mono">{strategy.key}</span>
+                <Badge tone={strategy.kind === 'system' ? 'info' : 'warning'}>
+                  {strategy.kind === 'system' ? 'Системная' : 'Кастомная'}
+                </Badge>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-zinc-600">
+              {bot.status === 'running' ? <FanIcon spinning /> : null}
+              <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
+                {statusLabels[bot.status]}
               </Badge>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-zinc-600">
-            {bot.status === 'running' ? <FanIcon spinning /> : null}
-            <Badge tone={bot.status === 'running' ? 'success' : 'neutral'}>
-              {statusLabels[bot.status]}
-            </Badge>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <BotUptimeCard startedAt={bot.startedAt} running={bot.status === 'running'} />
+            <Card className="tone-surface tone-surface-sky">
+              <CardTitle>Капитал</CardTitle>
+              <div className="mt-1 font-mono text-xl font-semibold">
+                {formatUsd(stats.equityUsd)}
+              </div>
+              <CardDescription>
+                Кэш {formatUsd(stats.cashUsd)} · просадка {stats.maxDrawdownPct ?? '—'}%
+              </CardDescription>
+            </Card>
+            <Card className="tone-surface tone-surface-violet">
+              <CardTitle>Общий P&L</CardTitle>
+              <div className={`mt-1 font-mono text-xl font-semibold ${pnlTone(stats.totalPnlUsd)}`}>
+                {formatSignedUsd(stats.totalPnlUsd)}
+              </div>
+              <CardDescription>Бюджет {formatUsd(stats.budgetUsd)}</CardDescription>
+            </Card>
+            <Card className="tone-surface tone-surface-amber">
+              <CardTitle>Профит-фактор</CardTitle>
+              <div className="mt-1 font-mono text-xl font-semibold">
+                {stats.profitFactor ?? '—'}
+              </div>
+              <CardDescription>
+                Win rate {stats.winRate ? `${stats.winRate}%` : '—'}
+              </CardDescription>
+            </Card>
+            <Card className="tone-surface tone-surface-emerald">
+              <CardTitle>Прибыль</CardTitle>
+              <div className="mt-1 font-mono text-xl font-semibold text-emerald-700">
+                {formatUsd(stats.grossProfitUsd)}
+              </div>
+              <CardDescription>Реализованная</CardDescription>
+            </Card>
+            <Card className="tone-surface tone-surface-rose">
+              <CardTitle>Убыток</CardTitle>
+              <div className="mt-1 font-mono text-xl font-semibold text-red-700">
+                {formatUsd(stats.grossLossUsd)}
+              </div>
+              <CardDescription>Реализованный</CardDescription>
+            </Card>
+            <Card className="tone-surface tone-surface-sky">
+              <CardTitle>Сделки</CardTitle>
+              <div className="mt-1 font-mono text-xl font-semibold">{stats.tradesCount}</div>
+              <CardDescription>
+                {stats.wins} / {stats.losses} · открыто {stats.openPositions}
+              </CardDescription>
+            </Card>
           </div>
-        </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <BotUptimeCard startedAt={bot.startedAt} running={bot.status === 'running'} />
-          <Card className="tone-surface tone-surface-sky">
-            <CardTitle>Капитал</CardTitle>
-            <div className="mt-1 font-mono text-xl font-semibold">{formatUsd(stats.equityUsd)}</div>
-            <CardDescription>
-              Кэш {formatUsd(stats.cashUsd)} · просадка {stats.maxDrawdownPct ?? '—'}%
-            </CardDescription>
+          <Card>
+            <CardTitle>Статистика по токенам</CardTitle>
+            <CardDescription>Только сделки, которые уже совершил робот.</CardDescription>
+            {tradeSummaries.isError ? (
+              <p className="mt-3 text-sm text-red-700">
+                {toRussianError(tradeSummaries.error, 'Не удалось загрузить статистику по токенам')}
+              </p>
+            ) : !tradeSummaries.data || tradeSummaries.data.data.length === 0 ? (
+              <CardDescription>Сделок пока нет.</CardDescription>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {tradeSummaries.data.data.map((row) => (
+                  <div
+                    key={row.asset.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3"
+                  >
+                    <div className="flex min-w-[150px] items-center gap-2.5">
+                      <TokenIcon
+                        logoUrl={row.asset.logoUrl}
+                        symbol={row.asset.symbol}
+                        className="h-8 w-8 text-[10px]"
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-zinc-900">
+                          {row.asset.symbol}
+                        </div>
+                        <div className="truncate text-[11px] text-zinc-500">
+                          {row.asset.name} · {row.asset.chainCode}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ml-auto grid grid-cols-2 gap-x-6 gap-y-1 text-right text-xs sm:grid-cols-4">
+                      <div>
+                        <div className="text-zinc-500">P&L</div>
+                        <div className={`font-mono ${pnlTone(row.realizedPnlUsd)}`}>
+                          {formatSignedUsd(row.realizedPnlUsd)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">Доход</div>
+                        <div className="font-mono text-emerald-700">
+                          {formatUsd(row.grossProfitUsd)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">Убыток</div>
+                        <div className="font-mono text-red-700">{formatUsd(row.grossLossUsd)}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">Сделок</div>
+                        <div className="font-mono text-zinc-800">{row.tradesCount}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
-          <Card className="tone-surface tone-surface-violet">
-            <CardTitle>Общий P&L</CardTitle>
-            <div className={`mt-1 font-mono text-xl font-semibold ${pnlTone(stats.totalPnlUsd)}`}>
-              {formatSignedUsd(stats.totalPnlUsd)}
-            </div>
-            <CardDescription>Бюджет {formatUsd(stats.budgetUsd)}</CardDescription>
-          </Card>
-          <Card className="tone-surface tone-surface-amber">
-            <CardTitle>Профит-фактор</CardTitle>
-            <div className="mt-1 font-mono text-xl font-semibold">{stats.profitFactor ?? '—'}</div>
-            <CardDescription>Win rate {stats.winRate ? `${stats.winRate}%` : '—'}</CardDescription>
-          </Card>
-          <Card className="tone-surface tone-surface-emerald">
-            <CardTitle>Прибыль</CardTitle>
-            <div className="mt-1 font-mono text-xl font-semibold text-emerald-700">
-              {formatUsd(stats.grossProfitUsd)}
-            </div>
-            <CardDescription>Реализованная</CardDescription>
-          </Card>
-          <Card className="tone-surface tone-surface-rose">
-            <CardTitle>Убыток</CardTitle>
-            <div className="mt-1 font-mono text-xl font-semibold text-red-700">
-              {formatUsd(stats.grossLossUsd)}
-            </div>
-            <CardDescription>Реализованный</CardDescription>
-          </Card>
-          <Card className="tone-surface tone-surface-sky">
-            <CardTitle>Сделки</CardTitle>
-            <div className="mt-1 font-mono text-xl font-semibold">{stats.tradesCount}</div>
-            <CardDescription>
-              {stats.wins} / {stats.losses} · открыто {stats.openPositions}
-            </CardDescription>
-          </Card>
-        </div>
 
-        <Card>
-          <CardTitle>Статистика по токенам</CardTitle>
-          <CardDescription>Только сделки, которые уже совершил робот.</CardDescription>
-          {tradeSummaries.isError ? (
-            <p className="mt-3 text-sm text-red-700">
-              {toRussianError(tradeSummaries.error, 'Не удалось загрузить статистику по токенам')}
-            </p>
-          ) : !tradeSummaries.data || tradeSummaries.data.data.length === 0 ? (
-            <CardDescription>Сделок пока нет.</CardDescription>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {tradeSummaries.data.data.map((row) => (
-                <div
-                  key={row.asset.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 p-3"
+          <BotEquityChart botId={botId} open={open} />
+
+          <Card>
+            <CardTitle>Токены</CardTitle>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {tokens.map((token) => (
+                <span
+                  key={token.assetId}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700"
                 >
-                  <div className="flex min-w-[150px] items-center gap-2.5">
-                    <TokenIcon
-                      logoUrl={row.asset.logoUrl}
-                      symbol={row.asset.symbol}
-                      className="h-8 w-8 text-[10px]"
-                    />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-zinc-900">
-                        {row.asset.symbol}
-                      </div>
-                      <div className="truncate text-[11px] text-zinc-500">
-                        {row.asset.name} · {row.asset.chainCode}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="ml-auto grid grid-cols-2 gap-x-6 gap-y-1 text-right text-xs sm:grid-cols-4">
-                    <div>
-                      <div className="text-zinc-500">P&L</div>
-                      <div className={`font-mono ${pnlTone(row.realizedPnlUsd)}`}>
-                        {formatSignedUsd(row.realizedPnlUsd)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500">Доход</div>
-                      <div className="font-mono text-emerald-700">
-                        {formatUsd(row.grossProfitUsd)}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500">Убыток</div>
-                      <div className="font-mono text-red-700">{formatUsd(row.grossLossUsd)}</div>
-                    </div>
-                    <div>
-                      <div className="text-zinc-500">Сделок</div>
-                      <div className="font-mono text-zinc-800">{row.tradesCount}</div>
-                    </div>
-                  </div>
-                </div>
+                  <TokenIcon
+                    logoUrl={token.logoUrl}
+                    symbol={token.symbol}
+                    className="h-5 w-5 text-[9px]"
+                  />
+                  {token.symbol}
+                  <span className="text-zinc-400">{token.chainCode}</span>
+                </span>
               ))}
             </div>
-          )}
-        </Card>
+          </Card>
 
-        <BotEquityChart botId={botId} open={open} />
-
-        <Card>
-          <CardTitle>Токены</CardTitle>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {tokens.map((token) => (
-              <span
-                key={token.assetId}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700"
-              >
-                <TokenIcon
-                  logoUrl={token.logoUrl}
-                  symbol={token.symbol}
-                  className="h-5 w-5 text-[9px]"
-                />
-                {token.symbol}
-                <span className="text-zinc-400">{token.chainCode}</span>
-              </span>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardTitle>Сигналы стратегии по токенам</CardTitle>
-          <CardDescription>
-            Что стратегия видит по каждому токену на последнем тике. Если сигнала на покупку нет,
-            здесь будет причина.
-          </CardDescription>
-          {signals.isError ? (
-            <p className="mt-2 text-sm text-red-700">
-              {toRussianError(signals.error, 'Не удалось загрузить сигналы')}
-            </p>
-          ) : !signals.data || signals.data.data.length === 0 ? (
+          <Card>
+            <CardTitle>Сигналы стратегии по токенам</CardTitle>
             <CardDescription>
-              Сигналы появятся после первого тика запущенного робота.
+              Что стратегия видит по каждому токену на последнем тике. Если сигнала на покупку нет,
+              здесь будет причина.
             </CardDescription>
-          ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Токен</th>
-                    <th className="py-2 pr-3 text-right font-medium">Цена</th>
-                    <th className="py-2 pr-3 text-right font-medium">24 ч</th>
-                    <th className="py-2 pr-3 font-medium">Сигнал</th>
-                    <th className="py-2 pr-3 font-medium">Причина</th>
-                    <th className="py-2 text-right font-medium">Обновлено</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {signals.data.data.map((signal) => (
-                    <tr
-                      key={signal.assetId}
-                      className="border-b border-zinc-100 last:border-0 align-top"
-                    >
-                      <td className="py-2 pr-3">
-                        <div className="flex items-center gap-2">
-                          <TokenIcon logoUrl={signal.logoUrl} symbol={signal.symbol} />
-                          <div>
-                            <div className="font-medium">
-                              {signal.symbol}
-                              {signal.hasPosition ? (
-                                <Badge tone="success" className="ml-2">
-                                  В позиции
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <div className="text-[11px] text-zinc-500">{signal.chainCode}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatPrice(signal.priceUsd)}
-                      </td>
-                      <td
-                        className={`py-2 pr-3 text-right font-mono ${pnlTone(signal.change24hPct)}`}
-                      >
-                        {formatPct(signal.change24hPct)}
-                      </td>
-                      <td className="py-2 pr-3">
-                        <Badge
-                          tone={
-                            signal.action === 'buy'
-                              ? 'success'
-                              : signal.action === 'sell'
-                                ? 'warning'
-                                : 'neutral'
-                          }
-                        >
-                          {signal.action === 'buy'
-                            ? 'Покупка'
-                            : signal.action === 'sell'
-                              ? 'Продажа'
-                              : 'Ждёт'}
-                        </Badge>
-                      </td>
-                      <td className="py-2 pr-3 text-xs text-zinc-600">{signal.reason}</td>
-                      <td className="py-2 text-right text-xs text-zinc-500">
-                        {signal.updatedAt ? formatDateTime(signal.updatedAt) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <CardTitle>Настройки</CardTitle>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-            <div>
-              <div className="text-zinc-500">Бюджет</div>
-              <div className="font-mono text-zinc-900">{formatUsd(bot.budgetUsd)}</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Макс. позиций</div>
-              <div className="font-mono text-zinc-900">{bot.maxPositions}</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Размер позиции</div>
-              <div className="font-mono text-zinc-900">{bot.positionSizePct}%</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Пауза после покупки</div>
-              <div className="font-mono text-zinc-900">{bot.cooldownMinutes} мин</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Комиссия</div>
-              <div className="font-mono text-zinc-900">{bot.feeBps} bps</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Проскальзывание</div>
-              <div className="font-mono text-zinc-900">{bot.slippageBps} bps</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Дневной лимит убытка</div>
-              <div className="font-mono text-zinc-900">{bot.maxDailyLossPct}%</div>
-            </div>
-            <div>
-              <div className="text-zinc-500">Последний тик</div>
-              <div className="font-mono text-zinc-900">
-                {bot.lastTickAt ? formatDateTime(bot.lastTickAt) : '—'}
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <CardTitle>Параметры стратегии</CardTitle>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
-            {strategy.paramFields.map((field) => {
-              const value = strategyParams[field.key];
-              return (
-                <div key={field.key}>
-                  <div className="text-zinc-500">{field.label}</div>
-                  <div className="font-mono text-zinc-900">
-                    {value === undefined || value === null ? '—' : String(value)}
-                    {field.unit ? ` ${field.unit}` : ''}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card>
-          <CardTitle>Открытые позиции</CardTitle>
-          {positions.length === 0 ? (
-            <CardDescription>Позиций нет.</CardDescription>
-          ) : (
-            <>
+            {signals.isError ? (
+              <p className="mt-2 text-sm text-red-700">
+                {toRussianError(signals.error, 'Не удалось загрузить сигналы')}
+              </p>
+            ) : !signals.data || signals.data.data.length === 0 ? (
+              <CardDescription>
+                Сигналы появятся после первого тика запущенного робота.
+              </CardDescription>
+            ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                       <th className="py-2 pr-3 font-medium">Токен</th>
-                      <th className="py-2 pr-3 text-right font-medium">Количество</th>
-                      <th className="py-2 pr-3 text-right font-medium">Средняя</th>
-                      <th className="py-2 pr-3 text-right font-medium">Сейчас</th>
-                      <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
-                      <th className="py-2 text-right font-medium">P&L</th>
+                      <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                      <th className="py-2 pr-3 text-right font-medium">24 ч</th>
+                      <th className="py-2 pr-3 font-medium">Сигнал</th>
+                      <th className="py-2 pr-3 font-medium">Причина</th>
+                      <th className="py-2 text-right font-medium">Обновлено</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {positions.slice(0, positionsLimit).map((position) => (
+                    {signals.data.data.map((signal) => (
                       <tr
-                        key={position.asset.id}
-                        className="border-b border-zinc-100 last:border-0"
+                        key={signal.assetId}
+                        className="border-b border-zinc-100 last:border-0 align-top"
                       >
                         <td className="py-2 pr-3">
                           <div className="flex items-center gap-2">
-                            <TokenIcon
-                              logoUrl={position.asset.logoUrl}
-                              symbol={position.asset.symbol}
-                            />
-                            <span className="font-medium">{position.asset.symbol}</span>
+                            <TokenIcon logoUrl={signal.logoUrl} symbol={signal.symbol} />
+                            <div>
+                              <div className="font-medium">
+                                {signal.symbol}
+                                {signal.hasPosition ? (
+                                  <Badge tone="success" className="ml-2">
+                                    В позиции
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <div className="text-[11px] text-zinc-500">{signal.chainCode}</div>
+                            </div>
                           </div>
                         </td>
                         <td className="py-2 pr-3 text-right font-mono">
-                          {formatTokenAmount(position.amount, 8)}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-mono">
-                          {formatPrice(position.avgCostUsd)}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-mono">
-                          {formatPrice(position.currentPriceUsd)}
-                        </td>
-                        <td className="py-2 pr-3 text-right font-mono">
-                          {formatUsd(position.valueUsd)}
+                          {formatPrice(signal.priceUsd)}
                         </td>
                         <td
-                          className={`py-2 text-right font-mono ${pnlTone(position.unrealizedPnlUsd)}`}
+                          className={`py-2 pr-3 text-right font-mono ${pnlTone(signal.change24hPct)}`}
                         >
-                          {formatSignedUsd(position.unrealizedPnlUsd)}
+                          {formatPct(signal.change24hPct)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <Badge
+                            tone={
+                              signal.action === 'buy'
+                                ? 'success'
+                                : signal.action === 'sell'
+                                  ? 'warning'
+                                  : 'neutral'
+                            }
+                          >
+                            {signal.action === 'buy'
+                              ? 'Покупка'
+                              : signal.action === 'sell'
+                                ? 'Продажа'
+                                : 'Ждёт'}
+                          </Badge>
+                        </td>
+                        <td className="py-2 pr-3 text-xs text-zinc-600">{signal.reason}</td>
+                        <td className="py-2 text-right text-xs text-zinc-500">
+                          {signal.updatedAt ? formatDateTime(signal.updatedAt) : '—'}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {positions.length > positionsLimit ? (
-                <div className="mt-3 flex justify-center">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setPositionsLimit((current) => current + 10)}
-                  >
-                    Ещё
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          )}
-        </Card>
+            )}
+          </Card>
 
-        <Card>
-          <CardTitle>Сделки</CardTitle>
-          {trades.isError ? (
-            <p className="text-sm text-red-700">
-              {toRussianError(trades.error, 'Не удалось загрузить сделки')}
-            </p>
-          ) : tradeRows.length === 0 ? (
-            <CardDescription>Сделок пока нет.</CardDescription>
-          ) : (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Время</th>
-                    <th className="py-2 pr-3 font-medium">Токен</th>
-                    <th className="py-2 pr-3 font-medium">Сторона</th>
-                    <th className="py-2 pr-3 text-right font-medium">Кол-во</th>
-                    <th className="py-2 pr-3 text-right font-medium">Цена</th>
-                    <th className="py-2 pr-3 text-right font-medium">P&L</th>
-                    <th className="py-2 font-medium">Причина</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tradeRows.map((trade) => (
-                    <tr key={trade.id} className="border-b border-zinc-100 last:border-0">
-                      <td className="py-2 pr-3 text-xs text-zinc-500">
-                        {formatDateTime(trade.executedAt)}
-                      </td>
-                      <td className="py-2 pr-3">{trade.asset.symbol}</td>
-                      <td className="py-2 pr-3">
-                        <Badge tone={trade.side === 'buy' ? 'info' : 'neutral'}>
-                          {trade.side === 'buy' ? 'Покупка' : 'Продажа'}
-                        </Badge>
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatTokenAmount(trade.amount, 8)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono">
-                        {formatPrice(trade.priceUsd)}
-                      </td>
-                      <td
-                        className={`py-2 pr-3 text-right font-mono ${pnlTone(trade.realizedPnlUsd)}`}
-                      >
-                        {trade.realizedPnlUsd !== '0.00000000'
-                          ? formatSignedUsd(trade.realizedPnlUsd)
-                          : '—'}
-                      </td>
-                      <td className="py-2 text-xs text-zinc-500">{trade.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {trades.hasNextPage ? (
-                <div className="mt-3 flex justify-center">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => void trades.fetchNextPage()}
-                    disabled={trades.isFetchingNextPage}
-                  >
-                    {trades.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
-                  </Button>
+          <Card>
+            <CardTitle>Настройки</CardTitle>
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+              <div>
+                <div className="text-zinc-500">Бюджет</div>
+                <div className="font-mono text-zinc-900">{formatUsd(bot.budgetUsd)}</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Макс. позиций</div>
+                <div className="font-mono text-zinc-900">{bot.maxPositions}</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Размер позиции</div>
+                <div className="font-mono text-zinc-900">{bot.positionSizePct}%</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Пауза после сделки</div>
+                <div className="font-mono text-zinc-900">{bot.cooldownMinutes} мин</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Комиссия</div>
+                <div className="font-mono text-zinc-900">{bot.feeBps} bps</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Проскальзывание</div>
+                <div className="font-mono text-zinc-900">{bot.slippageBps} bps</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Дневной лимит убытка</div>
+                <div className="font-mono text-zinc-900">{bot.maxDailyLossPct}%</div>
+              </div>
+              <div>
+                <div className="text-zinc-500">Последний тик</div>
+                <div className="font-mono text-zinc-900">
+                  {bot.lastTickAt ? formatDateTime(bot.lastTickAt) : '—'}
                 </div>
-              ) : null}
+              </div>
             </div>
-          )}
-        </Card>
+          </Card>
 
-        <Card>
-          <CardTitle>Журнал бота</CardTitle>
-          {events.isError ? (
-            <p className="text-sm text-red-700">
-              {toRussianError(events.error, 'Не удалось загрузить журнал')}
-            </p>
-          ) : eventRows.length === 0 ? (
-            <CardDescription>Событий нет.</CardDescription>
-          ) : (
-            <>
+          <Card>
+            <CardTitle>Параметры стратегии</CardTitle>
+            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-4">
+              {strategy.paramFields.map((field) => {
+                const value = strategyParams[field.key];
+                return (
+                  <div key={field.key}>
+                    <div className="text-zinc-500">{field.label}</div>
+                    <div className="font-mono text-zinc-900">
+                      {value === undefined || value === null ? '—' : String(value)}
+                      {field.unit ? ` ${field.unit}` : ''}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+
+          <Card>
+            <CardTitle>Открытые позиции</CardTitle>
+            {positions.length === 0 ? (
+              <CardDescription>Позиций нет.</CardDescription>
+            ) : (
+              <>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-3 font-medium">Токен</th>
+                        <th className="py-2 pr-3 text-right font-medium">Количество</th>
+                        <th className="py-2 pr-3 text-right font-medium">Средняя</th>
+                        <th className="py-2 pr-3 text-right font-medium">Сейчас</th>
+                        <th className="py-2 pr-3 text-right font-medium">Стоимость</th>
+                        <th className="py-2 text-right font-medium">P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.slice(0, positionsLimit).map((position) => (
+                        <tr
+                          key={position.asset.id}
+                          className="border-b border-zinc-100 last:border-0"
+                        >
+                          <td className="py-2 pr-3">
+                            <div className="flex items-center gap-2">
+                              <TokenIcon
+                                logoUrl={position.asset.logoUrl}
+                                symbol={position.asset.symbol}
+                              />
+                              <span className="font-medium">{position.asset.symbol}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {formatTokenAmount(position.amount, 8)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {formatPrice(position.avgCostUsd)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {formatPrice(position.currentPriceUsd)}
+                          </td>
+                          <td className="py-2 pr-3 text-right font-mono">
+                            {formatUsd(position.valueUsd)}
+                          </td>
+                          <td
+                            className={`py-2 text-right font-mono ${pnlTone(position.unrealizedPnlUsd)}`}
+                          >
+                            {formatSignedUsd(position.unrealizedPnlUsd)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {positions.length > positionsLimit ? (
+                  <div className="mt-3 flex justify-center">
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setPositionsLimit((current) => current + 10)}
+                    >
+                      Ещё
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+
+          <Card>
+            <CardTitle>Сделки</CardTitle>
+            {trades.isError ? (
+              <p className="text-sm text-red-700">
+                {toRussianError(trades.error, 'Не удалось загрузить сделки')}
+              </p>
+            ) : tradeRows.length === 0 ? (
+              <CardDescription>Сделок пока нет.</CardDescription>
+            ) : (
               <div className="mt-3 overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
                       <th className="py-2 pr-3 font-medium">Время</th>
-                      <th className="py-2 pr-3 font-medium">Событие</th>
-                      <th className="py-2 font-medium">Сообщение</th>
+                      <th className="py-2 pr-3 font-medium">Токен</th>
+                      <th className="py-2 pr-3 font-medium">Сторона</th>
+                      <th className="py-2 pr-3 text-right font-medium">Кол-во</th>
+                      <th className="py-2 pr-3 text-right font-medium">Цена</th>
+                      <th className="py-2 pr-3 text-right font-medium">P&L</th>
+                      <th className="py-2 font-medium">Причина</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {eventRows.map((event) => (
-                      <tr
-                        key={event.id}
-                        className="border-b border-zinc-100 align-top last:border-0"
-                      >
-                        <td className="whitespace-nowrap py-2 pr-3 text-xs text-zinc-500">
-                          {formatDateTime(event.createdAt)}
+                    {tradeRows.map((trade) => (
+                      <tr key={trade.id} className="border-b border-zinc-100 last:border-0">
+                        <td className="py-2 pr-3 text-xs text-zinc-500">
+                          {formatDateTime(trade.executedAt)}
                         </td>
+                        <td className="py-2 pr-3">{trade.asset.symbol}</td>
                         <td className="py-2 pr-3">
-                          <Badge tone={event.type === 'error' ? 'warning' : 'info'}>
-                            {eventLabels[event.type] ?? event.type}
+                          <Badge tone={trade.side === 'buy' ? 'info' : 'neutral'}>
+                            {trade.side === 'buy' ? 'Покупка' : 'Продажа'}
                           </Badge>
                         </td>
-                        <td className="py-2 text-xs text-zinc-600">{event.message}</td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatTokenAmount(trade.amount, 8)}
+                        </td>
+                        <td className="py-2 pr-3 text-right font-mono">
+                          {formatPrice(trade.priceUsd)}
+                        </td>
+                        <td
+                          className={`py-2 pr-3 text-right font-mono ${pnlTone(trade.realizedPnlUsd)}`}
+                        >
+                          {trade.realizedPnlUsd !== '0.00000000'
+                            ? formatSignedUsd(trade.realizedPnlUsd)
+                            : '—'}
+                        </td>
+                        <td className="py-2 text-xs text-zinc-500">{trade.reason}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                {trades.hasNextPage ? (
+                  <div className="mt-3 flex justify-center">
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => void trades.fetchNextPage()}
+                      disabled={trades.isFetchingNextPage}
+                    >
+                      {trades.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
-              {events.hasNextPage ? (
-                <div className="mt-3 flex justify-center">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => void events.fetchNextPage()}
-                    disabled={events.isFetchingNextPage}
-                  >
-                    {events.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
-                  </Button>
+            )}
+          </Card>
+
+          <Card>
+            <CardTitle>Журнал бота</CardTitle>
+            {events.isError ? (
+              <p className="text-sm text-red-700">
+                {toRussianError(events.error, 'Не удалось загрузить журнал')}
+              </p>
+            ) : eventRows.length === 0 ? (
+              <CardDescription>Событий нет.</CardDescription>
+            ) : (
+              <>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
+                        <th className="py-2 pr-3 font-medium">Время</th>
+                        <th className="py-2 pr-3 font-medium">Событие</th>
+                        <th className="py-2 font-medium">Сообщение</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {eventRows.map((event) => (
+                        <tr
+                          key={event.id}
+                          className="border-b border-zinc-100 align-top last:border-0"
+                        >
+                          <td className="whitespace-nowrap py-2 pr-3 text-xs text-zinc-500">
+                            {formatDateTime(event.createdAt)}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <Badge tone={event.type === 'error' ? 'warning' : 'info'}>
+                              {eventLabels[event.type] ?? event.type}
+                            </Badge>
+                          </td>
+                          <td className="py-2 text-xs text-zinc-600">{event.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : null}
-            </>
-          )}
-        </Card>
-        <CardDescription>
-          Сделки виртуальные. Реальные свопы и подписи не отправляются. Комиссия и проскальзывание
-          симулируются настройками бота.
-        </CardDescription>
-      </div>
-    </Drawer>
+                {events.hasNextPage ? (
+                  <div className="mt-3 flex justify-center">
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => void events.fetchNextPage()}
+                      disabled={events.isFetchingNextPage}
+                    >
+                      {events.isFetchingNextPage ? 'Загружаю…' : 'Ещё'}
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </Card>
+          <CardDescription>
+            Сделки виртуальные. Реальные свопы и подписи не отправляются. Комиссия и проскальзывание
+            симулируются настройками бота.
+          </CardDescription>
+        </div>
+      </Drawer>
+      <Drawer
+        open={telemetryOpen}
+        onClose={() => setTelemetryOpen(false)}
+        title={`Телеметрия · ${bot.name}`}
+        description="Сырые данные робота для анализа ИИ-агентом."
+        size="lg"
+        footer={
+          <Button variant="secondary" onClick={() => setTelemetryOpen(false)}>
+            Готово
+          </Button>
+        }
+      >
+        <AiJournalPanel botId={bot.id} botName={bot.name} />
+      </Drawer>
+    </>
   );
 }
