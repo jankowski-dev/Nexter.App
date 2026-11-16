@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte } from 'drizzle-orm';
 import {
   assets,
   botEquitySnapshots,
@@ -78,7 +78,13 @@ export class BotTelemetryService {
     const [bot] = await this.db
       .select()
       .from(tradingBots)
-      .where(and(eq(tradingBots.id, botId), eq(tradingBots.userId, userId)))
+      .where(
+        and(
+          eq(tradingBots.id, botId),
+          eq(tradingBots.userId, userId),
+          isNull(tradingBots.archivedAt),
+        ),
+      )
       .limit(1);
 
     if (!bot) {

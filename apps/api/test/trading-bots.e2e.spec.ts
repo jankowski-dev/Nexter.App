@@ -4,7 +4,19 @@ import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { botQuoteSamples, createDb, marketQuotes, type Database } from '@nexter/db';
+import {
+  botEquitySnapshots,
+  botEvents,
+  botPositions,
+  botQuoteSamples,
+  botSignals,
+  botTokens,
+  botTrades,
+  createDb,
+  marketQuotes,
+  tradingBots,
+  type Database,
+} from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -449,6 +461,22 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(list.body.data).toHaveLength(0);
 
     await agent.get(`/api/v1/trading-bots/bots/${botId}/telemetry`).expect(404);
+
+    for (const table of [botTokens, botPositions, botTrades, botEquitySnapshots, botEvents]) {
+      const [row] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(table)
+        .where(eq(table.botId, botId));
+      expect(row?.count).toBe(0);
+    }
+    const [signal] = await db.select().from(botSignals).where(eq(botSignals.botId, botId)).limit(1);
+    expect(signal?.reason).toBe('Бот удалён');
+    const [archived] = await db
+      .select({ archivedAt: tradingBots.archivedAt })
+      .from(tradingBots)
+      .where(eq(tradingBots.id, botId))
+      .limit(1);
+    expect(archived?.archivedAt).not.toBeNull();
   }, 60_000);
 
   it('removes a token with an open position and keeps managing the exit', async () => {

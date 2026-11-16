@@ -215,10 +215,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - The bot backtest drawer uses the same width as the bot form and a single-column layout.
 - Calendar tasks with an explicit time show a small time badge before the title; timed tasks sort before all-day tasks.
 - Viber task reminders are reduced to `⏰ <task title>`.
-- `Портфель → Журнал ИИ` builds a schema-v1 telemetry JSON for a bot/period and downloads it for external AI analysis. It includes bot/strategy config, tokens and latest signals, positions, trades with signal snapshots, events, equity and downsampled quote samples.
+- The bot drawer `Телеметрия` action builds a schema-v1 telemetry JSON for a bot/period and downloads it for external AI analysis. It includes bot/strategy config, tokens and latest signals, positions, trades with signal snapshots, events, equity and downsampled quote samples.
 
 ## UI-64 settings cards and bot telemetry placement
 
 - Settings hub cards use the strategy-card pattern with per-section icons.
 - Bot cooldown applies after any trade, including stop-loss and take-profit exits.
-- Telemetry is opened from `Телеметрия` inside the bot drawer; deleting a bot hard-deletes its telemetry source data.
+- Telemetry is opened from `Телеметрия` inside the bot drawer; deleting a bot purges its telemetry source data and keeps only an archived parent row.

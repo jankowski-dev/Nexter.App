@@ -772,10 +772,50 @@ export class TradingBotsService {
     if (openPosition) {
       throw new ConflictException({
         code: 'CONFLICT',
-        message: 'Close all positions before archiving the bot',
+        message: 'Close all positions before deleting the bot',
       });
     }
     await this.db.transaction(async (tx) => {
+      // Wait for a running tick to finish, then re-check positions inside the lock.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'nexter:bot-runner'})::bigint)`);
+      const [stillOpen] = await tx
+        .select({ id: botPositions.id })
+        .from(botPositions)
+        .where(eq(botPositions.botId, id))
+        .limit(1);
+      if (stillOpen) {
+        throw new ConflictException({
+          code: 'CONFLICT',
+          message: 'Close all positions before deleting the bot',
+        });
+      }
+
+      // The API role intentionally has no DELETE on trading_bots, so purge the
+      // telemetry child rows and keep an archived parent row. Signals have no
+      // DELETE grant either, so they are reset to a tombstone in place.
+      await tx.delete(botTokens).where(eq(botTokens.botId, id));
+      await tx.delete(botTrades).where(eq(botTrades.botId, id));
+      await tx.delete(botEquitySnapshots).where(eq(botEquitySnapshots.botId, id));
+      await tx.delete(botEvents).where(eq(botEvents.botId, id));
+      await tx
+        .update(botSignals)
+        .set({
+          priceUsd: null,
+          change24hPct: null,
+          action: 'hold',
+          reason: 'Бот удалён',
+          hasPosition: false,
+          strategyState: {},
+          updatedAt: new Date(),
+        })
+        .where(eq(botSignals.botId, id));
+
+      const now = new Date();
+      await tx
+        .update(tradingBots)
+        .set({ status: 'stopped', stoppedAt: now, archivedAt: now, updatedAt: now })
+        .where(eq(tradingBots.id, id));
+
       await this.audit.log(
         {
           userId,
@@ -791,14 +831,12 @@ export class TradingBotsService {
             startedAt: bot.startedAt?.toISOString() ?? null,
             archivedAt: bot.archivedAt?.toISOString() ?? null,
           },
-          after: { deleted: true },
+          after: { deleted: true, telemetryPurged: true, archiveRetained: true },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
         { executor: tx, strict: true },
       );
-      // Child rows (tokens, positions, trades, equity, events, signals) cascade.
-      await tx.delete(tradingBots).where(eq(tradingBots.id, id));
     });
   }
 
@@ -1103,7 +1141,9 @@ export class TradingBotsService {
     const [bot] = await this.db
       .select()
       .from(tradingBots)
-      .where(and(eq(tradingBots.id, id), eq(tradingBots.userId, userId)))
+      .where(
+        and(eq(tradingBots.id, id), eq(tradingBots.userId, userId), isNull(tradingBots.archivedAt)),
+      )
       .limit(1);
     if (!bot) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Bot not found' });
     return bot;

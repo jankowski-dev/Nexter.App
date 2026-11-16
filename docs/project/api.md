@@ -200,7 +200,7 @@
 | POST   | `/trading-bots/bots/:id/stop`            | остановка                                               |
 | POST   | `/trading-bots/bots/:id/close-positions` | принудительное закрытие всех позиций                    |
 | POST   | `/trading-bots/bots/:id/reset`           | сброс paper-состояния                                   |
-| DELETE | `/trading-bots/bots/:id`                 | soft archive                                            |
+| DELETE | `/trading-bots/bots/:id`                 | archive + purge telemetry                               |
 | GET    | `/trading-bots/bots/:id/trades?limit=`   | сделки                                                  |
 | GET    | `/trading-bots/bots/:id/events?limit=`   | события                                                 |
 | GET    | `/trading-bots/bots/:id/equity?limit=`   | equity curve                                            |
