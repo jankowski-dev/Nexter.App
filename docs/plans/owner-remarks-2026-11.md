@@ -1,6 +1,6 @@
 # Owner remarks — November 2026
 
-Status: in progress, branch `ui-62-owner-remarks`.
+Status: completed 2026-11-16. PR #158 merged as `2351d771`; deployment `6c4620e6-ec63-440b-92c2-553a7a03c469`; bundle `assets/index-9E6BajE_.js`; bot deployment `6c0f99f1-3c95-4fdd-9108-1339aecd2156`.
 
 | #   | Item                                            | Status                                                                                                                             |
 | --- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
