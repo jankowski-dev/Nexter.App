@@ -56,7 +56,7 @@ test('bot create modal keeps the form open while the backtest modal opens beside
 
   await page.goto('/portfolio');
   await page.getByRole('tab', { name: 'Роботы' }).click();
-  await page.getByRole('button', { name: 'Добавить робота' }).click();
+  await page.getByRole('button', { name: 'Добавить робота' }).first().click();
 
   const botDialog = page.getByRole('dialog').filter({ hasText: 'Новый робот' });
   await expect(botDialog).toBeVisible();
