@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import type { Task } from '@nexter/contracts';
-import { isTaskOverdue } from '@/lib/tasks';
+import { isTaskOverdue, taskTimeLabel } from '@/lib/tasks';
 import { useState } from 'react';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -64,6 +64,16 @@ export function TaskCalendar({
     const list = byDate.get(key) ?? [];
     list.push(task);
     byDate.set(key, list);
+  }
+  for (const list of byDate.values()) {
+    list.sort((left, right) => {
+      const leftTime = taskTimeLabel(left.dueAt);
+      const rightTime = taskTimeLabel(right.dueAt);
+      if (leftTime && rightTime) return leftTime.localeCompare(rightTime);
+      if (leftTime) return -1;
+      if (rightTime) return 1;
+      return 0;
+    });
   }
 
   return (
@@ -161,32 +171,44 @@ export function TaskCalendar({
                     </button>
                   </div>
                   <div className="mt-1 space-y-1">
-                    {dayTasks.slice(0, MAX_VISIBLE).map((task) => (
-                      <button
-                        key={task.id}
-                        type="button"
-                        draggable
-                        data-task-id={task.id}
-                        title={`${task.title}${task.recurrence ? ' · повтор' : ''}`}
-                        className={`w-full truncate rounded border px-1.5 py-1 text-left text-xs ${taskTone(
-                          task,
-                          now,
-                        )} ${draggingId === task.id ? 'opacity-50' : ''} ${
-                          busy ? 'cursor-wait' : 'cursor-grab'
-                        }`}
-                        onClick={() => onOpen(task)}
-                        onDragStart={(event) => {
-                          event.dataTransfer.setData('text/task-id', task.id);
-                          event.dataTransfer.effectAllowed = 'move';
-                          setDraggingId(task.id);
-                        }}
-                        onDragEnd={() => setDraggingId(null)}
-                      >
-                        {task.status === 'done' ? '✓ ' : task.recurrence ? '↻ ' : ''}
-                        {task.recurrence && task.status === 'done' ? '↻ ' : ''}
-                        {task.title}
-                      </button>
-                    ))}
+                    {dayTasks.slice(0, MAX_VISIBLE).map((task) => {
+                      const time = taskTimeLabel(task.dueAt);
+                      return (
+                        <button
+                          key={task.id}
+                          type="button"
+                          draggable
+                          data-task-id={task.id}
+                          title={`${task.title}${task.recurrence ? ' · повтор' : ''}`}
+                          className={`w-full rounded border px-1.5 py-1 text-left text-xs ${taskTone(
+                            task,
+                            now,
+                          )} ${draggingId === task.id ? 'opacity-50' : ''} ${
+                            busy ? 'cursor-wait' : 'cursor-grab'
+                          }`}
+                          onClick={() => onOpen(task)}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData('text/task-id', task.id);
+                            event.dataTransfer.effectAllowed = 'move';
+                            setDraggingId(task.id);
+                          }}
+                          onDragEnd={() => setDraggingId(null)}
+                        >
+                          <span className="flex items-start gap-1">
+                            {time ? (
+                              <span className="mt-px shrink-0 rounded bg-white/80 px-1 font-mono text-[10px] font-semibold text-zinc-800 shadow-sm">
+                                {time}
+                              </span>
+                            ) : null}
+                            <span className="min-w-0 flex-1 truncate">
+                              {task.status === 'done' ? '✓ ' : task.recurrence ? '↻ ' : ''}
+                              {task.recurrence && task.status === 'done' ? '↻ ' : ''}
+                              {task.title}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
                     {dayTasks.length > MAX_VISIBLE ? (
                       <div className="px-1 text-xs text-zinc-500">
                         +{dayTasks.length - MAX_VISIBLE} ещё

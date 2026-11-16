@@ -13,7 +13,7 @@ Strategy backtests lived on the separate `/testing` page. The owner had to re-en
 - Remove the top-level `/testing` navigation item and route.
 - Keep `Портфель → Роботы` and `Портфель → Стратегии` as the entry points.
 - Add a `Тестировать` action to the bot create/edit drawer footer.
-- The action opens a second drawer with `placement="beside"`: a wider panel anchored left of the bot drawer on desktop, full width on small screens. The bot drawer stays mounted and visible.
+- The action opens a second drawer with `placement="beside"`: the same `lg` width as the bot drawer, anchored left of it on desktop, full width on small screens. The panel is laid out in one column so it fits the narrower drawer. The bot drawer stays mounted and visible.
 - The backtest panel is prefilled with the current strategy, parameter values, selected token and protective-exit toggles from the bot form.
 - Strategy cards and the strategy detail drawer open the same backtest drawer with default parameters.
 

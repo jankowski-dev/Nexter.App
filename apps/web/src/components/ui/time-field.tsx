@@ -40,7 +40,7 @@ export function TimeField({
       <div className="mt-1 flex items-center gap-1.5" role="group" aria-label={ariaLabel}>
         <Select
           aria-label={`${ariaLabel}: часы`}
-          className="h-10 w-[72px]"
+          className="h-10 w-20"
           value={hour}
           disabled={disabled}
           onChange={(event) => update(event.target.value, minute)}
@@ -55,7 +55,7 @@ export function TimeField({
         <span className="text-zinc-400">:</span>
         <Select
           aria-label={`${ariaLabel}: минуты`}
-          className="h-10 w-[72px]"
+          className="h-10 w-20"
           value={minute}
           disabled={disabled}
           onChange={(event) => update(hour, event.target.value)}

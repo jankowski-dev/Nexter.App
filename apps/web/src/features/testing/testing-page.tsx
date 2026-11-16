@@ -1139,7 +1139,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
         onClose={() => setTestConfig(null)}
         title={testTemplate ? `Тестирование · ${testTemplate.name}` : 'Тестирование'}
         description="Параметры и токен взяты из формы робота. Изменения в этом окне не меняют робота."
-        size="xl"
+        size="lg"
         placement="beside"
       >
         {testTemplate && testConfig ? (
@@ -1153,6 +1153,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
             initialParams={testConfig.params}
             initialUseStopLoss={testConfig.useStopLoss}
             initialUseTakeProfit={testConfig.useTakeProfit}
+            stacked
           />
         ) : null}
       </Drawer>

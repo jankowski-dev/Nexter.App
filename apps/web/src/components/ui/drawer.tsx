@@ -102,8 +102,7 @@ export function Drawer({
           resolvedSize === 'lg' && 'w-full max-w-3xl',
           resolvedSize === 'xl' && 'w-full max-w-5xl',
           resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',
-          placement === 'beside' &&
-            'sm:w-[calc(100vw-min(768px,45vw))] sm:max-w-none sm:mr-[min(768px,45vw)]',
+          placement === 'beside' && 'sm:w-[calc(100vw-min(768px,45vw))] sm:mr-[min(768px,45vw)]',
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4">

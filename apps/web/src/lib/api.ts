@@ -13,6 +13,7 @@ import {
   botEventsResponseSchema,
   botStrategiesResponseSchema,
   botSignalsResponseSchema,
+  botTelemetryResponseSchema,
   botTradeSummariesResponseSchema,
   botTradesResponseSchema,
   tradingBotsResponseSchema,
@@ -94,6 +95,7 @@ import {
   type BotEventsResponse,
   type BotSignalsResponse,
   type BotStrategiesResponse,
+  type BotTelemetryResponse,
   type BotTradeSummariesResponse,
   type BotTradesResponse,
   type BotUpdateRequest,
@@ -1083,6 +1085,18 @@ export async function fetchBotEquity(
 
 export async function fetchBotSignals(id: string): Promise<BotSignalsResponse> {
   return apiFetch(`/api/v1/trading-bots/bots/${id}/signals`, {}, botSignalsResponseSchema);
+}
+
+export async function fetchBotTelemetry(
+  id: string,
+  from?: string,
+  to?: string,
+): Promise<BotTelemetryResponse> {
+  return apiFetch(
+    `/api/v1/trading-bots/bots/${id}/telemetry${queryString({ from, to })}`,
+    {},
+    botTelemetryResponseSchema,
+  );
 }
 
 export async function previewBotBacktest(

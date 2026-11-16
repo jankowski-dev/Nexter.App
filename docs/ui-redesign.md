@@ -209,3 +209,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - **Settings** — new `Интерфейс и поведение` page groups theme, wallet chain and the idle auto-lock timeout (default 5 minutes).
 - **Header** — the chain toggle tooltip and settings copy now state that it selects the wallet/execution network and does not filter the portfolio.
 - **Backtests** — insufficient or unavailable historical data has dedicated `BACKTEST_*` messages.
+
+## UI-63 robot journal and calendar polish
+
+- The bot backtest drawer uses the same width as the bot form and a single-column layout.
+- Calendar tasks with an explicit time show a small time badge before the title; timed tasks sort before all-day tasks.
+- Viber task reminders are reduced to `⏰ <task title>`.
+- `Портфель → Журнал ИИ` builds a schema-v1 telemetry JSON for a bot/period and downloads it for external AI analysis. It includes bot/strategy config, tokens and latest signals, positions, trades with signal snapshots, events, equity and downsampled quote samples.

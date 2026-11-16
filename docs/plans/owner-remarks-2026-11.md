@@ -20,3 +20,11 @@ Status: completed 2026-11-16. PR #158 merged as `2351d771`; deployment `6c4620e6
 - No migrations.
 - Viber reminder deduplication is process-local; a restart inside the five-minute window can resend one reminder.
 - The old standalone `/testing` page is gone; old bookmarks are not redirected.
+
+## UI-63 follow-up
+
+- Bot backtest drawer narrowed to the bot drawer width with a stacked, one-column layout.
+- Calendar shows explicit task time before the title and sorts timed tasks first.
+- Select checkmark layout fixed for narrow time selects.
+- Viber task reminder template simplified to `⏰ <task title>`.
+- `Портфель → Журнал ИИ`: read-only schema-v1 telemetry report per bot/period, JSON download for external AI analysis. See ADR 0059.

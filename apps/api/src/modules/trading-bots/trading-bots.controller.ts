@@ -19,6 +19,8 @@ import type {
   BotEventsResponse,
   BotSignalsResponse,
   BotStrategiesResponse,
+  BotTelemetryQuery,
+  BotTelemetryResponse,
   BotTradeSummariesResponse,
   BotTradesResponse,
   BotUpdateRequest,
@@ -29,12 +31,14 @@ import {
   botEquityQuerySchema,
   botHistoryQuerySchema,
   botListQuerySchema,
+  botTelemetryQuerySchema,
   botUpdateRequestSchema,
 } from '@nexter/contracts';
 import type { FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { BotTelemetryService } from './bot-telemetry.service';
 import { TradingBotsService } from './trading-bots.service';
 
 function meta(request: FastifyRequest) {
@@ -44,7 +48,10 @@ function meta(request: FastifyRequest) {
 @ApiTags('trading-bots')
 @Controller('trading-bots')
 export class TradingBotsController {
-  constructor(private readonly bots: TradingBotsService) {}
+  constructor(
+    private readonly bots: TradingBotsService,
+    private readonly telemetry: BotTelemetryService,
+  ) {}
 
   @Get('strategies')
   strategies(): Promise<BotStrategiesResponse> {
@@ -155,6 +162,15 @@ export class TradingBotsController {
     @Query(new ZodValidationPipe(botHistoryQuerySchema)) query: { limit: number; offset: number },
   ): Promise<BotEventsResponse> {
     return this.bots.events(auth.user.id, id, query.limit, query.offset);
+  }
+
+  @Get('bots/:id/telemetry')
+  botTelemetry(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(botTelemetryQuerySchema)) query: BotTelemetryQuery,
+  ): Promise<BotTelemetryResponse> {
+    return this.telemetry.report(auth.user.id, id, query);
   }
 
   @Get('bots/:id/equity')

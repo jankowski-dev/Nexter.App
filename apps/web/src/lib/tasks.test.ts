@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isTaskOverdue, localDateKey } from './tasks';
+import { formatTaskDue, isTaskOverdue, localDateKey, taskTimeLabel } from './tasks';
 
 describe('task overdue rules', () => {
   const today = new Date(2026, 10, 10, 23, 59);
@@ -18,6 +18,15 @@ describe('task overdue rules', () => {
     expect(isTaskOverdue({ status: 'done', dueAt: yesterdayNoon }, today)).toBe(false);
     expect(isTaskOverdue({ status: 'cancelled', dueAt: yesterdayNoon }, today)).toBe(false);
     expect(isTaskOverdue({ status: 'open', dueAt: null }, today)).toBe(false);
+  });
+
+  it('shows a time only for explicit due times', () => {
+    const explicit = new Date(2026, 10, 10, 9, 5).toISOString();
+    expect(taskTimeLabel(explicit)).toBe('09:05');
+    expect(taskTimeLabel(new Date(2026, 10, 10, 12, 0).toISOString())).toBeNull();
+    expect(taskTimeLabel(null)).toBeNull();
+    expect(formatTaskDue(explicit)).toContain('09:05');
+    expect(formatTaskDue(new Date(2026, 10, 10, 12, 0).toISOString())).not.toContain('12:00');
   });
 
   it('uses local calendar dates', () => {

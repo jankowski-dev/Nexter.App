@@ -6,6 +6,7 @@ import { BacktestReportService } from './backtest/backtest-report.service';
 import { BacktestService } from './backtest/backtest.service';
 import { HistoricalDataService } from './backtest/historical-data.service';
 import { BotRunnerService } from './bot-runner.service';
+import { BotTelemetryService } from './bot-telemetry.service';
 import { TradingBotsController } from './trading-bots.controller';
 import { TradingBotsService } from './trading-bots.service';
 
@@ -15,6 +16,7 @@ import { TradingBotsService } from './trading-bots.service';
   providers: [
     TradingBotsService,
     BotRunnerService,
+    BotTelemetryService,
     BacktestService,
     BacktestReportService,
     HistoricalDataService,
