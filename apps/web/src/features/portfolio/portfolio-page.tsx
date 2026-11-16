@@ -23,13 +23,15 @@ import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
 import { TokenBuyList } from './token-buy-list';
 import { TestingPage } from '../testing/testing-page';
+import { AiJournalPanel } from '../testing/ai-journal-panel';
 
-type PortfolioTab = 'portfolio' | 'trades' | 'robots' | 'strategies';
+type PortfolioTab = 'portfolio' | 'trades' | 'robots' | 'strategies' | 'ai';
 function tabFromHash(): PortfolioTab {
   if (typeof window === 'undefined') return 'portfolio';
   if (window.location.hash === '#trades') return 'trades';
   if (window.location.hash === '#robots') return 'robots';
   if (window.location.hash === '#strategies') return 'strategies';
+  if (window.location.hash === '#ai') return 'ai';
   return 'portfolio';
 }
 
@@ -212,7 +214,9 @@ export function PortfolioPage() {
           ? '#robots'
           : next === 'strategies'
             ? '#strategies'
-            : '#portfolio',
+            : next === 'ai'
+              ? '#ai'
+              : '#portfolio',
     );
   }
 
@@ -225,7 +229,9 @@ export function PortfolioPage() {
             ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
             : tab === 'strategies'
               ? 'Встроенные стратегии и подробные описания.'
-              : 'Позиции, ордера и покупка токенов.'
+              : tab === 'ai'
+                ? 'Сводка телеметрии роботов для анализа ИИ-агентом.'
+                : 'Позиции, ордера и покупка токенов.'
         }
       />
 
@@ -240,6 +246,7 @@ export function PortfolioPage() {
             ['trades', 'Ордера'],
             ['robots', 'Роботы'],
             ['strategies', 'Стратегии'],
+            ['ai', 'Журнал ИИ'],
           ] as const
         ).map(([value, label]) => (
           <button
@@ -462,6 +469,7 @@ export function PortfolioPage() {
       ) : null}
       {tab === 'robots' ? <TestingPage mode="bots" /> : null}
       {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
+      {tab === 'ai' ? <AiJournalPanel /> : null}
 
       <AssetDrawer
         assetId={selectedAssetId}

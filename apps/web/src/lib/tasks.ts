@@ -20,12 +20,19 @@ export function isTaskOverdue(
   return due.getTime() < now.getTime();
 }
 
+export function taskTimeLabel(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  if (hours === 12 && minutes === 0) return null;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
 export function formatTaskDue(value: string | null): string {
   if (!value) return 'Без срока';
   const date = new Date(value);
   const dateText = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'short' }).format(date);
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  if (hours === 12 && minutes === 0) return dateText;
-  return `${dateText}, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const time = taskTimeLabel(value);
+  return time ? `${dateText}, ${time}` : dateText;
 }

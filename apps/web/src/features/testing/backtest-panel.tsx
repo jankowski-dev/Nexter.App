@@ -16,6 +16,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { useConfirm } from '@/lib/confirm';
 import { filterBySearch } from '@/lib/search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ export function BacktestPanel({
   initialParams,
   initialUseStopLoss = true,
   initialUseTakeProfit = true,
+  stacked = false,
 }: {
   template: BotStrategyTemplate;
   tokenEntries: WatchlistEntry[];
@@ -57,6 +59,7 @@ export function BacktestPanel({
   initialParams?: Record<string, string>;
   initialUseStopLoss?: boolean;
   initialUseTakeProfit?: boolean;
+  stacked?: boolean;
 }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
@@ -317,12 +320,15 @@ export function BacktestPanel({
         </Badge>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-end gap-3">
-        <div className="relative min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+      <div className={cn('mt-4 gap-3', stacked ? 'flex flex-col' : 'flex flex-wrap items-end')}>
+        <div className={cn('relative min-w-0', stacked && 'w-full')}>
+          <div className={cn('flex items-center gap-2', !stacked && 'flex-wrap')}>
             <div
               ref={pickerRef}
-              className="relative w-full min-w-[240px] max-w-sm sm:w-[360px] sm:max-w-full sm:flex-none"
+              className={cn(
+                'relative w-full',
+                !stacked && 'min-w-[240px] max-w-sm sm:w-[360px] sm:max-w-full sm:flex-none',
+              )}
             >
               <Input
                 value={tokenSearch}
@@ -383,7 +389,12 @@ export function BacktestPanel({
             </div>
 
             {selectedToken ? (
-              <div className="flex h-10 max-w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm">
+              <div
+                className={cn(
+                  'flex h-10 max-w-full items-center gap-2 rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm',
+                  stacked && 'w-full',
+                )}
+              >
                 <TokenIcon
                   logoUrl={selectedToken.logoUrl ?? selectedToken.asset.logoUrl}
                   symbol={selectedToken.asset.symbol}
@@ -413,7 +424,7 @@ export function BacktestPanel({
           </div>
         </div>
 
-        <label className="block text-sm text-zinc-600">
+        <label className={cn('block text-sm text-zinc-600', stacked && 'w-full')}>
           Период
           <Select
             className="mt-1"
@@ -430,7 +441,7 @@ export function BacktestPanel({
         </label>
 
         <Button
-          className="h-10 px-6"
+          className={cn('h-10 px-6', stacked && 'w-full')}
           onClick={preview ? startRun : startPreview}
           disabled={previewing || running}
         >
@@ -440,7 +451,12 @@ export function BacktestPanel({
 
       {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
 
-      <div className="mt-4 grid items-stretch gap-4 xl:grid-cols-[minmax(320px,380px)_1fr]">
+      <div
+        className={cn(
+          'mt-4 grid items-stretch gap-4',
+          !stacked && 'xl:grid-cols-[minmax(320px,380px)_1fr]',
+        )}
+      >
         <div className="flex h-full flex-col gap-3">
           <div className="flex h-full flex-col rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
             <div className="mb-3 text-sm font-medium text-zinc-800">Параметры прогона</div>

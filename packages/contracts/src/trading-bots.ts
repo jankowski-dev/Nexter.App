@@ -435,3 +435,45 @@ export type BotStrategiesResponse = z.infer<typeof botStrategiesResponseSchema>;
 export type BotListQuery = z.infer<typeof botListQuerySchema>;
 export type BotHistoryQuery = z.infer<typeof botHistoryQuerySchema>;
 export type BotEquityQuery = z.infer<typeof botEquityQuerySchema>;
+
+export const botTelemetryQuerySchema = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
+
+export const botTelemetrySummarySchema = z.object({
+  trades: z.number().int().nonnegative(),
+  buys: z.number().int().nonnegative(),
+  sells: z.number().int().nonnegative(),
+  takeProfits: z.number().int().nonnegative(),
+  stopLosses: z.number().int().nonnegative(),
+  trailingStops: z.number().int().nonnegative(),
+  otherSells: z.number().int().nonnegative(),
+  realizedPnlUsd: z.string(),
+  feesUsd: z.string(),
+  slippageUsd: z.string(),
+  equityStartUsd: z.string().nullable(),
+  equityEndUsd: z.string().nullable(),
+  events: z.number().int().nonnegative(),
+  signals: z.number().int().nonnegative(),
+  quotePoints: z.number().int().nonnegative(),
+});
+
+export const botTelemetryResponseSchema = z.object({
+  schemaVersion: z.literal(1),
+  generatedAt: z.iso.datetime(),
+  range: z.object({ from: z.iso.datetime(), to: z.iso.datetime() }),
+  bot: z.record(z.string(), z.unknown()),
+  tokens: z.array(z.record(z.string(), z.unknown())),
+  positions: z.array(z.record(z.string(), z.unknown())),
+  summary: botTelemetrySummarySchema,
+  trades: z.array(z.record(z.string(), z.unknown())),
+  signals: z.array(z.record(z.string(), z.unknown())),
+  events: z.array(z.record(z.string(), z.unknown())),
+  equity: z.array(z.record(z.string(), z.unknown())),
+  quotes: z.record(z.string(), z.array(z.record(z.string(), z.unknown()))),
+});
+
+export type BotTelemetryQuery = z.infer<typeof botTelemetryQuerySchema>;
+export type BotTelemetrySummary = z.infer<typeof botTelemetrySummarySchema>;
+export type BotTelemetryResponse = z.infer<typeof botTelemetryResponseSchema>;

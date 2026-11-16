@@ -81,4 +81,8 @@ test('bot create modal keeps the form open while the backtest modal opens beside
 
   await botDialog.getByRole('button', { name: 'Отмена' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
+
+  await page.getByRole('tab', { name: 'Журнал ИИ' }).click();
+  await expect(page.getByRole('heading', { name: 'Журнал для ИИ' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Собрать отчёт' })).toBeVisible();
 });

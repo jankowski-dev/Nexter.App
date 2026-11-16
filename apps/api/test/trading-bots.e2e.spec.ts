@@ -246,6 +246,36 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(equityWeek.body.data.length).toBeGreaterThanOrEqual(1);
     expect(equityWeek.body.data[0].capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
+    const telemetryFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const telemetryTo = new Date(Date.now() + 60_000).toISOString();
+    const telemetry = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/telemetry`)
+      .query({ from: telemetryFrom, to: telemetryTo })
+      .expect(200);
+    expect(telemetry.body.schemaVersion).toBe(1);
+    expect(telemetry.body.bot).toMatchObject({
+      id: botId,
+      strategyKey: 'momentum_breakout',
+      strategy: { key: 'momentum_breakout', name: 'Импульсный пробой' },
+    });
+    expect(telemetry.body.summary).toMatchObject({
+      trades: 2,
+      buys: 1,
+      sells: 1,
+      takeProfits: 1,
+      stopLosses: 0,
+    });
+    expect(telemetry.body.tokens).toHaveLength(1);
+    expect(telemetry.body.trades).toHaveLength(2);
+    expect(telemetry.body.equity.length).toBeGreaterThanOrEqual(2);
+    expect(telemetry.body.quotes[asset.id].length).toBeGreaterThan(0);
+    expect(telemetry.body.events.length).toBeGreaterThan(0);
+
+    await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/telemetry`)
+      .query({ from: telemetryTo, to: telemetryFrom })
+      .expect(400);
+
     await agent
       .post(`/api/v1/trading-bots/bots/${botId}/stop`)
       .set('x-csrf-token', owner.csrf)
