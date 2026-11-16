@@ -344,6 +344,24 @@ export async function apiPost<T>(
   );
 }
 
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  schema?: { parse: (value: unknown) => T },
+): Promise<T> {
+  return apiFetch<T>(
+    path,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+    schema,
+  );
+}
+
 export async function apiPatch<T>(
   path: string,
   body: unknown,
@@ -633,7 +651,7 @@ export async function fetchAiSettings(): Promise<AiSettings> {
 }
 
 export async function updateAiSettings(body: UpdateAiSettingsRequest): Promise<AiSettings> {
-  return apiPatch('/api/v1/settings/ai', body, aiSettingsSchema);
+  return apiPut('/api/v1/settings/ai', body, aiSettingsSchema);
 }
 
 export async function testAiConnection(): Promise<AiTestResponse> {
