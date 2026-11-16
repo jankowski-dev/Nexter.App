@@ -135,7 +135,7 @@ export class TradingBotsController {
     @Param('id', new ParseUUIDPipe()) id: string,
     @Req() request: FastifyRequest,
   ): Promise<void> {
-    return this.bots.archiveBot(auth.user.id, id, meta(request));
+    return this.bots.deleteBot(auth.user.id, id, meta(request));
   }
 
   @Get('bots/:id/trades')

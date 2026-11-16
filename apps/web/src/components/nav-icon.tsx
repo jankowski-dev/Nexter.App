@@ -119,8 +119,8 @@ const icons: Record<NavIconName, ReactNode> = {
   ),
   quality: (
     <>
-      <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.6-7 9.3-4.2-1.7-7-4.9-7-9.3V6l7-2.5Z" />
-      <path d="m8.5 11.5 2.3 2.3 4.7-5" />
+      <path d="M4 5.5h16M4 12h9M4 18.5h6" />
+      <path d="m15 17 2 2 4-4.5" />
     </>
   ),
   upload: (
