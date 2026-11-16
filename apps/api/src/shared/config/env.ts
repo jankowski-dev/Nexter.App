@@ -41,6 +41,7 @@ export const envSchema = z.object({
   SENTRY_DSN: z.preprocess(emptyToUndefined, z.url().optional()),
   APP_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   BOT_API_TOKEN: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
+  DEEPSEEK_BASE_URL: z.preprocess(emptyToUndefined, z.url().optional()),
   SETUP_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   AUTH_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, authEncryptionKeySchema.optional()),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),

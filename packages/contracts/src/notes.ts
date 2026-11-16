@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { noteAudioSchema } from './audio-notes';
 
 export const noteImageMimeSchema = z.enum([
   'image/png',
@@ -31,6 +32,7 @@ export const noteSchema = z.object({
   body: z.string(),
   tags: z.array(z.string()),
   images: z.array(noteImageSchema),
+  audio: z.array(noteAudioSchema),
   attachmentCount: z.number().int().nonnegative(),
   pinned: z.boolean(),
   relatedAssetId: z.uuid().nullable(),

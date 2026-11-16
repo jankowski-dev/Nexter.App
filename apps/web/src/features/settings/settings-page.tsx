@@ -146,6 +146,13 @@ export function SettingsPage() {
           tone="sky"
         />
         <SettingsNavCard
+          to="/settings/ai"
+          title="ИИ"
+          description="DeepSeek, ключ API, модель и режим мышления."
+          icon="ai"
+          tone="violet"
+        />
+        <SettingsNavCard
           to="/settings/accounts"
           title="Счета"
           description="Кошельки и системные счета учёта."

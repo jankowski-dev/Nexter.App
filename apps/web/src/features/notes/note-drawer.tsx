@@ -11,7 +11,7 @@ import { compressTaskImage } from '@/lib/image';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useSaveFlash } from '@/lib/use-save-flash';
-import type { Note, NoteImage } from '@nexter/contracts';
+import type { Note, NoteAudio, NoteImage } from '@nexter/contracts';
 import { NoteImageViewer } from './note-image-viewer';
 import { NoteEditor, NoteMarkdown } from './note-markdown';
 
@@ -129,10 +129,11 @@ export function NoteDrawer({
   const [tags, setTags] = useState(note?.tags.join(', ') ?? '');
   const [pinned] = useState(note?.pinned ?? false);
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
+  const [audio, setAudio] = useState<NoteAudio[]>(note?.audio ?? []);
   const attachments = useQuery({
     queryKey: ['note-attachments', note?.id],
     queryFn: () => fetchNote(note!.id),
-    enabled: Boolean(note?.id && note.images.length === 0 && note.attachmentCount > 0),
+    enabled: Boolean(note?.id && note.attachmentCount > note.images.length),
   });
   const viewerImages = images.filter((image) => isImageAttachment(image.mimeType));
   const [createdAt, setCreatedAt] = useState<string | null>(note?.createdAt ?? null);
@@ -147,7 +148,10 @@ export function NoteDrawer({
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (attachments.data) setImages(attachments.data.images);
+    if (attachments.data) {
+      setImages(attachments.data.images);
+      setAudio(attachments.data.audio);
+    }
   }, [attachments.data]);
 
   const noteIdRef = useRef<string | null>(note?.id ?? null);
@@ -493,9 +497,32 @@ export function NoteDrawer({
                   </div>
                 ))}
               </div>
-            ) : (
+            ) : null}
+            {audio.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {audio.map((item) => (
+                  <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600">
+                      <span className="min-w-0 truncate font-medium text-zinc-800">
+                        {item.name}
+                      </span>
+                      <span>{formatBytes(item.sizeBytes)}</span>
+                    </div>
+                    <audio controls src={item.dataUrl} className="mt-2 h-9 w-full" />
+                    <a
+                      className="mt-2 inline-block text-xs text-emerald-800 hover:underline"
+                      href={item.dataUrl}
+                      download={item.name}
+                    >
+                      Скачать оригинал
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {images.length === 0 && audio.length === 0 ? (
               <p className="mt-2 text-xs text-zinc-500">Вложений пока нет.</p>
-            )}
+            ) : null}
           </div>
 
           {mode === 'view' && tagsFromInput(tags).length > 0 ? (

@@ -1,6 +1,6 @@
 # AI module, audio notes and transcription — implementation plan
 
-Status: proposed, reviewed 2026-11-16. No code or migrations yet.
+Status: implemented 2026-11-16 in UI-65. Viber file delivery was proven in the spike; ADRs 0060/0061 and migration 0041 are in place.
 
 ## Goals
 
@@ -16,7 +16,7 @@ Status: proposed, reviewed 2026-11-16. No code or migrations yet.
 
 Viber’s documented user→bot callback types do not guarantee voice/file delivery to a bot. The current bot only handles text. A file callback, if it arrives at all, has `media`, `file_name` and `file_size`; there is no audio type or MIME field. Media URLs expire (roughly one hour).
 
-**Spike 1 (go/no-go):** send real Viber voice notes and audio files to the bot and log the raw callback. If they do not arrive, pivot the intake to an authenticated web upload (or another channel such as Telegram) before building the audio pipeline. Do not start migrations until this is settled.
+**Spike 1 (go/no-go): completed.** A `.m4a` recorder file arrived as `message.type = "file"` with `media = true` and downloaded successfully (375 KB). Voice-message type is unavailable, but the file path is supported.
 
 ### Whisper on Railway is unmeasured
 

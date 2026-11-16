@@ -20,7 +20,8 @@ export type NavIconName =
   | 'system'
   | 'quality'
   | 'upload'
-  | 'sliders';
+  | 'sliders'
+  | 'ai';
 
 const icons: Record<NavIconName, ReactNode> = {
   dashboard: (
@@ -135,6 +136,12 @@ const icons: Record<NavIconName, ReactNode> = {
       <circle cx="15" cy="7" r="2" />
       <circle cx="9" cy="12" r="2" />
       <circle cx="15" cy="17" r="2" />
+    </>
+  ),
+  ai: (
+    <>
+      <path d="M12 3.5 13.8 8l4.5 1.8-4.5 1.8L12 16l-1.8-4.4L5.7 9.8 10.2 8 12 3.5Z" />
+      <path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" />
     </>
   ),
   settings: (
