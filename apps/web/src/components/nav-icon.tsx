@@ -13,7 +13,14 @@ export type NavIconName =
   | 'notes'
   | 'vault'
   | 'notifications'
-  | 'settings';
+  | 'settings'
+  | 'security'
+  | 'wallet'
+  | 'audit'
+  | 'system'
+  | 'quality'
+  | 'upload'
+  | 'sliders';
 
 const icons: Record<NavIconName, ReactNode> = {
   dashboard: (
@@ -85,6 +92,49 @@ const icons: Record<NavIconName, ReactNode> = {
     <>
       <path d="M18 8.5a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
       <path d="M10 21h4" />
+    </>
+  ),
+  security: (
+    <>
+      <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.6-7 9.3-4.2-1.7-7-4.9-7-9.3V6l7-2.5Z" />
+      <path d="m9 12 2 2 4-4.5" />
+    </>
+  ),
+  wallet: (
+    <>
+      <rect x="3.5" y="6" width="17" height="13" rx="3" />
+      <path d="M3.5 10h17M16 14.5h1.5" />
+    </>
+  ),
+  audit: (
+    <>
+      <rect x="5" y="4" width="14" height="16.5" rx="2.5" />
+      <path d="M9 8.5h6M9 12h6M9 15.5h4" />
+    </>
+  ),
+  system: (
+    <>
+      <path d="M3.5 12h4l2-5 4 10 2-5h5" />
+    </>
+  ),
+  quality: (
+    <>
+      <path d="M12 3.5 19 6v5.2c0 4.4-2.8 7.6-7 9.3-4.2-1.7-7-4.9-7-9.3V6l7-2.5Z" />
+      <path d="m8.5 11.5 2.3 2.3 4.7-5" />
+    </>
+  ),
+  upload: (
+    <>
+      <path d="M12 15.5V4.5M8.5 8 12 4.5 15.5 8" />
+      <path d="M4.5 14.5v3A2.5 2.5 0 0 0 7 20h10a2.5 2.5 0 0 0 2.5-2.5v-3" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h9M17 17h3" />
+      <circle cx="15" cy="7" r="2" />
+      <circle cx="9" cy="12" r="2" />
+      <circle cx="15" cy="17" r="2" />
     </>
   ),
   settings: (

@@ -125,7 +125,7 @@ describe.runIf(canRun)('Trading bots e2e', () => {
         feeBps: 25,
         slippageBps: 10,
         maxDailyLossPct: 10,
-        cooldownMinutes: 0,
+        cooldownMinutes: 15,
       })
       .expect(201);
     const botId = created.body.bot.id as string;
@@ -231,6 +231,13 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .expect(200);
     expect(olderTrade.body.data).toHaveLength(1);
     expect(olderTrade.body.data[0].side).toBe('buy');
+    await runner.runOnce();
+    const afterCooldown = await agent.get(`/api/v1/trading-bots/bots/${botId}/signals`).expect(200);
+    expect(afterCooldown.body.data[0].reason).toContain('пауза после сделки');
+    const tradesAfterCooldown = await agent
+      .get(`/api/v1/trading-bots/bots/${botId}/trades`)
+      .expect(200);
+    expect(tradesAfterCooldown.body.data).toHaveLength(2);
 
     const events = await agent.get(`/api/v1/trading-bots/bots/${botId}/events`).expect(200);
     expect(events.body.data.map((event: { type: string }) => event.type)).toEqual(
@@ -440,6 +447,8 @@ describe.runIf(canRun)('Trading bots e2e', () => {
 
     const list = await agent.get('/api/v1/trading-bots/bots').expect(200);
     expect(list.body.data).toHaveLength(0);
+
+    await agent.get(`/api/v1/trading-bots/bots/${botId}/telemetry`).expect(404);
   }, 60_000);
 
   it('removes a token with an open position and keeps managing the exit', async () => {

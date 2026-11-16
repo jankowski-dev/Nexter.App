@@ -48,3 +48,11 @@ The JSON report contains:
 
 - API e2e builds a bot with a buy and a take-profit sell, then asserts schema version, bot/strategy metadata, summary counts, tokens, trades, equity, quotes and event presence, plus a reversed-range 400.
 - E2E opens the `Журнал ИИ` tab and checks the panel.
+
+## UI location and deletion (2026-11-16)
+
+The report is opened from a `Телеметрия` button inside each bot's detail drawer, not from a separate portfolio tab. The endpoint and JSON schema are unchanged.
+
+Deleting a bot now hard-deletes the `trading_bots` row after the open-position check. Tokens, positions, trades, equity snapshots, events and signals cascade, so the telemetry source data disappears with the bot; `GET /trading-bots/bots/:id/telemetry` then returns 404. Global `bot_quote_samples` are shared across bots and are not deleted.
+
+Backtest runs are separate from bots: `DELETE /trading-bots/backtests/:id` deletes the stored run and its candles/trades/equity; the PDF is generated on demand from the run, so no report file remains after deletion.

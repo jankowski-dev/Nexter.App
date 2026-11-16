@@ -320,7 +320,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
     onSuccess: () => {
       setDetailOpen(false);
       setReturnToDetailBotId(null);
-      notify('Бот удалён в архив.');
+      notify('Бот и его телеметрия удалены.');
       invalidate();
     },
     onError: (err) => notify(toRussianError(err, 'Не удалось удалить бота'), true),
@@ -1001,7 +1001,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
               />
             </label>
             <label className="block text-sm text-zinc-600">
-              Пауза после покупки, мин
+              Пауза после сделки, мин
               <Input
                 className="mt-1"
                 type="number"
@@ -1194,8 +1194,9 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
           if (
             await confirm({
               title: 'Удалить робота?',
-              description: 'Робот будет перемещён в архив. История сохранится.',
-              confirmLabel: 'В архив',
+              description:
+                'Бот будет удалён вместе с историей сделок, событий и телеметрией. Восстановить его нельзя.',
+              confirmLabel: 'Удалить',
               variant: 'danger',
             })
           ) {
