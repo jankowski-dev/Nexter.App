@@ -37,3 +37,5 @@ UI-63 release 2026-11-16: PR #160 merged as `e284f234`; deployment `bc12d7c7-42c
 - Bot cooldown now counts the latest trade of any side, so a protective sell also pauses new buys.
 - Telemetry moved into the bot detail drawer (`Телеметрия`); bot deletion hard-deletes all bot child data, including telemetry sources.
 - The AI module + audio-note architecture is planned in `docs/plans/ai-audio-2026-11.md`.
+
+UI-64 release 2026-11-16: PR #162 merged as `e0aeb404`; deployment `167af8bb-6966-4c24-9751-a379ac6e298e`; bundle `assets/index-CLuTyUQJ.js`. The AI/audio plan was revised after review in `docs/plans/ai-audio-2026-11.md`.
