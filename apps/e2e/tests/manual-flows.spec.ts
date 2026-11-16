@@ -272,4 +272,10 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toContain('transactions');
   expect(download.suggestedFilename()).toContain('.json');
+
+  await page.goto('/settings/ai');
+  await page.getByLabel('API-ключ').fill('sk-test-e2e-only');
+  await page.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByText('Ключ сохранён')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Проверить подключение' })).toBeEnabled();
 });
