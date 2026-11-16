@@ -275,7 +275,9 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   await page.goto('/settings/ai');
   await page.getByLabel('API-ключ').fill('sk-test-e2e-only');
+  await page.getByLabel('Включить ИИ-модуль').check();
   await page.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByText('Ключ сохранён')).toBeVisible();
+  await expect(page.getByText('Модуль включён')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Проверить подключение' })).toBeEnabled();
 });
