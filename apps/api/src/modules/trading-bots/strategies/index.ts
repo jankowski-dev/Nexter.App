@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Decimal } from 'decimal.js';
 import { rollingHigh, sma } from './indicators';
 import { buy, dec, hold, sell, type StrategyDefinition, type StrategyState } from './types';
 
@@ -313,6 +314,106 @@ export const dcaDip: StrategyDefinition = {
   },
 };
 
+const trailingStopParamsSchema = z.object({
+  entryLookback: z.number().int().min(2).max(240).default(20),
+  breakoutBufferPct: z.number().min(0).max(10).default(0.2),
+  activationPct: z.number().min(0.1).max(100).default(2),
+  trailPct: z.number().min(0.1).max(50).default(1.5),
+  hardStopPct: z.number().min(0.1).max(50).default(5),
+});
+
+function readTrailingPeak(value: Record<string, unknown> | undefined, fallback: Decimal): Decimal {
+  if (value && typeof value.peak === 'string') {
+    try {
+      const parsed = dec(value.peak);
+      if (parsed.gt(0)) return parsed;
+    } catch {
+      // Fall back to the current price.
+    }
+  }
+  return fallback;
+}
+
+export const trailingStop: StrategyDefinition = {
+  key: 'trailing_stop',
+  version: 1,
+  icon: 'trend',
+  kind: 'system',
+  name: 'Трейлинг-стоп',
+  description: 'Покупает пробой диапазона и ведёт позицию по скользящему стопу от максимума цены.',
+  guide:
+    'Стратегия ждёт, пока цена закроется выше максимума за выбранное окно с небольшим буфером, и покупает пробой. В позиции запоминается максимум цены. После роста на activationPct включается трейлинг-стоп: если цена откатывается на trailPct от максимума, позиция закрывается. До активации защищает жёсткий стоп на hardStopPct ниже средней цены. Скользящий стоп подтягивается только вверх и никогда не опускается.',
+  bestFor:
+    'Трендовые и импульсные активы, где нужно дать прибыли расти, но защитить её от разворота.',
+  risks:
+    'В боковике пробои часто оказываются ложными. Слишком узкий трейлинг выбивает из тренда на обычном откате, слишком широкий отдаёт большую часть прибыли. Жёсткий стоп ограничивает убыток, но не исключает гэп ниже него.',
+  paramFields: [
+    { key: 'entryLookback', label: 'Окно пробоя', min: 2, max: 240, step: 1, integer: true },
+    {
+      key: 'breakoutBufferPct',
+      label: 'Буфер пробоя',
+      hint: 'Насколько цена должна превысить предыдущий максимум',
+      min: 0,
+      max: 10,
+      step: 0.1,
+      unit: '%',
+    },
+    {
+      key: 'activationPct',
+      label: 'Активация трейлинга',
+      hint: 'Прибыль от средней цены, после которой включается скользящий стоп',
+      min: 0.1,
+      max: 100,
+      step: 0.1,
+      unit: '%',
+    },
+    {
+      key: 'trailPct',
+      label: 'Откат для выхода',
+      hint: 'Расстояние от максимума цены',
+      min: 0.1,
+      max: 50,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'hardStopPct', label: 'Жёсткий стоп', min: 0.1, max: 50, step: 0.1, unit: '%' },
+  ],
+  defaultParams: trailingStopParamsSchema.parse({}),
+  parseParams: (value) => trailingStopParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = trailingStopParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      const peak = Decimal.max(readTrailingPeak(ctx.state, price), price, avg);
+      const state = { peak: peak.toString() };
+
+      if (ctx.stopLossEnabled !== false) {
+        const hardStop = avg.mul(1 - params.hardStopPct / 100);
+        if (price.lte(hardStop)) return sell('жёсткий стоп', { peak: price.toString() });
+      }
+
+      const activation = avg.mul(1 + params.activationPct / 100);
+      if (peak.gte(activation)) {
+        const trail = peak.mul(1 - params.trailPct / 100);
+        if (price.lte(trail)) return sell('трейлинг-стоп', { peak: price.toString() });
+        return hold('трейлинг активен', state);
+      }
+
+      return hold('ожидание активации трейлинга', state);
+    }
+
+    const priorHigh = rollingHigh(ctx.history.slice(0, -1), params.entryLookback);
+    if (!priorHigh) return hold('недостаточно истории', { peak: price.toString() });
+
+    const trigger = priorHigh.mul(1 + params.breakoutBufferPct / 100);
+    if (price.gt(trigger)) return buy('пробой диапазона', { peak: price.toString() });
+
+    return hold('нет пробоя', { peak: price.toString() });
+  },
+};
+
 const crashProtectedGridParamsSchema = z
   .object({
     gridStepPct: z.number().min(0.2).max(20).default(1.5),
@@ -469,6 +570,7 @@ export const strategyDefinitions = [
   gridRange,
   trendPullback,
   dcaDip,
+  trailingStop,
   crashProtectedGrid,
 ];
 

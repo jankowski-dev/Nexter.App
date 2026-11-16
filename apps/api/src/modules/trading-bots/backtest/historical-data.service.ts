@@ -59,15 +59,23 @@ export class HistoricalDataService {
     let source = 'coingecko';
     let candles: HistoricalCandle[] = [];
     let geckoCandles: HistoricalCandle[] = [];
+    let providerError = false;
+
+    const load = async (loader: () => Promise<HistoricalCandle[]>) => {
+      try {
+        return await loader();
+      } catch {
+        providerError = true;
+        return [] as HistoricalCandle[];
+      }
+    };
 
     // Prefer true daily OHLCV when the public source covers the requested period.
     // If it covers only part of the period, the longer sampled series wins and is
     // marked synthetic so the engine can use conservative exit fills.
     if (asset.contractAddress && (asset.chainCode === 'bsc' || asset.chainCode === 'ethereum')) {
-      geckoCandles = await this.geckoterminal.getDailyCandles(
-        asset.chainCode,
-        asset.contractAddress,
-        days,
+      geckoCandles = await load(() =>
+        this.geckoterminal.getDailyCandles(asset.chainCode, asset.contractAddress as string, days),
       );
       if (geckoCandles.length >= days) {
         candles = geckoCandles;
@@ -81,7 +89,9 @@ export class HistoricalDataService {
     }
 
     if (candles.length < days && asset.coingeckoId) {
-      const coingeckoCandles = await this.coingecko.getDailyCandles(asset.coingeckoId, days);
+      const coingeckoCandles = await load(() =>
+        this.coingecko.getDailyCandles(asset.coingeckoId as string, days),
+      );
       if (coingeckoCandles.length > candles.length) {
         candles = coingeckoCandles;
         source = 'coingecko';
@@ -96,9 +106,15 @@ export class HistoricalDataService {
 
     if (candles.length < MIN_CANDLES) {
       throw new UnprocessableEntityException({
-        code: 'VALIDATION_ERROR',
+        code:
+          providerError && candles.length === 0
+            ? 'BACKTEST_DATA_UNAVAILABLE'
+            : 'BACKTEST_INSUFFICIENT_DATA',
         message:
-          'Недостаточно исторических данных для этого токена. Нужно минимум 30 дневных свечей.',
+          providerError && candles.length === 0
+            ? 'Не удалось получить исторические данные от источников. Попробуйте ещё раз через минуту.'
+            : `Недостаточно исторических данных: ${candles.length} дневных свечей. Нужно минимум ${MIN_CANDLES}. Попробуйте период короче или другой токен.`,
+        details: { found: candles.length, required: MIN_CANDLES },
       });
     }
 

@@ -36,12 +36,16 @@ function tabFromHash(): PortfolioTab {
 function PortfolioMetric({
   label,
   value,
+  subvalue,
+  subvalueTone,
   tone,
   hint,
   className,
 }: {
   label: string;
   value: string;
+  subvalue?: string;
+  subvalueTone?: string;
   tone?: string;
   hint?: string;
   className?: string;
@@ -50,6 +54,11 @@ function PortfolioMetric({
     <div title={hint} className={className}>
       <div className="text-[10px] text-zinc-500">{label}</div>
       <div className={`mt-0.5 font-mono text-xs ${tone ?? 'text-zinc-800'}`}>{value}</div>
+      {subvalue ? (
+        <div className={`mt-0.5 font-mono text-[10px] ${subvalueTone ?? 'text-zinc-500'}`}>
+          {subvalue}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -303,6 +312,16 @@ export function PortfolioPage() {
                       totalActiveInvested > 0
                         ? Math.min(100, (invested / totalActiveInvested) * 100)
                         : 0;
+                    const average = Number(item.breakEvenPriceUsd);
+                    const market = Number(item.priceUsd);
+                    const averageDeltaPct =
+                      item.breakEvenPriceUsd &&
+                      item.priceUsd &&
+                      Number.isFinite(average) &&
+                      Number.isFinite(market) &&
+                      average > 0
+                        ? ((market - average) / average) * 100
+                        : null;
 
                     return (
                       <button
@@ -410,7 +429,17 @@ export function PortfolioPage() {
                               value={
                                 item.breakEvenPriceUsd ? formatPrice(item.breakEvenPriceUsd) : '—'
                               }
-                              hint="Курс выхода в ноль при закрытии всех сделок"
+                              subvalue={
+                                averageDeltaPct === null
+                                  ? undefined
+                                  : `${averageDeltaPct >= 0 ? '+' : '−'}${Math.abs(
+                                      averageDeltaPct,
+                                    ).toFixed(1)}% к рынку`
+                              }
+                              subvalueTone={pnlTone(
+                                averageDeltaPct === null ? null : String(averageDeltaPct),
+                              )}
+                              hint="Курс выхода в ноль при закрытии всех сделок. Ниже — разница между текущим рынком и средним курсом."
                             />
                           </div>
                         </div>

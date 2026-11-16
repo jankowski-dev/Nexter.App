@@ -44,24 +44,32 @@ export function BacktestPanel({
   tokenEntries,
   tokensPending,
   tokensError,
+  initialAssetId = '',
+  initialParams,
+  initialUseStopLoss = true,
+  initialUseTakeProfit = true,
 }: {
   template: BotStrategyTemplate;
   tokenEntries: WatchlistEntry[];
   tokensPending: boolean;
   tokensError: unknown;
+  initialAssetId?: string;
+  initialParams?: Record<string, string>;
+  initialUseStopLoss?: boolean;
+  initialUseTakeProfit?: boolean;
 }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [tokenSearch, setTokenSearch] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
-  const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [selectedAssetId, setSelectedAssetId] = useState(initialAssetId);
   const [days, setDays] = useState('365');
-  const [useStopLoss, setUseStopLoss] = useState(true);
-  const [useTakeProfit, setUseTakeProfit] = useState(true);
+  const [useStopLoss, setUseStopLoss] = useState(initialUseStopLoss);
+  const [useTakeProfit, setUseTakeProfit] = useState(initialUseTakeProfit);
   const [reinvestProfit, setReinvestProfit] = useState(false);
-  const [paramValues, setParamValues] = useState<Record<string, string>>(() =>
-    paramsToForm(template.defaultParams),
+  const [paramValues, setParamValues] = useState<Record<string, string>>(
+    () => initialParams ?? paramsToForm(template.defaultParams),
   );
   const [preview, setPreview] = useState<BotBacktestPreviewResponse | null>(null);
   const [run, setRun] = useState<BotBacktestRun | null>(null);

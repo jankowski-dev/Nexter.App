@@ -125,3 +125,16 @@ CI runs this after the build/test steps with `RESTORE_DRILL_MODE=dump-docker`. I
 - Never store unencrypted dumps on a workstation longer than the drill.
 - Record every drill and every real restore, including the data-loss window.
 - Test restore quarterly and after any destructive migration.
+
+## Recommended production setup
+
+The goal is two independent recovery paths: fast point-in-time recovery for mistakes during the day, and an off-site logical copy for a lost Railway project or region.
+
+1. **Railway PostgreSQL PITR** — enable it on the Postgres service and confirm the retention window covers the 1-hour RPO. This is the first restore path for accidental deletes or bad migrations.
+2. **Daily encrypted logical dump** — run `packages/db/scripts/backup.mjs` from a dedicated Railway cron service with `DATABASE_URL` (migration/owner role), `BACKUP_ENCRYPTION_KEY` and `BACKUP_OUTPUT_DIR=/data/backups`. A Railway volume keeps the last copies locally.
+3. **Off-site copy** — upload the `.dump.enc` files to Cloudflare R2 (or another S3-compatible bucket) with a write-only token. Keep 30 daily and 12 monthly objects via lifecycle rules. Use `rclone copy` or an S3 client in the same cron job; credentials belong in Railway secrets, never in git.
+4. **No separate application backup** — the application is reproducible from git plus the deployed image; configuration and secrets live in Railway and the owner password manager. A database dump is the only irreplaceable data.
+5. **Key custody** — store `BACKUP_ENCRYPTION_KEY` in the owner password manager and in Railway. Without it the encrypted dumps cannot be restored.
+6. **Restore drill** — quarterly, restore a dump into a new database, run the verification queries, then delete the drill instance. Record the date, dump SHA-256, restore duration and any drift.
+
+Minimum viable setup if R2 is not configured yet: enable PITR and run the daily encrypted dump to a Railway volume; add the off-site upload before relying on the backup for disaster recovery.

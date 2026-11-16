@@ -78,6 +78,35 @@ describe('HistoricalDataService source selection', () => {
     expect(coingecko.getDailyCandles).toHaveBeenCalledOnce();
   });
 
+  it('reports a specific code when the token has too few candles', async () => {
+    const { historical } = service(candles(10), candles(12));
+    await expect(
+      historical.getSeries(asset({ id: 'asset-5', contractAddress: null }), 365),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'BACKTEST_INSUFFICIENT_DATA',
+        details: { found: 12, required: 30 },
+      },
+    });
+  });
+
+  it('reports an unavailable source when every provider fails', async () => {
+    const coingecko = {
+      getDailyCandles: vi.fn().mockRejectedValue(new Error('coingecko down')),
+    };
+    const geckoterminal = {
+      getDailyCandles: vi.fn().mockRejectedValue(new Error('gecko down')),
+    };
+    const historical = new HistoricalDataService(
+      {} as Database,
+      coingecko as unknown as CoinGeckoClient,
+      geckoterminal as unknown as GeckoTerminalClient,
+    );
+    await expect(historical.getSeries(asset({ id: 'asset-6' }), 365)).rejects.toMatchObject({
+      response: { code: 'BACKTEST_DATA_UNAVAILABLE' },
+    });
+  });
+
   it('falls back to CoinGecko when the token has no contract address', async () => {
     const { historical, geckoterminal } = service(candles(0), candles(90));
     const series = await historical.getSeries(asset({ id: 'asset-4', contractAddress: null }), 90);

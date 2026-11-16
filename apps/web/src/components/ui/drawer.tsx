@@ -13,6 +13,7 @@ export function Drawer({
   footer,
   wide = false,
   size,
+  placement = 'right',
   inert = false,
   closeDisabled = false,
 }: {
@@ -24,7 +25,8 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
-  size?: 'md' | 'lg' | 'third';
+  size?: 'md' | 'lg' | 'xl' | 'third';
+  placement?: 'right' | 'beside';
   inert?: boolean;
   closeDisabled?: boolean;
 }) {
@@ -77,7 +79,7 @@ export function Drawer({
 
   return createPortal(
     <div
-      className={`fixed inset-0 z-50 bg-zinc-900/30 ${
+      className={`fixed inset-0 ${placement === 'beside' ? 'z-[60]' : 'z-50'} bg-zinc-900/30 ${
         visible ? 'dialog-overlay-enter' : 'dialog-overlay-exit pointer-events-none'
       }`}
       role="presentation"
@@ -98,7 +100,10 @@ export function Drawer({
           visible ? 'drawer-panel-enter' : 'drawer-panel-exit',
           resolvedSize === 'md' && 'w-full max-w-xl',
           resolvedSize === 'lg' && 'w-full max-w-3xl',
+          resolvedSize === 'xl' && 'w-full max-w-5xl',
           resolvedSize === 'third' && 'w-full sm:w-1/3 sm:min-w-[420px] sm:max-w-[720px]',
+          placement === 'beside' &&
+            'sm:w-[calc(100vw-min(768px,45vw))] sm:max-w-none sm:mr-[min(768px,45vw)]',
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-6 py-4">

@@ -15,11 +15,11 @@ import { ReportsPage } from '@/features/reports/reports-page';
 import { NotesPage } from '@/features/notes/notes-page';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
-import { TestingPage } from '@/features/testing/testing-page';
 import { VaultPage } from '@/features/vault/vault-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
+import { InterfaceSettingsPage } from '@/features/settings/interface-settings-page';
 import { SecuritySettingsPage } from '@/features/settings/security-settings-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { SystemStatusPage } from '@/features/settings/system-status-page';
@@ -177,12 +177,6 @@ const tasksRoute = createRoute({
   component: TasksPage,
 });
 
-const testingRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/testing',
-  component: TestingPage,
-});
-
 const notesRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/notes',
@@ -233,6 +227,12 @@ const securitySettingsRoute = createRoute({
   component: SecuritySettingsPage,
 });
 
+const interfaceSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/interface',
+  component: InterfaceSettingsPage,
+});
+
 const accountsSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/accounts',
@@ -277,7 +277,6 @@ const routeTree = rootRoute.addChildren([
     reportsRoute,
     vaultRoute,
     tasksRoute,
-    testingRoute,
     notesRoute,
     notificationsRoute,
     importRoute,
@@ -286,6 +285,7 @@ const routeTree = rootRoute.addChildren([
     swapRoute,
     settingsRoute,
     securitySettingsRoute,
+    interfaceSettingsRoute,
     accountsSettingsRoute,
     auditSettingsRoute,
     systemSettingsRoute,

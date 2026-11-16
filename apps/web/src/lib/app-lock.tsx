@@ -21,6 +21,7 @@ import {
   verifyLockPin,
   type StoredLockPin,
 } from './app-lock-crypto';
+import { readIdleLockMinutes, subscribeUiPreference } from './ui-preferences';
 
 const PIN_KEY = 'nexter-lock-pin-v1';
 const LOCKED_KEY = 'nexter-app-locked-v1';
@@ -384,6 +385,13 @@ export function LockProvider({ children }: { children: ReactNode }) {
   const [locked, setLocked] = useState(readLocked);
   const [hasPin, setHasPin] = useState(() => Boolean(readStoredPin()));
   const [setupOpen, setSetupOpen] = useState(false);
+  const [idleMinutes, setIdleMinutes] = useState(readIdleLockMinutes);
+
+  useEffect(() => {
+    return subscribeUiPreference('nexter-idle-lock-minutes', () =>
+      setIdleMinutes(readIdleLockMinutes()),
+    );
+  }, []);
 
   useEffect(() => {
     function onStorage(event: StorageEvent) {
@@ -403,6 +411,37 @@ export function LockProvider({ children }: { children: ReactNode }) {
     writeLocked(true);
     setLocked(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasPin || locked || setupOpen || idleMinutes <= 0) return;
+
+    let lastActivity = Date.now();
+    const markActive = () => {
+      lastActivity = Date.now();
+    };
+    const events: Array<keyof WindowEventMap> = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'touchstart',
+      'scroll',
+      'wheel',
+    ];
+    for (const event of events) {
+      window.addEventListener(event, markActive, { passive: true });
+    }
+
+    const timer = window.setInterval(() => {
+      if (Date.now() - lastActivity >= idleMinutes * 60_000) lock();
+    }, 15_000);
+
+    return () => {
+      for (const event of events) {
+        window.removeEventListener(event, markActive);
+      }
+      window.clearInterval(timer);
+    };
+  }, [hasPin, idleMinutes, lock, locked, setupOpen]);
 
   const unlock = useCallback(async (pin: string) => {
     const stored = readStoredPin();

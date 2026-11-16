@@ -65,7 +65,7 @@ function ChainButton({
 export function ChainToggle({
   value,
   onChange,
-  ariaLabel = 'Блокчейн',
+  ariaLabel = 'Сеть кошелька',
   className,
   labelClassName = 'hidden md:inline',
 }: {
@@ -79,6 +79,7 @@ export function ChainToggle({
     <div
       role="group"
       aria-label={ariaLabel}
+      title="Сеть для WalletConnect, on-chain свапов и ручных операций. Не фильтрует портфель и списки токенов."
       className={cn(
         'flex items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1',
         className,
