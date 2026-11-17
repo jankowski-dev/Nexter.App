@@ -62,17 +62,14 @@ function dueDate(value: string | null): string {
   return value ? localDateKey(new Date(value)) : '';
 }
 
-function dueClock(value: string | null): string {
-  if (!value) return '';
+function dueClock(value: string | null, hasTime: boolean): string {
+  if (!value || !hasTime) return '';
   const date = new Date(value);
-  const hours = date.getHours();
-  const minutes = date.getMinutes();
-  if (hours === 12 && minutes === 0) return '';
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function toIsoDate(value: string, time: string): string | null {
-  return value ? new Date(`${value}T${time || '12:00'}:00`).toISOString() : null;
+function toIsoDate(value: string, time: string, hasTime: boolean): string | null {
+  return value ? new Date(`${value}T${hasTime && time ? time : '12:00'}:00`).toISOString() : null;
 }
 
 function tagsFromInput(value: string): string[] {
@@ -83,9 +80,12 @@ function tagsFromInput(value: string): string[] {
     .slice(0, 20);
 }
 
-function dueLabel(value: string, time: string): string {
+function dueLabel(value: string, time: string, hasTime: boolean): string {
   if (!value) return 'Без срока';
-  return formatTaskDue(new Date(`${value}T${time || '12:00'}:00`).toISOString());
+  return formatTaskDue(
+    new Date(`${value}T${hasTime && time ? time : '12:00'}:00`).toISOString(),
+    hasTime && Boolean(time),
+  );
 }
 
 export function TaskDialog({
@@ -110,14 +110,19 @@ export function TaskDialog({
   const [description, setDescription] = useState(task?.description ?? '');
   const [priority, setPriority] = useState(String(task?.priority ?? 1));
   const [due, setDue] = useState(dueDate(task?.dueAt ?? null) || initialDue || '');
-  const [dueTimeValue, setDueTimeValue] = useState(dueClock(task?.dueAt ?? null));
+  const [dueHasTime, setDueHasTime] = useState(Boolean(task?.dueHasTime));
+  const [dueTimeValue, setDueTimeValue] = useState(
+    dueClock(task?.dueAt ?? null, Boolean(task?.dueHasTime)),
+  );
   const [tags, setTags] = useState(task?.tags.join(', ') ?? '');
   const [status, setStatus] = useState<TaskStatus>(task?.status ?? 'open');
   const [completedAt, setCompletedAt] = useState<string | null>(task?.completedAt ?? null);
   const [createdAt, setCreatedAt] = useState<string | null>(task?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(task?.updatedAt ?? null);
   const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>(task?.recurrence ?? 'none');
-  const [recurrenceEnds, setRecurrenceEnds] = useState('');
+  const [recurrenceEnds, setRecurrenceEnds] = useState(
+    task?.recurrenceEndsAt ? localDateKey(new Date(task.recurrenceEndsAt)) : '',
+  );
   const [images, setImages] = useState<TaskImage[]>(task?.images ?? []);
   const [seriesLocked, setSeriesLocked] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -137,6 +142,9 @@ export function TaskDialog({
           priority: task.priority,
           tags: task.tags,
           dueAt: task.dueAt,
+          dueHasTime: task.dueHasTime,
+          recurrence: task.recurrence,
+          recurrenceEndsAt: task.recurrenceEndsAt,
         })
       : null,
   );
@@ -146,6 +154,7 @@ export function TaskDialog({
     priority,
     due,
     dueTime: dueTimeValue,
+    dueHasTime,
     tags,
     recurrence,
     recurrenceEnds,
@@ -156,6 +165,7 @@ export function TaskDialog({
     priority,
     due,
     dueTime: dueTimeValue,
+    dueHasTime,
     tags,
     recurrence,
     recurrenceEnds,
@@ -167,13 +177,15 @@ export function TaskDialog({
     priority: number;
     tags: string[];
     dueAt: string | null;
+    dueHasTime: boolean;
   } {
     return {
       title: draft.title.trim(),
       description: draft.description.trim() || null,
       priority: Number.parseInt(draft.priority, 10) || 0,
       tags: tagsFromInput(draft.tags),
-      dueAt: toIsoDate(draft.due, draft.dueTime),
+      dueAt: toIsoDate(draft.due, draft.dueTime, draft.dueHasTime),
+      dueHasTime: Boolean(draft.due && draft.dueHasTime),
     };
   }
 
@@ -196,7 +208,7 @@ export function TaskDialog({
       return false;
     }
 
-    if (!taskIdRef.current && draft.recurrence !== 'none' && !draft.due) {
+    if (draft.recurrence !== 'none' && !draft.due) {
       setError('Для повторяющейся задачи укажите первый срок.');
       setSaveState('error');
       return false;
@@ -212,7 +224,16 @@ export function TaskDialog({
     }
 
     const payload = basePayload(draft);
-    const signature = JSON.stringify(payload);
+    const recurrencePayload =
+      draft.recurrence !== 'none'
+        ? {
+            recurrence: draft.recurrence,
+            ...(draft.recurrenceEnds
+              ? { recurrenceEndsAt: toIsoDate(draft.recurrenceEnds, '', false) }
+              : {}),
+          }
+        : {};
+    const signature = JSON.stringify({ ...payload, ...recurrencePayload });
 
     if (signature === savedSignatureRef.current) {
       setSaveState('saved');
@@ -224,17 +245,10 @@ export function TaskDialog({
 
     try {
       const saved = taskIdRef.current
-        ? await updateTask(taskIdRef.current, payload)
+        ? await updateTask(taskIdRef.current, { ...payload, ...recurrencePayload })
         : await createTask({
             ...payload,
-            ...(draft.recurrence !== 'none'
-              ? {
-                  recurrence: draft.recurrence,
-                  ...(draft.recurrenceEnds
-                    ? { recurrenceEndsAt: toIsoDate(draft.recurrenceEnds, '') }
-                    : {}),
-                }
-              : {}),
+            ...recurrencePayload,
           } satisfies TaskCreateRequest);
 
       taskIdRef.current = saved.id;
@@ -487,7 +501,7 @@ export function TaskDialog({
               <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
                 <div className="flex items-center gap-2">
                   <CalendarIcon />
-                  <span>{dueLabel(due, dueTimeValue)}</span>
+                  <span>{dueLabel(due, dueTimeValue, dueHasTime)}</span>
                 </div>
                 {completedAt ? <div>Выполнена {formatDate(completedAt)}</div> : null}
               </div>
@@ -568,26 +582,22 @@ export function TaskDialog({
                       Время
                       <TimeField
                         value={dueTimeValue}
-                        onChange={setDueTimeValue}
+                        onChange={(value) => {
+                          setDueTimeValue(value);
+                          setDueHasTime(Boolean(value));
+                        }}
                         disabled={!due}
                         ariaLabel="Время задачи"
                       />
                     </div>
                   </div>
                   <p className="mt-1 text-[11px] text-zinc-500">
-                    Время необязательно. Без него задача считается задачей на день (12:00).
+                    Время необязательно. Без него задача считается задачей на день.
                   </p>
                 </div>
               </div>
 
-              {persisted ? (
-                effectiveRecurrence ? (
-                  <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
-                    Повтор: {recurrenceLabels[effectiveRecurrence]}. Изменения и удаление
-                    применяются ко всей серии; отметка «выполнено» остаётся у каждого дня своя.
-                  </div>
-                ) : null
-              ) : (
+              {!task?.seriesId && !seriesLocked ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block text-sm text-zinc-600">
                     Повтор
@@ -627,7 +637,12 @@ export function TaskDialog({
                     </p>
                   ) : null}
                 </div>
-              )}
+              ) : effectiveRecurrence ? (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
+                  Повтор: {recurrenceLabels[effectiveRecurrence]}. Изменения и удаление применяются
+                  ко всей серии; отметка «выполнено» остаётся у каждого дня своя.
+                </div>
+              ) : null}
 
               <label className="block text-sm text-zinc-600">
                 Описание

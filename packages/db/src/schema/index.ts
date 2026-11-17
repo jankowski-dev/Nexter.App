@@ -822,6 +822,7 @@ export const tasks = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     dueAt: timestamp('due_at', { withTimezone: true }),
+    dueHasTime: boolean('due_has_time').notNull().default(false),
     completedAt: timestamp('completed_at', { withTimezone: true }),
     relatedAssetId: uuid('related_asset_id').references(() => assets.id, { onDelete: 'set null' }),
     seriesId: uuid('series_id'),

@@ -189,7 +189,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(taskView.getByText('Скрытое описание')).toBeVisible();
   await taskView.getByRole('button', { name: 'Изменить' }).click();
   await expect(taskView.getByLabel('Название')).toHaveValue('Задача для списка');
-  await expect(taskView.getByRole('combobox', { name: 'Повтор' })).toHaveCount(0);
+  await expect(taskView.getByRole('combobox', { name: 'Повтор' })).toBeVisible();
   await taskView.getByRole('button', { name: 'Готово' }).click();
   await expect(taskView.getByRole('heading', { name: 'Задача для списка' })).toBeVisible();
   await taskView.getByLabel('Закрыть').click();

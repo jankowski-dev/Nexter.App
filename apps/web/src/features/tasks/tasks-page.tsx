@@ -83,6 +83,7 @@ export function TasksPage() {
       const minutes = String(source?.getMinutes() ?? 0).padStart(2, '0');
       return updateTask(task.id, {
         dueAt: new Date(`${date}T${hours}:${minutes}:00`).toISOString(),
+        dueHasTime: task.dueHasTime,
         applyToSeries: false,
       });
     },

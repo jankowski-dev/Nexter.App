@@ -79,6 +79,7 @@ function toContract(row: TaskRecord, images: TaskImage[] = []): Task {
     tags: row.tags,
     images,
     dueAt: row.dueAt?.toISOString() ?? null,
+    dueHasTime: row.dueHasTime,
     completedAt: row.completedAt?.toISOString() ?? null,
     relatedAssetId: row.relatedAssetId,
     seriesId: row.seriesId,
@@ -179,6 +180,7 @@ export class TasksService {
       });
     }
 
+    const dueHasTime = Boolean(dueAt) && (input.dueHasTime ?? true);
     const seriesId = recurrence ? randomUUID() : null;
     const occurrences =
       recurrence && dueAt
@@ -209,6 +211,7 @@ export class TasksService {
             priority: input.priority ?? 0,
             tags: input.tags ?? [],
             dueAt: occurrence.dueAt,
+            dueHasTime,
             relatedAssetId: input.relatedAssetId ?? null,
             seriesId,
             recurrence,
@@ -272,6 +275,118 @@ export class TasksService {
     const applyToSeries = Boolean(existing.seriesId) && input.applyToSeries !== false;
     const seriesId = existing.seriesId as string;
 
+    if (!existing.seriesId && input.recurrence) {
+      const anchor = input.dueAt ? new Date(input.dueAt) : existing.dueAt;
+      if (!anchor) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'A recurring task requires a due date',
+        });
+      }
+      const recurrenceEndsAt = input.recurrenceEndsAt ? new Date(input.recurrenceEndsAt) : null;
+      if (recurrenceEndsAt && recurrenceEndsAt.getTime() < anchor.getTime()) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'recurrenceEndsAt must be on or after dueAt',
+        });
+      }
+
+      const newSeriesId = randomUUID();
+      const dueHasTime = input.dueHasTime ?? existing.dueHasTime;
+      const occurrences = Array.from({ length: MAX_OCCURRENCES }, (_, index) => ({
+        index,
+        dueAt: occurrenceAt(anchor, input.recurrence as TaskRecurrence, index),
+      })).filter(
+        (occurrence) =>
+          occurrence.dueAt.getTime() <= recurrenceHorizon(anchor, recurrenceEndsAt).getTime(),
+      );
+
+      if (occurrences.length === 0) {
+        throw new BadRequestException({
+          code: 'VALIDATION_FAILED',
+          message: 'recurrenceEndsAt must be on or after dueAt',
+        });
+      }
+
+      const updated = await this.db.transaction(async (tx) => {
+        const first = occurrences[0];
+        if (!first) throw new Error('Failed to create recurring series');
+
+        const [firstRow] = await tx
+          .update(tasks)
+          .set({
+            title: input.title ?? existing.title,
+            description: input.description !== undefined ? input.description : existing.description,
+            priority: input.priority ?? existing.priority,
+            tags: input.tags ?? existing.tags,
+            dueAt: first.dueAt,
+            dueHasTime,
+            relatedAssetId:
+              input.relatedAssetId !== undefined ? input.relatedAssetId : existing.relatedAssetId,
+            seriesId: newSeriesId,
+            recurrence: input.recurrence,
+            recurrenceEndsAt,
+            occurrenceIndex: 0,
+            updatedAt: now,
+          })
+          .where(eq(tasks.id, id))
+          .returning();
+
+        if (!firstRow) throw new Error('Failed to update task');
+
+        const rest = occurrences.slice(1);
+        if (rest.length > 0) {
+          await tx.insert(tasks).values(
+            rest.map((occurrence) => ({
+              userId,
+              title: firstRow.title,
+              description: firstRow.description,
+              priority: firstRow.priority,
+              tags: firstRow.tags,
+              dueAt: occurrence.dueAt,
+              dueHasTime,
+              relatedAssetId: firstRow.relatedAssetId,
+              seriesId: newSeriesId,
+              recurrence: input.recurrence,
+              recurrenceEndsAt,
+              occurrenceIndex: occurrence.index,
+            })),
+          );
+        }
+
+        await this.audit.log(
+          {
+            userId,
+            action: 'task.series_created',
+            entityType: 'task',
+            entityId: id,
+            before: { seriesId: null, recurrence: null },
+            after: {
+              seriesId: newSeriesId,
+              recurrence: input.recurrence,
+              recurrenceEndsAt: recurrenceEndsAt?.toISOString() ?? null,
+              occurrenceCount: occurrences.length,
+            },
+            ip: meta.ip,
+            userAgent: meta.userAgent,
+          },
+          { executor: tx, strict: true },
+        );
+
+        return firstRow;
+      });
+
+      const images = await loadImages(this.db, userId, [updated.id]);
+      return toContract(updated, images.get(updated.id) ?? []);
+    }
+
+    if (existing.seriesId && input.recurrence && input.recurrence !== existing.recurrence) {
+      throw new BadRequestException({
+        code: 'VALIDATION_FAILED',
+        message: 'The recurrence type of an existing series cannot be changed',
+      });
+    }
+
     if (applyToSeries && seriesId) {
       if (input.dueAt === null) {
         throw new BadRequestException({
@@ -308,8 +423,9 @@ export class TasksService {
               ...(input.relatedAssetId !== undefined
                 ? { relatedAssetId: input.relatedAssetId }
                 : {}),
-              ...(input.dueAt !== undefined
+              ...(input.dueAt !== undefined || input.dueHasTime !== undefined
                 ? {
+                    ...(input.dueHasTime !== undefined ? { dueHasTime: input.dueHasTime } : {}),
                     dueAt:
                       row.dueAt && deltaMs !== null
                         ? new Date(row.dueAt.getTime() + deltaMs)
@@ -397,6 +513,11 @@ export class TasksService {
         ...(input.priority !== undefined ? { priority: input.priority } : {}),
         ...(input.tags !== undefined ? { tags: input.tags } : {}),
         ...(input.dueAt !== undefined ? { dueAt: input.dueAt ? new Date(input.dueAt) : null } : {}),
+        ...(input.dueHasTime !== undefined
+          ? { dueHasTime: input.dueHasTime }
+          : input.dueAt === null
+            ? { dueHasTime: false }
+            : {}),
         ...(input.relatedAssetId !== undefined ? { relatedAssetId: input.relatedAssetId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
         completedAt,
@@ -577,6 +698,7 @@ export class TasksService {
         and(
           eq(tasks.userId, owner.id),
           eq(tasks.status, 'open'),
+          eq(tasks.dueHasTime, true),
           isNull(tasks.archivedAt),
           isNotNull(tasks.dueAt),
           gte(tasks.dueAt, now),
