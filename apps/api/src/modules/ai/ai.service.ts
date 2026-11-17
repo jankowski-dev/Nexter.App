@@ -64,7 +64,7 @@ export class AiService {
         apiKey,
         model,
         temperature: 0,
-        maxTokens: 16,
+        maxTokens: 256,
         messages: [{ role: 'user', content: 'Ответь одним словом: ok' }],
       });
       return {

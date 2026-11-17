@@ -30,7 +30,10 @@ export interface AiResponse {
 }
 
 interface DeepSeekResponse {
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{
+    finish_reason?: string;
+    message?: { content?: string; reasoning_content?: string };
+  }>;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
   error?: { message?: string };
 }
@@ -94,11 +97,16 @@ export class DeepSeekProvider {
       });
     }
 
-    const content = payload.choices?.[0]?.message?.content;
+    const choice = payload.choices?.[0];
+    const content = choice?.message?.content;
     if (typeof content !== 'string' || content.trim().length === 0) {
+      const truncated =
+        choice?.finish_reason === 'length' || Boolean(choice?.message?.reasoning_content);
       throw new ServiceUnavailableException({
         code: 'AI_INVALID_RESPONSE',
-        message: 'DeepSeek вернул пустой ответ',
+        message: truncated
+          ? 'DeepSeek израсходовал лимит токенов на рассуждение. Увеличьте максимум токенов ответа.'
+          : 'DeepSeek вернул пустой ответ',
       });
     }
 
