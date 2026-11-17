@@ -41,6 +41,7 @@ export const HELMET_CSP_DIRECTIVES: Record<string, readonly string[]> = {
   baseUri: ["'self'"],
   fontSrc: ["'self'", 'https:', 'data:'],
   imgSrc: ["'self'", 'data:', 'https:'],
+  mediaSrc: ["'self'", 'data:'],
   objectSrc: ["'none'"],
   scriptSrc: ["'self'"],
   styleSrc: ["'self'", "'unsafe-inline'"],
