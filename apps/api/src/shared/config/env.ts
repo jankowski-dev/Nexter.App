@@ -45,6 +45,7 @@ export const envSchema = z.object({
   SETUP_TOKEN: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   AUTH_ENCRYPTION_KEY: z.preprocess(emptyToUndefined, authEncryptionKeySchema.optional()),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  SESSION_PENDING_TTL_MINUTES: z.coerce.number().int().min(1).max(60).default(15),
   TOTP_ISSUER: z.string().min(1).default('Nexter'),
   WEB_DIST_PATH: z.preprocess(emptyToUndefined, z.string().optional()),
   TRUST_PROXY: z.preprocess(emptyToUndefined, z.string().default('false')),

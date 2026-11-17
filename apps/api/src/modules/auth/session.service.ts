@@ -17,6 +17,14 @@ export interface SessionMeta {
   userAgent?: string;
 }
 
+export function sessionExpiry(twoFactorVerified: boolean, now: Date): Date {
+  const ttlMs = twoFactorVerified
+    ? env.SESSION_TTL_DAYS * 86_400_000
+    : env.SESSION_PENDING_TTL_MINUTES * 60_000;
+
+  return new Date(now.getTime() + ttlMs);
+}
+
 @Injectable()
 export class SessionService {
   constructor(
@@ -32,7 +40,7 @@ export class SessionService {
     const token = this.crypto.randomToken(32);
     const csrfToken = this.crypto.randomToken(32);
     const now = new Date();
-    const expiresAt = new Date(now.getTime() + env.SESSION_TTL_DAYS * 86_400_000);
+    const expiresAt = sessionExpiry(data.twoFactorVerified, now);
 
     const [session] = await executor
       .insert(sessions)
@@ -124,10 +132,34 @@ export class SessionService {
     const [revoked] = await executor
       .update(sessions)
       .set({ revokedAt: new Date() })
-      .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt)))
+      .where(
+        and(
+          eq(sessions.id, sessionId),
+          isNull(sessions.revokedAt),
+          gt(sessions.expiresAt, new Date()),
+        ),
+      )
       .returning({ id: sessions.id });
 
     return Boolean(revoked);
+  }
+
+  async revokePendingOthers(
+    userId: string,
+    currentSessionId: string,
+    executor: DbExecutor = this.db,
+  ): Promise<void> {
+    await executor
+      .update(sessions)
+      .set({ revokedAt: new Date() })
+      .where(
+        and(
+          eq(sessions.userId, userId),
+          ne(sessions.id, currentSessionId),
+          eq(sessions.twoFactorVerified, false),
+          isNull(sessions.revokedAt),
+        ),
+      );
   }
 
   async revokeOthers(

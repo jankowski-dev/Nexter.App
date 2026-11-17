@@ -3,7 +3,7 @@ title = "Nexter gitleaks config"
 [extend]
 useDefault = true
 
-[allowlist]
+[[allowlists]]
 description = "Local development, generated, and CI-only credentials"
 paths = [
   '''node_modules''',
@@ -26,3 +26,18 @@ regexes = [
   '''0x4f2b33840227ddd0e28da8d4185d6fa07adfed87''',
   '''0x5a9610919f5e81183823a2be4bd1beb2b4da2a20''',
 ]
+
+[[allowlists]]
+description = "Public contract address used in swap tests"
+paths = ['''apps/api/test/swap\.e2e\.spec\.ts''']
+regexes = ['''0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd''']
+
+[[allowlists]]
+description = "Nest metadata keys that look like auth values"
+paths = ['''apps/api/src/modules/auth/auth\.constants\.ts''']
+regexes = ['''auth:(public|skip-csrf|allow-pending-2fa)''']
+
+[[allowlists]]
+description = "CI-only base64 test encryption key"
+paths = ['''.github/workflows/ci\.yml''', '''scripts/smoke-static\.mjs''']
+regexes = ['''MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY''']

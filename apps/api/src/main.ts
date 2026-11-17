@@ -75,6 +75,8 @@ async function bootstrap(): Promise<void> {
     const isMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method);
     const isAuthAttempt =
       url === '/api/v1/auth/login' ||
+      url === '/api/v1/auth/setup' ||
+      url.startsWith('/api/v1/auth/password') ||
       url.startsWith('/api/v1/auth/2fa/') ||
       url.startsWith('/api/v1/auth/recovery/');
     const max =

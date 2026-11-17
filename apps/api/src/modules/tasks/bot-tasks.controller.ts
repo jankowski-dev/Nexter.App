@@ -12,7 +12,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { BotUpcomingTasksResponse } from '@nexter/contracts';
 import { env } from '../../shared/config/env';
-import { Public } from '../auth/public.decorator';
+import { Public, SkipOrigin } from '../auth/public.decorator';
 import { TasksService } from './tasks.service';
 
 function tokensEqual(left: string, right: string): boolean {
@@ -22,6 +22,7 @@ function tokensEqual(left: string, right: string): boolean {
 }
 
 @ApiTags('bot')
+@SkipOrigin()
 @Controller('bot')
 export class BotTasksController {
   constructor(private readonly tasks: TasksService) {}

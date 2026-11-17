@@ -202,6 +202,7 @@ import {
   type WatchlistTokenSearchResult,
   type WatchlistUpdateRequest,
 } from '@nexter/contracts';
+import { notifyUnauthorized } from './auth-events';
 
 export { healthResponseSchema };
 export type {
@@ -308,12 +309,20 @@ export async function apiFetch<T>(
     const parsed = errorEnvelopeSchema.safeParse(payload);
 
     if (parsed.success) {
+      if (response.status === 401 && parsed.data.error.code === 'AUTH_REQUIRED') {
+        notifyUnauthorized();
+      }
+
       throw new ApiError(
         parsed.data.error.code,
         parsed.data.error.message,
         parsed.data.error.requestId,
         parsed.data.error.details,
       );
+    }
+
+    if (response.status === 401) {
+      notifyUnauthorized();
     }
 
     throw new ApiError('HTTP_ERROR', `Ошибка запроса (${response.status})`);

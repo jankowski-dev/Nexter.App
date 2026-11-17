@@ -8,6 +8,7 @@ import { auditLog, createDb, rateLimits, users, type Database } from '@nexter/db
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
+import { assertDisposableTestDatabase } from './helpers/test-database';
 
 const canRun = Boolean(
   process.env.NEXTER_TEST_DB === '1' &&
@@ -15,6 +16,10 @@ const canRun = Boolean(
   process.env.SETUP_TOKEN &&
   process.env.AUTH_ENCRYPTION_KEY,
 );
+
+if (canRun) {
+  assertDisposableTestDatabase(process.env.DATABASE_URL);
+}
 
 const password = 'correct horse battery staple';
 const newPassword = 'correct horse battery staple 2';
@@ -264,6 +269,20 @@ describe.runIf(canRun)('Auth e2e', () => {
     expect(auditRows.some((row) => row.action === 'auth.login_password_ok')).toBe(true);
     expect(auditRows.some((row) => row.action === 'auth.totp_enabled')).toBe(true);
     expect(auditRows.some((row) => row.action === 'auth.totp_verified')).toBe(true);
+  }, 30_000);
+
+  it('revokes other pending sessions when TOTP is enabled', async () => {
+    const ownerAgent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(ownerAgent);
+
+    const otherAgent = request.agent(app.getHttpServer());
+    await otherAgent.post('/api/v1/auth/login').send({ email: owner.email, password }).expect(200);
+    await otherAgent.get('/api/v1/auth/me').expect(200);
+
+    await enableTotp(ownerAgent, owner.csrf);
+
+    const revoked = await otherAgent.get('/api/v1/auth/me').expect(401);
+    expect(revoked.body.error.code).toBe('AUTH_REQUIRED');
   }, 30_000);
 
   it('blocks TOTP brute force and rejects a valid code while blocked', async () => {

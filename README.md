@@ -2,7 +2,7 @@
 
 Private, single-user, modular personal finance application.
 
-Current phase: **Phase 11 — Other modules implemented (2026-11-09)**. Phase 10 — On-chain reconciliation is implemented and live execution is accepted; data reconciliation is deferred to the go-live clean cutover per ADR 0014. UI redesign UI-0 through UI-5 are implemented: new navigation, Portfolio + trade journal, asset drawer, Operations and Reports pages, the unified trade/exchange modal with position-close linkage, dashboard analytics, daily snapshots, interactive charts, watchlist groups with contract-address token discovery, period reports with trade statistics and exports, embedded-only swap, and mobile navigation. Phase 11 adds an end-to-end encrypted password vault, tasks, and notes. Phase 9 — Ethereum execution is accepted (2026-11-05). Phase 8 — Swap execution is accepted, including Phase 8.x hardening. Live small BSC and Ethereum swaps completed; chain config, per-chain RPC/confirmations, chain-aware UI, tracking, and accounting are in place. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
+Current scope: **production v2 (2026-11-17)**. Phases 0–11 are accepted, and the shipped product now also includes live non-custodial swaps on BSC and Ethereum, paper-trading bots with backtesting and telemetry, an AI settings module, Viber audio notes, an encrypted vault, tasks, notes, finance tracking, and the redesigned Russian UI. This is the actual product scope; where older sections of the implementation contract still say "MVP-1", the v2 scope amendment in [`docs/mega-prompt.md`](docs/mega-prompt.md) and ADR 0063 take precedence. The unused `@nexter/worker` service was removed; background work runs in the API process. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
@@ -33,7 +33,6 @@ npx pnpm@10.20.0 --filter @nexter/api test
 - pnpm workspaces
 - NestJS 11 + Fastify
 - PostgreSQL 17 + Drizzle ORM
-- pg-boss
 - React 19 + Vite + TanStack Router/Query
 - Tailwind CSS + shadcn-compatible primitives
 - Vitest + Supertest + Playwright; Testcontainers, fast-check, and Anvil planned
@@ -44,7 +43,6 @@ npx pnpm@10.20.0 --filter @nexter/api test
 ```text
 apps/api       NestJS API, serves the built SPA in production
 apps/web       React SPA
-apps/worker    background jobs
 packages/db    Drizzle schema, migrations, client
 packages/contracts shared Zod schemas and API types
 packages/config shared root env loader
@@ -114,10 +112,9 @@ npx pnpm@10.20.0 lint
 npx pnpm@10.20.0 test
 npx pnpm@10.20.0 format
 npx pnpm@10.20.0 smoke:static
-npx pnpm@10.20.0 smoke:worker
 ```
 
-Browser auth E2E and API auth integration tests **truncate auth tables**. Never point them at a database that contains real Nexter data. Create a disposable database (for example `nexter_test`) and set `NEXTER_TEST_DB=1`; without this flag the destructive suites are skipped.
+Browser auth E2E and API auth integration tests **truncate auth tables**. Never point them at a database that contains real Nexter data. Create a disposable database (for example `nexter_test`) and set `NEXTER_TEST_DB=1`; without this flag the destructive suites are skipped. The API test global setup also refuses any `DATABASE_URL` whose host is not localhost or whose database name does not contain `test`.
 
 ```bash
 export DATABASE_URL=postgres://postgres:postgres@localhost:5432/nexter_test
@@ -156,6 +153,7 @@ npx pnpm@10.20.0 test:e2e
 - [x] Phase 9 — Ethereum (accepted)
 - [x] Phase 10 — On-chain reconciliation (implementation accepted; data reconciliation deferred to the clean cutover)
 - [x] Phase 11 — Other modules (vault, tasks, notes)
+- [x] Post-MVP — production UI redesign, live swaps, paper-trading bots, AI and audio notes
 
 ## Production environment
 
@@ -165,7 +163,7 @@ Production and staging require `DATABASE_URL`, `SETUP_TOKEN`, `AUTH_ENCRYPTION_K
 
 - No private keys or seed phrases on the server.
 - No public signup.
-- No wallet connection in MVP-1.
-- No swap execution in MVP-1.
+- Wallet connection is non-custodial (Tangem via WalletConnect); keys never reach the server.
+- Swap execution is allowlisted, simulated, step-up protected above $500, and gated by the kill switch.
 - All mutations must be audited.
 - Secrets live in environment variables only.

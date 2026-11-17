@@ -11,6 +11,8 @@ pgdata
 test-results
 playwright-report
 blob-report
+*.tsbuildinfo
+design-auth/
 apps/api/public/*
 !apps/api/public/.gitkeep
 data/

@@ -37,14 +37,14 @@ order by created_at desc;
 5. If `AUTH_ENCRYPTION_KEY` may be leaked, treat TOTP secrets as compromised: rotate the key, re-encrypt `users.totp_secret_encrypted`, and force TOTP re-enrollment. Do not rotate the key without a tested re-encryption plan; an incorrect rotation locks out 2FA.
 6. If `SETUP_TOKEN` leaked, rotate the Railway variable. Setup is already initialized and returns `409`, but rotate anyway.
 7. If the database or backup credentials leaked, rotate Railway/R2 credentials, revoke the old tokens, and take a fresh verified backup.
-8. If ledger data was changed outside the app, freeze writes (`@nexter/worker` stopped, API maintenance) and preserve the database and audit log before any repair. Corrections must be new transactions, never edits or deletes.
+8. If ledger data was changed outside the app, freeze writes (API maintenance) and preserve the database and audit log before any repair. Corrections must be new transactions, never edits or deletes.
 
 ## Recover
 
 - Restore from a verified backup/PITR if data integrity is in doubt (see `docs/runbooks/restore.md`).
 - Redeploy the last known good image if the incident is application-related.
 - Verify `/health`, `/ready`, login, 2FA, dashboard totals, and audit entries.
-- Re-enable the worker and writes.
+- Re-enable writes.
 
 ## Postmortem
 

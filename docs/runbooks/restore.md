@@ -35,7 +35,7 @@ Use a dedicated R2 token with write-only access to the backup bucket. Never put 
 
 ## Restoring a dump
 
-1. Declare an incident and freeze writes: stop the worker, put the API in maintenance, and revoke sessions if credentials may be compromised.
+1. Declare an incident and freeze writes: put the API in maintenance, and revoke sessions if credentials may be compromised.
 2. Choose the restore point (PITR timestamp or dump object).
 3. Create a **new** PostgreSQL instance/database. Do not overwrite production before verification.
 4. Download the `.dump.enc` and decrypt it:
@@ -55,7 +55,7 @@ Use a dedicated R2 token with write-only access to the backup bucket. Never put 
    If the dump was produced by an older app version, run `node packages/db/dist/migrate.js` against the restored database after the restore.
 
 6. Run the verification queries below. Do not point the app at the database until they pass.
-7. Point the API and worker at the restored database, redeploy the matching app image, and verify `/health` and `/ready`.
+7. Point the API at the restored database, redeploy the matching app image, and verify `/health` and `/ready`.
 8. Re-enable writes and confirm dashboard totals with the owner.
 9. Record the timeline, data-loss window, root cause, and follow-up actions.
 

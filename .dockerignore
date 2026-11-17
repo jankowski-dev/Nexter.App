@@ -12,3 +12,8 @@ apps/api/public
 .env.*
 *.log
 pgdata
+test-results
+playwright-report
+blob-report
+design-auth
+*.tsbuildinfo

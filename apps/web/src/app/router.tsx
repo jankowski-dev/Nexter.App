@@ -24,17 +24,58 @@ import { InterfaceSettingsPage } from '@/features/settings/interface-settings-pa
 import { SecuritySettingsPage } from '@/features/settings/security-settings-page';
 import { SettingsPage } from '@/features/settings/settings-page';
 import { SystemStatusPage } from '@/features/settings/system-status-page';
+import { Button } from '@/components/ui/button';
 import { ApiError, apiFetch } from '@/lib/api';
 import { authMeResponseSchema } from '@nexter/contracts';
 import {
   createRootRoute,
   createRoute,
   createRouter,
+  Link,
   Outlet,
   redirect,
+  type ErrorComponentProps,
 } from '@tanstack/react-router';
 import { AuthLayout } from './auth-layout';
 import { RootLayout } from './root-layout';
+
+function RouteError({ error, reset }: ErrorComponentProps) {
+  const message =
+    error instanceof Error && error.message
+      ? error.message
+      : 'Произошла ошибка. Повторите попытку.';
+
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-zinc-50 px-6">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+        <h1 className="text-lg font-semibold text-zinc-900">Не удалось загрузить страницу</h1>
+        <p className="mt-2 text-sm text-zinc-600">{message}</p>
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          <Button onClick={() => reset()}>Повторить</Button>
+          <Button variant="secondary" asChild>
+            <Link to="/dashboard">На дашборд</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RouteNotFound() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-zinc-50 px-6">
+      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-sm">
+        <h1 className="text-lg font-semibold text-zinc-900">Страница не найдена</h1>
+        <p className="mt-2 text-sm text-zinc-600">Такой страницы нет или она была перемещена.</p>
+        <div className="mt-5 flex justify-center">
+          <Button asChild>
+            <Link to="/dashboard">На дашборд</Link>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RootOutlet() {
   return <Outlet />;
@@ -304,6 +345,8 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  defaultErrorComponent: RouteError,
+  defaultNotFoundComponent: RouteNotFound,
 });
 
 declare module '@tanstack/react-router' {

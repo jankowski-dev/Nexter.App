@@ -37,6 +37,25 @@ describe('Sentry scrubbing', () => {
     expect((event.tags as Record<string, unknown>).environment).toBe('test');
   });
 
+  it('removes OTP, QR, recovery and CSRF secrets', () => {
+    const event = scrubSentryEvent({
+      extra: {
+        otpauthUrl: 'otpauth://totp/Nexter?secret=JBSWY3DPEHPK3PXP',
+        qrDataUrl: 'data:image/png;base64,secret',
+        recoveryCodes: ['AAAA-BBBB'],
+        totpSecret: 'JBSWY3DPEHPK3PXP',
+        csrfToken: 'csrf-secret',
+      },
+      message: 'otpauth://totp/Nexter?secret=JBSWY3DPEHPK3PXP',
+    });
+
+    const serialized = JSON.stringify(event);
+    expect(serialized).not.toContain('JBSWY3DPEHPK3PXP');
+    expect(serialized).not.toContain('AAAA-BBBB');
+    expect(serialized).not.toContain('csrf-secret');
+    expect(event.message).toBe('[redacted]');
+  });
+
   it('removes breadcrumb request data', () => {
     const breadcrumb = scrubSentryBreadcrumb({
       data: {

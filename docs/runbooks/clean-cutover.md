@@ -17,7 +17,7 @@ Start the go-forward application with an empty ledger, explicit custody, and ope
 ## 1. Freeze writes and record the timestamp
 
 1. Set `SWAP_KILL_SWITCH=true` and wait for in-flight swaps to reach a terminal state.
-2. Stop the worker and API, or put the app behind a maintenance response, so no new ledger rows can be written while the backup is taken. The owner chooses the maintenance mechanism; there is no built-in maintenance mode.
+2. Stop the API, or put the app behind a maintenance response, so no new ledger rows can be written while the backup is taken. The owner chooses the maintenance mechanism; there is no built-in maintenance mode.
 3. Record the cutover timestamp in UTC in the release record and in every opening-balance adjustment reason.
 
 ## 2. Back up and verify the legacy database
@@ -47,8 +47,8 @@ Preferred: a new Railway Postgres database/service so the archive is isolated.
      DATABASE_URL="$NEW_OWNER_DATABASE_URL" pnpm db:provision-app
    ```
 
-4. Set the API/worker `DATABASE_URL` to the `nexter_app` URL on the new database and `MIGRATION_DATABASE_URL` to the owner URL.
-5. Deploy the API and worker. Verify `/health` and `/ready` before continuing.
+4. Set the API `DATABASE_URL` to the `nexter_app` URL on the new database and `MIGRATION_DATABASE_URL` to the owner URL.
+5. Deploy the API. Verify `/health` and `/ready` before continuing.
 
 ## 4. Bootstrap the owner
 
@@ -86,7 +86,6 @@ Preferred: a new Railway Postgres database/service so the archive is isolated.
 - Portfolio, `Основной список`, trades, Статистика, Operations, Tasks, Notes, Vault, and Settings load without console errors.
 - A test quote (no execution) and the kill switch state are correct.
 - An export includes the new ledger only.
-- Worker logs `Nexter worker started`.
 
 ## 8. Archive the legacy database
 
@@ -97,7 +96,7 @@ Preferred: a new Railway Postgres database/service so the archive is isolated.
 ## Rollback
 
 - Before cutover: no production change has been made; discard the new database.
-- After switching `DATABASE_URL`: point API/worker `DATABASE_URL`/`MIGRATION_DATABASE_URL` back to the legacy database and redeploy the previous image. The legacy database was only read during cutover, so no restore is needed unless a write leaked through.
+- After switching `DATABASE_URL`: point the API `DATABASE_URL` and `MIGRATION_DATABASE_URL` back to the legacy database and redeploy the previous image. The legacy database was only read during cutover, so no restore is needed unless a write leaked through.
 - After opening balances: the new database can be discarded and recreated; the archive remains the source of truth for the legacy period.
 - The UI-12 release itself rolls back by redeploying the previous image (`31cb319`); migration `0027` is additive and can remain in the legacy database.
 
@@ -105,4 +104,3 @@ Preferred: a new Railway Postgres database/service so the archive is isolated.
 
 - Enable Railway PITR or a daily encrypted backup cron before the cutover; the current RPO requirement is not met by a one-off dump.
 - Decide whether the legacy Notion import UI stays under Settings or is removed after the archive is frozen.
-- The worker still uses the owner database role because pg-boss performs DDL; moving it to a restricted role is a separate task.

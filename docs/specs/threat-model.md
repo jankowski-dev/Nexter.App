@@ -22,7 +22,7 @@ Opportunistic attackers, credential stuffing, phishing, malware, malicious brows
 - Single user, closed registration, setup token.
 - Argon2id passwords, mandatory TOTP, recovery codes.
 - httpOnly/Secure/SameSite cookies, server-side sessions, rotation, revocation.
-- CSRF token and Origin checks for mutations.
+- CSRF token and Origin checks for mutations. Production/staging reject unsafe requests that have neither `Origin` nor `Referer`; bearer-only `/bot/*` endpoints explicitly skip the origin check.
 - Rate limits, lockout, audit log.
 - Helmet: CSP, HSTS, DENY framing, strict-origin-when-cross-origin, Permissions-Policy.
 - Secrets only in env; no secrets in logs; pino allowlist serializer; Sentry scrubbing.
@@ -35,6 +35,10 @@ Opportunistic attackers, credential stuffing, phishing, malware, malicious brows
 ## Residual risks
 
 Self-hosting shifts responsibility to the owner; Railway/Cloudflare/GitHub may be compromised; the user's device may be infected; Tangem firmware and DEX contracts are outside our control; market risk remains.
+
+- **Pending TOTP sessions.** A password-correct login before TOTP verification gets a pending session. It cannot read app data and expires after 15 minutes, and enabling TOTP revokes other pending sessions, but a stolen pending cookie could still complete 2FA with a valid code inside that window.
+- **TOTP replay.** Codes are accepted within a ±30-second epoch tolerance. Replay protection across the same time-step is planned in migration wave 1 (`users.last_totp_step`); until then, an intercepted code is usable only inside the tolerance window and is rate-limited.
+- **CSRF origin fallback.** Some non-browser clients omit `Origin`/`Referer`; these are rejected for unsafe requests in production/staging. Bearer-only bot endpoints are exempt by design.
 
 ## Verification
 
