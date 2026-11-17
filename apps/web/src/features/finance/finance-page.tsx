@@ -22,6 +22,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { useConfirm } from '@/lib/confirm';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Decimal } from 'decimal.js';
 import { useMemo, useRef, useState } from 'react';
 import type {
   FinanceAccount,
@@ -217,6 +218,27 @@ export function FinancePage() {
     };
   }, [period, customMonth]);
 
+  const periodDays = useMemo(() => {
+    if (period === 'all') return null;
+
+    const today = new Date();
+
+    if (period === 'year') {
+      const start = new Date(today.getFullYear(), 0, 1);
+      return Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86_400_000) + 1);
+    }
+
+    const [year, month] = periodRange.month.split('-').map(Number);
+
+    if (!year || !month) return null;
+
+    if (periodRange.month === currentMonth()) {
+      return Math.max(1, today.getDate());
+    }
+
+    return new Date(year, month, 0).getDate();
+  }, [period, periodRange.month]);
+
   const summary = useQuery({
     queryKey: [
       'finance-summary',
@@ -397,6 +419,15 @@ export function FinancePage() {
     }
   }
 
+  const avgIncome =
+    summary.data && periodDays
+      ? new Decimal(summary.data.incomeBase).div(periodDays).toFixed(2)
+      : null;
+  const avgExpense =
+    summary.data && periodDays
+      ? new Decimal(summary.data.expenseBase).div(periodDays).toFixed(2)
+      : null;
+
   const isLoading = summary.isPending || accounts.isPending || categories.isPending;
   const hasError = summary.isError || accounts.isError || categories.isError;
 
@@ -492,6 +523,22 @@ export function FinancePage() {
 
       {!isLoading && !hasError && tab === 'overview' ? (
         <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Kpi
+              label="Средний расход в день"
+              value={periodDays ? money(avgExpense, 'BYN') : '—'}
+              hint={periodDays ? `${periodDays} дн. периода` : 'За всё время'}
+              tone="text-red-700"
+              surface="rose"
+            />
+            <Kpi
+              label="Средний доход в день"
+              value={periodDays ? money(avgIncome, 'BYN') : '—'}
+              hint={periodDays ? `${periodDays} дн. периода` : 'За всё время'}
+              tone="text-emerald-700"
+              surface="emerald"
+            />
+          </div>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kpi
               label="Доходы"

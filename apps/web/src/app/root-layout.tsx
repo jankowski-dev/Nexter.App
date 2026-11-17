@@ -366,7 +366,7 @@ function RootLayoutContent() {
               Заблокировать
             </Button>
             <Button
-              className="w-full justify-center bg-red-700 text-white hover:bg-red-800"
+              className="w-full justify-center border-red-400/40 bg-red-500/10 text-red-200 hover:border-red-300/60 hover:bg-red-500/20"
               variant="danger"
               onClick={() => void logout()}
             >
@@ -437,7 +437,7 @@ function RootLayoutContent() {
               >
                 <LockIcon />
               </Button>
-              <Button className="px-2 md:hidden" variant="ghost" onClick={() => void logout()}>
+              <Button className="px-2 md:hidden" variant="danger" onClick={() => void logout()}>
                 Выйти
               </Button>
             </div>
