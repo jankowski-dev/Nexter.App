@@ -17,7 +17,8 @@ interface IconCacheEntry {
 const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ICON_CACHE_MAX_ENTRIES = 200;
 const ICON_CACHE_MAX_BYTES = 8 * 1024 * 1024;
-const HISTORY_CACHE_TTL_MS = 60 * 60 * 1000;
+const HISTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const HISTORY_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
 const HISTORY_CACHE_MAX_ENTRIES = 100;
 
 interface PriceHistoryCacheEntry {
@@ -182,7 +183,8 @@ export class MarketDataService {
       if (oldest) this.historyCache.delete(oldest);
     }
     this.historyCache.set(key, {
-      expiresAt: Date.now() + HISTORY_CACHE_TTL_MS,
+      expiresAt:
+        Date.now() + (points.length >= 2 ? HISTORY_CACHE_TTL_MS : HISTORY_EMPTY_CACHE_TTL_MS),
       source,
       points,
     });

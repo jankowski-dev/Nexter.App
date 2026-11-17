@@ -168,9 +168,9 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.getByRole('tab', { name: 'Пополнения' }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Пополнение' }).first()).toBeVisible();
+  await expect(page.getByText('Пополнение', { exact: true }).first()).toBeVisible();
   await page.getByRole('tab', { name: 'Выводы' }).click();
-  await expect(page.getByRole('row').filter({ hasText: 'Вывод' }).first()).toBeVisible();
+  await expect(page.getByText('Вывод', { exact: true }).first()).toBeVisible();
 
   // The trade journal opens the sell drawer; the full card still has lots and legs.
   await page.goto('/portfolio');
@@ -251,9 +251,9 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await exchangeDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('tab', { name: 'Обмены' }).click();
-  const exchangeRow = page.getByRole('row').filter({ hasText: 'Обмен' }).first();
+  const exchangeRow = page.getByText('Обмен', { exact: true }).first();
   await expect(exchangeRow).toBeVisible();
-  await expect(exchangeRow.getByText(/BASED/).first()).toBeVisible();
+  await expect(page.getByText(/BASED/).first()).toBeVisible();
 
   // Audit page shows the mutations created above.
   await page.goto('/settings/audit');

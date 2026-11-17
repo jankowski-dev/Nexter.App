@@ -72,6 +72,7 @@ export class WatchlistService {
   async chart(userId: string, id: string, days: number): Promise<WatchlistChartResponse> {
     const [row] = await this.db
       .select({
+        assetId: assets.id,
         bscContractAddress: watchlist.bscContractAddress,
         ethereumContractAddress: watchlist.ethereumContractAddress,
         contractAddress: assets.contractAddress,
@@ -100,6 +101,24 @@ export class WatchlistService {
       row.coingeckoId,
       days,
     );
+
+    if (history.points.length >= 2) {
+      return { days, source: history.source, points: history.points };
+    }
+
+    const cutoff = Date.now() - days * 86_400_000;
+    const manualPoints = (await this.pricing.list(row.assetId))
+      .filter((price) => new Date(price.observedAt).getTime() >= cutoff)
+      .map((price) => ({
+        date: price.observedAt.slice(0, 10),
+        priceUsd: price.priceUsd,
+      }))
+      .sort((left, right) => left.date.localeCompare(right.date))
+      .slice(-days);
+
+    if (manualPoints.length >= 2) {
+      return { days, source: 'manual', points: manualPoints };
+    }
 
     return { days, source: history.source, points: history.points };
   }

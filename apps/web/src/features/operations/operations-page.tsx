@@ -4,6 +4,7 @@ import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ListToolbar, TabGroup } from '@/components/ui/list-toolbar';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
+import { TokenIcon } from '@/components/token-icon';
 import { fetchAccounts, fetchAssets, fetchTransactions } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatTokenAmount, formatUsd } from '@/lib/format';
@@ -29,6 +30,17 @@ const typeLabels: Record<string, string> = {
   fee: 'Сбор',
   income: 'Доход',
   adjustment: 'Корректировка',
+};
+
+const typeAccentColors: Record<string, string> = {
+  deposit: '#34d399',
+  income: '#34d399',
+  withdrawal: '#f87171',
+  fee: '#fca5a5',
+  swap: '#38bdf8',
+  transfer: '#7dd3fc',
+  adjustment: '#fbbf24',
+  trade: '#d4d4d8',
 };
 
 const subtypeLabels: Record<string, string> = {
@@ -93,12 +105,17 @@ export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Операции"
-        subtitle="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
-        actions={<Button onClick={() => setManualOpen(true)}>Новая операция</Button>}
-        embedded={embedded}
-      />
+      {embedded ? (
+        <div className="flex justify-end">
+          <Button onClick={() => setManualOpen(true)}>Новая операция</Button>
+        </div>
+      ) : (
+        <PageHeader
+          title="Операции"
+          subtitle="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
+          actions={<Button onClick={() => setManualOpen(true)}>Новая операция</Button>}
+        />
+      )}
 
       <ListToolbar
         search={search}
@@ -129,85 +146,88 @@ export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
         <Card>
           <CardTitle>Журнал операций</CardTitle>
           <CardDescription>
-            Все движения по кошелькам. Сделки открываются из Торговли.
+            Все движения по кошелькам. Сделки открываются из вкладки «Ордера».
           </CardDescription>
           {visibleRows.length === 0 ? (
             <p className="mt-4 text-sm text-zinc-600">
               {rows.length === 0 ? 'Операций нет.' : 'Ничего не найдено.'}
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Дата</th>
-                    <th className="py-2 pr-3 font-medium">Тип</th>
-                    <th className="py-2 pr-3 font-medium">Движение</th>
-                    <th className="py-2 pr-3 font-medium">Источник</th>
-                    <th className="py-2 pr-3 font-medium">Заметки</th>
-                    <th className="py-2 text-right font-medium">Сборы</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((transaction) => {
-                    const walletPostings = transaction.postings.filter(
-                      (posting) =>
-                        posting.amount !== '0' &&
-                        accountById.get(posting.accountId)?.type === 'wallet',
-                    );
-                    const postings = (
-                      walletPostings.length > 0
-                        ? walletPostings
-                        : transaction.postings.filter((posting) => posting.amount !== '0')
-                    )
-                      .slice(0, 3)
-                      .map((posting) => {
-                        const asset = assetById.get(posting.assetId);
-                        const symbol = asset?.symbol ?? 'актив';
-                        return `${formatTokenAmount(posting.amount)} ${symbol}`;
-                      });
+            <div className="mt-4 space-y-2">
+              {visibleRows.map((transaction) => {
+                const walletPostings = transaction.postings.filter(
+                  (posting) =>
+                    posting.amount !== '0' && accountById.get(posting.accountId)?.type === 'wallet',
+                );
+                const displayPostings =
+                  walletPostings.length > 0
+                    ? walletPostings
+                    : transaction.postings.filter((posting) => posting.amount !== '0');
+                const postings = displayPostings.slice(0, 3).map((posting) => {
+                  const asset = assetById.get(posting.assetId);
+                  const symbol = asset?.symbol ?? 'актив';
+                  return `${formatTokenAmount(posting.amount)} ${symbol}`;
+                });
+                const primaryPosting = displayPostings[0];
+                const primaryAsset = primaryPosting ? assetById.get(primaryPosting.assetId) : null;
 
-                    const primaryLabel =
-                      transaction.subtype === 'swap'
-                        ? 'Обмен'
-                        : (typeLabels[transaction.type] ?? transaction.type);
-                    const secondaryLabel =
-                      subtypeLabels[transaction.subtype] ?? transaction.subtype;
-                    const showSecondary = primaryLabel !== secondaryLabel;
+                const primaryLabel =
+                  transaction.subtype === 'swap'
+                    ? 'Обмен'
+                    : (typeLabels[transaction.type] ?? transaction.type);
+                const secondaryLabel = subtypeLabels[transaction.subtype] ?? transaction.subtype;
+                const showSecondary = primaryLabel !== secondaryLabel;
+                const fees = Number(transaction.feesUsd);
 
-                    return (
-                      <tr
-                        key={transaction.id}
-                        className="border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70"
-                      >
-                        <td className="py-2 pr-3 text-zinc-600">
-                          {formatDateTime(transaction.occurredAt)}
-                        </td>
-                        <td className="py-2 pr-3">
-                          <div className="text-zinc-800">{primaryLabel}</div>
+                return (
+                  <div
+                    key={transaction.id}
+                    className="rounded-xl border border-l-4 border-zinc-200 p-3.5 transition-colors hover:border-emerald-300"
+                    style={{
+                      borderLeftColor: typeAccentColors[transaction.type] ?? '#d4d4d8',
+                    }}
+                  >
+                    <div className="flex flex-wrap items-center gap-4">
+                      <TokenIcon
+                        logoUrl={primaryAsset?.logoUrl ?? null}
+                        symbol={primaryAsset?.symbol ?? '—'}
+                        className="h-9 w-9 text-[10px]"
+                      />
+                      <div className="min-w-[180px] flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-900">
+                            {primaryLabel}
+                          </span>
                           {showSecondary ? (
-                            <div className="text-xs text-zinc-500">{secondaryLabel}</div>
+                            <span className="text-[11px] text-zinc-500">{secondaryLabel}</span>
                           ) : null}
-                        </td>
-                        <td className="py-2 pr-3 font-mono text-xs tabular-nums text-zinc-700">
+                          {transaction.source === 'notion' ? (
+                            <Badge tone="info">Notion</Badge>
+                          ) : null}
+                        </div>
+                        <div className="mt-1 text-[11px] text-zinc-500">
+                          {formatDateTime(transaction.occurredAt)}
+                        </div>
+                        {transaction.notes ? (
+                          <div className="mt-0.5 max-w-xl truncate text-xs text-zinc-500">
+                            {transaction.notes}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="ml-auto text-right">
+                        <div className="font-mono text-sm font-medium tabular-nums text-zinc-800">
                           {postings.length > 0 ? postings.join(' · ') : '—'}
-                        </td>
-                        <td className="py-2 pr-3">
-                          <Badge tone={transaction.source === 'notion' ? 'info' : 'neutral'}>
-                            {transaction.source}
-                          </Badge>
-                        </td>
-                        <td className="max-w-64 truncate py-2 pr-3 text-zinc-500">
-                          {transaction.notes ?? '—'}
-                        </td>
-                        <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
-                          {Number(transaction.feesUsd) === 0 ? '—' : formatUsd(transaction.feesUsd)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                        {fees > 0 ? (
+                          <div className="mt-0.5 text-[11px] text-zinc-500">
+                            Сборы {formatUsd(transaction.feesUsd)}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
           {transactions.hasNextPage ? (

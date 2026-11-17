@@ -44,7 +44,7 @@ export function TokenPriceChart({
           {chart.data ? (
             <div className="text-xs text-zinc-500">
               {chart.data.points.length > 0
-                ? `${chart.data.points.length} дн. · ${chart.data.source === 'geckoterminal' ? 'GeckoTerminal' : chart.data.source === 'coingecko' ? 'CoinGecko' : 'нет данных'}`
+                ? `${chart.data.points.length} дн. · ${chart.data.source === 'geckoterminal' ? 'GeckoTerminal' : chart.data.source === 'coingecko' ? 'CoinGecko' : chart.data.source === 'manual' ? 'ручные цены' : 'нет данных'}`
                 : 'Нет исторических данных'}
             </div>
           ) : null}

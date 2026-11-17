@@ -8,8 +8,13 @@ export function WeeklyPriceChart({ entryId, className }: { entryId: string; clas
   const chart = useQuery({
     queryKey: ['token-chart', entryId, 90],
     queryFn: () => fetchWatchlistChart(entryId, 90),
-    staleTime: 5 * 60 * 1000,
+    staleTime: (query) => {
+      const points = query.state.data?.points;
+      return points && points.length >= 2 ? 24 * 60 * 60 * 1000 : 5 * 60 * 1000;
+    },
+    gcTime: 7 * 24 * 60 * 60 * 1000,
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const weekly = sampleWeeklyPoints<WatchlistChartPoint>(chart.data?.points ?? []);

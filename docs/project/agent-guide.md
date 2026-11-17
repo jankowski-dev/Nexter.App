@@ -134,7 +134,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - Token icons: `TokenIcon` + `tokenIconSrc`; icon URL is `/api/v1/watchlist/icon?url=...`.
 - Russian copy; use existing `format*` helpers; never `Number()` for money except display-only.
 - New UI should be full-width rows/cards where the owner asked (watchlist, vault, notes, tasks).
-- Crypto is one sidebar entry with seven tabs: `Обзор` (stat cards + consolidated token blocks + active trades + main token list), `Токены` (token base), `Ордера` (full journal blocks), `Операции`, `Роботы`, `Стратегии`, `Статистика`. `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab; tab switches canonicalize to `/portfolio#<tab>`. Hash compatibility: `#trades`/`#deals`/`#journal` -> `Ордера`, `#watchlist` -> `Токены`, `#reports` -> `Статистика`. See ADR 0067.
+- Crypto is one sidebar entry with seven tabs: `Обзор` (stat cards + consolidated token blocks + main token list), `Токены` (token base), `Ордера` (full journal blocks), `Операции`, `Роботы`, `Стратегии`, `Статистика`. `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab; tab switches canonicalize to `/portfolio#<tab>`. Hash compatibility: `#trades`/`#deals`/`#journal` -> `Ордера`, `#watchlist` -> `Токены`, `#reports` -> `Статистика`. See ADR 0067.
 
 ## 12. Testing
 

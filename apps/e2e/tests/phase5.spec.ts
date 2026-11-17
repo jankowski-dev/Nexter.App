@@ -155,7 +155,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByText('Итоги за период')).toBeVisible();
   await expect(page.getByRole('button', { name: '12 месяцев' })).toBeVisible();
   await expect(page.getByText('Разбивка по активам')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Транзакции за период' })).toBeVisible();
   await page.getByRole('button', { name: '30 дней' }).click();
   await expect(page.getByText('Чистая прибыль за период')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Реализованный P&L по месяцам' })).toBeVisible();
@@ -164,7 +163,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page).toHaveURL(/\/portfolio$/);
 
   await page.goto('/portfolio');
-  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Обзор' })).toBeVisible();
   await expect(page.getByText('Портфель по токенам')).toBeVisible();
   await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
   const assetDrawer = page.getByRole('dialog');
@@ -215,8 +214,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await page.goto('/watchlist');
-  await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
-  await page.getByRole('button', { name: /BASED/ }).first().click();
+  await expect(page.getByRole('heading', { name: 'Токены' })).toBeVisible();
+  await page.getByTestId('token-block-BASED').click();
   const existingTokenDrawer = page.getByRole('dialog');
   await existingTokenDrawer.getByRole('button', { name: 'Изменить' }).click();
   const watchDialog = page.getByRole('dialog');
@@ -229,7 +228,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await watchDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('button', { name: /BASED/ }).first().click();
+  await page.getByTestId('token-block-BASED').click();
   const tokenDrawer = page.getByRole('dialog');
   await expect(tokenDrawer.getByRole('heading', { name: 'BASED' })).toBeVisible();
   await expect(tokenDrawer.getByText('Playwright thesis')).toBeVisible();
@@ -255,7 +254,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(editDialog.locator('img[src^="data:image/"]')).toBeVisible();
   await editDialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: /BASED/ }).first().click();
+  await page.getByTestId('token-block-BASED').click();
   const updatedDrawer = page.getByRole('dialog');
   await expect(updatedDrawer.getByText('Updated Playwright thesis')).toBeVisible();
   await updatedDrawer.getByLabel('Закрыть').click();
@@ -299,13 +298,13 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
 
   await page.goto('/watchlist');
-  await page.getByRole('button', { name: /BASED/ }).first().click();
+  await page.getByTestId('token-block-BASED').click();
   const drawerToDelete = page.getByRole('dialog');
   await expect(drawerToDelete.getByText('Updated Playwright thesis')).toBeVisible();
   await drawerToDelete.getByRole('button', { name: 'Удалить' }).click();
   const deleteTokenDialog = page.getByRole('dialog', { name: 'Удалить токен из базы?' });
   await expect(deleteTokenDialog).toBeVisible();
   await deleteTokenDialog.getByRole('button', { name: 'Удалить' }).click();
-  await expect(page.getByRole('button', { name: /BASED/ })).toHaveCount(0);
+  await expect(page.getByTestId('token-block-BASED')).toHaveCount(0);
   await expect(page.getByRole('switch', { name: 'Показать архивные токены' })).toHaveCount(0);
 });

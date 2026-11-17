@@ -52,7 +52,7 @@ test('mobile navigation and dialogs', async ({ page }) => {
 
   await cryptoLink.click();
   await expect(page).toHaveURL(/\/portfolio$/);
-  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Обзор' })).toBeVisible();
 
   await page.getByRole('tab', { name: 'Статистика' }).click();
   await expect(page).toHaveURL(/\/portfolio#statistics$/);
@@ -69,7 +69,7 @@ test('mobile navigation and dialogs', async ({ page }) => {
 
   await page.getByRole('tab', { name: 'Токены' }).click();
   await expect(page).toHaveURL(/\/portfolio#tokens$/);
-  await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Токены' })).toBeVisible();
 
   await page.goto('/swap');
   await expect(page).toHaveURL(/\/portfolio$/);

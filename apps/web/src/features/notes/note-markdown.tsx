@@ -186,7 +186,7 @@ export function NoteEditor({
       </div>
       <Textarea
         ref={ref}
-        className="min-h-[45vh] w-full font-sans text-[15px] leading-relaxed"
+        className="min-h-[45vh] w-full border-0 bg-transparent font-sans text-[15px] leading-relaxed shadow-none focus:border-0 focus:ring-0"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder="Пиши как в журнале: мысли, наблюдения, ссылки, списки…"

@@ -183,7 +183,7 @@ export function PortfolioPage() {
   if (tab === 'overview' && positions.isPending) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Крипта" subtitle="Загружаю позиции и сделки…" />
+        <PageHeader title="Обзор" />
         <LoadingRows rows={8} />
       </div>
     );
@@ -192,7 +192,7 @@ export function PortfolioPage() {
   if (tab === 'overview' && (positions.isError || !positions.data)) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Крипта" />
+        <PageHeader title="Обзор" />
         <ErrorState
           message={toRussianError(positions.error, 'Не удалось загрузить позиции')}
           onRetry={refetchPositions}
@@ -202,6 +202,7 @@ export function PortfolioPage() {
   }
 
   const data = positions.data;
+  const activeTabLabel = cryptoTabs.find((item) => item.value === tab)?.label ?? 'Обзор';
   const positionByAsset = new Map(
     (data?.positions ?? []).map((position) => [position.asset.id, position]),
   );
@@ -216,20 +217,7 @@ export function PortfolioPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Крипта"
-        subtitle={
-          tab === 'overview'
-            ? 'Портфель, консолидированные данные и основной список токенов.'
-            : tab === 'orders'
-              ? 'Все сделки: активные, прибыльные, убыточные и закрытые.'
-              : tab === 'robots'
-                ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
-                : tab === 'strategies'
-                  ? 'Встроенные стратегии и подробные описания.'
-                  : undefined
-        }
-      />
+      <PageHeader title={activeTabLabel} />
 
       <div
         role="tablist"
@@ -445,12 +433,6 @@ export function PortfolioPage() {
               )}
             </Card>
           ) : null}
-
-          <TradesPanel
-            mode="active"
-            logos={watchlistLogos}
-            onOpenGroup={(group) => setSelectedAssetId(group.asset.id)}
-          />
 
           <TokenBuyList
             onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
