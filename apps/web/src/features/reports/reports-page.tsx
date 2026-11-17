@@ -100,7 +100,7 @@ function Metric({
   );
 }
 
-export function ReportsPage() {
+export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
   const [preset, setPreset] = useState<PeriodPreset>('365d');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -170,6 +170,7 @@ export function ReportsPage() {
       <PageHeader
         title="Статистика"
         subtitle="Статистика по портфелю, сделкам и издержкам. Налоги не рассчитываются."
+        embedded={embedded}
       />
 
       <Card>

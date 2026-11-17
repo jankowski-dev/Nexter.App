@@ -103,7 +103,7 @@ function sortValue(entry: WatchlistEntry, key: Exclude<TokenSortKey, 'default'>)
   return Number.isFinite(value) ? value : null;
 }
 
-export function WatchlistPage() {
+export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [search, setSearch] = useState('');
@@ -418,6 +418,7 @@ export function WatchlistPage() {
             <Button onClick={openCreate}>Добавить актив</Button>
           </>
         }
+        embedded={embedded}
       />
 
       {error && !dialogOpen ? (

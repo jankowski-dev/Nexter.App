@@ -178,7 +178,6 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
 
   await page.reload();
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ручной' }).click();
   const basedBlock = page.getByTestId('token-block-BASED');
   await expect(basedBlock).toBeVisible();
   await basedBlock.getByRole('button', { name: 'Купить' }).click();
@@ -227,7 +226,6 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   });
 
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ручной' }).click();
   await expect(page.getByTestId('token-block-BASED')).toBeVisible();
   await expect(page.getByTestId('token-block-LINK')).toHaveCount(0);
 });

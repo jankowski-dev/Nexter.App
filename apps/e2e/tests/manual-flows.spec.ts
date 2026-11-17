@@ -84,7 +84,6 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   async function openBuyDrawer() {
     await page.goto('/portfolio');
-    await page.getByRole('tab', { name: 'Ручной' }).click();
     await page.getByTestId('token-block-BASED').getByRole('button', { name: 'Купить' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
@@ -175,7 +174,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // The trade journal opens the sell drawer; the full card still has lots and legs.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
   await expect(page.getByText('Активные сделки')).toBeVisible();
   await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   let sellDrawer = page.getByRole('dialog');
@@ -188,7 +187,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // Partial manual sell from the selected trade.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
   await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await sellDrawer.getByRole('tab', { name: 'Вручную' }).click();

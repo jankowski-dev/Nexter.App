@@ -10,7 +10,8 @@
 - ошибки импорта/ledger, портящие финансовые данные;
 - утечка секретов через логи/репозиторий;
 - XSS/CSRF/SSRF через пользовательские URL/Markdown/иконки;
-- provider rate limits/DoS.
+- provider rate limits/DoS;
+- known unfixable transitive advisory `GHSA-fc5q-39xc-vjpf` (`picomatch` ReDoS through repeated extglobs; no patched release). The app does not accept user-controlled glob patterns; CI ignores this exact CVE until an upstream fix exists.
 
 ## 2. Ключевые меры
 

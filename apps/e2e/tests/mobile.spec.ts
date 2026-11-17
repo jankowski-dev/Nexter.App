@@ -45,21 +45,17 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await expect(mobileNav).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
 
-  const cryptoButton = mobileNav.getByRole('button', { name: /Крипта/ });
-  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
-  await cryptoButton.click();
-  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'false');
-  await expect(mobileNav.getByRole('link', { name: 'Торговля' })).toHaveCount(0);
+  const cryptoLink = mobileNav.getByRole('link', { name: 'Крипта' });
+  await expect(cryptoLink).toBeVisible();
+  await expect(mobileNav.getByRole('link', { name: 'База токенов' })).toHaveCount(0);
   await expect(mobileNav.getByRole('link', { name: 'Хранилище' })).toBeVisible();
-  await cryptoButton.click();
-  await expect(cryptoButton).toHaveAttribute('aria-expanded', 'true');
 
-  await mobileNav.getByRole('link', { name: 'Торговля' }).click();
+  await cryptoLink.click();
   await expect(page).toHaveURL(/\/portfolio$/);
-  await expect(page.getByRole('heading', { name: 'Торговля' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
 
-  await mobileNav.getByRole('link', { name: 'Статистика' }).click();
-  await expect(page).toHaveURL(/\/statistics$/);
+  await page.getByRole('tab', { name: 'Статистика' }).click();
+  await expect(page).toHaveURL(/\/portfolio#statistics$/);
   await expect(page.getByRole('heading', { name: 'Статистика' })).toBeVisible();
   await expect(page.getByRole('button', { name: '30 дней' })).toBeVisible();
 
@@ -71,8 +67,8 @@ test('mobile navigation and dialogs', async ({ page }) => {
   await dialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await mobileNav.getByRole('link', { name: 'База токенов' }).click();
-  await expect(page).toHaveURL(/\/watchlist$/);
+  await page.getByRole('tab', { name: 'Токены' }).click();
+  await expect(page).toHaveURL(/\/portfolio#tokens$/);
   await expect(page.getByRole('heading', { name: 'База токенов' })).toBeVisible();
 
   await page.goto('/swap');

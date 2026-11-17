@@ -164,7 +164,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page).toHaveURL(/\/portfolio$/);
 
   await page.goto('/portfolio');
-  await expect(page.getByRole('heading', { name: 'Торговля' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
   await expect(page.getByText('Портфель по токенам')).toBeVisible();
   await page.getByRole('button', { name: 'Открыть статистику BASED' }).click();
   const assetDrawer = page.getByRole('dialog');
@@ -174,7 +174,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(assetDrawer.getByRole('button', { name: 'Готово' })).toBeVisible();
 
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
   await expect(page.getByText('Активные сделки')).toBeVisible();
   await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   const tradeDrawer = page.getByRole('dialog');
@@ -196,7 +196,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await post('/api/v1/watchlist', { assetId: xny?.id });
 
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ручной' }).click();
   await page.getByTestId('token-block-XNY').getByRole('button', { name: 'Купить' }).click();
   const tradeDialog = page.getByRole('dialog');
   await expect(tradeDialog.getByRole('heading', { name: 'Создание ордера · XNY' })).toBeVisible();
@@ -295,7 +294,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/portfolio');
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
-  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('tab', { name: 'Ордера' }).click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
 
