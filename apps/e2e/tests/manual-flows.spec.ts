@@ -84,12 +84,8 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   async function openBuyDrawer() {
     await page.goto('/portfolio');
-    await page
-      .getByRole('row')
-      .filter({ hasText: 'BASED' })
-      .first()
-      .getByRole('button', { name: 'Купить' })
-      .click();
+    await page.getByRole('tab', { name: 'Ручной' }).click();
+    await page.getByTestId('token-block-BASED').getByRole('button', { name: 'Купить' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
     await dialog.getByRole('tab', { name: 'Вручную' }).click();
@@ -179,9 +175,9 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // The trade journal opens the sell drawer; the full card still has lots and legs.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ордера' }).click();
-  await expect(page.getByText('Активные ордера')).toBeVisible();
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await expect(page.getByText('Активные сделки')).toBeVisible();
+  await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   let sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(sellDrawer.getByText('Текущая сделка')).toBeVisible();
@@ -192,8 +188,8 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
 
   // Partial manual sell from the selected trade.
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ордера' }).click();
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await sellDrawer.getByRole('tab', { name: 'Вручную' }).click();
   const firstManualForm = sellDrawer.locator('#manual-order-form');
@@ -215,7 +211,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByText('60 BASED', { exact: true }).first()).toBeVisible();
   await sellDrawer.getByRole('tab', { name: 'Вручную' }).click();
@@ -233,7 +229,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await sellDrawer.getByRole('button', { name: 'Сохранить продажу' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByText('50 BASED', { exact: true }).first()).toBeVisible();
   await sellDrawer.getByRole('button', { name: 'Закрыть' }).click();

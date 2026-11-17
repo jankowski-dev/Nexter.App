@@ -178,9 +178,10 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
 
   await page.reload();
   await page.goto('/portfolio');
-  const basedRow = page.getByRole('row').filter({ hasText: 'BASED' }).first();
-  await expect(basedRow).toBeVisible();
-  await basedRow.getByRole('button', { name: 'Купить' }).click();
+  await page.getByRole('tab', { name: 'Ручной' }).click();
+  const basedBlock = page.getByTestId('token-block-BASED');
+  await expect(basedBlock).toBeVisible();
+  await basedBlock.getByRole('button', { name: 'Купить' }).click();
 
   const buyDrawer = page.getByRole('dialog');
   await expect(buyDrawer.getByRole('heading', { name: 'Создание ордера · BASED' })).toBeVisible();
@@ -226,7 +227,7 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   });
 
   await page.goto('/portfolio');
-  const mainList = page.getByRole('table').filter({ hasText: 'Действие' });
-  await expect(mainList).toBeVisible();
-  await expect(mainList.getByText('LINK', { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Ручной' }).click();
+  await expect(page.getByTestId('token-block-BASED')).toBeVisible();
+  await expect(page.getByTestId('token-block-LINK')).toHaveCount(0);
 });
