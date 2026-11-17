@@ -33,7 +33,8 @@ Status: **UI-0 through UI-20 implemented.** Owner-approved direction on 2026-11-
 
 ## Portfolio
 
-- Tabs: `Портфель`, `Основной список`, `Сделки`.
+- Tabs (historical UI-0 design): `Портфель`, `Основной список`, `Сделки`.
+- Current UI-67 workspace: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`; the main list moved to `Ручной`, active trades live in `Портфель`, and the full journal is `Сделки`. See ADR 0066.
 - Summary cards: cash, positions value, equity, position count.
 - Asset table: quantity, price, average price, value, cost basis, unrealized P&L, share.
 - Clicking an asset opens a right-side drawer with lots, trade groups, transactions, thesis/tags, and a link to the full asset card.

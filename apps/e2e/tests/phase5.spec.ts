@@ -174,9 +174,9 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(assetDrawer.getByRole('button', { name: 'Готово' })).toBeVisible();
 
   await page.goto('/portfolio');
-  await page.getByRole('tab', { name: 'Ордера' }).click();
-  await expect(page.getByText('Активные ордера')).toBeVisible();
-  await page.getByRole('row').filter({ hasText: 'BASED' }).first().click();
+  await page.getByRole('tab', { name: 'Сделки' }).click();
+  await expect(page.getByText('Активные сделки')).toBeVisible();
+  await page.getByRole('button', { name: 'Открыть сделку BASED' }).first().click();
   const tradeDrawer = page.getByRole('dialog');
   await expect(tradeDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(tradeDrawer.getByText('Текущая сделка')).toBeVisible();
@@ -196,12 +196,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await post('/api/v1/watchlist', { assetId: xny?.id });
 
   await page.goto('/portfolio');
-  await page
-    .getByRole('row')
-    .filter({ hasText: 'XNY' })
-    .first()
-    .getByRole('button', { name: 'Купить' })
-    .click();
+  await page.getByRole('tab', { name: 'Ручной' }).click();
+  await page.getByTestId('token-block-XNY').getByRole('button', { name: 'Купить' }).click();
   const tradeDialog = page.getByRole('dialog');
   await expect(tradeDialog.getByRole('heading', { name: 'Создание ордера · XNY' })).toBeVisible();
   await tradeDialog.getByRole('tab', { name: 'Вручную' }).click();
@@ -299,7 +295,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/portfolio');
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
-  await page.getByRole('tab', { name: 'Ордера' }).click();
+  await page.getByRole('tab', { name: 'Сделки' }).click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Активность' })).toHaveCount(0);
 

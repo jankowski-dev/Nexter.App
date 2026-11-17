@@ -1,9 +1,8 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardTitle } from '@/components/ui/card';
+import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
 import { PriceFreshness } from '@/components/ui/price-freshness';
-import { PeriodChange } from '@/components/period-change';
 import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
 import { fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
@@ -13,6 +12,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Asset, WatchlistEntry } from '@nexter/contracts';
 import { TokenInfoDialog } from '../watchlist/token-info-dialog';
+import { WeeklyPriceChart } from '../watchlist/weekly-price-chart';
 
 type TokenListSort =
   'default' | 'price' | 'change24h' | 'change7d' | 'change30d' | 'change1y' | 'marketCap';
@@ -43,6 +43,17 @@ function sortValue(entry: WatchlistEntry, key: Exclude<TokenListSort, 'default'>
   if (value === null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function TokenMetric({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className="text-right">
+      <div className="text-[10px] text-zinc-500">{label}</div>
+      <div className={`mt-0.5 font-mono text-xs tabular-nums ${tone ?? 'text-zinc-700'}`}>
+        {value}
+      </div>
+    </div>
+  );
 }
 
 export function TokenBuyList({
@@ -125,109 +136,113 @@ export function TokenBuyList({
           </Button>
         </div>
       </div>
+      <CardDescription>
+        Токены из группы «Основная» для ручной покупки. Нажмите на блок, чтобы открыть карточку
+        токена.
+      </CardDescription>
 
       {entries.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-600">
           В группе «Основная» пока нет токенов. Добавьте их в базе токенов.
         </p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[920px] text-sm">
-            <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                <th className="py-2 pr-3 font-medium">Токен</th>
-                <th className="py-2 pr-3 font-medium">Действие</th>
-                <th className="py-2 pr-3 text-right font-medium">Цена</th>
-                <th className="py-2 pr-3 font-medium">Обновлено</th>
-                <th className="py-2 pr-3 text-right font-medium">24ч</th>
-                <th className="py-2 pr-3 text-right font-medium">7д</th>
-                <th className="py-2 pr-3 text-right font-medium">30д</th>
-                <th className="py-2 pr-3 text-right font-medium">1г</th>
-                <th className="py-2 text-right font-medium">Кап.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedEntries.map((entry) => {
-                const chainAddress =
-                  entry.asset.chainCode === 'bsc'
-                    ? entry.bscContractAddress
-                    : entry.asset.chainCode === 'ethereum'
-                      ? entry.ethereumContractAddress
-                      : null;
-                const tradeAsset: Asset = {
-                  ...entry.asset,
-                  contractAddress: entry.asset.contractAddress ?? chainAddress,
-                };
-                return (
-                  <tr
-                    key={entry.id}
-                    tabIndex={0}
-                    className="cursor-pointer border-b border-zinc-100 last:border-0 odd:bg-zinc-50/60 hover:bg-zinc-100/70 focus:outline-none focus-visible:bg-emerald-50"
-                    onClick={() => setSelectedEntry(entry)}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        setSelectedEntry(entry);
-                      }
-                    }}
-                  >
-                    <td className="py-2 pr-3">
+        <div className="mt-4 space-y-2">
+          {sortedEntries.map((entry) => {
+            const chainAddress =
+              entry.asset.chainCode === 'bsc'
+                ? entry.bscContractAddress
+                : entry.asset.chainCode === 'ethereum'
+                  ? entry.ethereumContractAddress
+                  : null;
+            const tradeAsset: Asset = {
+              ...entry.asset,
+              contractAddress: entry.asset.contractAddress ?? chainAddress,
+            };
+            const change24h = entry.change24hPct ? formatPct(entry.change24hPct) : '—';
+            const change7d = entry.change7dPct ? formatPct(entry.change7dPct) : '—';
+            const change30d = entry.change30dPct ? formatPct(entry.change30dPct) : '—';
+            const change1y = entry.change1yPct ? formatPct(entry.change1yPct) : '—';
+
+            return (
+              <div
+                key={entry.id}
+                data-testid={`token-block-${entry.asset.symbol}`}
+                role="group"
+                tabIndex={0}
+                aria-label={`Токен ${entry.asset.symbol}: открыть карточку`}
+                onClick={() => setSelectedEntry(entry)}
+                onKeyDown={(event) => {
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setSelectedEntry(entry);
+                  }
+                }}
+                className="cursor-pointer rounded-xl border border-zinc-200 p-3.5 text-left transition-colors hover:border-emerald-300 hover:bg-emerald-50/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+              >
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-3 xl:flex-nowrap">
+                  <div className="flex min-w-[170px] max-w-[235px] items-center gap-2.5">
+                    <TokenIcon
+                      logoUrl={entry.logoUrl ?? entry.asset.logoUrl}
+                      symbol={entry.asset.symbol}
+                      className="h-9 w-9 text-[10px]"
+                    />
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <TokenIcon
-                          logoUrl={entry.logoUrl ?? entry.asset.logoUrl}
-                          symbol={entry.asset.symbol}
-                        />
-                        <div className="min-w-0">
-                          <div className="font-medium text-zinc-800">{entry.asset.symbol}</div>
-                          <div className="truncate text-xs text-zinc-500">
-                            {entry.asset.name} · {entry.asset.chainCode}
-                          </div>
-                        </div>
+                        <span className="truncate text-sm font-semibold text-zinc-900">
+                          {entry.asset.symbol}
+                        </span>
                       </div>
-                    </td>
-                    <td className="whitespace-nowrap py-2 pr-3">
-                      <Button
-                        className="h-8 px-3 text-xs"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onBuy(tradeAsset, entry.priceUsd);
-                        }}
-                      >
-                        Купить
-                      </Button>
-                    </td>
-                    <td className="py-2 pr-3 text-right font-mono text-base font-medium tabular-nums text-zinc-800">
-                      <LiveValue value={formatPrice(entry.priceUsd)}>
-                        {formatPrice(entry.priceUsd)}
-                      </LiveValue>
-                    </td>
-                    <td className="py-2 pr-3">
-                      <PriceFreshness
-                        updatedAt={entry.priceUpdatedAt}
-                        fetchedAt={entry.priceFetchedAt}
-                        source={entry.priceSource}
-                      />
-                    </td>
-                    <td
-                      className={`py-2 pr-3 text-right font-mono tabular-nums ${pnlTone(
-                        entry.change24hPct,
-                      )}`}
+                      <div className="truncate text-[11px] text-zinc-500">
+                        {entry.asset.name} · {entry.asset.chainCode}
+                      </div>
+                      <div className="mt-1 flex items-baseline gap-2">
+                        <LiveValue value={formatPrice(entry.priceUsd)}>
+                          <span className="font-mono text-lg font-semibold tracking-tight text-zinc-900">
+                            {formatPrice(entry.priceUsd)}
+                          </span>
+                        </LiveValue>
+                        <span className={`text-xs font-medium ${pnlTone(entry.change24hPct)}`}>
+                          {change24h}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-w-[190px] max-w-[280px] flex-1">
+                    <WeeklyPriceChart entryId={entry.id} />
+                  </div>
+
+                  <div className="ml-auto grid grid-cols-2 gap-x-5 gap-y-2 text-right sm:grid-cols-4">
+                    <TokenMetric label="7д" value={change7d} tone={pnlTone(entry.change7dPct)} />
+                    <TokenMetric label="30д" value={change30d} tone={pnlTone(entry.change30dPct)} />
+                    <TokenMetric label="1г" value={change1y} tone={pnlTone(entry.change1yPct)} />
+                    <TokenMetric
+                      label="Кап."
+                      value={entry.marketCapUsd ? formatUsdCompact(entry.marketCapUsd) : '—'}
+                    />
+                  </div>
+
+                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <Button
+                      className="h-8 px-3 text-xs"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onBuy(tradeAsset, entry.priceUsd);
+                      }}
                     >
-                      <LiveValue value={entry.change24hPct ? formatPct(entry.change24hPct) : '—'}>
-                        {entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
-                      </LiveValue>
-                    </td>
-                    <PeriodChange value={entry.change7dPct} />
-                    <PeriodChange value={entry.change30dPct} />
-                    <PeriodChange value={entry.change1yPct} />
-                    <td className="py-2 text-right font-mono tabular-nums text-zinc-600">
-                      {entry.marketCapUsd ? formatUsdCompact(entry.marketCapUsd) : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      Купить
+                    </Button>
+                    <PriceFreshness
+                      updatedAt={entry.priceUpdatedAt}
+                      fetchedAt={entry.priceFetchedAt}
+                      source={entry.priceSource}
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
       <TokenInfoDialog entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
