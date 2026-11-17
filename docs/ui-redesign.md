@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-20 implemented.** Owner-approved direction on 2026-11-08, latest feedback batch on 2026-11-11. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
+Status: **UI-0 through UI-68 implemented.** Owner-approved direction on 2026-11-08; latest feedback batches are UI-67 (trading page) and UI-68 (logout/finance/tasks) on 2026-11-17. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 
@@ -12,18 +12,18 @@ Status: **UI-0 through UI-20 implemented.** Owner-approved direction on 2026-11-
 
 ## Final navigation
 
-| Item       | Contents                                                                       |
-| ---------- | ------------------------------------------------------------------------------ |
-| Dashboard  | Combined crypto/finance summary, today's tasks, habit streaks                  |
-| Portfolio  | Positions, Основной список with buy actions, trade journal                     |
-| Operations | Deposits, withdrawals, exchanges; no trades                                    |
-| Watchlist  | User-created groups, contract-address token search, token cards                |
-| Статистика | Detailed crypto P&L, trade statistics, operations, fees/gas, exports           |
-| Finance    | Personal BYN accounts, operations, transfers and period overview               |
-| Vault      | Separate top-level service: E2E-encrypted passwords and access notes           |
-| Tasks      | Personal tasks, priorities, due dates, calendar/list journals                  |
-| Notes      | Journal-style notes, tags, photos, pinning                                     |
-| Settings   | Existing settings, security, accounts, audit, data quality; legacy import link |
+| Item       | Contents                                                                                                                   |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Dashboard  | Combined crypto/finance summary, today's tasks, habit streaks                                                              |
+| Trading    | Five tabs: Портфель (consolidated + active trades), Ручной (manual token blocks), Сделки (full journal), Роботы, Стратегии |
+| Operations | Deposits, withdrawals, exchanges; no trades                                                                                |
+| Watchlist  | User-created groups, contract-address token search, token cards                                                            |
+| Статистика | Detailed crypto P&L, trade statistics, operations, fees/gas, exports                                                       |
+| Finance    | Personal BYN accounts, operations, transfers and period overview                                                           |
+| Vault      | Separate top-level service: E2E-encrypted passwords and access notes                                                       |
+| Tasks      | Personal tasks, priorities, due dates, calendar/list journals                                                              |
+| Notes      | Journal-style notes, tags, photos, pinning                                                                                 |
+| Settings   | Existing settings, security, accounts, audit, data quality; legacy import link                                             |
 
 - No separate **Trades** entry. `/trades` redirects to Portfolio; `/trades/$tradeId` remains the detail route.
 - No separate **Swap** entry. Buy/sell runs in the token trade drawer; on-chain exchange runs in the Operations exchange drawer. `/swap` redirects to `/portfolio`.
@@ -38,7 +38,7 @@ Status: **UI-0 through UI-20 implemented.** Owner-approved direction on 2026-11-
 - Summary cards: cash, positions value, equity, position count.
 - Asset table: quantity, price, average price, value, cost basis, unrealized P&L, share.
 - Clicking an asset opens a right-side drawer with lots, trade groups, transactions, thesis/tags, and a link to the full asset card.
-- `Основной список` shows the default `Основная` watchlist group with icon, CoinGecko price, 24h move, existing position, value, and `Купить`. Tokens outside the on-chain allowlist offer only manual entry.
+- Historical UI-12 `Основной список` showed the default `Основная` group with price/24h/position/value and `Купить`. Current UI-67 renders it in `Ручной` as clickable token blocks with a 3-month weekly chart; tokens outside the on-chain allowlist still offer manual entry.
 - `Сделки` opens the trade journal; clicking a row opens the sell drawer. The old mass-selection close flow is removed.
 
 ## Trade and exchange drawers (UI-12)
@@ -235,3 +235,17 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - Bot footer keeps Delete, Close positions, Start/Stop, Test, Telemetry and Edit; Reset and Done were removed, and Test works for running bots.
 - Task calendar renders all tasks and stretches each week row to its busiest day.
 - Task time is explicit: 12:00 can be a real deadline; recurrence is editable for one-off tasks and converts them to a series.
+
+## UI-67 trading page tabs and blocks
+
+- Five tabs: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`.
+- `Портфель` keeps the four summary cards and consolidated token blocks and adds an `Активные сделки` section. Active trade blocks emphasize `Результат`, `Доходность` and `Обновление`; average price, invested remaining cost, days and opened date are muted/right-aligned. Source, closed and sale columns are removed from active blocks.
+- `Ручной` is the former main list: clickable token blocks with price/24h, interactive 3-month weekly chart, 7d/30d/1y changes, market cap and `Купить`.
+- `Сделки` is the full journal with the existing views/filters and block layout; portfolio active blocks open the read-only asset drawer, while the journal keeps the sell/detail path.
+- Hash compatibility: `#trades`/`#orders` -> `Ручной`, `#deals`/`#journal` -> `Сделки`. See ADR 0066.
+
+## UI-68 logout, finance averages and task defaults
+
+- Sidebar `Выйти` uses a dark-adapted pale-red danger treatment; mobile `Выйти` uses the standard danger variant.
+- `Финансы → Обзор` adds `Средний расход в день` and `Средний доход в день` for the selected period.
+- Switching Tasks from `Календарь` back to `Список` resets the filter to `Открытые`.

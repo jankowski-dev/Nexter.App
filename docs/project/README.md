@@ -1,6 +1,6 @@
 # Nexter — путеводитель по проекту
 
-> Версия документа: 2026-11-12. Это живая документация: при изменении схемы, API или поведения обновляйте соответствующий раздел и `docs/decisions.md`.
+> Версия документа: 2026-11-17. Это живая документация: при изменении схемы, API или поведения обновляйте соответствующий раздел и `docs/decisions.md`.
 >
 > Быстрый старт для агента: [`agent-guide.md`](agent-guide.md). Архитектура ботов: [`trading-bots.md`](trading-bots.md). PDF-копия: [`../pdf/nexter-project-guide.pdf`](../pdf/nexter-project-guide.pdf).
 
@@ -16,23 +16,26 @@ Nexter — личный финансовый учёт владельца. Оди
 - задачи, заметки, привычки;
 - end-to-end зашифрованное хранилище паролей;
 - импорт исторических данных из Notion;
-- модуль бумажной торговли ботами (`Тестирование`) с изолированным paper-ledger.
+- модуль бумажной торговли ботами с изолированным paper-ledger;
+- AI-настройки DeepSeek и аудиозаметки из Viber (отдельный `Nexter.Bot`);
+- настраиваемый лимит аудио 1–20 МБ (по умолчанию 8 МБ).
 
 Приложение не является биржей, кастодиальным сервисом или налоговым калькулятором. Оно не хранит приватные ключи и seed-фразы. Все подписи выполняются в кошельке владельца.
 
+Текущее состояние (2026-11-17): один API-сервис + Postgres (worker удалён), миграции `0043`/`0044` применены, TOTP replay и append-only audit trigger включены, аудио-лимит настраивается в `Настройки → ИИ → Аудио`, а раздел `Торговля` имеет пять вкладок: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`.
+
 ## 2. Технологический стек
 
-| Слой                   | Технологии                                                                   |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| Монорепозиторий        | pnpm 10.20, TypeScript strict                                                |
-| API                    | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry       |
-| Web                    | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite              |
-| Worker                 | Node.js + pg-boss                                                            |
-| Тесты                  | Vitest (unit/integration), Supertest, Playwright (E2E)                       |
-| Деньги                 | PostgreSQL `numeric`, `decimal.js`, строки в API                             |
-| Очереди/фоновые задачи | pg-boss (worker), интервальные сервисы API (котировки, снапшоты, индексатор) |
-| Деплой                 | Railway (API + worker + Postgres), Dockerfile                                |
-| Бэкапы                 | `pg_dump` custom format + AES-256-GCM, restore drill                         |
+| Слой            | Технологии                                                                                                |
+| --------------- | --------------------------------------------------------------------------------------------------------- |
+| Монорепозиторий | pnpm 10.20, TypeScript strict                                                                             |
+| API             | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry                                    |
+| Web             | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite                                           |
+| Тесты           | Vitest (unit/integration), Supertest, Playwright (E2E)                                                    |
+| Деньги          | PostgreSQL `numeric`, `decimal.js`, строки в API                                                          |
+| Фоновые задачи  | Интервальные сервисы API под advisory locks (котировки, снапшоты, индексер, swap tracker, боты, AI/audio) |
+| Деплой          | Railway (API + Postgres), Dockerfile; Viber-бот — отдельный проект                                        |
+| Бэкапы          | `pg_dump` custom format + AES-256-GCM, restore drill                                                      |
 
 ## 3. Структура репозитория
 
@@ -40,7 +43,6 @@ Nexter — личный финансовый учёт владельца. Оди
 apps/
   api/        NestJS API; также раздаёт собранный SPA из apps/web/dist
   web/        React SPA
-  worker/     pg-boss worker (импорт/фоновые задачи)
   e2e/        Playwright acceptance tests
 packages/
   contracts/  Zod-схемы и TypeScript-типы API (единый контракт web/api)

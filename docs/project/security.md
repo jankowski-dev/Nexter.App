@@ -16,13 +16,14 @@
 
 | Область      | Меры                                                                                                                                                         |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Auth         | Argon2, TOTP, HttpOnly cookie, CSRF, rate limit, session rotation, recovery codes                                                                            |
+| Auth         | Argon2, TOTP (single-use 30s step), HttpOnly cookie, CSRF + Origin check, rate limit, 15m pending sessions, recovery codes                                   |
 | Swap         | allowlist кошельков/роутеров/executor/selectors, calldata decode, exact approvals, simulation, minOut, deadline, price impact cap, step-up TOTP, kill switch |
 | Private keys | никогда не попадают на сервер; подпись только в кошельке                                                                                                     |
 | Money        | `numeric`/Decimal, без float, проверка decimals/positive                                                                                                     |
-| Audit        | каждая мутация, strict audit для критичных                                                                                                                   |
+| Audit        | каждая мутация, strict audit для критичных, append-only trigger на `audit_log`                                                                               |
 | Import       | preview/commit/rollback, sourceHash, owner-scoped staging, no secrets in logs                                                                                |
 | Vault        | E2E AES-256-GCM, PBKDF2 600k, мастер-пароль не сохраняется                                                                                                   |
+| AI/audio     | DeepSeek key шифруется в БД и никогда не возвращается; Viber bot token только server-to-server; аудио-лимит 1–20 МБ (default 8)                              |
 | Notes        | Markdown subset без HTML, ссылки http/https, attachments allowlist + лимиты                                                                                  |
 | Icons        | SSRF allowlist CoinGecko hosts, timeout, content-type/size check                                                                                             |
 | Logs         | pino redaction, URLs без query, no bodies/secrets                                                                                                            |

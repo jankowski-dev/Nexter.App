@@ -4,13 +4,12 @@ Read this before changing code. It is intentionally opinionated: most production
 
 ## 1. What this repo is
 
-Private single-owner personal finance app. No public signup, no multi-tenant features. Crypto ledger + DEX swaps + personal finance (BYN) + tasks/notes/habits/vault. UI is Russian; code identifiers/comments are English.
+Private single-owner personal finance app. No public signup, no multi-tenant features. Crypto ledger + DEX swaps + paper bots/backtests + personal finance (BYN) + tasks/notes/habits/vault + AI settings and Viber audio notes. UI is Russian; code identifiers/comments are English.
 
 Monorepo:
 
 - `apps/api` — NestJS/Fastify API; also serves the built SPA.
 - `apps/web` — React 19 + TanStack Router/Query + Tailwind.
-- `apps/worker` — pg-boss worker.
 - `apps/e2e` — Playwright acceptance tests.
 - `packages/contracts` — Zod schemas/types shared by web/API.
 - `packages/db` — Drizzle schema/migrations/backup scripts.
@@ -22,9 +21,9 @@ Monorepo:
 2. **No public signup.**
 3. **No float money.** Use `decimal.js` and Postgres `numeric`; API money values are strings.
 4. **Every mutation is audited.** `AuditService` in the same transaction; critical paths use `strict: true`.
-5. **Ledger is append-only.** Corrections are new transactions. Do not edit/delete posted transactions except a documented, owner-approved emergency repair with backup and audit.
+5. **Ledger is append-only.** Corrections are new transactions. Do not edit/delete posted transactions except a documented, owner-approved emergency repair with backup and audit. `audit_log` also has a DB trigger that rejects UPDATE/DELETE.
 6. **No secrets in code/logs/screenshots.**
-7. **Schema change = ADR + migration + backup + review.**
+7. **Schema change = ADR + migration + backup + review.** TOTP replay state lives in `users.last_totp_step`; consume it atomically and never bypass the replay check.
 8. **Tests/typecheck/lint must pass before merge.** Do not weaken acceptance tests to make a change pass.
 9. **UI Russian, USD crypto base, BYN finance base.**
 10. **BSC first, Ethereum second.**
@@ -115,13 +114,14 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - Notes: Markdown is a safe subset; no HTML. List responses return attachment count, not full data URLs; detail endpoint returns full attachments.
 - Vault: E2E encryption in browser; server only ciphertext. Never log/decrypt on server.
 - Finance is isolated from crypto ledger; credit is liability; cancelled operations are soft-cancelled. A transfer from an asset account to a credit account is a principal repayment: it counts in `expenseBase`/`netBase` and appears as the synthetic category `Погашение кредита`, but it does not change net worth. Credit drawdowns are not income.
+- AI: `ai_settings` stores the encrypted DeepSeek key (never returned) and the model/reasoning/token settings; `AiService` validates JSON and fails back to raw text. Viber audio: the separate `Nexter.Bot` transcribes locally and posts transcript + original audio; the API creates the note/attachment. Audio limit is `settings.audio_max_mb` (default 8, max 20).
 
 ## 10. Database/migrations
 
 - Drizzle schema: `packages/db/src/schema/index.ts`.
 - Generate: `npx pnpm@10.20.0 db:generate`; review SQL and journal/snapshot.
 - Migrations additive; grants for `nexter_app` may need update for new tables/columns.
-- Production pre-deploy runs migrations with `MIGRATION_DATABASE_URL`; API uses `nexter_app`, worker owner role (pg-boss DDL).
+- Production pre-deploy runs migrations with `MIGRATION_DATABASE_URL` (owner/DDL role); API uses `nexter_app`. There is no worker process; background pollers run in the API under advisory locks/intervals.
 - `nexter_app` has SELECT/INSERT/UPDATE and limited DELETE; do not add DELETE grants casually.
 - Manual data seeds need journal entries and ADR.
 
@@ -134,6 +134,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - Token icons: `TokenIcon` + `tokenIconSrc`; icon URL is `/api/v1/watchlist/icon?url=...`.
 - Russian copy; use existing `format*` helpers; never `Number()` for money except display-only.
 - New UI should be full-width rows/cards where the owner asked (watchlist, vault, notes, tasks).
+- Trading is five tabs: `Портфель` (stat cards + consolidated token blocks + active trade blocks), `Ручной` (manual token blocks with a 3-month weekly chart), `Сделки` (full journal blocks), `Роботы`, `Стратегии`. Hash compatibility: `#trades`/`#orders` -> `Ручной`, `#deals`/`#journal` -> `Сделки`.
 
 ## 12. Testing
 
@@ -141,7 +142,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - E2E: Playwright, Chrome channel in CI (`PLAYWRIGHT_CHANNEL=chrome`). Do not change acceptance tests to hide a regression; update only when product behavior intentionally changes.
 - Parser tests: `notion-import.parser.spec.ts`.
 - Web tests: `apps/web` Vitest.
-- CI runs migration twice, static/API smoke, Docker API/worker, backup restore drill, encrypted backup smoke, dependency audit. A red E2E step skips later checks — fix it, don't merge.
+- CI runs migration twice, static/API smoke, the Docker API image, backup restore drill, encrypted backup smoke, dependency audit, and browser E2E. A red E2E step skips later checks — fix it, don't merge.
 
 ## 13. Production/deploy
 
@@ -149,8 +150,8 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - API serves SPA; frontend-only changes require API service redeploy (watch patterns include `apps/web/**`, `packages/**`).
 - Before production migration/data repair: encrypted backup + restore check; record IDs/paths.
 - Use `railway ssh` into Postgres for dumps/checks; do not print DB passwords.
-- Production secrets in Railway; backup key outside repo (`~/.nexter/backup-key` local).
-- Worker remains owner role because pg-boss DDL.
+- Production secrets in Railway; backup key outside the repo in a secure owner-controlled location.
+- There is one API service plus Postgres. The Viber bot is a separate Railway project/service in the `jankowski-dev/Nexter.Bot` repo; it calls the app's bot API.
 - `ENABLE_DOCS` only dev/test.
 
 ## 14. Common pitfalls
@@ -161,10 +162,10 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - **Date-only vs timestamp**: tasks due dates use local noon; cursor timestamps are ms; don't mix.
 - **CRLF on Windows**: Prettier warnings are okay; committed blobs are LF.
 - **Contracts package dist**: after editing `packages/contracts`, build it before API/web typecheck if types don't update.
-- **API role**: new tables need grants; worker/API roles differ.
+- **API role**: new tables need grants. The API role is `nexter_app`; migrations use the owner role. There is no worker role.
 - **No `any`** in web API layer; contracts should be Zod-first.
 - **XSS/SSRF**: validate URLs/Markdown/icon hosts; do not fetch arbitrary URLs.
-- **Attachment size**: base64 expands 4/3; 1.5 MB file can exceed 2 MB data URL; current cap 2.1 MB.
+- **Audio size**: base64 expands 4/3. The limit is `settings.audio_max_mb` (default 8, max 20) on `POST /api/v1/bot/audio-notes`; do not reintroduce a fixed 2 MB cap. The request body is bounded by a route-specific Fastify limit.
 - **`market_quotes` fallback**: don't overwrite CoinGecko periods with null on DEX ticks; preserve unless provider explicitly returns null on a due tick.
 - **Swap preview**: Do not poll Kyber too aggressively; 500ms debounce/15s poll/5s server cache.
 - **Order footer**: technical IDs belong in audit/logs, not the primary UI.
@@ -179,7 +180,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - Sizing: `min(budget * positionSizePct / 100, cash)` per buy; no per-asset cap, so DCA/grid can add until strategy `maxAdds` or cash runs out. Max positions applies only to new positions.
 - P&L is average-cost: buy cost basis includes fee; sell realized = net proceeds − cost basis. Never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
 - All user mutations are audited (`bot.*`); paper trades/events are their own journals. Running bots cannot be edited; unknown or invalid strategy keys/params cannot be saved or started. `POST /bots/:id/close-positions` force-closes all paper positions at the latest quotes, preserves trade history and stops the bot; archiving is blocked while positions remain. Bot stops/closes create `notifications` rows; the global nav shows an unread badge, and opening `/notifications` marks all read.
-- API under `/api/v1/trading-bots`; paper robots and read-only strategy documentation live under `/portfolio#robots` and `/portfolio#strategies`; `/testing` is only the standalone historical backtest stand. Strategy drawers contain descriptions, best-use cases, risks, guides and defaults, with no backtest UI. Bot trade/event journals paginate with `limit/offset` and `Ещё` (20 per page). Backtests use daily candles from CoinGecko or GeckoTerminal, store an immutable snapshot in `bot_backtest_runs`, and generate a Russian PDF on demand. PDF uses pdfmake + Roboto; local/URL font access is restricted to the pdfmake fonts directory.
+- API under `/api/v1/trading-bots`; paper robots and read-only strategy documentation live under `/portfolio#robots` and `/portfolio#strategies`; the backtest opens from the bot edit/create drawer and from strategy cards, and the standalone `/testing` page no longer exists. Strategy drawers contain descriptions, best-use cases, risks, guides and defaults. The trading workspace tabs are `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии` (ADR 0066). Bot trade/event journals paginate with `limit/offset` and `Ещё` (20 per page). Backtests use daily candles from CoinGecko or GeckoTerminal, store an immutable snapshot in `bot_backtest_runs`, and generate a Russian PDF on demand. PDF uses pdfmake + Roboto; local/URL font access is restricted to the pdfmake fonts directory.
 - Real automated trading is blocked by WalletConnect/Tangem manual signing. A future live venue needs an owner-approved signer/session-key/AA design and a separate security review; no server private keys.
 
 ## 16. Definition of Done

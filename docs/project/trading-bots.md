@@ -324,16 +324,16 @@ interface StrategyDefinition {
 
 ## 9. UI
 
-- **Торговля** (`/portfolio`) содержит пять табов: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`. `Портфель` объединяет консолидированные карточки по токенам и активные сделки; `Ручной` — основной список токенов для ручной покупки; `Сделки` — полный журнал сделок. См. ADR 0066.
+- **Торговля** (`/portfolio`) содержит пять табов: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`. `Портфель` объединяет консолидированные блоки по токенам и блоки `Активные сделки` (крупный `Результат`, `Доходность`, `Обновление`, справа средний курс/инвестировано/дни/открыта); `Ручной` — основной список токенов для ручной покупки отдельными блоками с 3-месячным недельным графиком; `Сделки` — полный журнал сделок с фильтрами и теми же блоками. Старые колонки `Источник`/`Закрыта`/`Продажа` в активных блоках не показываются. См. ADR 0066.
   - `Роботы` — бумажные роботы: сортировка по P&L/капиталу/профит-фактору, создание/редактирование, карточки с equity/P&L/PF, детальный drawer с сигналами по токенам, журналами и кнопкой `Телеметрия` для JSON-отчёта ИИ.
   - `Стратегии` — read-only справочник: карточки с маркером `Системная`/`Кастомная`; клик открывает drawer с подробным описанием, блоком «Когда лучше использовать», гайдом, рисками и параметрами по умолчанию.
 - **Тестирование** — бэктест открывается модалкой из создания/редактирования робота и из карточек стратегий; отдельной страницы `/testing` больше нет.
-  - выбор стратегии карточками (параметры и описание меняются автоматически); `/testing?strategy=<key>` открывает стенд с нужной стратегией;
+  - выбор стратегии карточками; параметры и описание меняются автоматически, кнопка `Тестировать` открывает модалку с уже выбранной стратегией;
   - двухколоночный layout: слева поиск токена, период 30/90/180/365 и параметры, справа график, статистика и журнал;
   - переключатели стоп-лосса/тейк-профита/реинвестирования;
   - `Начать` → спиннер загрузки → адаптивный дневной график (log-шкала, high/low-фитили, процент изменения) → `Прогнать` → сделки появляются на графике (синие покупки, зелёные/красные продажи) → статистика → `Скачать PDF`;
   - журнал прогонов с кнопками `Открыть`, `PDF`, `Удалить`, `Очистить`; первые 20 записей и кнопка `Ещё` до 100.
-- Карточки стратегий и drawer содержат `Тестировать`; на стенде выбор применяется сразу, из `Стратегий` выполняется переход на `/testing?strategy=<key>`.
+- Карточки стратегий и drawer содержат `Тестировать`; модалка открывается с выбранной стратегией и текущими параметрами.
 - Карточка робота кликабельна целиком; кнопки `Настройки`/`Запустить`/`Остановить` не открывают drawer. Для running-бота настройки сначала просят подтверждение и останавливают его; позиции и история сохраняются.
 - Журналы бота (сделки и события) отдают по 20 записей; кнопка `Ещё` подгружает следующую страницу через `limit/offset`, а не весь журнал сразу.
 - Поиск токенов использует общий client-side helper `apps/web/src/lib/search.ts` (регистронезависимый, `ё = е`, несколько слов через AND). Тот же helper применён в поиске Хранилища и выборе токена для бэктеста.
@@ -380,7 +380,7 @@ interface StrategyDefinition {
 - Encrypted backup `nexter-2026-11-13-ui37.dump.enc` (plaintext SHA-256 `3494315f…5262c`, encrypted SHA-256 `a4a77de6…354020`). Restore check in `nexter_restore_check_ui37` matched static counts exactly: users 1, assets 49, bots 4, trades 18, events 32, equity 270, notifications 1, cash sum `4009.43372568`; quote samples differed only by live ticks during the check (3406 vs 3409).
 - Migrations `0034`–`0035` were first applied to the restored copy. All four bots kept `mean_reversion` and the exact params JSON; `bot_strategies` and `strategy_id` were absent afterwards.
 - PR #101 merged as `a627b80`; API deployment `9d70b353-5b00-4222-bdd7-0caca4524af3`; 36 migrations applied; `/ready` 200; bundle `assets/index-eCq4h8AJ.js`.
-- Verification: `bot_signals` exists, `nexter_app` has SELECT/INSERT/UPDATE (DELETE revoked in the follow-up migration), existing bots preserved, diagnostics populated for 3 running bots. The owner DB password was rotated during the operation after an internal restore command echoed it; API/worker variables were updated and the worker restarted successfully.
+- Verification: `bot_signals` exists, `nexter_app` has SELECT/INSERT/UPDATE (DELETE revoked in the follow-up migration), existing bots preserved, diagnostics populated for 3 running bots. The owner DB password was rotated during the operation after an internal restore command echoed it; API variables were updated. The worker was later removed entirely (wave 0, 2026-11-17).
 - No real-ledger changes.
 
 ### UI-38 (2026-11-13)
@@ -407,8 +407,7 @@ interface StrategyDefinition {
 
 ### UI-44 (2026-11-13)
 
-- Strategies are documentation-only; the backtest block moved out of strategy drawers into the standalone `/testing` stand with a strategy selector.
-- `/portfolio` now has `Роботы` and `Стратегии` tabs after `Портфель`/`Сделки`; `/testing` contains only the stand.
+- Historical UI-44: strategies were documentation-only and the backtest block moved out of strategy drawers into a standalone `/testing` stand with a strategy selector. UI-62 later removed `/testing` and moved the backtest into the bot/strategy drawer.
 - Bot trade/event journals load 20 records per request through `limit/offset` and append pages with `Ещё`; the backtest journal starts at 20 and grows to 100.
 - Strategy metadata adds `bestFor` and `risks`; the strategy drawer shows description, best-use cases, guide, risks and defaults.
 - Deployment `b138c1ea-af5b-4b31-9f9b-cd17c5e87c94`; bundle `assets/index-pQAOvbq_.js`; `/ready` 200. No migration, no real-ledger changes.
@@ -430,8 +429,8 @@ interface StrategyDefinition {
 
 - `Портфель` переименован в `Торговля`; UI-46 добавил четыре вкладки `Портфель`, `Ордера`, `Роботы`, `Стратегии`. Позже UI-67 заменил их на пять: `Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии` (ADR 0066).
 - `Портфель` показывает консолидированные карточки по токенам из `GET /api/v1/portfolio/token-summaries` и оставляет основной список токенов ниже; порядок статистики: стоимость позиций, капитал, кэш, вложено из фиата.
-- `Ордера` добавляют колонки `Инвестировано` и `Средний курс` по каждому ордеру.
-- Стенд выбирает стратегию карточками, поддерживает `/testing?strategy=<key>` и двухколоночный layout; карточки и drawer получили `Тестировать`.
+- Historical UI-46: `Ордера` add `Инвестировано` and `Средний курс` columns; UI-67 replaced the table with blocks and moved the full journal to `Сделки`.
+- Historical UI-46: the stand selected a strategy with cards and supported `/testing?strategy=<key>`; UI-62 removed the standalone page and kept `Тестировать` in the bot/strategy drawer.
 - Общие `Select`/`ListToolbar`/`TabGroup` унифицируют поиск слева и сортировку справа в заметках, задачах, операциях, базе токенов и хранилище; архивные фильтры и восстановление убраны с этих страниц.
 - Загрузчик страниц ограничен `<main>`, индикатор синхронизации работает на всех страницах.
 - Бэктест различает настоящие OHLC (GeckoTerminal) и синтетические дневные точки (CoinGecko). Для синтетики TP исполняется по порогу, SL — по закрытию; в интерфейсе и PDF показывается предупреждение. GeckoTerminal сейчас покрывает около 180 дней; для 365 дней используется более длинный CoinGecko-ряд с консервативным исполнением.
