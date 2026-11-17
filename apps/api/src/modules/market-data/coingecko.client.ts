@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
-import { decimal, usdString } from '../../shared/money/decimal';
+import { decimal, priceString, usdString } from '../../shared/money/decimal';
 import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
 
 export interface CoinGeckoToken {
@@ -221,10 +221,10 @@ export class CoinGeckoClient {
         const volume = entry.volumes.reduce((total, value) => total + value, 0);
         return {
           date,
-          openUsd: usdString(decimal(String(open))),
-          highUsd: usdString(decimal(String(high))),
-          lowUsd: usdString(decimal(String(low))),
-          closeUsd: usdString(decimal(String(close))),
+          openUsd: priceString(decimal(String(open))),
+          highUsd: priceString(decimal(String(high))),
+          lowUsd: priceString(decimal(String(low))),
+          closeUsd: priceString(decimal(String(close))),
           volumeUsd: entry.volumes.length > 0 ? decimal(String(volume)).toFixed(2) : null,
         };
       });

@@ -1,13 +1,12 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { NavIcon } from '@/components/nav-icon';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { LiveValue } from '@/components/ui/live-value';
+import { StatCard } from '@/components/ui/stat-card';
 import {
   createHabit,
   fetchDashboardPnl,
@@ -19,7 +18,7 @@ import {
   updateTask,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatByn, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { formatByn, formatSignedUsd, formatUsd } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Decimal } from 'decimal.js';
@@ -51,30 +50,6 @@ function habitDays(startedOn: string): number {
   const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate()).getTime();
   const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   return Math.max(1, Math.floor((todayDay - startDay) / 86_400_000) + 1);
-}
-
-function SummaryMetric({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-zinc-200/80 bg-transparent p-3">
-      <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</div>
-      <div
-        className={`mt-1 font-mono text-xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
-      >
-        <LiveValue value={value}>{value}</LiveValue>
-      </div>
-      {hint ? <div className="mt-1 text-xs text-zinc-500">{hint}</div> : null}
-    </div>
-  );
 }
 
 export function DashboardPage() {
@@ -229,93 +204,6 @@ export function DashboardPage() {
 
       {summary.isPending ? <LoadingRows rows={4} /> : null}
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="tone-surface tone-surface-emerald relative overflow-hidden">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
-                <NavIcon name="crypto" className="h-4 w-4" />
-              </span>
-              <div>
-                <CardTitle>Крипта</CardTitle>
-                <CardDescription>Ключевые показатели портфеля.</CardDescription>
-              </div>
-            </div>
-            <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
-              <Link to="/portfolio">Торговля</Link>
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <SummaryMetric
-              label="Чистая прибыль за месяц"
-              value={pnl.isPending ? '—' : formatSignedUsd(monthPnl)}
-              hint="Net P&L из Статистики"
-              tone={pnl.isPending ? undefined : pnlTone(monthPnl)}
-            />
-            <SummaryMetric
-              label="Плюс в нереализованном"
-              value={formatUsd(summary.data?.positiveUnrealizedUsd)}
-              hint="Положительные открытые позиции"
-              tone="text-emerald-700"
-            />
-            <SummaryMetric
-              label="Минус в нереализованном"
-              value={formatUsd(summary.data?.negativeUnrealizedUsd)}
-              hint="Отрицательные открытые позиции"
-              tone="text-red-700"
-            />
-            <SummaryMetric
-              label="Капитал"
-              value={formatUsd(summary.data?.equityUsd)}
-              hint={`Кэш ${formatUsd(summary.data?.cashUsd)}`}
-            />
-          </div>
-        </Card>
-
-        <Card className="tone-surface tone-surface-amber relative overflow-hidden">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
-                <NavIcon name="finance" className="h-4 w-4" />
-              </span>
-              <div>
-                <CardTitle>Финансы</CardTitle>
-                <CardDescription>Текущий месяц в BYN.</CardDescription>
-              </div>
-            </div>
-            <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
-              <Link to="/finance">Финансы</Link>
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <SummaryMetric
-              label="Средний расход в день"
-              value={finance.data ? formatByn(avgExpense) : '—'}
-              hint={`${elapsedDays} дн. месяца`}
-              tone="text-red-700"
-            />
-            <SummaryMetric
-              label="Средний доход в день"
-              value={finance.data ? formatByn(avgIncome) : '—'}
-              hint={`${elapsedDays} дн. месяца`}
-              tone="text-emerald-700"
-            />
-            <SummaryMetric
-              label="Доходы за месяц"
-              value={formatByn(finance.data?.incomeBase)}
-              hint={monthKey}
-              tone="text-emerald-700"
-            />
-            <SummaryMetric
-              label="Расходы за месяц"
-              value={formatByn(finance.data?.expenseBase)}
-              hint={monthKey}
-              tone="text-red-700"
-            />
-          </div>
-        </Card>
-      </div>
-
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -454,6 +342,92 @@ export function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight text-zinc-900">Крипта</h2>
+          <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
+            <Link to="/portfolio">Торговля</Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Чистая прибыль за месяц"
+            value={pnl.isPending ? '—' : formatSignedUsd(monthPnl)}
+            description="Net P&L из Статистики"
+            icon="statistics"
+            tone={Number(monthPnl) >= 0 ? 'emerald' : 'rose'}
+            live={!pnl.isPending}
+          />
+          <StatCard
+            title="Плюс в нереализованном"
+            value={formatUsd(summary.data?.positiveUnrealizedUsd)}
+            description="Положительные открытые позиции"
+            icon="portfolio"
+            tone="sky"
+            live
+          />
+          <StatCard
+            title="Минус в нереализованном"
+            value={formatUsd(summary.data?.negativeUnrealizedUsd)}
+            description="Отрицательные открытые позиции"
+            icon="crypto"
+            tone="rose"
+            live
+          />
+          <StatCard
+            title="Капитал"
+            value={formatUsd(summary.data?.equityUsd)}
+            description={`Кэш ${formatUsd(summary.data?.cashUsd)}`}
+            icon="wallet"
+            tone="violet"
+            live
+          />
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold tracking-tight text-zinc-900">Финансы</h2>
+          <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
+            <Link to="/finance">Финансы</Link>
+          </Button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            title="Средний расход в день"
+            value={finance.data ? formatByn(avgExpense) : '—'}
+            description={`${elapsedDays} дн. месяца`}
+            icon="finance"
+            tone="rose"
+            live={Boolean(finance.data)}
+          />
+          <StatCard
+            title="Средний доход в день"
+            value={finance.data ? formatByn(avgIncome) : '—'}
+            description={`${elapsedDays} дн. месяца`}
+            icon="finance"
+            tone="emerald"
+            live={Boolean(finance.data)}
+          />
+          <StatCard
+            title="Доходы за месяц"
+            value={formatByn(finance.data?.incomeBase)}
+            description={monthKey}
+            icon="statistics"
+            tone="sky"
+            live
+          />
+          <StatCard
+            title="Расходы за месяц"
+            value={formatByn(finance.data?.expenseBase)}
+            description={monthKey}
+            icon="operations"
+            tone="amber"
+            live
+          />
+        </div>
+      </section>
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">

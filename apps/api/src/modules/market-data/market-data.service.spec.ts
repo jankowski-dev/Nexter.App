@@ -127,8 +127,8 @@ describe('MarketDataService.getPriceHistory', () => {
 
     const history = await service.getPriceHistory('bsc', '0xabc', 'token', 30);
 
-    expect(gecko.getDailyCandles).toHaveBeenCalledWith('bsc', '0xabc', 30);
-    expect(coingecko.getDailyCandles).toHaveBeenCalledWith('token', 30);
+    expect(gecko.getDailyCandles).toHaveBeenCalledWith('bsc', '0xabc', 365);
+    expect(coingecko.getDailyCandles).toHaveBeenCalledWith('token', 365);
     expect(history.source).toBe('coingecko');
     expect(history.points).toEqual([
       { date: '2026-11-12', priceUsd: '1.2' },

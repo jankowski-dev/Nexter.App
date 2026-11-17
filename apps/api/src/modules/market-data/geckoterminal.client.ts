@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
-import { decimal, usdString } from '../../shared/money/decimal';
+import { decimal, priceString } from '../../shared/money/decimal';
 import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
 
 const NETWORK: Record<string, string> = {
@@ -65,10 +65,10 @@ export class GeckoTerminalClient {
       const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
       byDate.set(date, {
         date,
-        openUsd: usdString(decimal(String(open))),
-        highUsd: usdString(decimal(String(high))),
-        lowUsd: usdString(decimal(String(low))),
-        closeUsd: usdString(decimal(String(close))),
+        openUsd: priceString(decimal(String(open))),
+        highUsd: priceString(decimal(String(high))),
+        lowUsd: priceString(decimal(String(low))),
+        closeUsd: priceString(decimal(String(close))),
         volumeUsd: Number.isFinite(volume) ? decimal(String(volume)).toFixed(2) : null,
       });
     }

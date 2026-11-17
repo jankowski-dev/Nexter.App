@@ -71,10 +71,12 @@ const rays = [
 export function NexterLogo({
   lit = 0,
   state = 'idle',
+  refreshing = false,
   className,
 }: {
   lit?: number;
   state?: NexterLogoState;
+  refreshing?: boolean;
   className?: string;
 }) {
   return (
@@ -83,11 +85,12 @@ export function NexterLogo({
         'nexter-logo',
         state === 'ok' && 'is-ok',
         state === 'error' && 'is-error',
+        refreshing && 'is-refreshing',
         className,
       )}
       viewBox="0 0 246 210"
       role="img"
-      aria-label="Nexter"
+      aria-label={refreshing ? 'Nexter — синхронизация данных' : 'Nexter'}
     >
       <g>
         {rays.map((ray, index) => (

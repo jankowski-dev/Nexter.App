@@ -28,6 +28,10 @@ export function usdString(value: Decimal): string {
   return value.toFixed(USD_SCALE);
 }
 
+export function priceString(value: Decimal): string {
+  return value.toFixed(18);
+}
+
 export function assertScale(value: Decimal, scale: number, label: string): void {
   if (value.decimalPlaces() > scale) {
     throw new Error(`${label} supports at most ${scale} decimal places`);

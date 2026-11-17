@@ -423,6 +423,93 @@ button:focus-visible,
   fill: #e93f5b;
 }
 
+@keyframes nexter-ray-refresh {
+  0%,
+  100% {
+    fill: #34d399;
+    opacity: 1;
+  }
+  45% {
+    fill: #707070;
+    opacity: 0.4;
+  }
+  60% {
+    fill: #34d399;
+    opacity: 1;
+  }
+}
+
+.nexter-logo.is-refreshing .nexter-ray {
+  animation: nexter-ray-refresh 0.9s ease-in-out infinite;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(1) {
+  animation-delay: -0.12s;
+  animation-duration: 0.61s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(2) {
+  animation-delay: -0.47s;
+  animation-duration: 0.83s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(3) {
+  animation-delay: -0.28s;
+  animation-duration: 0.72s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(4) {
+  animation-delay: -0.66s;
+  animation-duration: 0.95s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(5) {
+  animation-delay: -0.05s;
+  animation-duration: 0.58s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(6) {
+  animation-delay: -0.39s;
+  animation-duration: 0.87s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(7) {
+  animation-delay: -0.74s;
+  animation-duration: 0.66s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(8) {
+  animation-delay: -0.21s;
+  animation-duration: 0.78s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(9) {
+  animation-delay: -0.55s;
+  animation-duration: 0.91s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(10) {
+  animation-delay: -0.33s;
+  animation-duration: 0.63s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(11) {
+  animation-delay: -0.82s;
+  animation-duration: 0.99s;
+}
+
+.nexter-logo.is-refreshing .nexter-ray:nth-child(12) {
+  animation-delay: -0.17s;
+  animation-duration: 0.7s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nexter-logo.is-refreshing .nexter-ray {
+    animation: none;
+    fill: #34d399;
+  }
+}
+
 .auth-content {
   width: min(380px, 100%);
 }

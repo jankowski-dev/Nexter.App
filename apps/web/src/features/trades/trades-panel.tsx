@@ -82,7 +82,7 @@ export function TradeGroupBlock({
       className="block w-full rounded-xl border border-zinc-200 p-3.5 text-left transition-colors hover:border-emerald-300 hover:bg-emerald-50/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
     >
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 xl:flex-nowrap">
-        <div className="flex min-w-[150px] max-w-[220px] items-center gap-2.5">
+        <div className="flex w-full min-w-[150px] max-w-[220px] items-center gap-2.5 sm:w-[250px] sm:max-w-none sm:shrink-0">
           <TokenIcon
             logoUrl={group.asset.logoUrl ?? logos.get(group.asset.id) ?? null}
             symbol={group.asset.symbol}
@@ -105,7 +105,7 @@ export function TradeGroupBlock({
           </div>
         </div>
 
-        <div className="min-w-[115px]" title="Реализованный + нереализованный результат по сделке">
+        <div className="min-w-[130px]" title="Реализованный + нереализованный результат по сделке">
           <div className="text-[10px] text-zinc-500">Результат</div>
           <div
             className={`mt-0.5 font-mono text-xl font-semibold tracking-tight ${pnlTone(

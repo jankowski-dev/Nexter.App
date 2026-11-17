@@ -406,14 +406,7 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      {embedded ? (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
-            Новая группа
-          </Button>
-          <Button onClick={openCreate}>Добавить актив</Button>
-        </div>
-      ) : (
+      {embedded ? null : (
         <PageHeader
           title="Токены"
           subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
@@ -439,6 +432,16 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
         onSearch={setSearch}
         searchPlaceholder="Поиск по символу, названию, контракту или сети"
         searchAriaLabel="Поиск по базе токенов"
+        actions={
+          embedded ? (
+            <>
+              <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
+                Новая группа
+              </Button>
+              <Button onClick={openCreate}>Добавить актив</Button>
+            </>
+          ) : undefined
+        }
       >
         <Select
           className="w-48"

@@ -7,8 +7,8 @@ import { toRussianError } from '@/lib/error-messages';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Asset, WatchlistEntry } from '@nexter/contracts';
-import { TokenInfoDialog } from '../watchlist/token-info-dialog';
 import { TokenBlock } from '../watchlist/token-block';
+import { TokenDrawer } from '../watchlist/token-drawer';
 
 type TokenListSort =
   'default' | 'price' | 'change24h' | 'change7d' | 'change30d' | 'change1y' | 'marketCap';
@@ -80,6 +80,10 @@ export function TokenBuyList({
   }
 
   const entries = watchlist.data?.data ?? [];
+  const groupsData = groups.data?.groups ?? [];
+  const selectedGroup = selectedEntry?.groupId
+    ? (groupsData.find((group) => group.id === selectedEntry.groupId) ?? null)
+    : null;
   const sortedEntries =
     sortKey === 'default'
       ? entries
@@ -138,7 +142,13 @@ export function TokenBuyList({
           ))}
         </div>
       )}
-      <TokenInfoDialog entry={selectedEntry} onClose={() => setSelectedEntry(null)} />
+      <TokenDrawer
+        entry={selectedEntry}
+        groupName={selectedGroup?.name ?? null}
+        groups={groupsData}
+        defaultGroupId={defaultGroup?.id ?? null}
+        onClose={() => setSelectedEntry(null)}
+      />
     </Card>
   );
 }

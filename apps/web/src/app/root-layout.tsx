@@ -1,7 +1,7 @@
 import { ChainToggle } from '@/components/chain-toggle';
 import { NavIcon } from '@/components/nav-icon';
 import { NexterLogo } from '@/components/nexter-logo';
-import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
+import { useLiveRefreshing } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { UNAUTHORIZED_EVENT } from '@/lib/auth-events';
@@ -211,6 +211,7 @@ function RootLayoutContent() {
   const cryptoActive = cryptoPaths.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
+  const refreshing = useLiveRefreshing();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => readTheme());
   useEffect(() => {
     return subscribeUiPreference('nexter-theme', () => setTheme(readTheme()));
@@ -272,7 +273,7 @@ function RootLayoutContent() {
       <div className="flex min-h-dvh w-full">
         <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 overflow-hidden border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
           <Link to="/dashboard" className="mb-6 flex shrink-0 items-center gap-3 px-2">
-            <NexterLogo lit={8} className="h-9 w-8 shrink-0" />
+            <NexterLogo lit={8} refreshing={refreshing} className="h-9 w-8 shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold leading-tight text-white">
                 Nexter System
@@ -351,9 +352,14 @@ function RootLayoutContent() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
-            <HeaderClock />
+            <div className="flex items-center gap-3">
+              <NexterLogo lit={8} refreshing={refreshing} className="h-8 w-7 shrink-0 md:hidden" />
+              <HeaderClock />
+            </div>
+            <span className="sr-only" role="status" aria-live="polite">
+              {refreshing ? 'Синхронизация данных' : ''}
+            </span>
             <div className="flex items-center gap-2 sm:gap-3">
-              <LiveRefreshIndicator />
               <div
                 className="flex items-center gap-0.5 rounded-full border border-zinc-200 bg-zinc-50 p-1"
                 role="group"

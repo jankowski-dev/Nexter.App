@@ -182,44 +182,38 @@ export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
                 return (
                   <div
                     key={transaction.id}
-                    className="rounded-xl border border-l-4 border-zinc-200 p-3.5 transition-colors hover:border-emerald-300"
+                    className="rounded-xl border border-l-4 border-zinc-200 px-3 py-2 transition-colors hover:border-emerald-300"
                     style={{
                       borderLeftColor: typeAccentColors[transaction.type] ?? '#d4d4d8',
                     }}
                   >
-                    <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
                       <TokenIcon
                         logoUrl={primaryAsset?.logoUrl ?? null}
                         symbol={primaryAsset?.symbol ?? '—'}
-                        className="h-9 w-9 text-[10px]"
+                        className="h-8 w-8 text-[9px]"
                       />
-                      <div className="min-w-[180px] flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold text-zinc-900">
-                            {primaryLabel}
-                          </span>
-                          {showSecondary ? (
-                            <span className="text-[11px] text-zinc-500">{secondaryLabel}</span>
-                          ) : null}
-                          {transaction.source === 'notion' ? (
-                            <Badge tone="info">Notion</Badge>
-                          ) : null}
-                        </div>
-                        <div className="mt-1 text-[11px] text-zinc-500">
+                      <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="text-sm font-semibold text-zinc-900">{primaryLabel}</span>
+                        {showSecondary ? (
+                          <span className="text-[11px] text-zinc-500">{secondaryLabel}</span>
+                        ) : null}
+                        {transaction.source === 'notion' ? <Badge tone="info">Notion</Badge> : null}
+                        <span className="text-[11px] text-zinc-500">
                           {formatDateTime(transaction.occurredAt)}
-                        </div>
+                        </span>
                         {transaction.notes ? (
-                          <div className="mt-0.5 max-w-xl truncate text-xs text-zinc-500">
-                            {transaction.notes}
-                          </div>
+                          <span className="max-w-[360px] truncate text-[11px] text-zinc-500">
+                            · {transaction.notes}
+                          </span>
                         ) : null}
                       </div>
                       <div className="ml-auto text-right">
-                        <div className="font-mono text-sm font-medium tabular-nums text-zinc-800">
+                        <div className="font-mono text-[13px] font-medium tabular-nums text-zinc-800">
                           {postings.length > 0 ? postings.join(' · ') : '—'}
                         </div>
                         {fees > 0 ? (
-                          <div className="mt-0.5 text-[11px] text-zinc-500">
+                          <div className="mt-0.5 text-[10px] text-zinc-500">
                             Сборы {formatUsd(transaction.feesUsd)}
                           </div>
                         ) : null}
