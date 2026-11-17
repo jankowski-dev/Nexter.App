@@ -181,7 +181,8 @@ export class MarketDataService {
     const now = Date.now();
 
     if (cached) {
-      const fresh = now - cached.fetchedAt.getTime() < HISTORY_FRESH_MS;
+      const hasData = cached.points.length >= 2;
+      const fresh = hasData && now - cached.fetchedAt.getTime() < HISTORY_FRESH_MS;
       const waiting = (cached.nextAttemptAt?.getTime() ?? 0) > now;
       if (fresh || waiting) {
         return { source: cached.source, points: sliceHistory(cached.points, days) };
@@ -198,14 +199,18 @@ export class MarketDataService {
     }
 
     const hasFreshData = result.points.length >= 2;
-    const points = hasFreshData || !cached ? result.points : cached.points;
-    const source = hasFreshData || !cached ? result.source : cached.source;
+    const useFetched = hasFreshData || !cached;
+    const points = useFetched ? result.points : cached.points;
+    const source = useFetched ? result.source : cached.source;
+    const fetchedAt = useFetched ? new Date(now) : cached.fetchedAt;
     const failures = hasFreshData ? 0 : Math.min((cached?.failures ?? 0) + 1, 3);
     const nextAttemptAt = hasFreshData
       ? null
       : new Date(now + HISTORY_RETRY_MS[Math.min(failures, HISTORY_RETRY_MS.length - 1)]);
 
-    await this.writeHistory(key, source, points, nextAttemptAt, failures).catch(() => undefined);
+    await this.writeHistory(key, source, points, fetchedAt, nextAttemptAt, failures).catch(
+      () => undefined,
+    );
 
     return { source, points: sliceHistory(points, days) };
   }
@@ -277,6 +282,7 @@ export class MarketDataService {
     key: string,
     source: string,
     points: PriceHistoryPoint[],
+    fetchedAt: Date,
     nextAttemptAt: Date | null,
     failures: number,
   ): Promise<void> {
@@ -287,7 +293,7 @@ export class MarketDataService {
         cacheKey: key,
         source,
         points,
-        fetchedAt: now,
+        fetchedAt,
         nextAttemptAt,
         failures,
         updatedAt: now,
@@ -297,7 +303,7 @@ export class MarketDataService {
         set: {
           source,
           points,
-          fetchedAt: now,
+          fetchedAt,
           nextAttemptAt,
           failures,
           updatedAt: now,
