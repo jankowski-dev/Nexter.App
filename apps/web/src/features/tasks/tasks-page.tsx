@@ -145,6 +145,7 @@ export function TasksPage() {
                   onClick={() => {
                     setView(value);
                     if (value === 'calendar') setFilter('all');
+                    else if (view === 'calendar') setFilter('open');
                   }}
                   className={`rounded-md px-3 py-1.5 text-sm ${
                     view === value
