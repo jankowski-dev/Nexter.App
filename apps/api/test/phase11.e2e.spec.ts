@@ -256,6 +256,52 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     const archivedOnly = await agent.get('/api/v1/tasks?archivedOnly=true').expect(200);
     expect(archivedOnly.body.data).toHaveLength(1);
     expect(archivedOnly.body.data[0].id).toBe(task.body.id);
+    const allDay = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        title: 'Задача на день',
+        dueAt: '2026-12-06T12:00:00.000Z',
+        dueHasTime: false,
+      })
+      .expect(201);
+    expect(allDay.body.dueHasTime).toBe(false);
+
+    const convertible = await agent
+      .post('/api/v1/tasks')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        title: 'Convert to series',
+        dueAt: '2026-12-02T09:00:00.000Z',
+        dueHasTime: true,
+      })
+      .expect(201);
+    const converted = await agent
+      .patch(`/api/v1/tasks/${convertible.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        recurrence: 'daily',
+        recurrenceEndsAt: '2026-12-05T09:00:00.000Z',
+        dueAt: '2026-12-02T09:00:00.000Z',
+        dueHasTime: true,
+      })
+      .expect(200);
+    expect(converted.body).toMatchObject({
+      recurrence: 'daily',
+      dueHasTime: true,
+      occurrenceIndex: 0,
+    });
+    expect(converted.body.seriesId).not.toBeNull();
+    const convertedSeries = await agent
+      .get('/api/v1/tasks?search=Convert to series&includeArchived=true')
+      .expect(200);
+    expect(convertedSeries.body.data.length).toBeGreaterThan(1);
+    expect(
+      convertedSeries.body.data.every(
+        (item: { recurrence: string; dueHasTime: boolean }) =>
+          item.recurrence === 'daily' && item.dueHasTime === true,
+      ),
+    ).toBe(true);
 
     const habit = await agent
       .post('/api/v1/habits')

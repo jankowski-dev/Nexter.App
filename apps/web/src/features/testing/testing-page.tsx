@@ -17,7 +17,6 @@ import {
   fetchTradingBots,
   fetchWatchlist,
   fetchWatchlistGroups,
-  resetTradingBot,
   startTradingBot,
   stopTradingBot,
   updateTradingBot,
@@ -299,14 +298,6 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
     },
     onError: (err) => notify(toRussianError(err, 'Не удалось остановить бота'), true),
   });
-  const resetMutation = useMutation({
-    mutationFn: resetTradingBot,
-    onSuccess: () => {
-      notify('Бумажное состояние сброшено.');
-      invalidate();
-    },
-    onError: (err) => notify(toRussianError(err, 'Не удалось сбросить бота'), true),
-  });
   const closePositionsMutation = useMutation({
     mutationFn: closeTradingBotPositions,
     onSuccess: () => {
@@ -525,7 +516,6 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
   const busy =
     startMutation.isPending ||
     stopMutation.isPending ||
-    resetMutation.isPending ||
     closePositionsMutation.isPending ||
     archiveMutation.isPending;
 
@@ -1165,18 +1155,6 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
         onEdit={openEditBotFromDetail}
         onStart={(id) => startMutation.mutate(id)}
         onStop={(id) => stopMutation.mutate(id)}
-        onReset={async (id) => {
-          if (
-            await confirm({
-              title: 'Сбросить состояние робота?',
-              description: 'Сделки и позиции будут удалены, капитал вернётся к бюджету.',
-              confirmLabel: 'Сбросить',
-              variant: 'danger',
-            })
-          ) {
-            resetMutation.mutate(id);
-          }
-        }}
         onClosePositions={async (id) => {
           if (
             await confirm({

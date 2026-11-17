@@ -22,6 +22,7 @@ export const taskSchema = z.object({
   tags: z.array(z.string()),
   images: z.array(taskImageSchema),
   dueAt: z.iso.datetime().nullable(),
+  dueHasTime: z.boolean(),
   completedAt: z.iso.datetime().nullable(),
   relatedAssetId: z.uuid().nullable(),
   seriesId: z.uuid().nullable(),
@@ -62,6 +63,7 @@ export const taskCreateRequestSchema = z
     priority: z.number().int().min(0).max(3).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
     dueAt: z.iso.datetime().nullable().optional(),
+    dueHasTime: z.boolean().optional(),
     relatedAssetId: z.uuid().nullable().optional(),
     recurrence: taskRecurrenceSchema.optional(),
     recurrenceEndsAt: z.iso.datetime().nullable().optional(),
@@ -90,7 +92,10 @@ export const taskUpdateRequestSchema = z
     priority: z.number().int().min(0).max(3).optional(),
     tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
     dueAt: z.iso.datetime().nullable().optional(),
+    dueHasTime: z.boolean().optional(),
     relatedAssetId: z.uuid().nullable().optional(),
+    recurrence: taskRecurrenceSchema.optional(),
+    recurrenceEndsAt: z.iso.datetime().nullable().optional(),
     archived: z.boolean().optional(),
     applyToSeries: z.boolean().optional(),
   })
@@ -102,7 +107,10 @@ export const taskUpdateRequestSchema = z
       value.priority !== undefined ||
       value.tags !== undefined ||
       value.dueAt !== undefined ||
+      value.dueHasTime !== undefined ||
       value.relatedAssetId !== undefined ||
+      value.recurrence !== undefined ||
+      value.recurrenceEndsAt !== undefined ||
       value.archived !== undefined ||
       value.applyToSeries !== undefined,
     'At least one field must be provided',

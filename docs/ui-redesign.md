@@ -227,3 +227,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 
 - `Настройки → ИИ`: DeepSeek key (masked), enable toggle, model, reasoning mode, temperature, max tokens, raw fallback and connection test.
 - Viber audio files are transcribed locally and saved as notes with an AI summary/structure; the original audio is attached and playable/downloadable in the notes drawer.
+
+## UI-66 buttons, bot testing and task calendar
+
+- Primary/danger buttons are pale emerald/red with colored text; icons have a consistent gap.
+- Bot footer keeps Delete, Close positions, Start/Stop, Test, Telemetry and Edit; Reset and Done were removed, and Test works for running bots.
+- Task calendar renders all tasks and stretches each week row to its busiest day.
+- Task time is explicit: 12:00 can be a real deadline; recurrence is editable for one-off tasks and converts them to a series.

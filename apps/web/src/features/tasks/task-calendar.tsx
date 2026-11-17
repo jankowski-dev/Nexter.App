@@ -4,7 +4,6 @@ import { isTaskOverdue, taskTimeLabel } from '@/lib/tasks';
 import { useState } from 'react';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-const MAX_VISIBLE = 4;
 
 function dateKey(date: Date): string {
   const year = date.getFullYear();
@@ -67,8 +66,8 @@ export function TaskCalendar({
   }
   for (const list of byDate.values()) {
     list.sort((left, right) => {
-      const leftTime = taskTimeLabel(left.dueAt);
-      const rightTime = taskTimeLabel(right.dueAt);
+      const leftTime = taskTimeLabel(left.dueAt, left.dueHasTime);
+      const rightTime = taskTimeLabel(right.dueAt, right.dueHasTime);
       if (leftTime && rightTime) return leftTime.localeCompare(rightTime);
       if (leftTime) return -1;
       if (rightTime) return 1;
@@ -171,8 +170,8 @@ export function TaskCalendar({
                     </button>
                   </div>
                   <div className="mt-1 space-y-1">
-                    {dayTasks.slice(0, MAX_VISIBLE).map((task) => {
-                      const time = taskTimeLabel(task.dueAt);
+                    {dayTasks.map((task) => {
+                      const time = taskTimeLabel(task.dueAt, task.dueHasTime);
                       return (
                         <button
                           key={task.id}
@@ -209,11 +208,6 @@ export function TaskCalendar({
                         </button>
                       );
                     })}
-                    {dayTasks.length > MAX_VISIBLE ? (
-                      <div className="px-1 text-xs text-zinc-500">
-                        +{dayTasks.length - MAX_VISIBLE} ещё
-                      </div>
-                    ) : null}
                   </div>
                 </>
               ) : null}

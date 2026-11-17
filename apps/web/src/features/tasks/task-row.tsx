@@ -87,7 +87,7 @@ export function TaskCompactRow({
           <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             <span className="flex items-center gap-1">
               <CalendarIcon className="h-3.5 w-3.5" />
-              {formatTaskDue(task.dueAt)}
+              {formatTaskDue(task.dueAt, task.dueHasTime)}
             </span>
             <span>{taskPriorityLabels[task.priority] ?? 'Обычный'}</span>
             {task.recurrence ? <span>↻ Повтор</span> : null}
