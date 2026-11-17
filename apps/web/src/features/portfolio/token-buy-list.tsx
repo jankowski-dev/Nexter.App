@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Card, CardTitle } from '@/components/ui/card';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Select } from '@/components/ui/select';
 import { fetchWatchlist, fetchWatchlistGroups } from '@/lib/api';
@@ -121,10 +121,6 @@ export function TokenBuyList({
           </Button>
         </div>
       </div>
-      <CardDescription>
-        Токены из группы «Основная» для ручной покупки. Нажмите на блок, чтобы открыть карточку
-        токена.
-      </CardDescription>
 
       {entries.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-600">
