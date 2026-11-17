@@ -37,7 +37,7 @@ Opportunistic attackers, credential stuffing, phishing, malware, malicious brows
 Self-hosting shifts responsibility to the owner; Railway/Cloudflare/GitHub may be compromised; the user's device may be infected; Tangem firmware and DEX contracts are outside our control; market risk remains.
 
 - **Pending TOTP sessions.** A password-correct login before TOTP verification gets a pending session. It cannot read app data and expires after 15 minutes, and enabling TOTP revokes other pending sessions, but a stolen pending cookie could still complete 2FA with a valid code inside that window.
-- **TOTP replay.** Codes are accepted within a ±30-second epoch tolerance. Replay protection across the same time-step is planned in migration wave 1 (`users.last_totp_step`); until then, an intercepted code is usable only inside the tolerance window and is rate-limited.
+- **TOTP replay.** Codes are accepted within a ±30-second epoch tolerance, but the matched time step is persisted in `users.last_totp_step` and atomically consumed by the authorization transaction. A code cannot be reused for a second login, step-up, or concurrent request in the same period; a replay is rejected with `TOTP_REPLAY` and audited. A user who logs in and immediately needs step-up must wait for the next code.
 - **CSRF origin fallback.** Some non-browser clients omit `Origin`/`Referer`; these are rejected for unsafe requests in production/staging. Bearer-only bot endpoints are exempt by design.
 
 ## Verification

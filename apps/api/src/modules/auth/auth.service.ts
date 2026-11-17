@@ -7,8 +7,8 @@ import {
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
-import { sessions, settings, users, type Database, type User } from '@nexter/db';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
+import { sessions, settings, users, type Database, type DbExecutor, type User } from '@nexter/db';
 import type {
   AuthMeResponse,
   AuthStatusResponse,
@@ -120,6 +120,43 @@ export class AuthService {
       'code' in error &&
       (error as { code?: string }).code === '23505'
     );
+  }
+
+  private async consumeTotpStep(
+    executor: DbExecutor,
+    userId: string,
+    step: number,
+  ): Promise<boolean> {
+    const [consumed] = await executor
+      .update(users)
+      .set({ lastTotpStep: step })
+      .where(
+        and(eq(users.id, userId), or(isNull(users.lastTotpStep), lt(users.lastTotpStep, step))),
+      )
+      .returning({ id: users.id });
+
+    return Boolean(consumed);
+  }
+
+  private async rejectTotpReplay(
+    userId: string,
+    flow: 'enable' | 'login' | 'step_up',
+    request: FastifyRequest,
+  ): Promise<never> {
+    await this.audit.log({
+      userId,
+      action: 'auth.totp_replay_rejected',
+      entityType: 'user',
+      entityId: userId,
+      after: { flow },
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+
+    throw new UnauthorizedException({
+      code: 'TOTP_REPLAY',
+      message: 'TOTP code was already used',
+    });
   }
 
   async status(): Promise<AuthStatusResponse> {
@@ -358,9 +395,13 @@ export class AuthService {
     await this.throttle.assertNotBlocked(key, meta);
 
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const valid = await this.totp.verify(dto.code, secret);
+    const verification = await this.totp.verify(
+      dto.code,
+      secret,
+      auth.user.lastTotpStep ?? undefined,
+    );
 
-    if (!valid) {
+    if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
@@ -379,38 +420,49 @@ export class AuthService {
     await this.throttle.reset(key);
     await this.resetLoginThrottles(request, auth.user.email);
 
-    const result = await this.db.transaction(async (tx) => {
-      const now = new Date();
-      const [user] = await tx
-        .update(users)
-        .set({ totpEnabled: true, lastLoginAt: now, updatedAt: now })
-        .where(eq(users.id, auth.user.id))
-        .returning();
-
-      const tokens = await this.sessions.rotate(
-        auth.session,
-        {
-          twoFactorVerified: true,
-          ...meta,
-        },
+    const result = await this.db.transaction(
+      async (
         tx,
-      );
-      await this.sessions.revokePendingOthers(auth.user.id, tokens.session.id, tx);
+      ): Promise<{ replay: true } | { replay: false; user: User; tokens: SessionTokens }> => {
+        const consumed = await this.consumeTotpStep(tx, auth.user.id, verification.step);
+        if (!consumed) return { replay: true };
 
-      await this.audit.log(
-        {
-          userId: auth.user.id,
-          action: 'auth.totp_enabled',
-          entityType: 'user',
-          entityId: auth.user.id,
-          ip: request.ip,
-          userAgent: request.headers['user-agent'],
-        },
-        { executor: tx, strict: true },
-      );
+        const now = new Date();
+        const [user] = await tx
+          .update(users)
+          .set({ totpEnabled: true, lastLoginAt: now, updatedAt: now })
+          .where(eq(users.id, auth.user.id))
+          .returning();
 
-      return { user: user ?? auth.user, tokens };
-    });
+        const tokens = await this.sessions.rotate(
+          auth.session,
+          {
+            twoFactorVerified: true,
+            ...meta,
+          },
+          tx,
+        );
+        await this.sessions.revokePendingOthers(auth.user.id, tokens.session.id, tx);
+
+        await this.audit.log(
+          {
+            userId: auth.user.id,
+            action: 'auth.totp_enabled',
+            entityType: 'user',
+            entityId: auth.user.id,
+            ip: request.ip,
+            userAgent: request.headers['user-agent'],
+          },
+          { executor: tx, strict: true },
+        );
+
+        return { replay: false, user: user ?? auth.user, tokens };
+      },
+    );
+
+    if (result.replay) {
+      return this.rejectTotpReplay(auth.user.id, 'enable', request);
+    }
 
     return {
       data: { user: this.publicUser(result.user) },
@@ -446,9 +498,13 @@ export class AuthService {
     await this.throttle.assertNotBlocked(key, meta);
 
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const valid = await this.totp.verify(dto.code, secret);
+    const verification = await this.totp.verify(
+      dto.code,
+      secret,
+      auth.user.lastTotpStep ?? undefined,
+    );
 
-    if (!valid) {
+    if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
@@ -467,7 +523,10 @@ export class AuthService {
     await this.throttle.reset(key);
     await this.resetLoginThrottles(request, auth.user.email);
 
-    const tokens = await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
+      const consumed = await this.consumeTotpStep(tx, auth.user.id, verification.step);
+      if (!consumed) return { replay: true as const };
+
       const now = new Date();
 
       await tx
@@ -497,12 +556,16 @@ export class AuthService {
         { executor: tx, strict: true },
       );
 
-      return rotated;
+      return { replay: false as const, tokens: rotated };
     });
+
+    if (result.replay) {
+      return this.rejectTotpReplay(auth.user.id, 'login', request);
+    }
 
     return {
       data: { user: this.publicUser(auth.user) },
-      tokens,
+      tokens: result.tokens,
     };
   }
 
@@ -703,9 +766,13 @@ export class AuthService {
     const key = `2fa:${auth.user.id}`;
     await this.throttle.assertNotBlocked(key, meta);
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const valid = await this.totp.verify(dto.code, secret);
+    const verification = await this.totp.verify(
+      dto.code,
+      secret,
+      auth.user.lastTotpStep ?? undefined,
+    );
 
-    if (!valid) {
+    if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
       await this.audit.log({
         userId: auth.user.id,
@@ -724,7 +791,10 @@ export class AuthService {
     await this.throttle.reset(key);
     const stepUpUntil = new Date(Date.now() + 5 * 60 * 1000);
 
-    await this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
+      const consumed = await this.consumeTotpStep(tx, auth.user.id, verification.step);
+      if (!consumed) return { replay: true as const };
+
       await tx.update(sessions).set({ stepUpUntil }).where(eq(sessions.id, auth.session.id));
 
       await this.audit.log(
@@ -739,7 +809,13 @@ export class AuthService {
         },
         { executor: tx, strict: true },
       );
+
+      return { replay: false as const };
     });
+
+    if (result.replay) {
+      return this.rejectTotpReplay(auth.user.id, 'step_up', request);
+    }
 
     return { stepUpUntil: stepUpUntil.toISOString() };
   }

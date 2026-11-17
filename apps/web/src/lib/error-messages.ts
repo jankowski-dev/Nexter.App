@@ -12,6 +12,7 @@ const messages: Record<string, string> = {
   INVALID_CREDENTIALS: 'Неверный email или пароль.',
   TOTP_REQUIRED: 'Введите код двухфакторной аутентификации.',
   TOTP_INVALID: 'Неверный код. Попробуйте ещё раз.',
+  TOTP_REPLAY: 'Этот код уже использован. Дождитесь следующего и попробуйте снова.',
   RATE_LIMITED: 'Слишком много попыток. Подождите и попробуйте снова.',
   VALIDATION_ERROR: 'Проверьте введённые данные.',
   BACKTEST_INSUFFICIENT_DATA:

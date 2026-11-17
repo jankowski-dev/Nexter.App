@@ -73,6 +73,10 @@ describe.runIf(canRun)('Auth e2e', () => {
       .send({ code: generateSync({ secret }) })
       .expect(200);
 
+    // Tests run faster than the 30-second TOTP period. Clear the consumed step
+    // to simulate the next window; replay protection has a dedicated test.
+    await db.update(users).set({ lastTotpStep: null });
+
     return {
       secret,
       csrf: csrfFrom(enabled),
@@ -81,6 +85,8 @@ describe.runIf(canRun)('Auth e2e', () => {
   }
 
   async function loginWithTotp(agent: SuperAgentTest, ownerEmail: string, secret: string) {
+    await db.update(users).set({ lastTotpStep: null });
+
     const login = await agent
       .post('/api/v1/auth/login')
       .send({ email: ownerEmail, password })
@@ -283,6 +289,25 @@ describe.runIf(canRun)('Auth e2e', () => {
 
     const revoked = await otherAgent.get('/api/v1/auth/me').expect(401);
     expect(revoked.body.error.code).toBe('AUTH_REQUIRED');
+  }, 30_000);
+
+  it('rejects a replayed TOTP code', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const { secret, csrf } = await enableTotp(agent, owner.csrf);
+    const code = generateSync({ secret });
+
+    await agent.post('/api/v1/auth/step-up').set('x-csrf-token', csrf).send({ code }).expect(200);
+
+    const replay = await agent
+      .post('/api/v1/auth/step-up')
+      .set('x-csrf-token', csrf)
+      .send({ code })
+      .expect(401);
+    expect(replay.body.error.code).toBe('TOTP_REPLAY');
+
+    const auditRows = await db.select().from(auditLog);
+    expect(auditRows.some((row) => row.action === 'auth.totp_replay_rejected')).toBe(true);
   }, 30_000);
 
   it('blocks TOTP brute force and rejects a valid code while blocked', async () => {

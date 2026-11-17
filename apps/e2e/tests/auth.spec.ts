@@ -6,6 +6,17 @@ const setupToken = process.env.SETUP_TOKEN ?? '';
 const password = 'correct horse battery staple';
 const newPassword = 'correct horse battery staple 2';
 
+async function resetTotpStep(): Promise<void> {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+
+  try {
+    await client.query('update users set last_totp_step = null');
+  } finally {
+    await client.end();
+  }
+}
+
 test.skip(
   process.env.NEXTER_TEST_DB !== '1',
   'Set NEXTER_TEST_DB=1 and use a dedicated test database; this suite truncates auth tables.',
@@ -64,6 +75,7 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
   await page.getByRole('button', { name: 'Войти' }).click();
 
   await expect(page.getByRole('heading', { name: 'Двухфакторная проверка' })).toBeVisible();
+  await resetTotpStep();
   await page.getByLabel('Код').fill(generateSync({ secret }));
   await page.getByRole('button', { name: 'Подтвердить' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
@@ -83,6 +95,7 @@ test('setup, TOTP, login and password change through the real UI', async ({ page
   await page.getByLabel('Пароль').fill(newPassword);
   await page.getByRole('button', { name: 'Войти' }).click();
   await expect(page.getByRole('heading', { name: 'Двухфакторная проверка' })).toBeVisible();
+  await resetTotpStep();
   await page.getByLabel('Код').fill(generateSync({ secret }));
   await page.getByRole('button', { name: 'Подтвердить' }).click();
   await expect(page).toHaveURL(/\/dashboard$/);

@@ -294,6 +294,7 @@ Protected branches. No direct pushes to main. No production secrets in CI logs.
 - Email is a login identifier; **no emails are sent**.
 - Password hashing: Argon2id with memory >= 64 MB, iterations >= 3, parallelism >= 1 (tune and document).
 - TOTP mandatory after setup.
+- TOTP codes are single-use per 30-second period across enable, login, and step-up. `users.last_totp_step` is consumed atomically; replay returns `TOTP_REPLAY` and is audited.
 - Recovery codes: 10 one-time codes, hashed at rest, shown once.
 - Password reset: recovery code + new password; all other sessions revoked.
 - Passkeys: after MVP-1.
@@ -344,6 +345,7 @@ Protected branches. No direct pushes to main. No production secrets in CI logs.
 - Private networking.
 - Separate app and migration users.
 - Least privilege.
+- `audit_log` is append-only: a trigger rejects UPDATE/DELETE even for the owner role; `nexter_app` has no such grants.
 - TLS.
 - PITR enabled.
 - Daily encrypted `pg_dump` to R2.

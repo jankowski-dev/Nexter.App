@@ -22,6 +22,7 @@ export const users = pgTable(
     passwordHash: text('password_hash').notNull(),
     totpSecretEncrypted: text('totp_secret_encrypted'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
+    lastTotpStep: integer('last_totp_step'),
     recoveryCodesHash: text('recovery_codes_hash')
       .array()
       .notNull()
@@ -79,6 +80,7 @@ export const auditLog = pgTable(
   (table) => [
     index('audit_log_created_at_idx').on(table.createdAt),
     index('audit_log_entity_idx').on(table.entityType, table.entityId),
+    index('audit_log_user_id_idx').on(table.userId),
   ],
 );
 
