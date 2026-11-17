@@ -227,7 +227,7 @@ test('buy drawer preview and manual operations UI', async ({ page }) => {
   });
 
   await page.goto('/portfolio');
-  const mainList = page.getByRole('table').filter({ hasText: 'Действие' });
-  await expect(mainList).toBeVisible();
-  await expect(mainList.getByText('LINK', { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Ручной' }).click();
+  await expect(page.getByTestId('token-block-BASED')).toBeVisible();
+  await expect(page.getByTestId('token-block-LINK')).toHaveCount(0);
 });
