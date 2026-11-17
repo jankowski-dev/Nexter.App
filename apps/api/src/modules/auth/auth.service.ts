@@ -395,11 +395,7 @@ export class AuthService {
     await this.throttle.assertNotBlocked(key, meta);
 
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const verification = await this.totp.verify(
-      dto.code,
-      secret,
-      auth.user.lastTotpStep ?? undefined,
-    );
+    const verification = await this.totp.verify(dto.code, secret);
 
     if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
@@ -498,11 +494,7 @@ export class AuthService {
     await this.throttle.assertNotBlocked(key, meta);
 
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const verification = await this.totp.verify(
-      dto.code,
-      secret,
-      auth.user.lastTotpStep ?? undefined,
-    );
+    const verification = await this.totp.verify(dto.code, secret);
 
     if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);
@@ -766,11 +758,7 @@ export class AuthService {
     const key = `2fa:${auth.user.id}`;
     await this.throttle.assertNotBlocked(key, meta);
     const secret = this.crypto.decryptSecret(auth.user.totpSecretEncrypted);
-    const verification = await this.totp.verify(
-      dto.code,
-      secret,
-      auth.user.lastTotpStep ?? undefined,
-    );
+    const verification = await this.totp.verify(dto.code, secret);
 
     if (!verification.valid) {
       await this.throttle.hit(key, TWO_FACTOR_WINDOW, meta);

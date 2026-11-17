@@ -19,17 +19,12 @@ export class TotpService {
     });
   }
 
-  async verify(
-    code: string,
-    secret: string,
-    afterTimeStep?: number | null,
-  ): Promise<TotpVerification> {
+  async verify(code: string, secret: string): Promise<TotpVerification> {
     try {
       const result = await verify({
         secret,
         token: code,
         epochTolerance: 30,
-        ...(typeof afterTimeStep === 'number' ? { afterTimeStep } : {}),
       });
 
       if (!result.valid) return { valid: false };

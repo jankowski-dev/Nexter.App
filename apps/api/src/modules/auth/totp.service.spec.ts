@@ -28,18 +28,17 @@ describe('TotpService', () => {
     await expect(service.verify('000000', secret)).resolves.toEqual({ valid: false });
   });
 
-  it('rejects a code that was already consumed at the same time step', async () => {
+  it('returns a stable time step for the same code', async () => {
     const secret = service.generateSecret();
     const code = generateSync({ secret });
     const first = await service.verify(code, secret);
+    const second = await service.verify(code, secret);
 
     expect(first.valid).toBe(true);
-    if (!first.valid) return;
-
-    await expect(service.verify(code, secret, first.step)).resolves.toEqual({ valid: false });
-    await expect(service.verify(code, secret, first.step - 1)).resolves.toMatchObject({
-      valid: true,
-    });
+    expect(second.valid).toBe(true);
+    if (first.valid && second.valid) {
+      expect(second.step).toBe(first.step);
+    }
   });
 
   it('renders a QR data URL', async () => {

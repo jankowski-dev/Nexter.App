@@ -18,10 +18,10 @@ The audit also recommended an index on `audit_log(user_id)` for per-user queries
 ### TOTP replay protection
 
 - Add nullable `users.last_totp_step` (integer). Existing users keep `NULL` and accept the first valid code after the migration.
-- `TotpService.verify` returns the matched time step (`epoch / 30`) instead of a boolean and accepts an `afterTimeStep` value, which is passed to otplib as a pre-check.
+- `TotpService.verify` returns the matched time step reported by otplib instead of a boolean.
 - Every TOTP flow (TOTP enable, login verification, step-up) consumes the step with a single conditional update inside the same transaction as the action it authorizes:
   `UPDATE users SET last_totp_step = $step WHERE id = $id AND (last_totp_step IS NULL OR last_totp_step < $step)`.
-- If the update returns no row, the request is rejected with `TOTP_REPLAY` (401) and audited as `auth.totp_replay_rejected` with the flow name. The transaction has no effect.
+- If the update returns no row, the request is rejected with `TOTP_REPLAY` (401) and audited as `auth.totp_replay_rejected` with the flow name. The transaction has no effect. The code is first validated by otplib (current ±30-second window); the database update, not a second code check, is the authoritative replay decision, so a replayed code returns `TOTP_REPLAY` rather than a generic invalid-code error.
 - The same code therefore cannot authorize two operations or two concurrent requests in the same 30-second period. A user who logs in and immediately needs step-up must wait for the next code.
 - Recovery codes are not TOTP and are unchanged.
 
