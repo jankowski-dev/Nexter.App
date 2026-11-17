@@ -4,6 +4,7 @@ import { NexterLogo } from '@/components/nexter-logo';
 import { LiveRefreshIndicator } from '@/components/live-refresh-indicator';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
+import { UNAUTHORIZED_EVENT } from '@/lib/auth-events';
 import { messages } from '@/lib/i18n';
 import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { LockProvider, useAppLock } from '@/lib/app-lock';
@@ -239,6 +240,21 @@ function RootLayoutContent() {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute('content', theme === 'dark' ? '#202329' : '#f6f7f9');
   }, [theme]);
+
+  useEffect(() => {
+    const onUnauthorized = (): void => {
+      appLock.clearLocked();
+      queryClient.clear();
+
+      if (window.location.pathname !== '/login') {
+        void navigate({ to: '/login', replace: true });
+      }
+    };
+
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
+  }, [appLock, navigate, queryClient]);
 
   async function logout() {
     try {

@@ -12,8 +12,7 @@
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "tsconfig.base.json",
-      "railway.json",
-      "railway.worker.json"
+      "railway.json"
     ]
   },
   "deploy": {

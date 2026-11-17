@@ -7,7 +7,13 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { env } from '../../shared/config/env';
-import { CSRF_COOKIE, IS_PUBLIC_METADATA, SKIP_CSRF_METADATA } from './auth.constants';
+import { checkSameOrigin } from '../../shared/security/origin';
+import {
+  CSRF_COOKIE,
+  IS_PUBLIC_METADATA,
+  SKIP_CSRF_METADATA,
+  SKIP_ORIGIN_METADATA,
+} from './auth.constants';
 import type { RequestWithAuth } from './auth.types';
 import { CryptoService } from './crypto.service';
 
@@ -27,7 +33,11 @@ export class CsrfGuard implements CanActivate {
       return true;
     }
 
-    this.assertSameOrigin(request);
+    const skipOrigin = this.reflector.getAllAndOverride<boolean>(SKIP_ORIGIN_METADATA, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!skipOrigin) this.assertSameOrigin(request);
 
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_METADATA, [
       context.getHandler(),
@@ -82,27 +92,18 @@ export class CsrfGuard implements CanActivate {
   }
 
   private assertSameOrigin(request: RequestWithAuth): void {
-    const origin = request.headers.origin;
-    const referer = request.headers.referer;
-    const expected = new URL(env.APP_URL).origin;
+    const result = checkSameOrigin({
+      origin: typeof request.headers.origin === 'string' ? request.headers.origin : undefined,
+      referer: typeof request.headers.referer === 'string' ? request.headers.referer : undefined,
+      expected: new URL(env.APP_URL).origin,
+      requireOrigin: env.NODE_ENV === 'production' || env.NODE_ENV === 'staging',
+    });
 
-    let actual: string | undefined;
-
-    if (typeof origin === 'string') {
-      actual = origin;
-    } else if (typeof referer === 'string') {
-      try {
-        actual = new URL(referer).origin;
-      } catch {
-        actual = undefined;
-      }
-    }
-
-    if (actual && actual !== expected) {
+    if (result !== 'ok') {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
         message: 'Cross-origin request rejected',
-        details: { reason: 'ORIGIN_MISMATCH' },
+        details: { reason: result === 'missing' ? 'ORIGIN_MISSING' : 'ORIGIN_MISMATCH' },
       });
     }
   }

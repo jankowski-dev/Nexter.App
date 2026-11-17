@@ -1,8 +1,8 @@
-# NEXTER — MEGA PROMPT v1
+# NEXTER — MEGA PROMPT v2
 
 > Implementation contract for AI agents.
-> Version: 1.0
-> Date: 2026-11-02
+> Version: 2.0 (scope amendment; historical MVP sections are preserved)
+> Date: 2026-11-17
 > Owner: single user
 > UI language: Russian
 > Code language: TypeScript, English identifiers/comments
@@ -26,6 +26,16 @@ Rules:
 9. Never touch production data or real funds without explicit approval.
 10. If a dependency or API is unavailable, propose a fallback; do not silently substitute.
 
+### 0.1 Scope amendment (v2, 2026-11-17)
+
+The product shipped beyond the original MVP-1/MVP-2 contract. The current scope, confirmed by the owner, is defined by this amendment and ADR 0063:
+
+- Accounting, FIFO lots, P&L, imports, reports, finance, vault, tasks, notes, notifications, dashboard, and the Russian UI are live.
+- Non-custodial WalletConnect/Tangem swaps are live on BSC and Ethereum. Execution is allowlisted, built and simulated by the server, signed only by the wallet, step-up protected above $500, and gated by `SWAP_ENABLED`, the per-chain flags, and the kill switch. No private keys ever reach the server.
+- Paper-trading bots, backtesting, bot telemetry, the AI settings module, and Viber audio notes are part of the product.
+- The `apps/worker` service was removed because it registered no jobs. Background polling and scheduled work run in the API process under advisory locks. `pnpm dev` starts the API and web app only.
+- Where older sections below still describe "MVP-1" or "MVP-2" as future work, treat them as historical rationale. Current behavior is defined by this amendment, the ADRs, and `docs/decisions.md`.
+
 ---
 
 ## 1. Mission
@@ -38,11 +48,9 @@ Primary goals:
 - provide accurate accounting, P&L, FIFO lots, fees, transfers, income, and audit;
 - provide a fast dashboard and detailed statistics;
 - add safe non-custodial DEX swaps via KyberSwap on BSC and Ethereum;
-- create a foundation for future modules: passwords, tasks, notes.
+- include passwords, tasks, notes, finance, paper-trading bots, backtesting, and AI/audio modules;
 
-MVP-1: accounting and import.
-MVP-2: swaps.
-Later: on-chain reconciliation, passwords, tasks, notes.
+Delivered: accounting and import, live swaps on BSC/Ethereum, on-chain reconciliation, passwords, tasks, notes, finance, paper-trading bots, backtesting, AI settings, and Viber audio notes.
 
 ---
 
@@ -67,17 +75,13 @@ Later: on-chain reconciliation, passwords, tasks, notes.
 - DEX swaps are manual and error-prone.
 - Security and data ownership are concerns.
 
-### Non-goals for MVP-1
+### Original MVP-1 non-goals (historical)
 
-- Wallet connection.
-- On-chain sync.
-- Swap execution.
+- Wallet connection, on-chain sync, swap execution.
 - Passwords, tasks, notes.
-- Mobile app.
-- Multi-user.
-- Automated trading.
-- Tax filing.
-- Non-EVM DEX execution.
+- Mobile app, multi-user, automated trading, tax filing, non-EVM DEX execution.
+
+Most of these were delivered later. The remaining non-goals are: public signup, multi-user, mobile native apps, tax filing, non-EVM execution, and server-side key custody.
 
 ---
 
@@ -85,8 +89,8 @@ Later: on-chain reconciliation, passwords, tasks, notes.
 
 1. **No private keys, seed phrases, or signing keys on the server.**
 2. **No public signup.** Single owner, setup token only.
-3. **No wallet connection in MVP-1.**
-4. **No swap execution in MVP-1.**
+3. **Wallet connection is non-custodial and limited to allowlisted chains/tokens; no private keys, seed phrases, or signing keys on the server.**
+4. **Swap execution is implemented with allowlists, simulation, step-up TOTP, and the kill switch. Do not bypass or weaken these gates.**
 5. **All monetary values are decimal strings / Postgres `numeric`; never JS `number` or float.**
 6. **Every mutation is audited.**
 7. **The ledger is append-only.** Corrections are new transactions, never deletes.
@@ -114,12 +118,11 @@ Modular monolith:
 
 - `apps/api` — NestJS + Fastify.
 - `apps/web` — React SPA, built with Vite, served by Nest in production.
-- `apps/worker` — background jobs via pg-boss.
 - `packages/contracts` — Zod DTOs, OpenAPI types, shared constants.
 - `packages/db` — Drizzle schema, migrations, seed.
 - `packages/ui` — shared UI components.
 
-One deployable app + one worker + Postgres. No microservices.
+One deployable app + Postgres. No microservices and no separate worker; background jobs run in the API process.
 
 ### Stack
 
@@ -208,9 +211,6 @@ Pin exact versions in `package.json` and lockfile. Do not use floating `latest` 
 │   │   │   ├── components/
 │   │   │   └── lib/
 │   │   └── vite.config.ts
-│   └── worker/
-│       ├── src/
-│       └── Dockerfile
 ├── packages/
 │   ├── contracts/
 │   ├── db/
@@ -245,7 +245,7 @@ Module boundaries:
 ### Local
 
 - Docker Compose: Postgres 17.
-- `pnpm dev` runs API, web, worker.
+- `pnpm dev` runs API and web.
 - `.env.example` contains names only, no values.
 - Seed script creates the owner, demo accounts, and test data.
 
@@ -259,8 +259,7 @@ Module boundaries:
 ### Production
 
 - Railway services:
-  - `app` — NestJS + static SPA.
-  - `worker` — pg-boss worker.
+  - `app` — NestJS + static SPA, including background pollers.
   - `postgres` — Postgres 17 with PITR/backups.
 - Cloudflare in front: WAF, TLS, rate limits.
 - R2 for encrypted backups and exports.
@@ -303,14 +302,15 @@ Protected branches. No direct pushes to main. No production secrets in CI logs.
 
 - Cookie `nexter_session`: httpOnly, Secure, SameSite=Lax, Path=/.
 - Session stored in Postgres with hashed token.
-- TTL 30 days, sliding, rotation on login and password change.
+- TTL 30 days, absolute; activity updates `last_seen_at` but does not extend expiry.
+- Pending sessions created by setup or password login expire after 15 minutes (`SESSION_PENDING_TTL_MINUTES`) and are revoked when TOTP is enabled or verified.
 - Revoke all sessions on password change.
 - Session list in settings with IP, user agent, last seen.
 
 ### CSRF and headers
 
 - CSRF: double-submit cookie + `X-CSRF-Token` for all mutations.
-- Origin check for state-changing requests.
+- Origin check for state-changing requests. In production/staging a missing `Origin`/`Referer` is rejected. Bearer-only bot endpoints explicitly opt out with `@SkipOrigin()`.
 - Helmet or equivalent:
   - CSP: `default-src 'self'`; adjust `connect-src` for RPC/WalletConnect in MVP-2;
   - HSTS;

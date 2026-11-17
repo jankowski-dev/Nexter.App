@@ -395,6 +395,7 @@ export class AuthService {
         },
         tx,
       );
+      await this.sessions.revokePendingOthers(auth.user.id, tokens.session.id, tx);
 
       await this.audit.log(
         {
@@ -482,6 +483,7 @@ export class AuthService {
         },
         tx,
       );
+      await this.sessions.revokePendingOthers(auth.user.id, rotated.session.id, tx);
 
       await this.audit.log(
         {
@@ -556,6 +558,7 @@ export class AuthService {
         },
         tx,
       );
+      await this.sessions.revokePendingOthers(user.id, tokens.session.id, tx);
 
       await this.audit.log(
         {

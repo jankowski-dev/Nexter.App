@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted.
+Accepted. This ADR describes the initial Phase 1 schema only; later ADRs and migrations extend it (starting with ADR 0005 for auth sessions and rate limits).
 
 ## Context
 

@@ -9,6 +9,7 @@ const inheritedEnv = Object.fromEntries(
 
 export default defineConfig({
   testDir: './tests',
+  globalSetup: './global-setup.ts',
   timeout: 90_000,
   fullyParallel: false,
   workers: 1,

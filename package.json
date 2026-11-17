@@ -20,7 +20,6 @@
     "db:migrate": "pnpm --filter @nexter/config build && pnpm --filter @nexter/db db:migrate",
     "db:migrate:prod": "node packages/db/dist/migrate.js",
     "smoke:static": "node scripts/smoke-static.mjs",
-    "smoke:worker": "node --check apps/worker/dist/main.js",
     "docker:up": "docker compose up -d postgres",
     "docker:down": "docker compose down",
     "restore:drill": "pnpm build:packages && pnpm --filter @nexter/db restore:drill",

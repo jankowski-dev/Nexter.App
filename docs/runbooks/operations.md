@@ -20,7 +20,7 @@
 ## Deploy
 
 1. Merge to `main` only after CI is green.
-2. Railway deploys `@nexter/api` and `@nexter/worker` from `main`.
+2. Railway deploys `@nexter/api` from `main`.
 3. Pre-deploy runs `node packages/db/dist/migrate.js`.
 4. Verify `/ready`, `/dashboard`, `/portfolio`, `/trades`, `/watchlist`, `/settings`, and an authenticated login/2FA flow.
 5. Record the deployment id and migration in `docs/decisions.md` when the release changes behavior or schema.

@@ -6,13 +6,12 @@ Create these Railway services in one project:
 
 1. **Postgres** — Railway PostgreSQL 17, private networking, PITR/backups enabled.
 2. **api** — repository root, Dockerfile builder, start command `node apps/api/dist/main.js`.
-3. **worker** — repository root, same Dockerfile, start command `node apps/worker/dist/main.js`.
 
-Do **not** create a separate `@nexter/web` service. The API serves the built SPA from `WEB_DIST_PATH=/app/apps/api/public`.
+Do **not** create a separate `@nexter/web` service. The API serves the built SPA from `WEB_DIST_PATH=/app/apps/api/public`. The old `@nexter/worker` service was removed because it registered no jobs; background work runs in the API process.
 
-Set **Root Directory** to the repository root for both `api` and `worker`. If Railway created services with root directories `apps/api`, `apps/worker`, or `apps/web`, delete/recreate them or change the root to `/`; otherwise the root `Dockerfile` and `railway.json` are ignored and Railway falls back to Nixpacks.
+Set **Root Directory** to the repository root for `api`. If Railway created services with a root directory of `apps/api`, `apps/web`, or the removed `apps/worker`, delete/recreate them or change the root to `/`; otherwise the root `Dockerfile` and `railway.json` are ignored and Railway falls back to Nixpacks.
 
-The API image also serves the built SPA (`apps/web/dist` → `/app/apps/api/public`). Its `watchPatterns` in `railway.json` should include `apps/web/**` and `packages/**`; otherwise a frontend-only merge reports “No deployment needed” and production keeps the old bundle. The worker service stays narrower and does not watch the web app.
+The API image also serves the built SPA (`apps/web/dist` → `/app/apps/api/public`). Its `watchPatterns` in `railway.json` should include `apps/web/**` and `packages/**`; otherwise a frontend-only merge reports “No deployment needed” and production keeps the old bundle.
 
 Railway dashboard watch paths can override config-as-code. If a UI-only merge reports “No deployment needed”, open the API service in Railway → Settings → Source → Watch Paths and add:
 
@@ -38,7 +37,7 @@ Then redeploy the API once. Until this is set, frontend-only merges require an A
 - Config-as-code path: `railway.json` (or leave default)
 - Start command: `node apps/api/dist/main.js`
 - Healthcheck path: `/ready`
-- Public networking: generate a domain on **api** (not on worker)
+- Public networking: generate a domain on **api**
 - Variables:
   - `NODE_ENV=production`
   - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
@@ -51,24 +50,15 @@ Then redeploy the API once. Until this is set, frontend-only merges require an A
 
 `WEB_DIST_PATH` is already set in the Dockerfile (`/app/apps/api/public`); do not set it manually. On Git Bash/Windows, setting Unix paths through `railway variable set` can be mangled by MSYS path conversion — use the Railway dashboard or `--stdin` if you must set one.
 
-### worker
-
-- Builder: **Dockerfile**
-- Dockerfile path: `Dockerfile`
-- Config-as-code path: `railway.worker.json`
-- Start command: `node apps/worker/dist/main.js`
-- No public domain, no HTTP healthcheck.
-- Variables: `NODE_ENV=production`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `SENTRY_DSN` (optional).
-
 ## Troubleshooting: `The executable pnpm could not be found`
 
 This error means the service start command is still `pnpm ...` while the runtime image contains only Node. It is not an application build failure.
 
-1. Confirm the service **Root Directory** is `/`, not `apps/api` or `apps/worker`.
-2. Set the service start command to `node apps/api/dist/main.js` (api) or `node apps/worker/dist/main.js` (worker).
+1. Confirm the service **Root Directory** is `/`, not `apps/api` or `apps/web`.
+2. Set the service start command to `node apps/api/dist/main.js`.
 3. Use the root `Dockerfile` as the builder.
 4. Delete the separate `@nexter/web` service; the API serves the SPA.
-5. Redeploy api and worker.
+5. Redeploy the API.
 
 ## Migrations
 
@@ -87,7 +77,7 @@ Do not run migrations automatically on every API boot.
 Production should use two roles:
 
 - **Migration/owner role** — owns the schema and runs `node packages/db/dist/migrate.js`. Set it as `MIGRATION_DATABASE_URL`.
-- **Application role** — used by the API and worker as `DATABASE_URL`. It must not own tables and must not have `CREATE` on schema `public`.
+- **Application role** — used by the API as `DATABASE_URL`. It must not own tables and must not have `CREATE` on schema `public`.
 
 Run the provisioning script as the owner/migration role:
 
@@ -95,7 +85,7 @@ Run the provisioning script as the owner/migration role:
 APP_DB_USER=nexter_app APP_DB_PASSWORD='<strong-password>' DATABASE_URL="$MIGRATION_DATABASE_URL" pnpm db:provision-app
 ```
 
-Then set the API/worker `DATABASE_URL` to the `nexter_app` URL and keep `MIGRATION_DATABASE_URL` on the owner role for the pre-deploy migration. The script refuses to run without a password of at least 16 characters, grants only DML on `public`, and verifies the role is not superuser/createdb/createrole. Use `--dry-run` to review the SQL with the password redacted.
+Then set the API `DATABASE_URL` to the `nexter_app` URL and keep `MIGRATION_DATABASE_URL` on the owner role for the pre-deploy migration. The script refuses to run without a password of at least 16 characters, grants only DML on `public`, and verifies the role is not superuser/createdb/createrole. Use `--dry-run` to review the SQL with the password redacted.
 
 Equivalent SQL (run as the database owner, replace the password and database name):
 
@@ -128,9 +118,9 @@ Migration `0007_wild_leper_queen.sql` is additive: it creates `imports`/`import_
 Before deploying:
 
 1. Take a PostgreSQL backup.
-2. Confirm the previous API/worker deployment is healthy.
+2. Confirm the previous API deployment is healthy.
 3. Run the pre-deploy migration command `node packages/db/dist/migrate.js`.
-4. Deploy the Phase 4 API/worker and the rebuilt SPA.
+4. Deploy the Phase 4 API and the rebuilt SPA.
 5. Verify `/ready`, then import through `/import` per `docs/runbooks/notion-import.md`.
 
 The import endpoint accepts up to 10 MiB because the raw Notion `orders.json` is about 1.7 MiB. If a reverse proxy or edge is added later, raise its body limit to at least 10 MiB for `/api/v1/imports/notion/preview`.
@@ -155,7 +145,7 @@ Before enabling quotes:
 
 1. Take a PostgreSQL backup.
 2. Run the pre-deploy migration command.
-3. Configure `SWAP_ENABLED=false` first and deploy the API/worker and SPA.
+3. Configure `SWAP_ENABLED=false` first and deploy the API and SPA.
 4. Set `KYBERSWAP_API_KEY` (preferred) or use the public fallback, `BSC_RPC_URL`, `ETHEREUM_RPC_URL`, `SWAP_WALLET_ALLOWLIST`, and `SWAP_SELECTOR_ALLOWLIST` only after review.
 5. Set `SWAP_ENABLED=true` and verify `GET /swap/config`, a quote, and the kill switch. Set `SWAP_KILL_SWITCH=true` to stop new quotes/builds; set it back to `false` only after the provider/RPC check.
 
@@ -169,7 +159,7 @@ Before deploying:
 
 1. Take a PostgreSQL backup.
 2. Run the pre-deploy migration command.
-3. Deploy Phase 5 API/worker and the rebuilt SPA.
+3. Deploy Phase 5 API and the rebuilt SPA.
 4. Verify `/ready`, then open `/dashboard`, `/portfolio`, `/trades`, `/watchlist`, and `/settings`.
 5. Check that the production watchlist backfills from the latest committed Notion import on first read.
 
@@ -202,7 +192,6 @@ If the history is ambiguous, restore the pre-migration backup and resolve the du
 
 - `GET /health` returns 200.
 - `GET /ready` returns 200 and `database: "ok"`.
-- Worker logs `Nexter worker started`.
 - No secret values appear in Railway logs.
 - `pnpm smoke:static` passes locally against the built image before deploy.
 

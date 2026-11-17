@@ -15,7 +15,7 @@ import type { BotAudioNoteRequest, BotAudioNoteResponse } from '@nexter/contract
 import { botAudioNoteRequestSchema } from '@nexter/contracts';
 import { env } from '../../shared/config/env';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
-import { Public } from '../auth/public.decorator';
+import { Public, SkipOrigin } from '../auth/public.decorator';
 import { AudioNotesService } from './audio-notes.service';
 
 function tokensEqual(left: string, right: string): boolean {
@@ -41,6 +41,7 @@ function assertBotToken(authorization: string | undefined): void {
 }
 
 @ApiTags('bot')
+@SkipOrigin()
 @Controller('bot/audio-notes')
 export class AudioNotesController {
   constructor(private readonly audioNotes: AudioNotesService) {}

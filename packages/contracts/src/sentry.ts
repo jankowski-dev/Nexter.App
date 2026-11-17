@@ -1,6 +1,7 @@
-const secretKey = /token|secret|password|cookie|authorization|api[-_]?key/i;
+const secretKey =
+  /token|secret|password|cookie|authorization|api[-_]?key|otp|totp|qr|recovery|csrf/i;
 const secretText =
-  /(?:bearer\s+[a-z0-9._-]+|api[-_]?key\s*[:=]\s*\S+|token\s*[:=]\s*\S+|password\s*[:=]\s*\S+)/i;
+  /(?:bearer\s+[a-z0-9._-]+|api[-_]?key\s*[:=]\s*\S+|token\s*[:=]\s*\S+|password\s*[:=]\s*\S+|secret\s*[:=]\s*\S+|otpauth:\/\/\S+|recovery\s*codes?\s*[:=]\s*\S+)/i;
 
 function redactValue(value: unknown): unknown {
   if (typeof value === 'string') {
