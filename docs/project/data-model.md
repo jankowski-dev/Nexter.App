@@ -6,9 +6,9 @@
 
 | Таблица       | Назначение                                         | Ключевые поля/связи                                                                           |
 | ------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `users`       | Владелец                                           | id, email, passwordHash, totpSecret, recovery, timezone, baseCurrency                         |
-| `sessions`    | Сессии                                             | userId, tokenHash, expiresAt, createdAt, lastUsedAt                                           |
-| `audit_log`   | Аудит мутаций                                      | userId, action, entityType, entityId, before/after JSONB, ip, userAgent                       |
+| `users`       | Владелец                                           | id, email, passwordHash, totpSecret, lastTotpStep, recovery, timezone, baseCurrency           |
+| `sessions`    | Сессии                                             | userId, tokenHash, expiresAt, createdAt, lastUsedAt; pending 2FA TTL 15m                      |
+| `audit_log`   | Аудит мутаций (append-only trigger)                | userId, action, entityType, entityId, before/after JSONB, ip, userAgent                       |
 | `rate_limits` | In-memory rate limit (таблица для персистентности) | key, points, windowStartedAt, blockedUntil                                                    |
 | `settings`    | Настройки владельца                                | userId, baseCurrency, displayCurrency, taxMethod, includeGasInCostBasis, timezone, audioMaxMb |
 

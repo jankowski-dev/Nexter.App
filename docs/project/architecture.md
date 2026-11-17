@@ -11,7 +11,6 @@ flowchart LR
   API -->|fallback/native| CG[CoinGecko]
   API -->|quote/build| KYBER[KyberSwap Aggregator]
   API -->|balance/receipt/logs| RPC[BSC/Ethereum RPC]
-  Worker[pg-boss worker] --> DB
   SPA -->|WalletConnect| Wallet[Tangem / внешний кошелёк]
   Wallet -->|подписанная tx| Chain[BSC / Ethereum]
   API -->|read-only indexer| Chain
@@ -20,9 +19,10 @@ flowchart LR
 
 - **SPA** не хранит приватные ключи и не работает с БД напрямую.
 - **API** — единственная точка записи в БД. Он же раздаёт статику SPA из `apps/web/dist`.
-- **Worker** выполняет фоновые задачи pg-boss. Сейчас worker использует owner-роль БД, потому что pg-boss создаёт/меняет свою схему; API использует ограниченную роль `nexter_app`.
+- Фоновые задачи (котировки, индексер, swap tracker, снапшоты, paper-боты, AI/audio) выполняются внутри API по интервалам под advisory locks. Отдельного worker-процесса и pg-boss больше нет.
 - **WalletConnect/Tangem** — единственный путь подписи. Сервер не может подписать транзакцию за владельца.
 - **RPC/индексер** используется для проверки балансов, квитанций и reconciliation; он не является источником цен.
+- **Viber-бот** — отдельный Python-сервис в репозитории `jankowski-dev/Nexter.Bot` (Railway-проект `Viber-Bot's`). Он принимает webhook, скачивает/распознаёт аудио локально и вызывает `GET /api/v1/bot/tasks/upcoming` и `POST /api/v1/bot/audio-notes`; API создаёт заметку/вложение и вызывает DeepSeek. API-ключи и БД в боте не хранятся.
 
 ## 2. Слои API
 
@@ -42,7 +42,7 @@ flowchart TB
 - **Controllers** только валидируют вход через Zod (`ZodValidationPipe`) и вызывают сервисы.
 - **Services** содержат бизнес-логику, транзакции и аудит.
 - **Drizzle** используется напрямую; отдельного repository-слоя нет.
-- **AuditService** пишет в `audit_log`; для критичных мутаций используется `strict: true` (ошибка аудита откатывает мутацию).
+- **AuditService** пишет в `audit_log`; для критичных мутаций используется `strict: true` (ошибка аудита откатывает мутацию). В production на `audit_log` стоит trigger, запрещающий UPDATE/DELETE даже owner-роли.
 - **Auth guard** проверяет `HttpOnly` cookie-сессию; мутации требуют `x-csrf-token`.
 - **Rate limit** — in-memory, по IP; в тестах лимиты выше.
 
@@ -64,9 +64,9 @@ sequenceDiagram
   A->>DB: mutation + audit
 ```
 
-- TOTP обязателен после настройки; step-up TOTP используется для свопов выше `SWAP_STEP_UP_THRESHOLD_USD`.
+- TOTP обязателен после настройки; step-up TOTP используется для свопов выше `SWAP_STEP_UP_THRESHOLD_USD`. Каждый код одноразовый на 30-секундный период: `users.last_totp_step` потребляется атомарно, повтор возвращает `TOTP_REPLAY`.
 - Сессии хранятся хэшами; cookie `Secure`/`SameSite` настраиваются окружением.
-- Восстановление пароля — через recovery-код; сброс инвалидирует сессии.
+- Восстановление пароля — через recovery-код; сброс инвалидирует сессии. Pending-сессии до 2FA живут 15 минут.
 - Публичной регистрации нет; первичная настройка — по `SETUP_TOKEN`.
 
 ## 4. Учётный контур (ledger)

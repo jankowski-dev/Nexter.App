@@ -33,6 +33,7 @@ The product shipped beyond the original MVP-1/MVP-2 contract. The current scope,
 - Accounting, FIFO lots, P&L, imports, reports, finance, vault, tasks, notes, notifications, dashboard, and the Russian UI are live.
 - Non-custodial WalletConnect/Tangem swaps are live on BSC and Ethereum. Execution is allowlisted, built and simulated by the server, signed only by the wallet, step-up protected above $500, and gated by `SWAP_ENABLED`, the per-chain flags, and the kill switch. No private keys ever reach the server.
 - Paper-trading bots, backtesting, bot telemetry, the AI settings module, and Viber audio notes are part of the product.
+- The trading workspace has five tabs (`Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`); consolidated tokens and active trades share the portfolio tab, manual buying is separate, and the full journal is `Сделки` (ADR 0066).
 - Viber audio uploads use the per-owner `settings.audio_max_mb` limit: default 8 MB, configurable 1–20 MB in `Настройки → ИИ`, with a 20 MB hard ceiling. `Nexter.Bot` accepts up to the same 20 MB ceiling, so the API setting is the effective limit.
 - The `apps/worker` service was removed because it registered no jobs. Background polling and scheduled work run in the API process under advisory locks. `pnpm dev` starts the API and web app only.
 - Where older sections below still describe "MVP-1" or "MVP-2" as future work, treat them as historical rationale. Current behavior is defined by this amendment, the ADRs, and `docs/decisions.md`.
@@ -127,31 +128,31 @@ One deployable app + Postgres. No microservices and no separate worker; backgrou
 
 ### Stack
 
-| Layer           | Choice                                                           |
-| --------------- | ---------------------------------------------------------------- |
-| Runtime         | Node.js 24 LTS                                                   |
-| Package manager | pnpm workspaces                                                  |
-| Backend         | NestJS 11 + Fastify adapter                                      |
-| ORM             | Drizzle ORM + `pg`                                               |
-| Database        | PostgreSQL 17                                                    |
-| Queue           | pg-boss on Postgres                                              |
-| Validation      | Zod + nestjs-zod                                                 |
-| API             | REST `/api/v1` + OpenAPI                                         |
-| Auth            | Session cookies + Argon2id + TOTP                                |
-| Frontend        | React 19 + Vite + TypeScript                                     |
-| Routing         | TanStack Router                                                  |
-| Data fetching   | TanStack Query                                                   |
-| UI              | Tailwind CSS + shadcn/ui                                         |
-| Tables          | TanStack Table                                                   |
-| Charts          | Recharts                                                         |
-| Forms           | React Hook Form + Zod                                            |
-| Wallet (MVP-2)  | wagmi + viem + WalletConnect                                     |
-| Logging         | pino                                                             |
-| Errors          | Sentry with scrubbing                                            |
-| Tests           | Vitest, Supertest, Playwright, Testcontainers, fast-check, Anvil |
-| CI/CD           | GitHub Actions + Railway                                         |
-| Backups         | Railway PITR + encrypted `pg_dump` to Cloudflare R2              |
-| Edge            | Cloudflare WAF/TLS; Cloudflare Access optional                   |
+| Layer           | Choice                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| Runtime         | Node.js 24 LTS                                                     |
+| Package manager | pnpm workspaces                                                    |
+| Backend         | NestJS 11 + Fastify adapter                                        |
+| ORM             | Drizzle ORM + `pg`                                                 |
+| Database        | PostgreSQL 17                                                      |
+| Background work | In-process interval pollers and advisory locks; no separate worker |
+| Validation      | Zod + nestjs-zod                                                   |
+| API             | REST `/api/v1` + OpenAPI                                           |
+| Auth            | Session cookies + Argon2id + TOTP                                  |
+| Frontend        | React 19 + Vite + TypeScript                                       |
+| Routing         | TanStack Router                                                    |
+| Data fetching   | TanStack Query                                                     |
+| UI              | Tailwind CSS + shadcn/ui                                           |
+| Tables          | TanStack Table                                                     |
+| Charts          | Recharts                                                           |
+| Forms           | React Hook Form + Zod                                              |
+| Wallet          | wagmi + viem + WalletConnect (non-custodial)                       |
+| Logging         | pino                                                               |
+| Errors          | Sentry with scrubbing                                              |
+| Tests           | Vitest, Supertest, Playwright, Testcontainers, fast-check, Anvil   |
+| CI/CD           | GitHub Actions + Railway                                           |
+| Backups         | Railway PITR + encrypted `pg_dump` to Cloudflare R2                |
+| Edge            | Cloudflare WAF/TLS; Cloudflare Access optional                     |
 
 Pin exact versions in `package.json` and lockfile. Do not use floating `latest` tags in production.
 
@@ -161,7 +162,7 @@ Pin exact versions in `package.json` and lockfile. Do not use floating `latest` 
 - Wallet libraries are client-side React.
 - NestJS modules map to the modular product.
 - Same-origin SPA + API simplifies cookies/CSRF.
-- Separate worker handles imports, prices, snapshots, and swap tracking.
+- The API process handles imports, market quotes, snapshots, swap tracking, bot ticks, and AI/audio work; there is no separate worker.
 - Domain logic lives in framework-agnostic services; Nest controllers are thin adapters.
 
 ---
@@ -954,7 +955,7 @@ On failure: no accounting transaction.
 
 ### Tracking
 
-- pg-boss job after submit.
+- In-process swap tracker after submit.
 - Poll receipt with backoff.
 - Confirmation thresholds: BSC 15, Ethereum 12.
 - Parse logs and balance delta.

@@ -6,6 +6,8 @@ Current scope: **production v2 (2026-11-17)**. Phases 0–11 are accepted, and t
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
+Current UI state: the `Торговля` workspace has five tabs (`Портфель`, `Ручной`, `Сделки`, `Роботы`, `Стратегии`) with consolidated token blocks, active-trade blocks and a block-based journal. The Viber audio limit is configurable in `Настройки → ИИ → Аудио` (default 8 MB, max 20 MB). Wave 0/1 hardening added disposable-DB test guards, CSRF origin enforcement, TOTP replay protection, an append-only `audit_log` trigger, and removed the unused worker service.
+
 ## Notion import
 
 The `/import` page accepts three JSON arrays exported from Notion:
@@ -165,5 +167,7 @@ Production and staging require `DATABASE_URL`, `SETUP_TOKEN`, `AUTH_ENCRYPTION_K
 - No public signup.
 - Wallet connection is non-custodial (Tangem via WalletConnect); keys never reach the server.
 - Swap execution is allowlisted, simulated, step-up protected above $500, and gated by the kill switch.
-- All mutations must be audited.
+- All mutations must be audited; `audit_log` is protected by an append-only trigger.
+- TOTP codes are single-use per 30-second period; replay returns `TOTP_REPLAY`.
+- Pending sessions before 2FA expire after 15 minutes.
 - Secrets live in environment variables only.

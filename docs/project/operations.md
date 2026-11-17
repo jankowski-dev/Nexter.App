@@ -2,11 +2,10 @@
 
 ## 1. Окружения и деплой
 
-- Production: Railway project `generous-radiance`, API + worker + Postgres. API URL: `https://nexterapi-production.up.railway.app`.
+- Production: Railway project `generous-radiance`, API + Postgres. API URL: `https://nexterapi-production.up.railway.app`. Viber-бот — отдельный проект `Viber-Bot's` (сервис `Nexter.Bot`).
 - API собирается из `Dockerfile`; pre-deploy запускает `node packages/db/dist/migrate.js` с `MIGRATION_DATABASE_URL`.
 - API раздаёт SPA из `apps/api/public`; Railway watch patterns API: `apps/api/**`, `apps/web/**`, `packages/**`.
-- Worker собирается отдельно; watch patterns уже, worker не пересобирается на frontend-only изменения.
-- Production API использует роль `nexter_app` (SELECT/INSERT/UPDATE, ограниченный DELETE). Worker использует owner-роль, потому что pg-boss делает DDL.
+- Production API использует роль `nexter_app` (SELECT/INSERT/UPDATE, ограниченный DELETE). Миграции выполняются owner-ролью через `MIGRATION_DATABASE_URL`.
 - `ENABLE_DOCS=true` включает `/api/docs` только в development/test.
 
 ## 2. Переменные окружения
@@ -20,7 +19,8 @@
 | `SETUP_TOKEN`                                       | первичная настройка owner              |
 | `AUTH_ENCRYPTION_KEY`                               | шифрование TOTP/recovery/сессий        |
 | `APP_URL`                                           | origin для cookie/CSRF/CORS            |
-| `SESSION_TTL_DAYS`                                  | срок сессии                            |
+| `SESSION_TTL_DAYS`                                  | срок полной сессии                     |
+| `SESSION_PENDING_TTL_MINUTES`                       | срок pending-сессии до 2FA (15)        |
 | `ENABLE_DOCS`                                       | Swagger                                |
 | `SWAP_ENABLED`                                      | включить swap-модуль                   |
 | `SWAP_EXECUTION_ENABLED`                            | разрешить execution (BSC)              |
@@ -39,9 +39,11 @@
 | `WALLETCONNECT_PROJECT_ID`                          | WalletConnect                          |
 | `RECONCILIATION_ENABLED`                            | on-chain indexer                       |
 | `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots                        |
+| `BOT_API_TOKEN`                                     | bearer-токен для `/api/v1/bot/*`       |
 | `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)      |
 | `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)             |
 | `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)         |
+| `DEEPSEEK_BASE_URL`                                 | optional DeepSeek base URL             |
 | `BACKUP_ENCRYPTION_KEY`                             | только для backup/restore, не в API    |
 
 Секреты хранятся в Railway Variables и локальном `.env`, не в репозитории.
@@ -70,7 +72,7 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 ```
 
 - Формат: `NEXTER1 | IV | tag | ciphertext` (AES-256-GCM).
-- Ключ вне репозитория (`~/.nexter/backup-key` локально; Railway secret в production).
+- Ключ вне репозитория (owner-controlled secure location; Railway secret в production).
 - RPO 1 час, RTO 4 часа. Одноразовый дамп не заменяет расписание/PITR.
 - Restore: stop writes → decrypt → `pg_restore` → verify counts/sums → switch traffic.
 - Не хранить plaintext-дампы дольше проверки.
@@ -85,6 +87,9 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 - `swap_events`: state machine обменов.
 - `audit_log`: бизнес-мутации.
 - `/settings/data-quality`: negative balances, unverified assets, missing gas.
+- `/settings/system-status`: quote freshness, bot ticks/errors, swap/indexer state, provider error rates.
+- `users.last_totp_step` and `audit_log` trigger: TOTP replay protection and append-only audit history.
+- `settings.audio_max_mb` (default 8, max 20) is the effective Viber audio limit; `Nexter.Bot` reports `maxAudioMb` in its status and must be at least as high as the API setting.
 
 ## 6. Feature flags и аварийные переключатели
 
@@ -101,7 +106,7 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 ## 7. Rollback
 
 - Frontend-only: redeploy previous image; миграции обычно аддитивные, могут остаться.
-- API/worker: redeploy previous image; проверить `/ready` и ключевые страницы.
+- API: redeploy previous image; проверить `/ready` и ключевые страницы.
 - БД: предпочтителен forward fix; restore только для destructive-миграции/инцидента.
 - При rollback свопа: сначала drain active/unaccounted orders, затем менять image; иначе старый image не сможет корректно трекать Ethereum orders.
 
@@ -113,11 +118,10 @@ DATABASE_URL=... BACKUP_ENCRYPTION_KEY=... BACKUP_OUTPUT_DIR=./backups \
 
 ## 9. Известные эксплуатационные ограничения
 
-- Worker использует owner role (pg-boss DDL).
 - PITR/ежедневный cron бэкап — residual; настроить до go-live.
 - In-memory rate limit/quote guard не масштабируется на несколько API-реплик; при масштабировании нужен Redis/Postgres advisory lock.
 - Reconciliation не исправляет ledger автоматически.
 - Native TRON/Solana — manual-only, не входят в swap/indexer.
-- Paper-боты работают только при живом API; worker их не запускает. Один тик защищён advisory lock, но при нескольких репликах все они должны иметь доступ к одной БД.
+- Paper-боты и фоновые pollers работают внутри API; при остановленном API тиков нет. Один тик защищён advisory lock, но при нескольких репликах все они должны иметь доступ к одной БД.
 - `bot_quote_samples`, `bot_events` и `bot_equity_snapshots` очищаются по retention на каждом тике; при остановленном runner очистка не выполняется.
 - Боты не влияют на реальный ledger; их P&L нельзя использовать для налогов или отчётов.

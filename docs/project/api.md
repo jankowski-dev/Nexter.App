@@ -24,18 +24,24 @@
 
 ## 3. Auth
 
-| Метод | Путь                   | Описание                                |
-| ----- | ---------------------- | --------------------------------------- |
-| POST  | `/auth/setup`          | первичная настройка owner (setup token) |
-| POST  | `/auth/login`          | email + password                        |
-| POST  | `/auth/2fa`            | TOTP-проверка при входе                 |
-| POST  | `/auth/2fa/setup`      | начать настройку TOTP                   |
-| POST  | `/auth/2fa/enable`     | подтвердить TOTP                        |
-| POST  | `/auth/logout`         | завершить сессию                        |
-| GET   | `/auth/me`             | текущий owner/состояние 2FA             |
-| POST  | `/auth/recovery`       | восстановление по коду                  |
-| POST  | `/auth/reset-password` | сброс пароля                            |
-| POST  | `/auth/step-up`        | step-up TOTP для свопов                 |
+| Метод  | Путь                    | Описание                                |
+| ------ | ----------------------- | --------------------------------------- |
+| POST   | `/auth/setup`           | первичная настройка owner (setup token) |
+| POST   | `/auth/login`           | email + password                        |
+| GET    | `/auth/status`          | инициализирован ли owner                |
+| POST   | `/auth/2fa/verify`      | TOTP-проверка при входе                 |
+| POST   | `/auth/2fa/setup`       | начать настройку TOTP                   |
+| POST   | `/auth/2fa/enable`      | подтвердить TOTP                        |
+| POST   | `/auth/logout`          | завершить сессию                        |
+| GET    | `/auth/me`              | текущий owner/состояние 2FA             |
+| GET    | `/auth/csrf`            | текущий CSRF-токен                      |
+| POST   | `/auth/recovery/verify` | восстановление по коду                  |
+| POST   | `/auth/password`        | смена пароля                            |
+| POST   | `/auth/password/reset`  | сброс пароля                            |
+| POST   | `/auth/recovery-codes`  | перегенерация recovery codes            |
+| GET    | `/auth/sessions`        | активные сессии                         |
+| DELETE | `/auth/sessions/:id`    | отозвать сессию                         |
+| POST   | `/auth/step-up`         | step-up TOTP для свопов                 |
 
 ## 4. Accounting
 
@@ -168,8 +174,10 @@
 | Метод | Путь                        | Описание                                        |
 | ----- | --------------------------- | ----------------------------------------------- |
 | GET   | `/audit-log`                | audit entries (action/entityType/period/cursor) |
-| GET   | `/settings`                 | настройки                                       |
-| PATCH | `/settings`                 | изменить                                        |
+| GET   | `/settings`                 | настройки, включая `audioMaxMb`                 |
+| PATCH | `/settings`                 | изменить; `audioMaxMb` 1–20                     |
+| GET   | `/settings/system-status`   | read-only статус котировок/ботов/свопов         |
+| GET   | `/settings/data-quality`    | read-only проверки качества данных              |
 | GET   | `/reconciliation/runs`      | запуски сверки                                  |
 | GET   | `/reconciliation/runs/:id`  | детали                                          |
 | POST  | `/reconciliation/runs`      | запустить (если enabled)                        |
@@ -185,24 +193,40 @@
 
 Все ответы owner-scoped. Уведомления создаются сервером; отдельного пользовательского создания нет.
 
-## 12. Trading bots (paper)
+## 12. Bot API (server-to-server)
 
-| Метод  | Путь                                     | Описание                                                |
-| ------ | ---------------------------------------- | ------------------------------------------------------- |
-| GET    | `/trading-bots/strategies`               | шаблоны registry + созданные стратегии                  |
-| POST   | `/trading-bots/strategies`               | создать стратегию (`key`,`name`,`description`,`params`) |
-| PATCH  | `/trading-bots/strategies/:id`           | изменить/архивировать                                   |
-| GET    | `/trading-bots/bots`                     | список ботов + статистика (`includeArchived`)           |
-| POST   | `/trading-bots/bots`                     | создать бота                                            |
-| GET    | `/trading-bots/bots/:id`                 | бот + стратегия + токены + позиции                      |
-| PATCH  | `/trading-bots/bots/:id`                 | настройки (только не-running)                           |
-| POST   | `/trading-bots/bots/:id/start`           | запуск                                                  |
-| POST   | `/trading-bots/bots/:id/stop`            | остановка                                               |
-| POST   | `/trading-bots/bots/:id/close-positions` | принудительное закрытие всех позиций                    |
-| POST   | `/trading-bots/bots/:id/reset`           | сброс paper-состояния                                   |
-| DELETE | `/trading-bots/bots/:id`                 | archive + purge telemetry                               |
-| GET    | `/trading-bots/bots/:id/trades?limit=`   | сделки                                                  |
-| GET    | `/trading-bots/bots/:id/events?limit=`   | события                                                 |
-| GET    | `/trading-bots/bots/:id/equity?limit=`   | equity curve                                            |
+| Метод | Путь                            | Описание                                       |
+| ----- | ------------------------------- | ---------------------------------------------- |
+| GET   | `/bot/tasks/upcoming?minutes=5` | открытые задачи в окне напоминания             |
+| POST  | `/bot/audio-notes`              | транскрипт + аудио; создаёт заметку и вложение |
+| GET   | `/bot/audio-notes/:id`          | статус обработки аудиозаметки                  |
 
-Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются; стратегию с running-ботами нельзя архивировать. Подробности — в `trading-bots.md`.
+Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankowski-dev/Nexter.Bot` service transcribes locally and calls these endpoints. The audio limit is `settings.audio_max_mb` (default 8, max 20).
+
+## 13. Trading bots (paper)
+
+| Метод  | Путь                                     | Описание                                      |
+| ------ | ---------------------------------------- | --------------------------------------------- |
+| GET    | `/trading-bots/strategies`               | read-only registry стратегий                  |
+| GET    | `/trading-bots/bots`                     | список ботов + статистика (`includeArchived`) |
+| POST   | `/trading-bots/bots`                     | создать бота                                  |
+| GET    | `/trading-bots/bots/:id`                 | бот + стратегия + токены + позиции            |
+| PATCH  | `/trading-bots/bots/:id`                 | настройки (только не-running)                 |
+| POST   | `/trading-bots/bots/:id/start`           | запуск                                        |
+| POST   | `/trading-bots/bots/:id/stop`            | остановка                                     |
+| POST   | `/trading-bots/bots/:id/close-positions` | принудительное закрытие всех позиций          |
+| POST   | `/trading-bots/bots/:id/reset`           | сброс paper-состояния                         |
+| DELETE | `/trading-bots/bots/:id`                 | archive + purge telemetry                     |
+| GET    | `/trading-bots/bots/:id/trades?limit=`   | сделки                                        |
+| GET    | `/trading-bots/bots/:id/events?limit=`   | события                                       |
+| GET    | `/trading-bots/bots/:id/equity?limit=`   | equity curve                                  |
+| GET    | `/trading-bots/bots/:id/signals`         | последние решения по токенам                  |
+| GET    | `/trading-bots/bots/:id/trade-summaries` | P&L по токенам                                |
+| GET    | `/trading-bots/bots/:id/telemetry`       | schema-v1 JSON для AI-анализа                 |
+| POST   | `/trading-bots/backtests`                | запустить/сохранить backtest                  |
+| POST   | `/trading-bots/backtests/preview`        | preview без сохранения                        |
+| GET    | `/trading-bots/backtests`                | список прогонов                               |
+| GET    | `/trading-bots/backtests/:id/report.pdf` | PDF-отчёт                                     |
+| DELETE | `/trading-bots/backtests/:id`            | удалить прогон                                |
+
+Стратегии — read-only code registry; отдельных CRUD-эндпоинтов стратегий больше нет. Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются. Подробности — в `trading-bots.md`.
