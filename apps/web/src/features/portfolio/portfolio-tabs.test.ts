@@ -1,31 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { hashForTab, portfolioTabs, tabFromHash } from './portfolio-tabs';
+import { cryptoTabs, hashForTab, tabFromLocation } from './portfolio-tabs';
 
-describe('portfolio tabs', () => {
-  it('exposes five trading tabs', () => {
-    expect(portfolioTabs.map((tab) => tab.label)).toEqual([
-      'Портфель',
-      'Ручной',
-      'Сделки',
+describe('crypto tabs', () => {
+  it('exposes seven crypto sections', () => {
+    expect(cryptoTabs.map((tab) => tab.label)).toEqual([
+      'Обзор',
+      'Токены',
+      'Ордера',
+      'Операции',
       'Роботы',
       'Стратегии',
+      'Статистика',
     ]);
   });
 
-  it('maps legacy order hashes to the manual tab', () => {
-    expect(tabFromHash('#trades')).toBe('manual');
-    expect(tabFromHash('#orders')).toBe('manual');
-    expect(tabFromHash('#manual')).toBe('manual');
+  it('maps the legacy crypto routes to their tabs', () => {
+    expect(tabFromLocation('/operations', '')).toBe('operations');
+    expect(tabFromLocation('/watchlist', '')).toBe('tokens');
+    expect(tabFromLocation('/statistics', '')).toBe('statistics');
+    expect(tabFromLocation('/reports', '')).toBe('statistics');
   });
 
-  it('maps deals and journal hashes to the deals tab', () => {
-    expect(tabFromHash('#deals')).toBe('deals');
-    expect(tabFromHash('#journal')).toBe('deals');
+  it('maps legacy hashes to the new tabs', () => {
+    expect(tabFromLocation('/portfolio', '#manual')).toBe('overview');
+    expect(tabFromLocation('/portfolio', '#deals')).toBe('orders');
+    expect(tabFromLocation('/portfolio', '#journal')).toBe('orders');
+    expect(tabFromLocation('/portfolio', '#watchlist')).toBe('tokens');
+    expect(tabFromLocation('/portfolio', '#reports')).toBe('statistics');
   });
 
   it('round-trips the current hashes', () => {
-    for (const tab of portfolioTabs) {
-      expect(tabFromHash(hashForTab(tab.value))).toBe(tab.value);
+    for (const tab of cryptoTabs) {
+      expect(tabFromLocation('/portfolio', hashForTab(tab.value))).toBe(tab.value);
     }
   });
 });

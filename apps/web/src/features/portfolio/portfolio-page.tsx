@@ -14,8 +14,8 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from '@tanstack/react-router';
-import { useCallback, useState } from 'react';
+import { useNavigate, useRouterState } from '@tanstack/react-router';
+import { useCallback, useEffect, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
 import { TokenTradeDrawer } from '../trade/token-trade-drawer';
@@ -23,7 +23,10 @@ import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
 import { TokenBuyList } from './token-buy-list';
 import { TestingPage } from '../testing/testing-page';
-import { hashForTab, portfolioTabs, tabFromHash, type PortfolioTab } from './portfolio-tabs';
+import { OperationsPage } from '../operations/operations-page';
+import { WatchlistPage } from '../watchlist/watchlist-page';
+import { ReportsPage } from '../reports/reports-page';
+import { cryptoTabs, hashForTab, tabFromLocation, type CryptoTab } from './portfolio-tabs';
 
 function PortfolioMetric({
   label,
@@ -120,9 +123,20 @@ function PortfolioStatCard({
 
 export function PortfolioPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<PortfolioTab>(() =>
-    tabFromHash(typeof window === 'undefined' ? undefined : window.location.hash),
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [tab, setTab] = useState<CryptoTab>(() =>
+    tabFromLocation(
+      typeof window === 'undefined' ? '/portfolio' : window.location.pathname,
+      typeof window === 'undefined' ? undefined : window.location.hash,
+    ),
   );
+
+  useEffect(() => {
+    setTab(
+      tabFromLocation(pathname, typeof window === 'undefined' ? undefined : window.location.hash),
+    );
+  }, [pathname]);
+
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [buyTarget, setBuyTarget] = useState<{
     asset: Asset;
@@ -149,13 +163,13 @@ export function PortfolioPage() {
   const tokenSummaries = useQuery({
     queryKey: ['portfolio-token-summaries'],
     queryFn: fetchPortfolioTokenSummaries,
-    enabled: tab === 'portfolio',
+    enabled: tab === 'overview',
     refetchInterval: 15_000,
   });
   const dashboardSummary = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: fetchDashboardSummary,
-    enabled: tab === 'portfolio',
+    enabled: tab === 'overview',
     refetchInterval: 30_000,
   });
   const activeTokenRows = (tokenSummaries.data?.data ?? []).filter(
@@ -166,19 +180,19 @@ export function PortfolioPage() {
     0,
   );
 
-  if (tab === 'portfolio' && positions.isPending) {
+  if (tab === 'overview' && positions.isPending) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Торговля" subtitle="Загружаю позиции и сделки…" />
+        <PageHeader title="Крипта" subtitle="Загружаю позиции и сделки…" />
         <LoadingRows rows={8} />
       </div>
     );
   }
 
-  if (tab === 'portfolio' && (positions.isError || !positions.data)) {
+  if (tab === 'overview' && (positions.isError || !positions.data)) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Торговля" />
+        <PageHeader title="Крипта" />
         <ErrorState
           message={toRussianError(positions.error, 'Не удалось загрузить позиции')}
           onRetry={refetchPositions}
@@ -192,37 +206,37 @@ export function PortfolioPage() {
     (data?.positions ?? []).map((position) => [position.asset.id, position]),
   );
 
-  function changeTab(next: PortfolioTab): void {
+  function changeTab(next: CryptoTab): void {
     setTab(next);
     setSelectedAssetId(null);
     setBuyTarget(null);
     setSellGroup(null);
-    window.history.replaceState(null, '', hashForTab(next));
+    window.history.replaceState(null, '', `/portfolio${hashForTab(next)}`);
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Торговля"
+        title="Крипта"
         subtitle={
-          tab === 'robots'
-            ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
-            : tab === 'strategies'
-              ? 'Встроенные стратегии и подробные описания.'
-              : tab === 'manual'
-                ? 'Основной список токенов для ручной покупки.'
-                : tab === 'deals'
-                  ? 'Все сделки: активные, прибыльные, убыточные и закрытые.'
-                  : 'Консолидированные позиции и активные сделки.'
+          tab === 'overview'
+            ? 'Портфель, консолидированные данные и основной список токенов.'
+            : tab === 'orders'
+              ? 'Все сделки: активные, прибыльные, убыточные и закрытые.'
+              : tab === 'robots'
+                ? 'Бумажные роботы. Реальные деньги и подписи не используются.'
+                : tab === 'strategies'
+                  ? 'Встроенные стратегии и подробные описания.'
+                  : undefined
         }
       />
 
       <div
         role="tablist"
-        aria-label="Раздел торговли"
+        aria-label="Раздел крипты"
         className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
       >
-        {portfolioTabs.map(({ value, label }) => (
+        {cryptoTabs.map(({ value, label }) => (
           <button
             key={value}
             type="button"
@@ -240,7 +254,7 @@ export function PortfolioPage() {
         ))}
       </div>
 
-      {tab === 'portfolio' && data ? (
+      {tab === 'overview' && data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <PortfolioStatCard
@@ -437,17 +451,21 @@ export function PortfolioPage() {
             logos={watchlistLogos}
             onOpenGroup={(group) => setSelectedAssetId(group.asset.id)}
           />
+
+          <TokenBuyList
+            onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })}
+          />
         </>
       ) : null}
 
-      {tab === 'manual' ? (
-        <TokenBuyList onBuy={(asset, marketPriceUsd) => setBuyTarget({ asset, marketPriceUsd })} />
-      ) : null}
-      {tab === 'deals' ? (
+      {tab === 'tokens' ? <WatchlistPage embedded /> : null}
+      {tab === 'orders' ? (
         <TradesPanel mode="journal" onOpenGroup={openTradeGroup} logos={watchlistLogos} />
       ) : null}
+      {tab === 'operations' ? <OperationsPage embedded /> : null}
       {tab === 'robots' ? <TestingPage mode="bots" /> : null}
       {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
+      {tab === 'statistics' ? <ReportsPage embedded /> : null}
 
       <AssetDrawer
         assetId={selectedAssetId}

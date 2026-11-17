@@ -9,9 +9,6 @@ import { Setup2faPage } from '@/features/auth/setup-2fa-page';
 import { SetupPage } from '@/features/auth/setup-page';
 import { TwoFactorPage } from '@/features/auth/two-factor-page';
 import { TradeDetailPage } from '@/features/trades/trade-detail-page';
-import { WatchlistPage } from '@/features/watchlist/watchlist-page';
-import { OperationsPage } from '@/features/operations/operations-page';
-import { ReportsPage } from '@/features/reports/reports-page';
 import { NotesPage } from '@/features/notes/notes-page';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
@@ -190,13 +187,13 @@ const tradeDetailRoute = createRoute({
 const operationsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/operations',
-  component: OperationsPage,
+  component: PortfolioPage,
 });
 
 const statisticsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/statistics',
-  component: ReportsPage,
+  component: PortfolioPage,
 });
 
 const reportsRoute = createRoute({
@@ -246,7 +243,7 @@ const financeRoute = createRoute({
 const watchlistRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/watchlist',
-  component: WatchlistPage,
+  component: PortfolioPage,
 });
 
 const swapRoute = createRoute({

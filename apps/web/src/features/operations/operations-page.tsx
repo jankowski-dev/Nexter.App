@@ -43,7 +43,7 @@ const subtypeLabels: Record<string, string> = {
   adjustment: 'Корректировка',
 };
 
-export function OperationsPage() {
+export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
   const [filter, setFilter] = useState<OperationFilter>('all');
   const [search, setSearch] = useState('');
   const [manualOpen, setManualOpen] = useState(false);
@@ -97,6 +97,7 @@ export function OperationsPage() {
         title="Операции"
         subtitle="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
         actions={<Button onClick={() => setManualOpen(true)}>Новая операция</Button>}
+        embedded={embedded}
       />
 
       <ListToolbar
