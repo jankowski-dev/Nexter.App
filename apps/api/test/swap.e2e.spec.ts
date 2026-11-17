@@ -18,6 +18,7 @@ import {
   tokenApprovals,
   tradeGroups,
   transactions,
+  users,
   watchedAddresses,
   type Database,
 } from '@nexter/db';
@@ -266,6 +267,9 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', csrfFrom(setup))
       .send({ code: generateSync({ secret: totpSetup.body.secret }) })
       .expect(200);
+
+    // The test performs step-up within the same TOTP period as setup.
+    await db.update(users).set({ lastTotpStep: null });
 
     return {
       userId: setup.body.user.id as string,

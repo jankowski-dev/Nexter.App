@@ -27,6 +27,7 @@ const contractCodes = new Set([
   'INVALID_CREDENTIALS',
   'TOTP_REQUIRED',
   'TOTP_INVALID',
+  'TOTP_REPLAY',
   'FORBIDDEN',
   'RATE_LIMITED',
   'VALIDATION_ERROR',

@@ -3,6 +3,8 @@ import { generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
 import { env } from '../../shared/config/env';
 
+export type TotpVerification = { valid: false } | { valid: true; step: number };
+
 @Injectable()
 export class TotpService {
   generateSecret(): string {
@@ -17,7 +19,7 @@ export class TotpService {
     });
   }
 
-  async verify(code: string, secret: string): Promise<boolean> {
+  async verify(code: string, secret: string): Promise<TotpVerification> {
     try {
       const result = await verify({
         secret,
@@ -25,9 +27,15 @@ export class TotpService {
         epochTolerance: 30,
       });
 
-      return result.valid;
+      if (!result.valid) return { valid: false };
+      if (!('timeStep' in result)) return { valid: false };
+
+      return {
+        valid: true,
+        step: result.timeStep,
+      };
     } catch {
-      return false;
+      return { valid: false };
     }
   }
 
