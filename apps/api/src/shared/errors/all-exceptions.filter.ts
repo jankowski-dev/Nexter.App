@@ -107,6 +107,7 @@ const contractCodes = new Set([
   'AI_UNAUTHORIZED',
   'AI_INVALID_RESPONSE',
   'AUDIO_UNSUPPORTED',
+  'AUDIO_TOO_LARGE',
   'INTERNAL_ERROR',
 ]);
 

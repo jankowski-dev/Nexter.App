@@ -1,12 +1,18 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { audioNotes, users, type Database } from '@nexter/db';
-import type { BotAudioNoteRequest, BotAudioNoteResponse } from '@nexter/contracts';
+import {
+  audioLimitBytes,
+  decodedAudioBytes,
+  type BotAudioNoteRequest,
+  type BotAudioNoteResponse,
+} from '@nexter/contracts';
 import { Inject } from '@nestjs/common';
 import { DB } from '../../shared/db/db.module';
 import { AiSettingsService } from '../ai/ai-settings.service';
 import { AiService } from '../ai/ai.service';
 import { NotesService } from '../notes/notes.service';
+import { SettingsService } from '../settings/settings.service';
 
 function toResponse(row: typeof audioNotes.$inferSelect): BotAudioNoteResponse {
   return {
@@ -37,6 +43,7 @@ export class AudioNotesService {
     private readonly ai: AiService,
     private readonly aiSettings: AiSettingsService,
     private readonly notes: NotesService,
+    private readonly settings: SettingsService,
   ) {}
 
   async createFromBot(input: BotAudioNoteRequest): Promise<BotAudioNoteResponse> {
@@ -49,6 +56,18 @@ export class AudioNotesService {
 
     const [owner] = await this.db.select({ id: users.id }).from(users).limit(1);
     if (!owner) throw new NotFoundException({ code: 'NOT_FOUND', message: 'Owner not found' });
+
+    const audioMaxMb = await this.settings.getOwnerAudioMaxMb();
+    const maxBytes = audioLimitBytes(audioMaxMb);
+    const attachedBytes = decodedAudioBytes(input.audioDataUrl);
+
+    if (input.audioSize > maxBytes || attachedBytes > maxBytes) {
+      throw new PayloadTooLargeException({
+        code: 'AUDIO_TOO_LARGE',
+        message: `Аудио больше допустимого размера: ${audioMaxMb} МБ`,
+        details: { maxMb: audioMaxMb, maxBytes },
+      });
+    }
 
     const [created] = await this.db
       .insert(audioNotes)

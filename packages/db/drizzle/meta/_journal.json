@@ -309,6 +309,13 @@
       "when": 1794909483373,
       "tag": "0043_plain_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794912392173,
+      "tag": "0044_flowery_mauler",
+      "breakpoints": true
     }
   ]
 }

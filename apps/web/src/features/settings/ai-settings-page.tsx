@@ -5,12 +5,18 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { fetchAiSettings, testAiConnection, updateAiSettings } from '@/lib/api';
+import {
+  fetchAiSettings,
+  fetchSettings,
+  testAiConnection,
+  updateAiSettings,
+  updateSettings,
+} from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { AiTestResponse } from '@nexter/contracts';
+import { AUDIO_MAX_MB_MAX, AUDIO_MAX_MB_MIN, type AiTestResponse } from '@nexter/contracts';
 
 const models = [
   { value: 'deepseek-flash', label: 'DeepSeek Flash — быстрая' },
@@ -22,6 +28,7 @@ const models = [
 export function AiSettingsPage() {
   const queryClient = useQueryClient();
   const settings = useQuery({ queryKey: ['ai-settings'], queryFn: fetchAiSettings });
+  const generalSettings = useQuery({ queryKey: ['settings'], queryFn: fetchSettings });
   const [enabled, setEnabled] = useState(false);
   const [model, setModel] = useState('deepseek-flash');
   const [reasoning, setReasoning] = useState<'fast' | 'reasoning'>('fast');
@@ -29,6 +36,8 @@ export function AiSettingsPage() {
   const [maxTokens, setMaxTokens] = useState('2000');
   const [fallbackToRaw, setFallbackToRaw] = useState(true);
   const [apiKey, setApiKey] = useState('');
+  const [audioMaxMb, setAudioMaxMb] = useState('');
+  const [audioDirty, setAudioDirty] = useState(false);
   const [test, setTest] = useState<AiTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,6 +53,12 @@ export function AiSettingsPage() {
     setFallbackToRaw(settings.data.fallbackToRaw);
     setDirty(false);
   }, [settings.data]);
+
+  useEffect(() => {
+    if (!generalSettings.data) return;
+    setAudioMaxMb(String(generalSettings.data.audioMaxMb));
+    setAudioDirty(false);
+  }, [generalSettings.data]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -87,6 +102,28 @@ export function AiSettingsPage() {
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось удалить ключ')),
   });
+
+  const saveAudioLimit = useMutation({
+    mutationFn: (value: number) => updateSettings({ audioMaxMb: value }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(['settings'], data);
+      setAudioDirty(false);
+      setError(null);
+      setNotice('Лимит аудио сохранён.');
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось сохранить лимит аудио')),
+  });
+
+  function saveAudio() {
+    const value = Number(audioMaxMb);
+    if (!Number.isInteger(value) || value < AUDIO_MAX_MB_MIN || value > AUDIO_MAX_MB_MAX) {
+      setError(
+        `Лимит аудио должен быть целым числом от ${AUDIO_MAX_MB_MIN} до ${AUDIO_MAX_MB_MAX} МБ.`,
+      );
+      return;
+    }
+    saveAudioLimit.mutate(value);
+  }
 
   function touch() {
     setDirty(true);
@@ -316,6 +353,55 @@ export function AiSettingsPage() {
               : `Ошибка: ${test.error ?? 'неизвестная'}`}
           </div>
         ) : null}
+      </Card>
+
+      <Card>
+        <CardTitle>Аудио</CardTitle>
+        <CardDescription>
+          Максимальный размер аудиофайла, который принимает Viber-бот. Лимит проверяется по
+          исходному размеру аудио, а не по base64-копии в запросе. Допустимо от 1 до 20 МБ;
+          изменение применяется к следующим загрузкам.
+        </CardDescription>
+        {generalSettings.isPending ? (
+          <p className="mt-4 text-sm text-zinc-500">Загружаю лимит…</p>
+        ) : generalSettings.isError || !generalSettings.data ? (
+          <div className="mt-4">
+            <ErrorState
+              message={toRussianError(generalSettings.error, 'Не удалось загрузить лимит аудио')}
+              onRetry={() => void generalSettings.refetch()}
+            />
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,320px)_1fr] md:items-end">
+            <label className="block text-sm text-zinc-600">
+              Максимальный размер, МБ
+              <Input
+                className="mt-1"
+                type="number"
+                min={AUDIO_MAX_MB_MIN}
+                max={AUDIO_MAX_MB_MAX}
+                step={1}
+                value={audioMaxMb}
+                onChange={(event) => {
+                  setAudioMaxMb(event.target.value);
+                  setAudioDirty(true);
+                  setError(null);
+                  setNotice(null);
+                }}
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button onClick={saveAudio} disabled={saveAudioLimit.isPending || !audioDirty}>
+                {saveAudioLimit.isPending ? 'Применяю…' : 'Применить лимит'}
+              </Button>
+              <span className="text-xs text-zinc-500">
+                {audioDirty
+                  ? 'Есть несохранённые изменения'
+                  : `Обновлено ${formatDateTime(generalSettings.data.updatedAt)}`}
+              </span>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card>

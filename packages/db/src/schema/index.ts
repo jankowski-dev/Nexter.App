@@ -92,18 +92,29 @@ export const rateLimits = pgTable('rate_limits', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const settings = pgTable('settings', {
-  userId: uuid('user_id')
-    .primaryKey()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  baseCurrency: text('base_currency').notNull().default('USD'),
-  displayCurrency: text('display_currency').notNull().default('USD'),
-  taxMethod: text('tax_method').notNull().default('FIFO'),
-  includeGasInCostBasis: boolean('include_gas_in_cost_basis').notNull().default(true),
-  timezone: text('timezone').notNull().default('Europe/Minsk'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const settings = pgTable(
+  'settings',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    baseCurrency: text('base_currency').notNull().default('USD'),
+    displayCurrency: text('display_currency').notNull().default('USD'),
+    taxMethod: text('tax_method').notNull().default('FIFO'),
+    includeGasInCostBasis: boolean('include_gas_in_cost_basis').notNull().default(true),
+    timezone: text('timezone').notNull().default('Europe/Minsk'),
+    // Keep in sync with AUDIO_MAX_MB_DEFAULT in @nexter/contracts.
+    audioMaxMb: integer('audio_max_mb').notNull().default(8),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check(
+      'settings_audio_max_mb_range',
+      sql`${table.audioMaxMb} >= 1 and ${table.audioMaxMb} <= 20`,
+    ),
+  ],
+);
 
 export const aiSettings = pgTable('ai_settings', {
   userId: uuid('user_id')
