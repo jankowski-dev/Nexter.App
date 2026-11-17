@@ -392,7 +392,7 @@ export function AiSettingsPage() {
             </label>
             <div className="flex flex-wrap items-center gap-3">
               <Button onClick={saveAudio} disabled={saveAudioLimit.isPending || !audioDirty}>
-                {saveAudioLimit.isPending ? 'Сохраняю…' : 'Сохранить лимит'}
+                {saveAudioLimit.isPending ? 'Применяю…' : 'Применить лимит'}
               </Button>
               <span className="text-xs text-zinc-500">
                 {audioDirty

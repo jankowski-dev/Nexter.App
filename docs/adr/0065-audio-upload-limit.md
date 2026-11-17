@@ -36,7 +36,7 @@ Base64 inflates the binary by roughly 4/3, and the JSON body also carries the da
 
 ### UI
 
-`Настройки → ИИ` gains an `Аудио` card with a number input (`1`–`20`, step `1`), a `Сохранить лимит` action, an unsaved-changes indicator and the last update time. It uses the existing general settings query and `PATCH /settings`, so it follows the page's explicit-save behavior and the existing audit path. Client validation repeats the server range before sending.
+`Настройки → ИИ` gains an `Аудио` card with a number input (`1`–`20`, step `1`), a `Применить лимит` action, an unsaved-changes indicator and the last update time. It uses the existing general settings query and `PATCH /settings`, so it follows the page's explicit-save behavior and the existing audit path. Client validation repeats the server range before sending.
 
 ### External bot
 
