@@ -39,10 +39,30 @@ describe.runIf(canRun)('audit_log immutability', () => {
     expect(row).toBeDefined();
     if (!row) throw new Error('Probe audit row was not inserted');
 
-    await expect(
-      db.update(auditLog).set({ action: 'changed' }).where(eq(auditLog.id, row.id)),
-    ).rejects.toThrow(/append-only/);
+    let updateError: unknown;
 
-    await expect(db.delete(auditLog).where(eq(auditLog.id, row.id))).rejects.toThrow(/append-only/);
+    try {
+      await db.update(auditLog).set({ action: 'changed' }).where(eq(auditLog.id, row.id));
+    } catch (error) {
+      updateError = error;
+    }
+
+    expect(updateError).toBeDefined();
+
+    const [afterUpdate] = await db.select().from(auditLog).where(eq(auditLog.id, row.id)).limit(1);
+    expect(afterUpdate?.action).toBe('audit_trigger_probe');
+
+    let deleteError: unknown;
+
+    try {
+      await db.delete(auditLog).where(eq(auditLog.id, row.id));
+    } catch (error) {
+      deleteError = error;
+    }
+
+    expect(deleteError).toBeDefined();
+
+    const [afterDelete] = await db.select().from(auditLog).where(eq(auditLog.id, row.id)).limit(1);
+    expect(afterDelete?.id).toBe(row.id);
   });
 });
