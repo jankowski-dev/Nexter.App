@@ -171,6 +171,7 @@ export const watchlistTokenSearchResultSchema = z.object({
   change24hPct: z.string().nullable(),
   marketCapUsd: z.string().nullable(),
   volume24hUsd: z.string().nullable(),
+  liquidityUsd: z.string().nullable(),
   assetId: z.uuid().nullable(),
   alreadyInWatchlist: z.boolean(),
 });

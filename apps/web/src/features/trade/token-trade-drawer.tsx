@@ -1088,42 +1088,61 @@ function TradeSummary({
   const originalAmount =
     trade.lots.reduce((total, lot) => total.plus(lot.amount), new Decimal(0)) || new Decimal(0);
   const buyPrice = originalAmount.gt(0) ? new Decimal(group.buyUsd).div(originalAmount) : null;
+  const pnl = group.totalPnlUsd;
 
   return (
-    <div className="space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-semibold text-zinc-900">Текущая сделка</div>
-        <Badge tone={group.status === 'closed' ? 'neutral' : 'info'}>
-          {group.status === 'closed' ? 'Закрыта' : 'Открыта'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            Текущая сделка
+          </span>
+          <Badge tone={group.status === 'closed' ? 'neutral' : 'info'}>
+            {group.status === 'closed' ? 'Закрыта' : 'Открыта'}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-[10px] text-zinc-500">Результат</div>
+            <div className={`font-mono text-base font-semibold ${pnlTone(pnl)}`}>
+              {pnl ? formatSignedUsd(pnl) : '—'}
+            </div>
+          </div>
+          <Link
+            to="/trades/$tradeId"
+            params={{ tradeId: group.id }}
+            className="text-[11px] text-emerald-800 hover:underline"
+          >
+            Полная карточка
+          </Link>
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-sm">
+      <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
         <div>
-          <div className="text-xs text-zinc-500">Куплено по</div>
-          <div className="font-mono text-zinc-900">
+          <div className="text-[10px] text-zinc-500">Куплено по</div>
+          <div className="font-mono text-[13px] font-semibold text-zinc-900">
             {buyPrice ? formatPrice(buyPrice.toFixed(12)) : '—'}
           </div>
         </div>
         <div>
-          <div className="text-xs text-zinc-500">Сейчас</div>
-          <div className="font-mono text-zinc-900">{formatPrice(currentPrice)}</div>
+          <div className="text-[10px] text-zinc-500">Сейчас</div>
+          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+            {formatPrice(currentPrice)}
+          </div>
         </div>
         <div>
-          <div className="text-xs text-zinc-500">Остаток</div>
-          <div className="font-mono text-zinc-900">
+          <div className="text-[10px] text-zinc-500">Остаток</div>
+          <div className="font-mono text-[13px] font-semibold text-zinc-900">
             {formatTokenAmount(group.remainingAmount, 8)} {group.asset.symbol}
           </div>
         </div>
         <div>
-          <div className="text-xs text-zinc-500">Вложено</div>
-          <div className="font-mono font-semibold text-zinc-900">{formatUsd(group.buyUsd)}</div>
+          <div className="text-[10px] text-zinc-500">Вложено</div>
+          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+            {formatUsd(group.buyUsd)}
+          </div>
         </div>
       </div>
-      <Button variant="ghost" className="h-8 px-2 text-xs" asChild>
-        <Link to="/trades/$tradeId" params={{ tradeId: group.id }}>
-          Полная карточка
-        </Link>
-      </Button>
     </div>
   );
 }

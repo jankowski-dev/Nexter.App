@@ -75,7 +75,7 @@ export function TaskCompactRow({
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span
-              className={`truncate text-sm font-semibold ${
+              className={`truncate text-[15px] font-semibold ${
                 done ? 'text-zinc-500' : 'text-zinc-900'
               }`}
             >

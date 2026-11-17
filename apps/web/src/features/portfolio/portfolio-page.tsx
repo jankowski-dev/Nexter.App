@@ -1,5 +1,5 @@
-import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { NavIcon, type NavIconName } from '@/components/nav-icon';
+import { Card, CardTitle } from '@/components/ui/card';
+import { StatCard } from '@/components/ui/stat-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { TokenIcon } from '@/components/token-icon';
@@ -55,69 +55,6 @@ function PortfolioMetric({
         </div>
       ) : null}
     </div>
-  );
-}
-
-const statTones = {
-  emerald: {
-    card: 'tone-surface tone-surface-emerald',
-    title: 'text-emerald-800',
-    icon: 'bg-emerald-100 text-emerald-700',
-    value: 'text-emerald-950',
-    description: 'text-emerald-800/60',
-  },
-  sky: {
-    card: 'tone-surface tone-surface-sky',
-    title: 'text-sky-800',
-    icon: 'bg-sky-100 text-sky-700',
-    value: 'text-sky-950',
-    description: 'text-sky-800/60',
-  },
-  amber: {
-    card: 'tone-surface tone-surface-amber',
-    title: 'text-amber-800',
-    icon: 'bg-amber-100 text-amber-700',
-    value: 'text-amber-950',
-    description: 'text-amber-800/60',
-  },
-  violet: {
-    card: 'tone-surface tone-surface-violet',
-    title: 'text-violet-800',
-    icon: 'bg-violet-100 text-violet-700',
-    value: 'text-violet-950',
-    description: 'text-violet-800/60',
-  },
-} as const;
-
-function PortfolioStatCard({
-  title,
-  value,
-  description,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  icon: NavIconName;
-  tone: keyof typeof statTones;
-}) {
-  const styles = statTones[tone];
-  return (
-    <Card className={`relative overflow-hidden ${styles.card}`}>
-      <div className="flex items-start justify-between gap-3">
-        <CardTitle className={styles.title}>{title}</CardTitle>
-        <span
-          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}
-        >
-          <NavIcon name={icon} className="h-4 w-4" />
-        </span>
-      </div>
-      <div className={`mt-1 font-mono text-3xl font-semibold tracking-tight ${styles.value}`}>
-        {value}
-      </div>
-      <CardDescription className={styles.description}>{description}</CardDescription>
-    </Card>
   );
 }
 
@@ -245,28 +182,28 @@ export function PortfolioPage() {
       {tab === 'overview' && data ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <PortfolioStatCard
+            <StatCard
               title="Стоимость позиций"
               value={formatUsd(data.positionsValueUsd)}
               description="По последним ценам"
               icon="portfolio"
               tone="emerald"
             />
-            <PortfolioStatCard
+            <StatCard
               title="Капитал"
               value={formatUsd(data.equityUsd)}
               description="Стоимость позиций + свободный капитал"
               icon="statistics"
               tone="sky"
             />
-            <PortfolioStatCard
+            <StatCard
               title="Свободный капитал"
               value={formatUsd(data.cashUsd)}
               description="USDT / USDC вне позиций"
               icon="finance"
               tone="amber"
             />
-            <PortfolioStatCard
+            <StatCard
               title="Мои инвестиции"
               value={dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'}
               description="Пополнения минус выводы"

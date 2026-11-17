@@ -608,6 +608,20 @@ export const marketQuotes = pgTable(
   (table) => [index('market_quotes_fetched_idx').on(table.fetchedAt)],
 );
 
+export const marketHistory = pgTable(
+  'market_history',
+  {
+    cacheKey: text('cache_key').primaryKey(),
+    source: text('source').notNull(),
+    points: jsonb('points').$type<{ date: string; priceUsd: string }[]>().notNull().default([]),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull(),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true }),
+    failures: integer('failures').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('market_history_fetched_idx').on(table.fetchedAt)],
+);
+
 export const portfolioSnapshots = pgTable(
   'portfolio_snapshots',
   {

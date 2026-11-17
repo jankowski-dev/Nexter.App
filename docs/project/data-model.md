@@ -39,6 +39,7 @@
 | `lot_consumptions`    | FIFO-списания                | lotId, disposalTransactionId, amount, costBasisUsd, proceedsUsd, realizedPnlUsd                                                   |
 | `prices`              | Ручные/импортированные цены  | assetId, priceUsd, observedAt, source                                                                                             |
 | `market_quotes`       | Последняя рыночная котировка | assetId PK, priceUsd, change24hPct, change7d/30d/1yPct, marketCapUsd, source, liquidityUsd, fetchedAt, changedAt                  |
+| `market_history`      | Кэш дневной истории графиков | cacheKey PK (`chain:contract:coingeckoId`), source, points jsonb (до 365 дней, 18 знаков), fetchedAt, nextAttemptAt, failures     |
 | `portfolio_snapshots` | Дневной снимок капитала      | userId, snapshotDate, cashUsd, positionsValueUsd, equityUsd                                                                       |
 
 `transactions` + `postings` — append-only. `lots`/`lot_consumptions` — производные FIFO-структуры. Удаление старых транзакций запрещено; исправления — новые операции.

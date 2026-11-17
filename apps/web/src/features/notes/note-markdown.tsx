@@ -106,10 +106,10 @@ function lineNodes(line: string, index: number): ReactNode {
 }
 
 export function NoteMarkdown({ value }: { value: string }) {
-  if (!value.trim()) return <p className="text-sm text-zinc-500">Заметка пока пустая.</p>;
+  if (!value.trim()) return <p className="text-[15px] text-zinc-500">Заметка пока пустая.</p>;
 
   return (
-    <div className="space-y-1 text-sm leading-relaxed">
+    <div className="space-y-1 text-[15px] leading-relaxed">
       {value.split(/\r?\n/).map((line, index) => lineNodes(line, index))}
     </div>
   );

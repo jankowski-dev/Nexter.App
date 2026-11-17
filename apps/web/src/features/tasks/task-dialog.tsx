@@ -479,7 +479,7 @@ export function TaskDialog({
           </div>
         }
       >
-        <div className="space-y-5">
+        <div className="space-y-5 [&_input]:text-[15px] [&_select]:text-[15px] [&_textarea]:text-[15px]">
           {mode === 'view' ? (
             <>
               <div>
@@ -510,7 +510,7 @@ export function TaskDialog({
                 <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                   Описание
                 </div>
-                <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700">
+                <p className="mt-1 whitespace-pre-wrap text-[15px] text-zinc-700">
                   {description || 'Описание не заполнено.'}
                 </p>
               </div>

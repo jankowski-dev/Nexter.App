@@ -45,6 +45,7 @@ export function ListToolbar({
   searchPlaceholder,
   searchAriaLabel,
   children,
+  actions,
   className,
 }: {
   search: string;
@@ -52,6 +53,7 @@ export function ListToolbar({
   searchPlaceholder: string;
   searchAriaLabel?: string;
   children?: ReactNode;
+  actions?: ReactNode;
   className?: string;
 }) {
   return (
@@ -64,7 +66,8 @@ export function ListToolbar({
         aria-label={searchAriaLabel ?? searchPlaceholder}
         className="max-w-sm"
       />
-      <div className="ml-auto flex flex-wrap items-center gap-2">{children}</div>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+      {actions ? <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
     </div>
   );
 }

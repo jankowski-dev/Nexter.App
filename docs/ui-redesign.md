@@ -265,3 +265,12 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - `Обзор` no longer includes active trades.
 - `Операции` uses colored block rows instead of the wide grey table.
 - `Статистика` removes the timezone/export row and defaults to all time.
+
+## UI-71 compact data surfaces and persistent charts
+
+- Token blocks and operation rows are compact; `Купить` sits before the metric cluster, the price and changes are larger, and the chart is a 44px sparkline.
+- Main-list token clicks open the shared `TokenDrawer`: header, chart, stat cards (price, 24h/7d/30d/1y, cap, volume, liquidity), description, links, investors, contracts, tags.
+- The close-order summary is a compact strip with result, cost, current price, remaining and invested.
+- Dashboard order is tasks/habits, then crypto/finance stat cards using the shared `StatCard` tone surfaces.
+- The app logo rays flash green while queries are fetching; notes/tasks use 15px content text.
+- Daily chart history is persisted in `market_history`, fetched once per day, serialized with a 1.5s interval, and loaded lazily. See ADR 0068.

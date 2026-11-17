@@ -66,7 +66,8 @@ export function MiniLineChart({
     <div className="relative">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="h-20 w-full"
+        className="w-full"
+        style={{ height }}
         role="img"
         aria-label="График цены за три месяца"
         onMouseMove={handleMove}

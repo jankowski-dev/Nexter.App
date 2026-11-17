@@ -1,6 +1,14 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { assets, chains, marketQuotes, watchlist, type Asset, type Database } from '@nexter/db';
+import {
+  assets,
+  chains,
+  marketHistory,
+  marketQuotes,
+  watchlist,
+  type Asset,
+  type Database,
+} from '@nexter/db';
 import type { WatchlistTokenSearchResult } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 import { AssetsService } from '../accounting/assets.service';
@@ -17,14 +25,32 @@ interface IconCacheEntry {
 const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ICON_CACHE_MAX_ENTRIES = 200;
 const ICON_CACHE_MAX_BYTES = 8 * 1024 * 1024;
-const HISTORY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-const HISTORY_EMPTY_CACHE_TTL_MS = 5 * 60 * 1000;
-const HISTORY_CACHE_MAX_ENTRIES = 100;
+const HISTORY_FRESH_MS = 24 * 60 * 60 * 1000;
+const HISTORY_FETCH_INTERVAL_MS = 1500;
+const HISTORY_MAX_DAYS = 365;
+const HISTORY_RETRY_MS = [
+  30 * 60 * 1000,
+  2 * 60 * 60 * 1000,
+  12 * 60 * 60 * 1000,
+  24 * 60 * 60 * 1000,
+];
 
-interface PriceHistoryCacheEntry {
-  expiresAt: number;
+interface PriceHistoryPoint {
+  date: string;
+  priceUsd: string;
+}
+
+interface CachedHistory {
   source: string;
-  points: { date: string; priceUsd: string }[];
+  points: PriceHistoryPoint[];
+  fetchedAt: Date;
+  nextAttemptAt: Date | null;
+  failures: number;
+}
+
+function sliceHistory(points: PriceHistoryPoint[], days: number): PriceHistoryPoint[] {
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  return points.filter((point) => point.date >= cutoff).slice(-days);
 }
 
 @Injectable()
@@ -32,7 +58,8 @@ export class MarketDataService {
   private readonly iconCache = new Map<string, IconCacheEntry>();
   private readonly iconInFlight = new Map<string, Promise<{ body: Buffer; contentType: string }>>();
   private iconCacheBytes = 0;
-  private readonly historyCache = new Map<string, PriceHistoryCacheEntry>();
+  private historyQueue: Promise<void> = Promise.resolve();
+  private lastHistoryFetchAt = 0;
 
   constructor(
     @Inject(DB) private readonly db: Database,
@@ -104,6 +131,7 @@ export class MarketDataService {
       change24hPct: quote?.change24hPct ?? market?.change24hPct ?? null,
       marketCapUsd: quote?.marketCapUsd ?? market?.marketCapUsd ?? null,
       volume24hUsd: market?.volume24hUsd ?? null,
+      liquidityUsd: quote?.liquidityUsd ?? null,
       assetId: assetRow?.assets.id ?? null,
       alreadyInWatchlist,
     };
@@ -147,23 +175,56 @@ export class MarketDataService {
     contractAddress: string | null,
     coingeckoId: string | null,
     days: number,
-  ): Promise<{ source: string; points: { date: string; priceUsd: string }[] }> {
-    const key = `${chainCode}:${contractAddress ?? ''}:${coingeckoId ?? ''}:${days}`;
-    const cached = this.historyCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) {
-      return { source: cached.source, points: cached.points };
+  ): Promise<{ source: string; points: PriceHistoryPoint[] }> {
+    const key = `${chainCode}:${contractAddress ?? ''}:${coingeckoId ?? ''}`;
+    const cached = await this.readHistory(key).catch(() => null);
+    const now = Date.now();
+
+    if (cached) {
+      const fresh = now - cached.fetchedAt.getTime() < HISTORY_FRESH_MS;
+      const waiting = (cached.nextAttemptAt?.getTime() ?? 0) > now;
+      if (fresh || waiting) {
+        return { source: cached.source, points: sliceHistory(cached.points, days) };
+      }
     }
 
+    let result: { source: string; points: PriceHistoryPoint[] };
+    try {
+      result = await this.enqueueHistoryFetch(() =>
+        this.fetchDailyHistory(chainCode, contractAddress, coingeckoId),
+      );
+    } catch {
+      result = { source: 'none', points: [] };
+    }
+
+    const hasFreshData = result.points.length >= 2;
+    const points = hasFreshData || !cached ? result.points : cached.points;
+    const source = hasFreshData || !cached ? result.source : cached.source;
+    const failures = hasFreshData ? 0 : Math.min((cached?.failures ?? 0) + 1, 3);
+    const nextAttemptAt = hasFreshData
+      ? null
+      : new Date(now + HISTORY_RETRY_MS[Math.min(failures, HISTORY_RETRY_MS.length - 1)]);
+
+    await this.writeHistory(key, source, points, nextAttemptAt, failures).catch(() => undefined);
+
+    return { source, points: sliceHistory(points, days) };
+  }
+
+  private async fetchDailyHistory(
+    chainCode: string,
+    contractAddress: string | null,
+    coingeckoId: string | null,
+  ): Promise<{ source: string; points: PriceHistoryPoint[] }> {
     let source = 'coingecko';
     let candles =
       contractAddress && (chainCode === 'bsc' || chainCode === 'ethereum')
-        ? await this.geckoterminal.getDailyCandles(chainCode, contractAddress, days)
+        ? await this.geckoterminal.getDailyCandles(chainCode, contractAddress, HISTORY_MAX_DAYS)
         : [];
 
     if (candles.length > 0) source = 'geckoterminal';
 
-    if (candles.length < days && coingeckoId) {
-      const coingeckoCandles = await this.coingecko.getDailyCandles(coingeckoId, days);
+    if (candles.length < HISTORY_MAX_DAYS && coingeckoId) {
+      const coingeckoCandles = await this.coingecko.getDailyCandles(coingeckoId, HISTORY_MAX_DAYS);
       if (coingeckoCandles.length > candles.length) {
         candles = coingeckoCandles;
         source = 'coingecko';
@@ -173,23 +234,75 @@ export class MarketDataService {
     const points = candles
       .filter((candle) => Number(candle.closeUsd) > 0)
       .sort((left, right) => left.date.localeCompare(right.date))
-      .slice(-days)
+      .slice(-HISTORY_MAX_DAYS)
       .map((candle) => ({ date: candle.date, priceUsd: candle.closeUsd }));
 
-    if (points.length === 0) source = 'none';
+    return { source: points.length > 0 ? source : 'none', points };
+  }
 
-    if (this.historyCache.size >= HISTORY_CACHE_MAX_ENTRIES) {
-      const oldest = this.historyCache.keys().next().value;
-      if (oldest) this.historyCache.delete(oldest);
-    }
-    this.historyCache.set(key, {
-      expiresAt:
-        Date.now() + (points.length >= 2 ? HISTORY_CACHE_TTL_MS : HISTORY_EMPTY_CACHE_TTL_MS),
-      source,
-      points,
+  private enqueueHistoryFetch<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.historyQueue.then(async () => {
+      const wait = Math.max(0, HISTORY_FETCH_INTERVAL_MS - (Date.now() - this.lastHistoryFetchAt));
+      if (wait > 0) {
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+      this.lastHistoryFetchAt = Date.now();
+      return task();
     });
+    this.historyQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
 
-    return { source, points };
+  private async readHistory(key: string): Promise<CachedHistory | null> {
+    const [row] = await this.db
+      .select()
+      .from(marketHistory)
+      .where(eq(marketHistory.cacheKey, key))
+      .limit(1);
+    if (!row) return null;
+
+    return {
+      source: row.source,
+      points: row.points,
+      fetchedAt: row.fetchedAt,
+      nextAttemptAt: row.nextAttemptAt,
+      failures: row.failures,
+    };
+  }
+
+  private async writeHistory(
+    key: string,
+    source: string,
+    points: PriceHistoryPoint[],
+    nextAttemptAt: Date | null,
+    failures: number,
+  ): Promise<void> {
+    const now = new Date();
+    await this.db
+      .insert(marketHistory)
+      .values({
+        cacheKey: key,
+        source,
+        points,
+        fetchedAt: now,
+        nextAttemptAt,
+        failures,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: marketHistory.cacheKey,
+        set: {
+          source,
+          points,
+          fetchedAt: now,
+          nextAttemptAt,
+          failures,
+          updatedAt: now,
+        },
+      });
   }
 
   async fetchIcon(url: string): Promise<{ body: Buffer; contentType: string }> {
