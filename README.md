@@ -6,7 +6,7 @@ Current scope: **production v2 (2026-11-17)**. Phases 0–11 are accepted, and t
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
-Current UI state: `Крипта` is one sidebar entry with seven tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Стратегии`, `Статистика`). `Обзор` combines summary cards, consolidated token blocks, active trades and the main token list; the other tabs reuse the operations, token-base, journal, bot, strategy and statistics pages. The Viber audio limit is configurable in `Настройки → ИИ → Аудио` (default 8 MB, max 20 MB). Wave 0/1 hardening added disposable-DB test guards, CSRF origin enforcement, TOTP replay protection, an append-only `audit_log` trigger, and removed the unused worker service.
+Current UI state: `Крипта` is one sidebar entry with seven tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Стратегии`, `Статистика`). `Обзор` combines summary cards, consolidated token blocks and the main token list; the other tabs reuse the operations, token-base, journal, bot, strategy and statistics pages. The Viber audio limit is configurable in `Настройки → ИИ → Аудио` (default 8 MB, max 20 MB). Wave 0/1 hardening added disposable-DB test guards, CSRF origin enforcement, TOTP replay protection, an append-only `audit_log` trigger, and removed the unused worker service.
 
 ## Notion import
 

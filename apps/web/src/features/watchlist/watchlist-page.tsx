@@ -8,10 +8,9 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { LiveValue } from '@/components/ui/live-value';
-import { PriceFreshness } from '@/components/ui/price-freshness';
 import { TrashIcon } from '@/components/ui/icons';
 import { TokenIcon } from '@/components/token-icon';
+import { TokenBlock } from './token-block';
 import { Textarea } from '@/components/ui/textarea';
 import {
   archiveWatchlist,
@@ -26,7 +25,7 @@ import {
   updateWatchlist,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatPct, formatPrice, formatUsd, formatUsdCompact, pnlTone } from '@/lib/format';
+import { formatPct, formatPrice, formatUsd, pnlTone } from '@/lib/format';
 import { filterBySearch } from '@/lib/search';
 import { compressTokenIcon } from '@/lib/image';
 import { useConfirm } from '@/lib/confirm';
@@ -407,19 +406,27 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="База токенов"
-        subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
-              Новая группа
-            </Button>
-            <Button onClick={openCreate}>Добавить актив</Button>
-          </>
-        }
-        embedded={embedded}
-      />
+      {embedded ? (
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
+            Новая группа
+          </Button>
+          <Button onClick={openCreate}>Добавить актив</Button>
+        </div>
+      ) : (
+        <PageHeader
+          title="Токены"
+          subtitle="Карточки токенов: контракт, описание, ссылки и инвесторы."
+          actions={
+            <>
+              <Button variant="secondary" onClick={() => setGroupDialogOpen(true)}>
+                Новая группа
+              </Button>
+              <Button onClick={openCreate}>Добавить актив</Button>
+            </>
+          }
+        />
+      )}
 
       {error && !dialogOpen ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -624,76 +631,23 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
             {sortedEntries.map((entry) => {
               const group = entry.groupId ? groupById.get(entry.groupId) : null;
               return (
-                <Card
+                <TokenBlock
                   key={entry.id}
-                  className={`p-0 transition-colors hover:border-emerald-300 ${''}`}
-                >
-                  <button
-                    type="button"
-                    className="flex w-full flex-wrap items-center justify-between gap-3 p-4 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
-                    onClick={() => openDrawer(entry)}
-                  >
-                    <span className="flex min-w-0 flex-1 items-center gap-3">
-                      <TokenIcon
-                        logoUrl={entry.logoUrl}
-                        symbol={entry.asset.symbol}
-                        className="h-10 w-10 text-xs"
-                      />
-                      <span className="block min-w-0">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-base font-semibold text-zinc-900">
-                            {entry.asset.symbol}
-                          </span>
-                          {group ? <Badge tone="info">{group.name}</Badge> : null}
-                        </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-500">
-                          <span className="truncate">
-                            {entry.asset.name} · {entry.asset.chainCode}
-                          </span>
-                          {entry.marketCapUsd ? (
-                            <span className="whitespace-nowrap">
-                              Кап.{' '}
-                              <LiveValue value={formatUsdCompact(entry.marketCapUsd)}>
-                                {formatUsdCompact(entry.marketCapUsd)}
-                              </LiveValue>
-                            </span>
-                          ) : null}
-                          {entry.tags.slice(0, 4).map((tag) => (
-                            <Badge key={tag} tone="info">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </span>
+                  entry={entry}
+                  onOpen={() => openDrawer(entry)}
+                  meta={
+                    group || entry.tags.length > 0 ? (
+                      <span className="flex flex-wrap gap-1">
+                        {group ? <Badge tone="info">{group.name}</Badge> : null}
+                        {entry.tags.slice(0, 4).map((tag) => (
+                          <Badge key={tag} tone="info">
+                            {tag}
+                          </Badge>
+                        ))}
                       </span>
-                    </span>
-
-                    <span className="flex shrink-0 items-center gap-4">
-                      <PriceFreshness
-                        updatedAt={entry.priceUpdatedAt}
-                        fetchedAt={entry.priceFetchedAt}
-                        source={entry.priceSource}
-                        className="hidden sm:inline-flex"
-                      />
-                      <span className="block text-right">
-                        <span className="block font-mono text-base font-semibold text-zinc-900">
-                          <LiveValue value={formatPrice(entry.priceUsd)}>
-                            {formatPrice(entry.priceUsd)}
-                          </LiveValue>
-                        </span>
-                        <span className={`block text-xs ${pnlTone(entry.change24hPct)}`}>
-                          <LiveValue
-                            value={entry.change24hPct ? formatPct(entry.change24hPct) : '—'}
-                          >
-                            {entry.change24hPct ? formatPct(entry.change24hPct) : '24ч: —'}
-                          </LiveValue>
-                        </span>
-                      </span>
-                      <span aria-hidden="true" className="text-lg text-zinc-300">
-                        ›
-                      </span>
-                    </span>
-                  </button>
-                </Card>
+                    ) : undefined
+                  }
+                />
               );
             })}
           </div>

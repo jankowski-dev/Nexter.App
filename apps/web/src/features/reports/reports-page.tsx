@@ -1,12 +1,11 @@
 import { BarChart } from '@/components/charts/bar-chart';
 import { TokenIcon } from '@/components/token-icon';
-import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
-import { downloadExport, fetchReports } from '@/lib/api';
+import { fetchReports } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
   formatCount,
@@ -16,7 +15,7 @@ import {
   pluralizeRu,
   pnlTone,
 } from '@/lib/format';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 type PeriodPreset = '30d' | '90d' | '365d' | 'ytd' | 'all' | 'custom';
@@ -101,11 +100,9 @@ function Metric({
 }
 
 export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
-  const [preset, setPreset] = useState<PeriodPreset>('365d');
+  const [preset, setPreset] = useState<PeriodPreset>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
-  const [exportNotice, setExportNotice] = useState<string | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
 
   const period = useMemo(() => {
     if (preset === 'custom') {
@@ -138,26 +135,6 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
     refetchInterval: 30_000,
   });
 
-  const exportMutation = useMutation({
-    mutationFn: ({
-      dataset,
-      format,
-      scoped,
-    }: {
-      dataset: 'transactions' | 'positions' | 'trade-groups';
-      format: 'csv' | 'json';
-      scoped: boolean;
-    }) => downloadExport(dataset, format, scoped ? { from: period.from, to: period.to } : {}),
-    onSuccess: (_data, variables) => {
-      setExportNotice(`Экспорт ${variables.dataset}.${variables.format} скачан.`);
-      setExportError(null);
-    },
-    onError: (error) => {
-      setExportNotice(null);
-      setExportError(toRussianError(error, 'Не удалось скачать экспорт'));
-    },
-  });
-
   const report = reports.data;
   const monthly = report?.monthly.slice(-12) ?? [];
   const monthlyPoints = monthly.map((month) => ({
@@ -167,11 +144,12 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Статистика"
-        subtitle="Статистика по портфелю, сделкам и издержкам. Налоги не рассчитываются."
-        embedded={embedded}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Статистика"
+          subtitle="Статистика по портфелю, сделкам и издержкам. Налоги не рассчитываются."
+        />
+      )}
 
       <Card>
         <div className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
@@ -217,49 +195,9 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
           </div>
         ) : null}
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-xs text-zinc-500">
-            Часовой пояс: {report?.period.timezone ?? 'Europe/Minsk'}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              className="h-9 px-3 text-xs"
-              onClick={() =>
-                exportMutation.mutate({ dataset: 'transactions', format: 'csv', scoped: true })
-              }
-              disabled={exportMutation.isPending}
-            >
-              Транзакции за период
-            </Button>
-            <Button
-              variant="secondary"
-              className="h-9 px-3 text-xs"
-              onClick={() =>
-                exportMutation.mutate({ dataset: 'trade-groups', format: 'csv', scoped: false })
-              }
-              disabled={exportMutation.isPending}
-            >
-              Сделки
-            </Button>
-            <Button
-              variant="secondary"
-              className="h-9 px-3 text-xs"
-              onClick={() =>
-                exportMutation.mutate({ dataset: 'positions', format: 'csv', scoped: false })
-              }
-              disabled={exportMutation.isPending}
-            >
-              Позиции
-            </Button>
-          </div>
-        </div>
-
         {invalidPeriod ? (
           <p className="mt-3 text-sm text-red-700">Дата начала не может быть позже даты конца.</p>
         ) : null}
-        {exportNotice ? <p className="mt-3 text-sm text-emerald-700">{exportNotice}</p> : null}
-        {exportError ? <p className="mt-3 text-sm text-red-700">{exportError}</p> : null}
       </Card>
 
       {reports.isPending ? <LoadingRows rows={8} /> : null}
