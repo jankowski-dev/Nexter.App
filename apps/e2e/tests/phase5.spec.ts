@@ -191,7 +191,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const noteDialog = page.getByRole('dialog');
   await noteDialog.getByRole('textbox').fill('Playwright trade note');
   await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Playwright trade note')).toBeVisible();
+  await expect(page.getByText('Playwright trade note').first()).toBeVisible();
 
   await post('/api/v1/watchlist', { assetId: xny?.id });
 
