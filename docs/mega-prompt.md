@@ -33,6 +33,7 @@ The product shipped beyond the original MVP-1/MVP-2 contract. The current scope,
 - Accounting, FIFO lots, P&L, imports, reports, finance, vault, tasks, notes, notifications, dashboard, and the Russian UI are live.
 - Non-custodial WalletConnect/Tangem swaps are live on BSC and Ethereum. Execution is allowlisted, built and simulated by the server, signed only by the wallet, step-up protected above $500, and gated by `SWAP_ENABLED`, the per-chain flags, and the kill switch. No private keys ever reach the server.
 - Paper-trading bots, backtesting, bot telemetry, the AI settings module, and Viber audio notes are part of the product.
+- Viber audio uploads use the per-owner `settings.audio_max_mb` limit: default 8 MB, configurable 1–20 MB in `Настройки → ИИ`, with a 20 MB hard ceiling. The Viber bot has its own separate upload guard.
 - The `apps/worker` service was removed because it registered no jobs. Background polling and scheduled work run in the API process under advisory locks. `pnpm dev` starts the API and web app only.
 - Where older sections below still describe "MVP-1" or "MVP-2" as future work, treat them as historical rationale. Current behavior is defined by this amendment, the ADRs, and `docs/decisions.md`.
 

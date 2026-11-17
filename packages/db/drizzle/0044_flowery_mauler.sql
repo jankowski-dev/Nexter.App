@@ -1,0 +1,2 @@
+ALTER TABLE "settings" ADD COLUMN "audio_max_mb" integer DEFAULT 8 NOT NULL;--> statement-breakpoint
+ALTER TABLE "settings" ADD CONSTRAINT "settings_audio_max_mb_range" CHECK ("settings"."audio_max_mb" >= 1 and "settings"."audio_max_mb" <= 20);

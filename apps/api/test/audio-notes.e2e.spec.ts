@@ -7,6 +7,8 @@ import request, { type SuperAgentTest } from 'supertest';
 import { audioNotes, createDb, noteAudio, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
+import { registerAudioBodyLimit } from '../src/modules/audio-notes/audio-body-limit';
+import { SettingsService } from '../src/modules/settings/settings.service';
 import { env } from '../src/shared/config/env';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -58,6 +60,9 @@ describe.runIf(canRun)('AI and audio notes API', () => {
 
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter());
+    registerAudioBodyLimit(app.getHttpAdapter().getInstance(), () =>
+      app.get(SettingsService).getOwnerAudioMaxMb(),
+    );
     await app.register(cookie as any);
     app.setGlobalPrefix('api/v1', { exclude: ['health', 'ready'] });
     app.useGlobalFilters(new AllExceptionsFilter());
@@ -117,6 +122,95 @@ describe.runIf(canRun)('AI and audio notes API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(cleared.body.hasApiKey).toBe(false);
+  }, 60_000);
+
+  it('stores the audio upload limit with defaults and range validation', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const defaults = await agent.get('/api/v1/settings').expect(200);
+    expect(defaults.body.audioMaxMb).toBe(8);
+
+    for (const audioMaxMb of [0, 21, 8.5]) {
+      const rejected = await agent
+        .patch('/api/v1/settings')
+        .set('x-csrf-token', owner.csrf)
+        .send({ audioMaxMb })
+        .expect(400);
+      expect(rejected.body.error.code).toBe('VALIDATION_ERROR');
+    }
+
+    const updated = await agent
+      .patch('/api/v1/settings')
+      .set('x-csrf-token', owner.csrf)
+      .send({ audioMaxMb: 12 })
+      .expect(200);
+    expect(updated.body.audioMaxMb).toBe(12);
+
+    const audit = await agent.get('/api/v1/audit-log?action=settings.updated').expect(200);
+    expect(audit.body.data[0].after).toMatchObject({ audioMaxMb: 12 });
+  }, 60_000);
+
+  it('accepts audio near the configured limit and rejects audio above it', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    await agent
+      .patch('/api/v1/settings')
+      .set('x-csrf-token', owner.csrf)
+      .send({ audioMaxMb: 1 })
+      .expect(200);
+
+    // 900 KB binary -> 1.2 MB base64, above the 1 MB Fastify test-adapter
+    // default but below the configured 1 MB binary limit.
+    const acceptedBytes = 900_000;
+    const acceptedPayload = Buffer.alloc(acceptedBytes, 0x41).toString('base64');
+    const accepted = await request(app.getHttpServer())
+      .post('/api/v1/bot/audio-notes')
+      .set('Authorization', `Bearer ${botToken}`)
+      .send({
+        viberMessageId: 'viber-limit-accepted',
+        transcript: 'Короткая заметка в пределах лимита.',
+        audioMime: 'audio/mpeg',
+        audioName: 'limit-ok.mp3',
+        audioSize: acceptedBytes,
+        audioDataUrl: `data:audio/mpeg;base64,${acceptedPayload}`,
+      })
+      .expect(201);
+    expect(accepted.body.status).toBe('done');
+
+    const tooLargeBytes = 1_100_000;
+    const tooLargePayload = Buffer.alloc(tooLargeBytes, 0x42).toString('base64');
+    const rejected = await request(app.getHttpServer())
+      .post('/api/v1/bot/audio-notes')
+      .set('Authorization', `Bearer ${botToken}`)
+      .send({
+        viberMessageId: 'viber-limit-too-large',
+        transcript: 'Файл больше настроенного лимита.',
+        audioMime: 'audio/mpeg',
+        audioName: 'limit-too-large.mp3',
+        audioSize: tooLargeBytes,
+        audioDataUrl: `data:audio/mpeg;base64,${tooLargePayload}`,
+      })
+      .expect(413);
+    expect(rejected.body.error).toMatchObject({
+      code: 'AUDIO_TOO_LARGE',
+      details: { maxMb: 1 },
+    });
+
+    const claimed = await request(app.getHttpServer())
+      .post('/api/v1/bot/audio-notes')
+      .set('Authorization', `Bearer ${botToken}`)
+      .send({
+        viberMessageId: 'viber-limit-claimed',
+        transcript: 'Метаданные сообщают слишком большой размер.',
+        audioMime: 'audio/mpeg',
+        audioName: 'limit-claimed.mp3',
+        audioSize: 2_000_000,
+        audioDataUrl,
+      })
+      .expect(413);
+    expect(claimed.body.error.code).toBe('AUDIO_TOO_LARGE');
   }, 60_000);
 
   it('creates an idempotent note from a bot audio payload and attaches the audio', async () => {

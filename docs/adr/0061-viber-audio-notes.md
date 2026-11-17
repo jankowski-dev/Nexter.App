@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted for UI-65 on 2026-11-16. Migration `0041` is additive.
+Accepted for UI-65 on 2026-11-16. Migration `0041` is additive. The fixed audio size limits below were superseded by ADR 0065 (configurable 1–20 MB, default 8 MB).
 
 ## Context
 

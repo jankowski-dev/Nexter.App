@@ -16,8 +16,10 @@ import { existsSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
+import { registerAudioBodyLimit } from './modules/audio-notes/audio-body-limit';
 import { registerImportAuthHook } from './modules/imports/import-auth.hook';
 import { registerNotionImportBodyParser } from './modules/imports/import-body-parser';
+import { SettingsService } from './modules/settings/settings.service';
 import { apiCacheControl } from './shared/http/cache-control';
 import { env } from './shared/config/env';
 import { parseTrustProxy } from './shared/config/trust-proxy';
@@ -50,6 +52,7 @@ async function bootstrap(): Promise<void> {
   const fastify = app.getHttpAdapter().getInstance();
 
   registerNotionImportBodyParser(fastify);
+  registerAudioBodyLimit(fastify, () => app.get(SettingsService).getOwnerAudioMaxMb());
 
   fastify.addHook('onSend', (request, reply, payload, done) => {
     void reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');

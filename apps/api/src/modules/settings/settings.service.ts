@@ -1,7 +1,12 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { settings, type Database } from '@nexter/db';
-import type { Settings, UpdateSettingsRequest } from '@nexter/contracts';
+import {
+  AUDIO_MAX_MB_DEFAULT,
+  clampAudioMaxMb,
+  type Settings,
+  type UpdateSettingsRequest,
+} from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 
@@ -12,6 +17,8 @@ interface SettingsMeta {
 
 @Injectable()
 export class SettingsService {
+  private ownerAudioMaxMb: { value: number; expiresAt: number } | null = null;
+
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly audit: AuditService,
@@ -56,6 +63,23 @@ export class SettingsService {
     });
   }
 
+  /**
+   * Single-owner app: the bot endpoint has no user session, so it reads the
+   * owner's row directly. Missing rows fall back to the contract default. The
+   * short cache avoids a query on every request while `update` invalidates it.
+   */
+  async getOwnerAudioMaxMb(): Promise<number> {
+    const now = Date.now();
+    if (this.ownerAudioMaxMb && this.ownerAudioMaxMb.expiresAt > now) {
+      return this.ownerAudioMaxMb.value;
+    }
+
+    const [row] = await this.db.select({ audioMaxMb: settings.audioMaxMb }).from(settings).limit(1);
+    const value = clampAudioMaxMb(row?.audioMaxMb ?? AUDIO_MAX_MB_DEFAULT);
+    this.ownerAudioMaxMb = { value, expiresAt: now + 30_000 };
+    return value;
+  }
+
   async update(
     userId: string,
     input: UpdateSettingsRequest,
@@ -83,6 +107,8 @@ export class SettingsService {
               ? input.includeGasInCostBasis
               : before.includeGasInCostBasis,
           timezone: input.timezone !== undefined ? input.timezone : before.timezone,
+          audioMaxMb:
+            input.audioMaxMb !== undefined ? clampAudioMaxMb(input.audioMaxMb) : before.audioMaxMb,
           updatedAt: new Date(),
         })
         .where(eq(settings.userId, userId));
@@ -102,6 +128,7 @@ export class SettingsService {
       );
     });
 
+    this.ownerAudioMaxMb = null;
     return this.get(userId);
   }
 
@@ -112,6 +139,7 @@ export class SettingsService {
       taxMethod: row.taxMethod,
       includeGasInCostBasis: row.includeGasInCostBasis,
       timezone: row.timezone,
+      audioMaxMb: clampAudioMaxMb(row.audioMaxMb),
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };

@@ -148,7 +148,7 @@ export function SettingsPage() {
         <SettingsNavCard
           to="/settings/ai"
           title="ИИ"
-          description="DeepSeek, ключ API, модель и режим мышления."
+          description="DeepSeek, ключ API, модель, режим и лимит аудио."
           icon="ai"
           tone="violet"
         />
