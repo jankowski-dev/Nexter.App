@@ -40,7 +40,7 @@ Base64 inflates the binary by roughly 4/3, and the JSON body also carries the da
 
 ### External bot
 
-`jankowski-dev/Nexter.Bot` has its own download/upload guard (2.4 MB at the time of ADR 0061). This repository cannot change that code. To use the new limit the owner must raise the bot's file-size check and redeploy the bot; otherwise the bot still rejects larger files before calling the API. No new Railway environment variable is required for the API: the limit lives in the database and is read through `/settings`.
+`jankowski-dev/Nexter.Bot` had its own 2.4 MB download guard. It is updated in commit `79cb874`: `MAX_AUDIO_MB` defaults to `8`, is clamped to `1`–`20`, and is deployed as `20` in production. The bot therefore accepts up to the API hard ceiling and the API setting is the effective limit. The bot's README documents that `MAX_AUDIO_MB` must not be lower than the API setting if the API is raised above 20. No new Railway environment variable is required for the API: the limit lives in the database and is read through `/settings`.
 
 ### Migration and rollback
 
@@ -57,7 +57,7 @@ Existing rows receive `8`; table-level grants for `nexter_app` already cover the
 - Oversized requests fail with a stable code and details instead of a generic parser error or an opaque attachment failure.
 - The API can receive a ~28 MB request only on the bot audio route; all other routes stay at 4 MB.
 - An upload is stored as a base64 data URL in `note_audio`, so a 20 MB upload consumes roughly 27 MB in Postgres plus note/attachment overhead. The 20 MB hard ceiling bounds this growth.
-- The Viber bot must be updated separately if its own limit is lower than the API setting.
+- The Viber bot accepts up to the 20 MB hard ceiling; the API setting is the effective limit.
 
 ## Verification
 
