@@ -1,5 +1,5 @@
 {
-  "id": "b7c47931-6564-4314-9ee2-031038e5b159",
+  "id": "c6ab7058-8cb1-4f84-ae91-5eb6a0ac2bf8",
   "prevId": "ca2ffa62-5f46-494a-9e2f-5bc3a5c7f9ea",
   "version": "7",
   "dialect": "postgresql",
@@ -5228,7 +5228,7 @@
         },
         "take_profit_pct": {
           "name": "take_profit_pct",
-          "type": "numeric(5, 2)",
+          "type": "numeric(6, 2)",
           "primaryKey": false,
           "notNull": false
         },
@@ -6912,7 +6912,7 @@
         },
         "take_profit_pct": {
           "name": "take_profit_pct",
-          "type": "numeric(5, 2)",
+          "type": "numeric(6, 2)",
           "primaryKey": false,
           "notNull": false
         },
@@ -7937,7 +7937,7 @@
         },
         "take_profit_pct": {
           "name": "take_profit_pct",
-          "type": "numeric(5, 2)",
+          "type": "numeric(6, 2)",
           "primaryKey": false,
           "notNull": false
         },
