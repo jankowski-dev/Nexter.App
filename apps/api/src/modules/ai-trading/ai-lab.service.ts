@@ -303,17 +303,29 @@ export class AiLabService {
               parsed.candidates,
               parsed.confidence,
               warnings,
-            )
+            );
+            if (validated.length === 0) {
+              throw new Error('AI не предложил допустимых кандидатов');
+            }
+            const aboveThreshold = validated
               .filter((candidate) => candidate.confidence >= analyst.minConfidence)
               .slice(0, analyst.maxCandidates);
-            if (validated.length === 0) {
-              throw new Error('AI не предложил кандидатов выше порога уверенности');
+            if (aboveThreshold.length === 0) {
+              const best = validated
+                .slice()
+                .sort((left, right) => right.confidence - left.confidence)
+                .slice(0, 1);
+              warnings.push(
+                `ИИ предложил кандидатов ниже порога уверенности ${analyst.minConfidence}; показан лучший вариант.`,
+              );
+              prepared = best;
+            } else {
+              prepared = aboveThreshold;
             }
             source = 'ai';
             regime = parsed.regime;
             confidence = parsed.confidence;
             summary = parsed.summary;
-            prepared = validated;
             warnings.push(...(parsed.warnings ?? []));
           } catch (error) {
             fallback(`ИИ недоступен: ${safeMessage(error)}.`);
