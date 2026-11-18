@@ -10,10 +10,12 @@ import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import {
   createAiToken,
+  fetchAiCoverage,
   fetchAiDashboard,
   fetchAiServices,
   fetchAiTokens,
   fetchWatchlist,
+  refreshAiData,
   removeAiToken,
   updateAiProfile,
   updateAiService,
@@ -22,6 +24,9 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatUsd } from '@/lib/format';
 import type {
+  AiCoverage,
+  AiCoverageStatus,
+  AiCoverageTimeframe,
   AiProfile,
   AiProfileToken,
   AiProfileUpdateRequest,
@@ -33,7 +38,21 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-type Section = 'panel' | 'universe' | 'services' | 'settings';
+type Section = 'panel' | 'universe' | 'data' | 'services' | 'settings';
+
+const coverageLabels: Record<AiCoverageStatus, string> = {
+  ok: 'OK',
+  partial: 'Частично',
+  stale: 'Устарело',
+  missing: 'Нет данных',
+};
+
+const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> = {
+  ok: 'success',
+  partial: 'warning',
+  stale: 'warning',
+  missing: 'danger',
+};
 
 const serviceLabels: Record<AiServiceKey, string> = {
   data: 'Data Service',
@@ -54,7 +73,7 @@ const serviceDescriptions: Record<AiServiceKey, string> = {
 const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m', '5m'];
 
 function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
-  for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services']) {
+  for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services', 'ai-coverage']) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
 }
@@ -69,6 +88,12 @@ export function AiTradingPage() {
   });
   const tokens = useQuery({ queryKey: ['ai-tokens'], queryFn: fetchAiTokens });
   const services = useQuery({ queryKey: ['ai-services'], queryFn: fetchAiServices });
+  const coverage = useQuery({
+    queryKey: ['ai-coverage'],
+    queryFn: fetchAiCoverage,
+    enabled: section === 'data',
+    refetchInterval: 60_000,
+  });
   const watchlist = useQuery({
     queryKey: ['ai-watchlist'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
@@ -153,6 +178,7 @@ export function AiTradingPage() {
         options={[
           { value: 'panel', label: 'Панель' },
           { value: 'universe', label: 'Вселенная' },
+          { value: 'data', label: 'Данные' },
           { value: 'services', label: 'Сервисы' },
           { value: 'settings', label: 'Настройки' },
         ]}
@@ -173,6 +199,16 @@ export function AiTradingPage() {
         <UniverseSection
           tokens={tokenRows}
           watchlistEntries={watchlist.data?.data ?? []}
+          onChanged={() => invalidateAi(queryClient)}
+        />
+      ) : null}
+
+      {section === 'data' ? (
+        <DataSection
+          coverage={coverage.data}
+          loading={coverage.isPending}
+          error={coverage.isError}
+          onRetry={() => void coverage.refetch()}
           onChanged={() => invalidateAi(queryClient)}
         />
       ) : null}
@@ -333,6 +369,139 @@ function UniverseSection({
         )}
       </div>
     </Card>
+  );
+}
+
+function DataSection({
+  coverage,
+  loading,
+  error,
+  onRetry,
+  onChanged,
+}: {
+  coverage: AiCoverage | undefined;
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+  onChanged: () => void;
+}) {
+  const [days, setDays] = useState('90');
+  const [message, setMessage] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const refresh = useMutation({
+    mutationFn: () => refreshAiData({ days: Number(days) || 90 }),
+    onSuccess: (result) => {
+      setRefreshError(null);
+      setMessage(
+        `Пар: ${result.pairs}, свечей: ${result.upserted}${
+          result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''
+        }`,
+      );
+      onChanged();
+    },
+    onError: (err) => setRefreshError(toRussianError(err, 'Не удалось обновить данные')),
+  });
+
+  if (loading) return <LoadingRows rows={4} />;
+  if (error || !coverage) {
+    return <ErrorState message="Не удалось загрузить покрытие данных" onRetry={onRetry} />;
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <CardTitle>Покрытие данных</CardTitle>
+          <CardDescription>
+            OHLCV из GeckoTerminal и CoinGecko. Свечи хранятся в market_candles; синтетические
+            дневные и часовые точки помечаются отдельно.
+          </CardDescription>
+        </div>
+        <div className="flex items-end gap-2">
+          <label className="text-xs text-zinc-600">
+            Период
+            <Select
+              className="mt-1 h-9 w-28"
+              value={days}
+              onChange={(event) => setDays(event.target.value)}
+              aria-label="Период истории"
+            >
+              <option value="30">30 дней</option>
+              <option value="90">90 дней</option>
+              <option value="180">180 дней</option>
+              <option value="365">365 дней</option>
+            </Select>
+          </label>
+          <Button disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+            {refresh.isPending ? 'Обновляю…' : 'Обновить данные'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-2 text-xs text-zinc-500">
+        {message ? <span className="text-emerald-700">{message}</span> : null}
+        {refreshError ? <span className="text-red-700">{refreshError}</span> : null}
+      </div>
+
+      {coverage.tokens.length === 0 ? (
+        <p className="mt-4 text-sm text-zinc-500">
+          Во вселенной пока нет включённых токенов. Добавьте токены на вкладке «Вселенная».
+        </p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {coverage.tokens.map((token) => (
+            <div key={token.assetId} className="rounded-xl border border-zinc-200 px-3 py-2">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <TokenIcon
+                  logoUrl={token.logoUrl}
+                  symbol={token.symbol}
+                  className="h-8 w-8 text-[9px]"
+                />
+                <div className="min-w-[140px] flex-1">
+                  <div className="text-sm font-semibold text-zinc-900">{token.symbol}</div>
+                  <div className="text-[11px] text-zinc-500">{token.name}</div>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {token.timeframes.map((item) => (
+                  <CoverageChip key={item.timeframe} item={item} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-4 text-[11px] text-zinc-400">
+        Обновлено: {formatDateTime(coverage.generatedAt)}. Данные реальные, деньги виртуальные.
+      </p>
+    </Card>
+  );
+}
+
+function CoverageChip({ item }: { item: AiCoverageTimeframe }) {
+  const tone = coverageTones[item.status];
+  const border =
+    item.status === 'ok'
+      ? 'border-emerald-200 bg-emerald-50/50'
+      : item.status === 'missing'
+        ? 'border-red-200 bg-red-50/40'
+        : 'border-amber-200 bg-amber-50/40';
+
+  return (
+    <div className={`min-w-[170px] rounded-lg border px-2.5 py-1.5 ${border}`}>
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-semibold text-zinc-800">{item.timeframe}</span>
+        <Badge tone={tone}>{coverageLabels[item.status]}</Badge>
+      </div>
+      <div className="mt-1 text-[11px] text-zinc-500">
+        {item.candles} / {item.expected} свечей
+      </div>
+      <div className="text-[11px] text-zinc-500">
+        {item.lastOpenTime ? formatDateTime(item.lastOpenTime) : 'Нет данных'}
+      </div>
+    </div>
   );
 }
 

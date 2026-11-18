@@ -134,6 +134,50 @@ export const aiServiceConfigUpdateRequestSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, 'At least one field must be provided');
 
+export const aiCoverageStatusSchema = z.enum(['ok', 'partial', 'stale', 'missing']);
+
+export const aiCoverageTimeframeSchema = z.object({
+  timeframe: aiTimeframeSchema,
+  candles: z.number().int(),
+  expected: z.number().int(),
+  firstOpenTime: z.iso.datetime().nullable(),
+  lastOpenTime: z.iso.datetime().nullable(),
+  stale: z.boolean(),
+  status: aiCoverageStatusSchema,
+});
+
+export const aiCoverageTokenSchema = z.object({
+  assetId: z.uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  logoUrl: z.string().nullable(),
+  timeframes: z.array(aiCoverageTimeframeSchema),
+});
+
+export const aiCoverageSchema = z.object({
+  generatedAt: z.iso.datetime(),
+  tokens: z.array(aiCoverageTokenSchema),
+});
+
+export const aiDataRefreshRequestSchema = z.object({
+  assetId: z.uuid().optional(),
+  timeframes: z.array(aiTimeframeSchema).min(1).max(5).optional(),
+  days: z.number().int().min(7).max(365).default(90),
+});
+
+export const aiDataRefreshResponseSchema = z.object({
+  pairs: z.number().int(),
+  upserted: z.number().int(),
+  failed: z.array(
+    z.object({
+      assetId: z.uuid(),
+      symbol: z.string(),
+      timeframe: aiTimeframeSchema,
+      reason: z.string(),
+    }),
+  ),
+});
+
 export const aiTradingDashboardSchema = z.object({
   profile: aiProfileSchema,
   tokensCount: z.number().int(),
@@ -157,4 +201,10 @@ export type AiProfileTokenUpdateRequest = z.infer<typeof aiProfileTokenUpdateReq
 export type AiServiceConfig = z.infer<typeof aiServiceConfigSchema>;
 export type AiServiceConfigsResponse = z.infer<typeof aiServiceConfigsResponseSchema>;
 export type AiServiceConfigUpdateRequest = z.infer<typeof aiServiceConfigUpdateRequestSchema>;
+export type AiCoverageStatus = z.infer<typeof aiCoverageStatusSchema>;
+export type AiCoverageTimeframe = z.infer<typeof aiCoverageTimeframeSchema>;
+export type AiCoverageToken = z.infer<typeof aiCoverageTokenSchema>;
+export type AiCoverage = z.infer<typeof aiCoverageSchema>;
+export type AiDataRefreshRequest = z.infer<typeof aiDataRefreshRequestSchema>;
+export type AiDataRefreshResponse = z.infer<typeof aiDataRefreshResponseSchema>;
 export type AiTradingDashboard = z.infer<typeof aiTradingDashboardSchema>;

@@ -13,10 +13,14 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import {
+  aiDataRefreshRequestSchema,
   aiProfileTokenCreateRequestSchema,
   aiProfileTokenUpdateRequestSchema,
   aiProfileUpdateRequestSchema,
   aiServiceConfigUpdateRequestSchema,
+  type AiCoverage,
+  type AiDataRefreshRequest,
+  type AiDataRefreshResponse,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -29,12 +33,16 @@ import {
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { AiDataService } from './ai-data.service';
 import { AiTradingService } from './ai-trading.service';
 
 @ApiTags('ai-trading')
 @Controller('ai-trading')
 export class AiTradingController {
-  constructor(private readonly aiTrading: AiTradingService) {}
+  constructor(
+    private readonly aiTrading: AiTradingService,
+    private readonly aiData: AiDataService,
+  ) {}
 
   @Get('profile')
   getProfile(@CurrentAuth() auth: AuthContext): Promise<AiProfile> {
@@ -127,5 +135,22 @@ export class AiTradingController {
   @Get('dashboard')
   dashboard(@CurrentAuth() auth: AuthContext): Promise<AiTradingDashboard> {
     return this.aiTrading.dashboard(auth.user.id);
+  }
+
+  @Get('coverage')
+  coverage(@CurrentAuth() auth: AuthContext): Promise<AiCoverage> {
+    return this.aiData.coverage(auth.user.id);
+  }
+
+  @Post('data/refresh')
+  refreshData(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(aiDataRefreshRequestSchema)) body: AiDataRefreshRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<AiDataRefreshResponse> {
+    return this.aiData.refresh(auth.user.id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
   }
 }

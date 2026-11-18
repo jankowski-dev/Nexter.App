@@ -116,6 +116,30 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(patched.body.timeframes).toEqual(['1d']);
 
     await agent
+      .patch(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ enabled: true })
+      .expect(200);
+
+    const coverage = await agent.get('/api/v1/ai-trading/coverage').expect(200);
+    expect(coverage.body.tokens).toHaveLength(1);
+    expect(coverage.body.tokens[0].timeframes).toHaveLength(1);
+    expect(coverage.body.tokens[0].timeframes[0]).toMatchObject({
+      timeframe: '1d',
+      candles: 0,
+      status: 'missing',
+    });
+
+    const refreshed = await agent
+      .post('/api/v1/ai-trading/data/refresh')
+      .set('x-csrf-token', owner.csrf)
+      .send({ days: 30 })
+      .expect(201);
+    expect(refreshed.body.pairs).toBe(1);
+    expect(refreshed.body.upserted).toBe(0);
+    expect(refreshed.body.failed).toHaveLength(1);
+
+    await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
       .set('x-csrf-token', owner.csrf)
       .expect(200);
