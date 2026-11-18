@@ -37,7 +37,7 @@ export function LoginPage() {
     try {
       const result = await apiPost('/api/v1/auth/login', { email, password }, loginResponseSchema);
       visual.setState('ok');
-      visual.setLit(12);
+      visual.setLit(8);
       await new Promise((resolve) => window.setTimeout(resolve, 280));
 
       if (result.requires2fa) {

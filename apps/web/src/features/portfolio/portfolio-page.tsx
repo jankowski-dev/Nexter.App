@@ -1,4 +1,5 @@
 import { Card, CardTitle } from '@/components/ui/card';
+import { NavIcon } from '@/components/nav-icon';
 import { StatCard } from '@/components/ui/stat-card';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -161,7 +162,7 @@ export function PortfolioPage() {
         aria-label="Раздел крипты"
         className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
       >
-        {cryptoTabs.map(({ value, label }) => (
+        {cryptoTabs.map(({ value, label, icon }) => (
           <button
             key={value}
             type="button"
@@ -174,7 +175,10 @@ export function PortfolioPage() {
             aria-selected={tab === value}
             role="tab"
           >
-            {label}
+            <span className="inline-flex items-center gap-1.5">
+              <NavIcon name={icon} className="h-4 w-4" />
+              {label}
+            </span>
           </button>
         ))}
       </div>

@@ -849,66 +849,78 @@ export function FinancePage() {
       ) : null}
 
       {!isLoading && !hasError && tab === 'accounts' ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={() => setCreditDialogOpen(true)}>
               Получить кредит
             </Button>
             <Button onClick={() => setAccountDialog({})}>+ Счёт</Button>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2">
             {accountRows.map((account) => (
-              <Card key={account.id} className={account.archivedAt ? 'opacity-60' : ''}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle>{account.name}</CardTitle>
-                    <CardDescription>
-                      {accountKindLabels[account.kind]} · {account.currency}
-                    </CardDescription>
+              <div
+                key={account.id}
+                className={`rounded-xl border border-zinc-200 bg-white px-3 py-2 transition-colors hover:border-emerald-300 ${
+                  account.archivedAt ? 'opacity-60' : ''
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-[180px] flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-zinc-900">{account.name}</span>
+                      <Badge tone={account.kind === 'credit' ? 'warning' : 'success'}>
+                        {account.kind === 'credit' ? 'обязательство' : 'актив'}
+                      </Badge>
+                      {account.archivedAt ? <Badge tone="neutral">архив</Badge> : null}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-zinc-500">
+                      {accountKindLabels[account.kind]} · {account.currency} · курс{' '}
+                      {Number(account.fxRate).toLocaleString('ru-RU', {
+                        maximumFractionDigits: 8,
+                      })}
+                    </div>
                   </div>
-                  <Badge tone={account.kind === 'credit' ? 'warning' : 'success'}>
-                    {account.kind === 'credit' ? 'обязательство' : 'актив'}
-                  </Badge>
+                  <div className="ml-auto text-right">
+                    <div className="font-mono text-lg font-semibold tabular-nums text-zinc-900">
+                      {money(account.balance, account.currency)}
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      {money(account.balanceBase, 'BYN')}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="secondary"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => setAccountDialog({ account })}
+                    >
+                      Изменить
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="h-8 px-3 text-xs"
+                      onClick={async () => {
+                        if (account.archivedAt) {
+                          archiveAccount.mutate(account);
+                          return;
+                        }
+                        if (
+                          await confirm({
+                            title: 'Архивировать счёт?',
+                            description: `Счёт «${account.name}» перейдёт в архив. История сохранится.`,
+                            confirmLabel: 'В архив',
+                            variant: 'danger',
+                          })
+                        ) {
+                          archiveAccount.mutate(account);
+                        }
+                      }}
+                    >
+                      {account.archivedAt ? 'Вернуть' : 'В архив'}
+                    </Button>
+                  </div>
                 </div>
-                <div className="mt-4 font-mono text-2xl font-semibold text-zinc-900">
-                  {money(account.balance, account.currency)}
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">
-                  {money(account.balanceBase, 'BYN')} · курс{' '}
-                  {Number(account.fxRate).toLocaleString('ru-RU', { maximumFractionDigits: 8 })}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => setAccountDialog({ account })}
-                  >
-                    Изменить
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="h-8 px-3 text-xs"
-                    onClick={async () => {
-                      if (account.archivedAt) {
-                        archiveAccount.mutate(account);
-                        return;
-                      }
-                      if (
-                        await confirm({
-                          title: 'Архивировать счёт?',
-                          description: `Счёт «${account.name}» перейдёт в архив. История сохранится.`,
-                          confirmLabel: 'В архив',
-                          variant: 'danger',
-                        })
-                      ) {
-                        archiveAccount.mutate(account);
-                      }
-                    }}
-                  >
-                    {account.archivedAt ? 'Вернуть' : 'В архив'}
-                  </Button>
-                </div>
-              </Card>
+              </div>
             ))}
           </div>
         </div>

@@ -45,27 +45,6 @@ const rays = [
     height: 113.119,
     transform: 'rotate(37.6521 214.032 6.78673)',
   },
-  {
-    transform: 'matrix(-1.00105 0 0 1.00105 75.859 96.8812)',
-  },
-  {
-    x: 169.654,
-    y: 96.8812,
-    width: 16.0168,
-    height: 113.119,
-  },
-  {
-    soft: true,
-    transform: 'matrix(-0.792567 0.611508 0.611508 0.792567 9.4572 15.7962)',
-  },
-  {
-    soft: true,
-    x: 236.055,
-    y: 15.7962,
-    width: 16.0168,
-    height: 113.119,
-    transform: 'rotate(37.6521 236.055 15.7962)',
-  },
 ] as const;
 
 export function NexterLogo({

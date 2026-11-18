@@ -29,7 +29,7 @@ export function TwoFactorPage() {
     try {
       await apiPost('/api/v1/auth/2fa/verify', { code }, twoFactorVerifyResponseSchema);
       visual.setState('ok');
-      visual.setLit(12);
+      visual.setLit(8);
       await new Promise((resolve) => window.setTimeout(resolve, 280));
       await navigate({ to: '/dashboard' });
     } catch (requestError) {
@@ -40,7 +40,7 @@ export function TwoFactorPage() {
       window.setTimeout(() => {
         setShake(false);
         visual.setState('idle');
-        visual.setLit(Math.min(12, code.length * 2));
+        visual.setLit(Math.min(8, Math.ceil((code.length / 6) * 8)));
       }, 650);
     } finally {
       setLoading(false);
@@ -68,7 +68,7 @@ export function TwoFactorPage() {
             onChange={(event) => {
               const next = event.target.value.replace(/\D/g, '');
               setCode(next);
-              visual.setLit(Math.min(12, next.length * 2));
+              visual.setLit(Math.min(8, Math.ceil((next.length / 6) * 8)));
               if (visual.state === 'error') visual.setState('idle');
             }}
             required
