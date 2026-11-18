@@ -863,11 +863,14 @@ export function TokenTradeDrawer({
                   onChange={(event) => setSlippageBps(Number(event.target.value))}
                   disabled={executing}
                 >
-                  {[10, 50, 100, 200].map((value) => (
-                    <option key={value} value={value}>
-                      {(value / 100).toFixed(2)}%
-                    </option>
-                  ))}
+                  {Array.from(new Set([config.data?.defaultSlippageBps ?? 50, 10, 50, 100, 200]))
+                    .filter((value) => value <= (config.data?.maxSlippageBps ?? 200))
+                    .sort((left, right) => left - right)
+                    .map((value) => (
+                      <option key={value} value={value}>
+                        {(value / 100).toFixed(2)}%
+                      </option>
+                    ))}
                 </Select>
               </div>
               <div className="rounded-lg border border-zinc-200 p-2">

@@ -2,7 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarketDataService } from './market-data.service';
 
 function createService(): MarketDataService {
-  return new MarketDataService({} as never, {} as never, {} as never, {} as never, {} as never);
+  return new MarketDataService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { getRuntime: async () => ({ chartHistoryRefreshHours: 24 }) } as never,
+  );
 }
 
 function imageResponse(body = 'icon'): Response {
@@ -123,6 +130,7 @@ describe('MarketDataService.getPriceHistory', () => {
       coingecko as never,
       gecko as never,
       {} as never,
+      { getRuntime: async () => ({ chartHistoryRefreshHours: 24 }) } as never,
     );
 
     const history = await service.getPriceHistory('bsc', '0xabc', 'token', 30);
@@ -143,6 +151,7 @@ describe('MarketDataService.getPriceHistory', () => {
       { getDailyCandles: vi.fn().mockResolvedValue([]) } as never,
       { getDailyCandles: vi.fn().mockResolvedValue([]) } as never,
       {} as never,
+      { getRuntime: async () => ({ chartHistoryRefreshHours: 24 }) } as never,
     );
 
     await expect(service.getPriceHistory('bsc', null, null, 90)).resolves.toEqual({

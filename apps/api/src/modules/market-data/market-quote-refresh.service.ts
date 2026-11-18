@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { MarketQuoteService } from './market-quote.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class MarketQuoteRefreshService implements OnApplicationBootstrap, OnApplicationShutdown {
@@ -14,7 +15,12 @@ export class MarketQuoteRefreshService implements OnApplicationBootstrap, OnAppl
   private initialTimer: NodeJS.Timeout | null = null;
   private running = false;
 
-  constructor(private readonly quotes: MarketQuoteService) {}
+  private lastRunAt = 0;
+
+  constructor(
+    private readonly quotes: MarketQuoteService,
+    private readonly settings: SettingsService,
+  ) {}
 
   onApplicationBootstrap(): void {
     if (!env.MARKET_QUOTES_ENABLED || env.NODE_ENV === 'test') return;
@@ -26,7 +32,7 @@ export class MarketQuoteRefreshService implements OnApplicationBootstrap, OnAppl
 
     this.timer = setInterval(() => {
       void this.tick();
-    }, env.MARKET_QUOTE_INTERVAL_SECONDS * 1000);
+    }, 10_000);
     this.timer.unref();
   }
 
@@ -39,7 +45,13 @@ export class MarketQuoteRefreshService implements OnApplicationBootstrap, OnAppl
 
   private async tick(): Promise<void> {
     if (this.running) return;
+    const runtime = await this.settings.getRuntime().catch(() => null);
+    const intervalMs =
+      (runtime?.marketQuoteIntervalSeconds ?? env.MARKET_QUOTE_INTERVAL_SECONDS) * 1000;
+    if (Date.now() - this.lastRunAt < intervalMs) return;
+
     this.running = true;
+    this.lastRunAt = Date.now();
 
     try {
       await this.quotes.refreshAll();

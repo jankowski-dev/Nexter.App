@@ -2,9 +2,10 @@ import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { settings, type Database } from '@nexter/db';
 import {
-  AUDIO_MAX_MB_DEFAULT,
   clampAudioMaxMb,
+  settingsInputDefaults,
   type Settings,
+  type SettingsInput,
   type UpdateSettingsRequest,
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
@@ -15,9 +16,28 @@ interface SettingsMeta {
   userAgent?: string;
 }
 
+type UsdKey =
+  | 'marketMinLiquidityUsd'
+  | 'swapMaxGasUsd'
+  | 'botDefaultBudgetUsd'
+  | 'backtestDefaultCapitalUsd'
+  | 'automationMaxOrderUsd'
+  | 'automationMaxDailyUsd'
+  | 'automationDefaultBuyAmountUsd';
+
+export interface RuntimeSettings extends Omit<SettingsInput, UsdKey> {
+  marketMinLiquidityUsd: number;
+  swapMaxGasUsd: number;
+  botDefaultBudgetUsd: number;
+  backtestDefaultCapitalUsd: number;
+  automationMaxOrderUsd: number;
+  automationMaxDailyUsd: number;
+  automationDefaultBuyAmountUsd: number;
+}
+
 @Injectable()
 export class SettingsService {
-  private ownerAudioMaxMb: { value: number; expiresAt: number } | null = null;
+  private runtimeCache: { value: RuntimeSettings; expiresAt: number } | null = null;
 
   constructor(
     @Inject(DB) private readonly db: Database,
@@ -64,20 +84,24 @@ export class SettingsService {
   }
 
   /**
-   * Single-owner app: the bot endpoint has no user session, so it reads the
-   * owner's row directly. Missing rows fall back to the contract default. The
-   * short cache avoids a query on every request while `update` invalidates it.
+   * Single-owner app: background jobs and bot endpoints have no user session.
+   * The 30-second cache avoids a settings query on every market/bot tick.
    */
-  async getOwnerAudioMaxMb(): Promise<number> {
+  async getRuntime(): Promise<RuntimeSettings> {
     const now = Date.now();
-    if (this.ownerAudioMaxMb && this.ownerAudioMaxMb.expiresAt > now) {
-      return this.ownerAudioMaxMb.value;
+    if (this.runtimeCache && this.runtimeCache.expiresAt > now) {
+      return this.runtimeCache.value;
     }
 
-    const [row] = await this.db.select({ audioMaxMb: settings.audioMaxMb }).from(settings).limit(1);
-    const value = clampAudioMaxMb(row?.audioMaxMb ?? AUDIO_MAX_MB_DEFAULT);
-    this.ownerAudioMaxMb = { value, expiresAt: now + 30_000 };
+    const [row] = await this.db.select().from(settings).limit(1);
+    const source = (row ?? {}) as Partial<SettingsInput>;
+    const value = this.toRuntime(source);
+    this.runtimeCache = { value, expiresAt: now + 30_000 };
     return value;
+  }
+
+  async getOwnerAudioMaxMb(): Promise<number> {
+    return (await this.getRuntime()).audioMaxMb;
   }
 
   async update(
@@ -97,20 +121,24 @@ export class SettingsService {
     }
 
     const before = await this.get(userId);
+    const nextDefaultSlippage = input.swapDefaultSlippageBps ?? before.swapDefaultSlippageBps;
+    const nextMaxSlippage = input.swapMaxSlippageBps ?? before.swapMaxSlippageBps;
+
+    if (nextDefaultSlippage > nextMaxSlippage) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'Default slippage cannot exceed maximum slippage',
+      });
+    }
+
+    const patch = Object.fromEntries(
+      Object.entries(input).filter(([, value]) => value !== undefined),
+    ) as Partial<typeof settings.$inferInsert>;
 
     await this.db.transaction(async (tx) => {
       await tx
         .update(settings)
-        .set({
-          includeGasInCostBasis:
-            input.includeGasInCostBasis !== undefined
-              ? input.includeGasInCostBasis
-              : before.includeGasInCostBasis,
-          timezone: input.timezone !== undefined ? input.timezone : before.timezone,
-          audioMaxMb:
-            input.audioMaxMb !== undefined ? clampAudioMaxMb(input.audioMaxMb) : before.audioMaxMb,
-          updatedAt: new Date(),
-        })
+        .set({ ...patch, updatedAt: new Date() })
         .where(eq(settings.userId, userId));
 
       await this.audit.log(
@@ -120,7 +148,7 @@ export class SettingsService {
           entityType: 'settings',
           entityId: userId,
           before,
-          after: input,
+          after: { ...input, changedKeys: Object.keys(input) },
           ip: meta.ip,
           userAgent: meta.userAgent,
         },
@@ -128,7 +156,7 @@ export class SettingsService {
       );
     });
 
-    this.ownerAudioMaxMb = null;
+    this.runtimeCache = null;
     return this.get(userId);
   }
 
@@ -140,8 +168,115 @@ export class SettingsService {
       includeGasInCostBasis: row.includeGasInCostBasis,
       timezone: row.timezone,
       audioMaxMb: clampAudioMaxMb(row.audioMaxMb),
+      marketQuoteIntervalSeconds: row.marketQuoteIntervalSeconds,
+      marketCoinGeckoIntervalSeconds: row.marketCoinGeckoIntervalSeconds,
+      marketMinLiquidityUsd: row.marketMinLiquidityUsd,
+      chartDefaultDays: row.chartDefaultDays as Settings['chartDefaultDays'],
+      chartHistoryRefreshHours: row.chartHistoryRefreshHours,
+      swapDefaultSlippageBps: row.swapDefaultSlippageBps,
+      swapMaxSlippageBps: row.swapMaxSlippageBps,
+      swapMaxPriceImpactBps: row.swapMaxPriceImpactBps,
+      swapMaxGasUsd: row.swapMaxGasUsd,
+      swapQuoteTtlSeconds: row.swapQuoteTtlSeconds,
+      botTickIntervalSeconds: row.botTickIntervalSeconds,
+      botQuoteMaxAgeSeconds: row.botQuoteMaxAgeSeconds,
+      botDefaultBudgetUsd: row.botDefaultBudgetUsd,
+      botDefaultMaxPositions: row.botDefaultMaxPositions,
+      botDefaultPositionSizePct: row.botDefaultPositionSizePct,
+      botDefaultFeeBps: row.botDefaultFeeBps,
+      botDefaultSlippageBps: row.botDefaultSlippageBps,
+      botDefaultDailyLossPct: row.botDefaultDailyLossPct,
+      botDefaultCooldownMinutes: row.botDefaultCooldownMinutes,
+      backtestDefaultCapitalUsd: row.backtestDefaultCapitalUsd,
+      backtestDefaultFeeBps: row.backtestDefaultFeeBps,
+      backtestDefaultSlippageBps: row.backtestDefaultSlippageBps,
+      backtestDefaultDays: row.backtestDefaultDays,
+      backtestDefaultStopLoss: row.backtestDefaultStopLoss,
+      backtestDefaultTakeProfit: row.backtestDefaultTakeProfit,
+      backtestDefaultReinvest: row.backtestDefaultReinvest,
+      taskReminderLeadMinutes: row.taskReminderLeadMinutes,
+      taskDefaultDueTime: row.taskDefaultDueTime,
+      autosaveIntervalSeconds: row.autosaveIntervalSeconds,
+      defaultReportPeriod: row.defaultReportPeriod as Settings['defaultReportPeriod'],
+      dashboardPollSeconds: row.dashboardPollSeconds,
+      portfolioPollSeconds: row.portfolioPollSeconds,
+      watchlistPollSeconds: row.watchlistPollSeconds,
+      reportsPollSeconds: row.reportsPollSeconds,
+      notificationsPollSeconds: row.notificationsPollSeconds,
+      notifyBotStopped: row.notifyBotStopped,
+      notifyPositionsClosed: row.notifyPositionsClosed,
+      automationEnabled: row.automationEnabled,
+      automationMode: row.automationMode as Settings['automationMode'],
+      automationMaxOrderUsd: row.automationMaxOrderUsd,
+      automationMaxDailyUsd: row.automationMaxDailyUsd,
+      automationMaxActionsPerDay: row.automationMaxActionsPerDay,
+      automationCooldownMinutes: row.automationCooldownMinutes,
+      automationDefaultStopLossPct: row.automationDefaultStopLossPct,
+      automationDefaultTakeProfitPct: row.automationDefaultTakeProfitPct,
+      automationDefaultTrailingPct: row.automationDefaultTrailingPct,
+      automationDefaultBuyDropPct: row.automationDefaultBuyDropPct,
+      automationDefaultBuyAmountUsd: row.automationDefaultBuyAmountUsd,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
+    };
+  }
+
+  private toRuntime(source: Partial<SettingsInput>): RuntimeSettings {
+    const get = <K extends keyof SettingsInput>(key: K): SettingsInput[K] =>
+      source[key] ?? settingsInputDefaults[key];
+
+    return {
+      includeGasInCostBasis: get('includeGasInCostBasis'),
+      timezone: get('timezone'),
+      audioMaxMb: clampAudioMaxMb(get('audioMaxMb')),
+      marketQuoteIntervalSeconds: get('marketQuoteIntervalSeconds'),
+      marketCoinGeckoIntervalSeconds: get('marketCoinGeckoIntervalSeconds'),
+      marketMinLiquidityUsd: Number(get('marketMinLiquidityUsd')),
+      chartDefaultDays: get('chartDefaultDays'),
+      chartHistoryRefreshHours: get('chartHistoryRefreshHours'),
+      swapDefaultSlippageBps: get('swapDefaultSlippageBps'),
+      swapMaxSlippageBps: get('swapMaxSlippageBps'),
+      swapMaxPriceImpactBps: get('swapMaxPriceImpactBps'),
+      swapMaxGasUsd: Number(get('swapMaxGasUsd')),
+      swapQuoteTtlSeconds: get('swapQuoteTtlSeconds'),
+      botTickIntervalSeconds: get('botTickIntervalSeconds'),
+      botQuoteMaxAgeSeconds: get('botQuoteMaxAgeSeconds'),
+      botDefaultBudgetUsd: Number(get('botDefaultBudgetUsd')),
+      botDefaultMaxPositions: get('botDefaultMaxPositions'),
+      botDefaultPositionSizePct: get('botDefaultPositionSizePct'),
+      botDefaultFeeBps: get('botDefaultFeeBps'),
+      botDefaultSlippageBps: get('botDefaultSlippageBps'),
+      botDefaultDailyLossPct: get('botDefaultDailyLossPct'),
+      botDefaultCooldownMinutes: get('botDefaultCooldownMinutes'),
+      backtestDefaultCapitalUsd: Number(get('backtestDefaultCapitalUsd')),
+      backtestDefaultFeeBps: get('backtestDefaultFeeBps'),
+      backtestDefaultSlippageBps: get('backtestDefaultSlippageBps'),
+      backtestDefaultDays: get('backtestDefaultDays'),
+      backtestDefaultStopLoss: get('backtestDefaultStopLoss'),
+      backtestDefaultTakeProfit: get('backtestDefaultTakeProfit'),
+      backtestDefaultReinvest: get('backtestDefaultReinvest'),
+      taskReminderLeadMinutes: get('taskReminderLeadMinutes'),
+      taskDefaultDueTime: get('taskDefaultDueTime'),
+      autosaveIntervalSeconds: get('autosaveIntervalSeconds'),
+      defaultReportPeriod: get('defaultReportPeriod'),
+      dashboardPollSeconds: get('dashboardPollSeconds'),
+      portfolioPollSeconds: get('portfolioPollSeconds'),
+      watchlistPollSeconds: get('watchlistPollSeconds'),
+      reportsPollSeconds: get('reportsPollSeconds'),
+      notificationsPollSeconds: get('notificationsPollSeconds'),
+      notifyBotStopped: get('notifyBotStopped'),
+      notifyPositionsClosed: get('notifyPositionsClosed'),
+      automationEnabled: get('automationEnabled'),
+      automationMode: get('automationMode'),
+      automationMaxOrderUsd: Number(get('automationMaxOrderUsd')),
+      automationMaxDailyUsd: Number(get('automationMaxDailyUsd')),
+      automationMaxActionsPerDay: get('automationMaxActionsPerDay'),
+      automationCooldownMinutes: get('automationCooldownMinutes'),
+      automationDefaultStopLossPct: get('automationDefaultStopLossPct'),
+      automationDefaultTakeProfitPct: get('automationDefaultTakeProfitPct'),
+      automationDefaultTrailingPct: get('automationDefaultTrailingPct'),
+      automationDefaultBuyDropPct: get('automationDefaultBuyDropPct'),
+      automationDefaultBuyAmountUsd: Number(get('automationDefaultBuyAmountUsd')),
     };
   }
 }

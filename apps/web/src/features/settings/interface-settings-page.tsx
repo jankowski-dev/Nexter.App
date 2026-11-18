@@ -2,6 +2,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
+import { LoadingRows } from '@/components/ui/states';
+import { NumberField, SettingsCard, SettingsSaveBar } from './settings-form';
+import { useSettings, useUpdateSettings } from './use-settings';
 import { Select } from '@/components/ui/select';
 import { ChainToggle } from '@/components/chain-toggle';
 import { useAppLock } from '@/lib/app-lock';
@@ -16,6 +19,104 @@ import {
 } from '@/lib/ui-preferences';
 import { useWallet } from '@/lib/wallet-context';
 import { useEffect, useState } from 'react';
+import { toRussianError } from '@/lib/error-messages';
+
+function PollingSettingsCard() {
+  const settings = useSettings();
+  const update = useUpdateSettings();
+  const [values, setValues] = useState<Record<string, string> | null>(null);
+
+  useEffect(() => {
+    if (!settings.data || values) return;
+    setValues({
+      dashboardPollSeconds: String(settings.data.dashboardPollSeconds),
+      portfolioPollSeconds: String(settings.data.portfolioPollSeconds),
+      watchlistPollSeconds: String(settings.data.watchlistPollSeconds),
+      reportsPollSeconds: String(settings.data.reportsPollSeconds),
+      notificationsPollSeconds: String(settings.data.notificationsPollSeconds),
+    });
+  }, [settings.data, values]);
+
+  if (settings.isPending || !values) {
+    return (
+      <Card>
+        <CardTitle>Обновление данных</CardTitle>
+        <div className="mt-4">
+          <LoadingRows rows={3} />
+        </div>
+      </Card>
+    );
+  }
+
+  const set = (key: keyof typeof values, value: string) =>
+    setValues((current) => (current ? { ...current, [key]: value } : current));
+
+  return (
+    <SettingsCard
+      title="Обновление данных"
+      description="Как часто страницы запрашивают свежие данные. Слишком частые запросы создают нагрузку."
+    >
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <NumberField
+          label="Дашборд"
+          value={values.dashboardPollSeconds}
+          onChange={(value) => set('dashboardPollSeconds', value)}
+          min={5}
+          max={300}
+          suffix="сек"
+        />
+        <NumberField
+          label="Портфель"
+          value={values.portfolioPollSeconds}
+          onChange={(value) => set('portfolioPollSeconds', value)}
+          min={5}
+          max={300}
+          suffix="сек"
+        />
+        <NumberField
+          label="Токены"
+          value={values.watchlistPollSeconds}
+          onChange={(value) => set('watchlistPollSeconds', value)}
+          min={5}
+          max={600}
+          suffix="сек"
+        />
+        <NumberField
+          label="Статистика"
+          value={values.reportsPollSeconds}
+          onChange={(value) => set('reportsPollSeconds', value)}
+          min={5}
+          max={600}
+          suffix="сек"
+        />
+        <NumberField
+          label="Уведомления"
+          value={values.notificationsPollSeconds}
+          onChange={(value) => set('notificationsPollSeconds', value)}
+          min={5}
+          max={600}
+          suffix="сек"
+        />
+      </div>
+      <SettingsSaveBar
+        pending={update.isPending}
+        saved={update.isSuccess}
+        error={
+          update.isError ? toRussianError(update.error, 'Не удалось сохранить настройки') : null
+        }
+        onSave={() =>
+          update.mutate({
+            dashboardPollSeconds: Number(values.dashboardPollSeconds),
+            portfolioPollSeconds: Number(values.portfolioPollSeconds),
+            watchlistPollSeconds: Number(values.watchlistPollSeconds),
+            reportsPollSeconds: Number(values.reportsPollSeconds),
+            notificationsPollSeconds: Number(values.notificationsPollSeconds),
+          })
+        }
+      />
+    </SettingsCard>
+  );
+}
 
 export function InterfaceSettingsPage() {
   const appLock = useAppLock();
@@ -118,6 +219,8 @@ export function InterfaceSettingsPage() {
           </p>
         ) : null}
       </Card>
+
+      <PollingSettingsCard />
 
       <Card>
         <CardTitle>Сеть кошелька</CardTitle>

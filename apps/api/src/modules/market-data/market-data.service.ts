@@ -15,6 +15,7 @@ import { AssetsService } from '../accounting/assets.service';
 import { EvmRpcService } from '../swap/evm-rpc.service';
 import { CoinGeckoClient, type CoinGeckoMarket } from './coingecko.client';
 import { GeckoTerminalClient } from './geckoterminal.client';
+import { SettingsService } from '../settings/settings.service';
 
 interface IconCacheEntry {
   body: Buffer;
@@ -25,7 +26,6 @@ interface IconCacheEntry {
 const ICON_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const ICON_CACHE_MAX_ENTRIES = 200;
 const ICON_CACHE_MAX_BYTES = 8 * 1024 * 1024;
-const HISTORY_FRESH_MS = 24 * 60 * 60 * 1000;
 const HISTORY_FETCH_INTERVAL_MS = 1500;
 const HISTORY_MAX_DAYS = 365;
 const HISTORY_RETRY_MS = [
@@ -67,6 +67,7 @@ export class MarketDataService {
     private readonly coingecko: CoinGeckoClient,
     private readonly geckoterminal: GeckoTerminalClient,
     private readonly assets: AssetsService,
+    private readonly settings: SettingsService,
   ) {}
 
   async search(
@@ -177,12 +178,14 @@ export class MarketDataService {
     days: number,
   ): Promise<{ source: string; points: PriceHistoryPoint[] }> {
     const key = `${chainCode}:${contractAddress ?? ''}:${coingeckoId ?? ''}`;
+    const runtime = await this.settings.getRuntime().catch(() => null);
+    const freshMs = (runtime?.chartHistoryRefreshHours ?? 24) * 60 * 60 * 1000;
     const cached = await this.readHistory(key).catch(() => null);
     const now = Date.now();
 
     if (cached) {
       const hasData = cached.points.length >= 2;
-      const fresh = hasData && now - cached.fetchedAt.getTime() < HISTORY_FRESH_MS;
+      const fresh = hasData && now - cached.fetchedAt.getTime() < freshMs;
       const waiting = (cached.nextAttemptAt?.getTime() ?? 0) > now;
       if (fresh || waiting) {
         return { source: cached.source, points: sliceHistory(cached.points, days) };

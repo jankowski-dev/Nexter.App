@@ -223,12 +223,40 @@ export function getSwapChain(code: string): SwapChainConfig | null {
   return SWAP_CHAINS.find((chain) => chain.code === code) ?? null;
 }
 
+const dynamicTokens = new Map<string, SwapToken[]>();
+
+export function replaceDynamicSwapTokens(
+  entries: Array<{ chainCode: string; token: SwapToken }>,
+): void {
+  dynamicTokens.clear();
+  for (const entry of entries) {
+    const key = `${entry.chainCode}:${entry.token.address.toLowerCase()}`;
+    dynamicTokens.set(key, [
+      ...(dynamicTokens.get(key) ?? []),
+      { ...entry.token, address: entry.token.address.toLowerCase() },
+    ]);
+  }
+}
+
+export function getDynamicSwapTokens(chainCode: string): SwapToken[] {
+  const result: SwapToken[] = [];
+  for (const [key, tokens] of dynamicTokens) {
+    if (!key.startsWith(`${chainCode}:`)) continue;
+    for (const token of tokens) result.push(token);
+  }
+  return result;
+}
+
 export function getSwapToken(chainCode: string, address: string): SwapToken | null {
   const chain = getSwapChain(chainCode);
   if (!chain) return null;
 
   const normalized = address.toLowerCase();
-  return chain.tokens.find((token) => token.address.toLowerCase() === normalized) ?? null;
+  return (
+    chain.tokens.find((token) => token.address.toLowerCase() === normalized) ??
+    dynamicTokens.get(`${chainCode}:${normalized}`)?.[0] ??
+    null
+  );
 }
 
 export function isNativeToken(address: string): boolean {

@@ -33,6 +33,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { useEffect, useRef, useState } from 'react';
 import type { WatchlistEntry, WatchlistTokenSearchResult } from '@nexter/contracts';
 import { TokenDrawer } from './token-drawer';
+import { useRuntimeSettings } from '../settings/use-settings';
 
 function tagsFromInput(value: string): string[] {
   return value
@@ -138,6 +139,7 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
   const [searchGroupId, setSearchGroupId] = useState('');
   const [searchError, setSearchError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const runtime = useRuntimeSettings();
 
   const groups = useQuery({ queryKey: ['watchlist-groups'], queryFn: fetchWatchlistGroups });
   const defaultGroup = groups.data?.groups.find((group) => group.isDefault);
@@ -149,7 +151,7 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
       fetchWatchlist(false, pageParam ?? undefined, selectedGroupId ?? undefined),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.page.hasMore ? last.page.nextCursor : undefined),
-    refetchInterval: 30_000,
+    refetchInterval: runtime.watchlistPollSeconds * 1000,
   });
   const assets = useQuery({ queryKey: ['assets'], queryFn: fetchAssets });
   const entries = watchlist.data?.pages.flatMap((page) => page.data) ?? [];
@@ -180,7 +182,15 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
   }, [defaultGroup, searchGroupId]);
 
   const invalidate = () => {
-    for (const key of ['watchlist', 'watchlist-groups', 'assets', 'positions', 'portfolio-asset']) {
+    for (const key of [
+      'watchlist',
+      'watchlist-groups',
+      'assets',
+      'positions',
+      'portfolio-asset',
+      'swap-config',
+      'buy-list',
+    ]) {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
     void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
@@ -289,6 +299,17 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
       invalidate();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось сменить группу')),
+  });
+
+  const swapMutation = useMutation({
+    mutationFn: ({ id, swapEnabled }: { id: string; swapEnabled: boolean }) =>
+      updateWatchlist(id, { swapEnabled }),
+    onSuccess: (updated) => {
+      setDrawerSnapshot(updated);
+      setError(null);
+      invalidate();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось изменить разрешение свопов')),
   });
 
   const deleteGroupMutation = useMutation({
@@ -676,6 +697,8 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
         defaultGroupId={defaultGroup?.id ?? null}
         onGroupChange={(entry, groupId) => changeGroupMutation.mutate({ id: entry.id, groupId })}
         groupBusy={changeGroupMutation.isPending}
+        onSwapChange={(entry, swapEnabled) => swapMutation.mutate({ id: entry.id, swapEnabled })}
+        swapBusy={swapMutation.isPending}
         onClose={closeDrawer}
         onEdit={openEdit}
         onDelete={async (entry) => {

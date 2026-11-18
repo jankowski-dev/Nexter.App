@@ -274,3 +274,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - Dashboard order is tasks/habits, then crypto/finance stat cards using the shared `StatCard` tone surfaces.
 - The app logo rays flash green while queries are fetching; notes/tasks use 15px content text.
 - Daily chart history is persisted in `market_history`, fetched once per day, serialized with a 1.5s interval, and loaded lazily. See ADR 0068.
+
+## UI-72 settings, allowlist and automation
+
+- Settings hub split into accounting, market, trading, bots, automation, tasks/notes, notifications, diagnostics and data; security-critical values stay read-only.
+- `Токены` drawer has an explicit `Ончейн-свопы` toggle. Only active default-group tokens with the toggle enabled become dynamic swap tokens.
+- Crypto workspace gains an `Автоматизация` tab with rules, dry-run/proposal modes, test action, journal and pause-all. Stop-loss/take-profit/trailing proposals link to the existing trade card; no automatic signing.
+- Defaults: stop-loss 10%, take-profit 20%, trailing 8% after +10%, auto-buy on a 10% drop for $100, max order $250, max daily $500, 5 actions/day, cooldown 60 minutes.

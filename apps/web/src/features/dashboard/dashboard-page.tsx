@@ -26,6 +26,7 @@ import { useState } from 'react';
 import type { Habit, Task } from '@nexter/contracts';
 import { TaskCompactRow } from '../tasks/task-row';
 import { TaskDialog } from '../tasks/task-dialog';
+import { useRuntimeSettings } from '../settings/use-settings';
 
 function currentMonthKey(): string {
   const now = new Date();
@@ -64,32 +65,34 @@ export function DashboardPage() {
   const [habitToDelete, setHabitToDelete] = useState<Habit | null>(null);
   const [showArchivedHabits, setShowArchivedHabits] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const runtime = useRuntimeSettings();
+  const dashboardPoll = runtime.dashboardPollSeconds * 1000;
 
   const monthKey = currentMonthKey();
   const summary = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: fetchDashboardSummary,
-    refetchInterval: 10_000,
+    refetchInterval: dashboardPoll,
   });
   const pnl = useQuery({
     queryKey: ['dashboard-pnl'],
     queryFn: fetchDashboardPnl,
-    refetchInterval: 30_000,
+    refetchInterval: dashboardPoll * 2,
   });
   const finance = useQuery({
     queryKey: ['dashboard-finance', monthKey],
     queryFn: () => fetchFinanceSummary({ month: monthKey, months: 1 }),
-    refetchInterval: 60_000,
+    refetchInterval: dashboardPoll * 6,
   });
   const tasks = useQuery({
     queryKey: ['dashboard-tasks'],
     queryFn: () => fetchTasks({ status: 'open', to: endOfTodayIso(), limit: 50 }),
-    refetchInterval: 30_000,
+    refetchInterval: dashboardPoll * 3,
   });
   const habits = useQuery({
     queryKey: ['habits', showArchivedHabits],
     queryFn: () => fetchHabits(showArchivedHabits),
-    refetchInterval: 60_000,
+    refetchInterval: dashboardPoll * 6,
   });
 
   const invalidateTasks = () => {

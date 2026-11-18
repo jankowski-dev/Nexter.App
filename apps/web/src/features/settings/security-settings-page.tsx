@@ -11,6 +11,7 @@ import {
 } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Link } from '@tanstack/react-router';
 import { LockSettingsCard } from './lock-settings-card';
 
 export function SecuritySettingsPage() {
@@ -205,6 +206,14 @@ export function SecuritySettingsPage() {
             <div className="text-sm text-red-700">Не удалось загрузить сессии.</div>
           ) : null}
         </div>
+      </Card>
+
+      <Card>
+        <CardTitle>Журнал аудита</CardTitle>
+        <CardDescription>Все изменения настроек, сделок и справочников.</CardDescription>
+        <Button variant="secondary" className="mt-3" asChild>
+          <Link to="/settings/audit">Открыть аудит</Link>
+        </Button>
       </Card>
     </div>
   );

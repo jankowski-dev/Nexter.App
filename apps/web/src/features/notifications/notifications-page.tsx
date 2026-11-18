@@ -1,3 +1,4 @@
+import { useRuntimeSettings } from '../settings/use-settings';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
@@ -15,10 +16,11 @@ import type { NotificationsResponse } from '@nexter/contracts';
 export function NotificationsPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
+  const runtime = useRuntimeSettings();
   const notifications = useQuery({
     queryKey: ['notifications'],
     queryFn: () => fetchNotifications(100),
-    refetchInterval: 30_000,
+    refetchInterval: runtime.notificationsPollSeconds * 1000,
   });
   const clearAll = useMutation({
     mutationFn: clearNotifications,

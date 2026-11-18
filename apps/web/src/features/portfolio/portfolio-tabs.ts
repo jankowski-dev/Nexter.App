@@ -1,14 +1,28 @@
-export type CryptoTab =
-  'overview' | 'tokens' | 'orders' | 'operations' | 'robots' | 'strategies' | 'statistics';
+import type { NavIconName } from '@/components/nav-icon';
 
-export const cryptoTabs: ReadonlyArray<{ value: CryptoTab; label: string }> = [
-  { value: 'overview', label: 'Обзор' },
-  { value: 'tokens', label: 'Токены' },
-  { value: 'orders', label: 'Ордера' },
-  { value: 'operations', label: 'Операции' },
-  { value: 'robots', label: 'Роботы' },
-  { value: 'strategies', label: 'Стратегии' },
-  { value: 'statistics', label: 'Статистика' },
+export type CryptoTab =
+  | 'overview'
+  | 'tokens'
+  | 'orders'
+  | 'operations'
+  | 'robots'
+  | 'automation'
+  | 'strategies'
+  | 'statistics';
+
+export const cryptoTabs: ReadonlyArray<{
+  value: CryptoTab;
+  label: string;
+  icon: NavIconName;
+}> = [
+  { value: 'overview', label: 'Обзор', icon: 'dashboard' },
+  { value: 'tokens', label: 'Токены', icon: 'watchlist' },
+  { value: 'orders', label: 'Ордера', icon: 'portfolio' },
+  { value: 'operations', label: 'Операции', icon: 'operations' },
+  { value: 'robots', label: 'Роботы', icon: 'testing' },
+  { value: 'automation', label: 'Автоматизация', icon: 'ai' },
+  { value: 'strategies', label: 'Стратегии', icon: 'sliders' },
+  { value: 'statistics', label: 'Статистика', icon: 'statistics' },
 ];
 
 export function tabFromLocation(pathname: string, hash: string | undefined): CryptoTab {
@@ -29,6 +43,8 @@ export function tabFromLocation(pathname: string, hash: string | undefined): Cry
       return 'operations';
     case '#robots':
       return 'robots';
+    case '#automation':
+      return 'automation';
     case '#strategies':
       return 'strategies';
     case '#statistics':
@@ -49,6 +65,8 @@ export function hashForTab(tab: CryptoTab): string {
       return '#operations';
     case 'robots':
       return '#robots';
+    case 'automation':
+      return '#automation';
     case 'strategies':
       return '#strategies';
     case 'statistics':

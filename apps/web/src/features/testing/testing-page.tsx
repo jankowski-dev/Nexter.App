@@ -24,6 +24,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { useConfirm } from '@/lib/confirm';
+import { useRuntimeSettings } from '../settings/use-settings';
 import { filterBySearch } from '@/lib/search';
 import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { compressTokenIcon } from '@/lib/image';
@@ -80,7 +81,18 @@ const sortOptions: Array<{ value: Sort; label: string }> = [
 
 const defaultParams: Record<string, unknown> = {};
 
-function emptyBotForm(template?: BotStrategyTemplate): BotFormState {
+function emptyBotForm(
+  template?: BotStrategyTemplate,
+  defaults?: {
+    botDefaultBudgetUsd: string;
+    botDefaultMaxPositions: number;
+    botDefaultPositionSizePct: number;
+    botDefaultFeeBps: number;
+    botDefaultSlippageBps: number;
+    botDefaultDailyLossPct: number;
+    botDefaultCooldownMinutes: number;
+  },
+): BotFormState {
   return {
     name: '',
     description: '',
@@ -88,13 +100,13 @@ function emptyBotForm(template?: BotStrategyTemplate): BotFormState {
     strategyKey: template?.key ?? 'momentum_breakout',
     strategyParams: paramsToForm(template?.defaultParams ?? defaultParams),
     tokenAssetIds: [],
-    budgetUsd: '1000',
-    maxPositions: '5',
-    positionSizePct: '20',
-    feeBps: '25',
-    slippageBps: '10',
-    maxDailyLossPct: '10',
-    cooldownMinutes: '15',
+    budgetUsd: defaults?.botDefaultBudgetUsd ?? '1000',
+    maxPositions: String(defaults?.botDefaultMaxPositions ?? 5),
+    positionSizePct: String(defaults?.botDefaultPositionSizePct ?? 20),
+    feeBps: String(defaults?.botDefaultFeeBps ?? 25),
+    slippageBps: String(defaults?.botDefaultSlippageBps ?? 10),
+    maxDailyLossPct: String(defaults?.botDefaultDailyLossPct ?? 10),
+    cooldownMinutes: String(defaults?.botDefaultCooldownMinutes ?? 15),
   };
 }
 
@@ -157,6 +169,7 @@ function BotStats({ bot }: { bot: BotSummary }) {
 }
 
 export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
+  const runtime = useRuntimeSettings();
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [sort, setSort] = useState<Sort>('pnl');
@@ -330,7 +343,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
     }
     setEditingBot(null);
     setEditingTokens([]);
-    setBotForm(emptyBotForm(templates[0]));
+    setBotForm(emptyBotForm(templates[0], runtime));
     setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);

@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { Select } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import { searchWatchlistToken } from '@/lib/api';
 import { formatPct, formatPrice, formatUsdCompact, pnlTone } from '@/lib/format';
@@ -50,6 +51,8 @@ export function TokenDrawer({
   defaultGroupId,
   onGroupChange,
   groupBusy = false,
+  onSwapChange,
+  swapBusy = false,
   onClose,
   onEdit,
   onDelete,
@@ -62,6 +65,8 @@ export function TokenDrawer({
   defaultGroupId?: string | null;
   onGroupChange?: (entry: WatchlistEntry, groupId: string) => void;
   groupBusy?: boolean;
+  onSwapChange?: (entry: WatchlistEntry, swapEnabled: boolean) => void;
+  swapBusy?: boolean;
   onClose: () => void;
   onEdit?: (entry: WatchlistEntry) => void;
   onDelete?: (entry: WatchlistEntry) => void;
@@ -288,6 +293,26 @@ export function TokenDrawer({
             )}
           </div>
         </div>
+
+        {onSwapChange ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-xs font-medium uppercase tracking-wide text-amber-800">
+                Ончейн-свопы
+              </div>
+              <div className="text-[11px] text-amber-800/80">
+                Разрешить свопы для этого токена. Работает только для группы «Основная» и не
+                отключает проверки router/selector/approval.
+              </div>
+            </div>
+            <Switch
+              checked={entry.swapEnabled}
+              onChange={(checked) => onSwapChange(entry, checked)}
+              label={`Разрешить свопы ${entry.asset.symbol}`}
+              disabled={swapBusy}
+            />
+          </div>
+        ) : null}
 
         {onGroupChange ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">

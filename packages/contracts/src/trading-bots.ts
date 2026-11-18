@@ -352,6 +352,12 @@ export const botBacktestRequestSchema = botBacktestPreviewRequestSchema.extend({
   useStopLoss: z.boolean().default(true),
   useTakeProfit: z.boolean().default(true),
   reinvestProfit: z.boolean().default(false),
+  capitalUsd: z
+    .string()
+    .regex(/^\d+(?:\.\d+)?$/)
+    .optional(),
+  feeBps: z.number().int().min(0).max(500).optional(),
+  slippageBps: z.number().int().min(0).max(500).optional(),
 });
 
 export const botBacktestListQuerySchema = z.object({

@@ -21,6 +21,7 @@ import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
 import { formatTaskDue, localDateKey } from '@/lib/tasks';
 import { useSaveFlash } from '@/lib/use-save-flash';
+import { useRuntimeSettings } from '../settings/use-settings';
 import { useEffect, useRef, useState } from 'react';
 import type {
   Task,
@@ -68,8 +69,15 @@ function dueClock(value: string | null, hasTime: boolean): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-function toIsoDate(value: string, time: string, hasTime: boolean): string | null {
-  return value ? new Date(`${value}T${hasTime && time ? time : '12:00'}:00`).toISOString() : null;
+function toIsoDate(
+  value: string,
+  time: string,
+  hasTime: boolean,
+  defaultTime = '12:00',
+): string | null {
+  return value
+    ? new Date(`${value}T${hasTime && time ? time : defaultTime}:00`).toISOString()
+    : null;
 }
 
 function tagsFromInput(value: string): string[] {
@@ -80,10 +88,10 @@ function tagsFromInput(value: string): string[] {
     .slice(0, 20);
 }
 
-function dueLabel(value: string, time: string, hasTime: boolean): string {
+function dueLabel(value: string, time: string, hasTime: boolean, defaultTime = '12:00'): string {
   if (!value) return 'Без срока';
   return formatTaskDue(
-    new Date(`${value}T${hasTime && time ? time : '12:00'}:00`).toISOString(),
+    new Date(`${value}T${hasTime && time ? time : defaultTime}:00`).toISOString(),
     hasTime && Boolean(time),
   );
 }
@@ -105,6 +113,7 @@ export function TaskDialog({
   onSaved: () => void;
   onDeleted: () => void;
 }) {
+  const runtime = useRuntimeSettings();
   const [mode, setMode] = useState<Mode>(task && !startInEdit ? 'view' : 'edit');
   const [title, setTitle] = useState(task?.title ?? '');
   const [description, setDescription] = useState(task?.description ?? '');
@@ -184,7 +193,7 @@ export function TaskDialog({
       description: draft.description.trim() || null,
       priority: Number.parseInt(draft.priority, 10) || 0,
       tags: tagsFromInput(draft.tags),
-      dueAt: toIsoDate(draft.due, draft.dueTime, draft.dueHasTime),
+      dueAt: toIsoDate(draft.due, draft.dueTime, draft.dueHasTime, runtime.taskDefaultDueTime),
       dueHasTime: Boolean(draft.due && draft.dueHasTime),
     };
   }
@@ -229,7 +238,14 @@ export function TaskDialog({
         ? {
             recurrence: draft.recurrence,
             ...(draft.recurrenceEnds
-              ? { recurrenceEndsAt: toIsoDate(draft.recurrenceEnds, '', false) }
+              ? {
+                  recurrenceEndsAt: toIsoDate(
+                    draft.recurrenceEnds,
+                    '',
+                    false,
+                    runtime.taskDefaultDueTime,
+                  ),
+                }
               : {}),
           }
         : {};
@@ -287,10 +303,10 @@ export function TaskDialog({
     const timer = window.setInterval(() => {
       // Keep the recurrence controls available until the first explicit save of a new task.
       if (mode === 'edit' && taskIdRef.current) void saveNowRef.current();
-    }, 10_000);
+    }, runtime.autosaveIntervalSeconds * 1000);
 
     return () => window.clearInterval(timer);
-  }, [mode]);
+  }, [mode, runtime.autosaveIntervalSeconds]);
 
   async function attemptClose(): Promise<void> {
     if (mode === 'view') {
@@ -501,7 +517,7 @@ export function TaskDialog({
               <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
                 <div className="flex items-center gap-2">
                   <CalendarIcon />
-                  <span>{dueLabel(due, dueTimeValue, dueHasTime)}</span>
+                  <span>{dueLabel(due, dueTimeValue, dueHasTime, runtime.taskDefaultDueTime)}</span>
                 </div>
                 {completedAt ? <div>Выполнена {formatDate(completedAt)}</div> : null}
               </div>

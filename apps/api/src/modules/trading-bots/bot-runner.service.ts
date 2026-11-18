@@ -25,6 +25,7 @@ import { DB, DB_POOL } from '../../shared/db/db.module';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService, type MarketQuoteValue } from '../market-data/market-quote.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 import { strategyByKey } from './strategies';
 
 const HISTORY_LIMIT = 300;
@@ -37,12 +38,14 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
   private initialTimer: NodeJS.Timeout | null = null;
   private running = false;
   private sampledThisTick = new Set<string>();
+  private lastRunAt = 0;
 
   constructor(
     @Inject(DB) private readonly db: Database,
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly quotes: MarketQuoteService,
     private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -55,7 +58,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
     this.timer = setInterval(() => {
       void this.tick();
-    }, env.BOT_RUNNER_INTERVAL_SECONDS * 1000);
+    }, 10_000);
     this.timer.unref();
   }
 
@@ -73,6 +76,10 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
   private async tick(): Promise<void> {
     if (this.running) return;
+    const runtime = await this.settings.getRuntime().catch(() => null);
+    const intervalMs = (runtime?.botTickIntervalSeconds ?? env.BOT_RUNNER_INTERVAL_SECONDS) * 1000;
+    if (Date.now() - this.lastRunAt < intervalMs) return;
+    this.lastRunAt = Date.now();
     this.running = true;
     this.sampledThisTick.clear();
 
@@ -123,6 +130,8 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
   }
 
   private async processBot(bot: TradingBotRecord): Promise<void> {
+    const runtime = await this.settings.getRuntime().catch(() => null);
+    const quoteMaxAgeMs = (runtime?.botQuoteMaxAgeSeconds ?? 300) * 1000;
     const definition = strategyByKey.get(bot.strategyKey);
     if (!definition) {
       await this.recordError(
@@ -134,16 +143,18 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .update(tradingBots)
         .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
-      await this.notifications
-        .create({
-          userId: bot.userId,
-          type: 'bot_stopped',
-          title: 'Бот остановлен',
-          body: `Бот «${bot.name}» остановлен: стратегия недоступна в этой версии.`,
-          href: '/testing',
-          payload: { botId: bot.id, reason: 'strategy_unavailable' },
-        })
-        .catch(() => undefined);
+      if (runtime?.notifyBotStopped !== false) {
+        await this.notifications
+          .create({
+            userId: bot.userId,
+            type: 'bot_stopped',
+            title: 'Бот остановлен',
+            body: `Бот «${bot.name}» остановлен: стратегия недоступна в этой версии.`,
+            href: '/portfolio#robots',
+            payload: { botId: bot.id, reason: 'strategy_unavailable' },
+          })
+          .catch(() => undefined);
+      }
       return;
     }
 
@@ -164,16 +175,18 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .update(tradingBots)
         .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
-      await this.notifications
-        .create({
-          userId: bot.userId,
-          type: 'bot_stopped',
-          title: 'Бот остановлен',
-          body: `Бот «${bot.name}» остановлен: некорректные параметры стратегии.`,
-          href: '/testing',
-          payload: { botId: bot.id, reason: 'invalid_params' },
-        })
-        .catch(() => undefined);
+      if (runtime?.notifyBotStopped !== false) {
+        await this.notifications
+          .create({
+            userId: bot.userId,
+            type: 'bot_stopped',
+            title: 'Бот остановлен',
+            body: `Бот «${bot.name}» остановлен: некорректные параметры стратегии.`,
+            href: '/portfolio#robots',
+            payload: { botId: bot.id, reason: 'invalid_params' },
+          })
+          .catch(() => undefined);
+      }
       return;
     }
 
@@ -259,11 +272,11 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         await record(null, 'hold', 'Нет котировки от источника данных', Boolean(existingPosition));
         continue;
       }
-      if (now.getTime() - quote.fetchedAt.getTime() > 5 * 60_000) {
+      if (now.getTime() - quote.fetchedAt.getTime() > quoteMaxAgeMs) {
         await record(
           quote,
           'hold',
-          'Котировка устарела (старше 5 минут)',
+          `Котировка устарела (старше ${Math.round(quoteMaxAgeMs / 60_000)} минут)`,
           Boolean(existingPosition),
         );
         continue;

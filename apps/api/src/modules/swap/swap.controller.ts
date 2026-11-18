@@ -65,7 +65,7 @@ export class SwapController {
   }
 
   @Get('config')
-  config(): SwapConfigResponse {
+  config(): Promise<SwapConfigResponse> {
     return this.swaps.config();
   }
 
