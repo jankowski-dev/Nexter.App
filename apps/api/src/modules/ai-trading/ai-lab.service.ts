@@ -81,6 +81,13 @@ interface UsageRecord {
   latencyMs: number;
 }
 
+interface AnalystConfig {
+  inputCostPerMillion: number;
+  outputCostPerMillion: number;
+  minConfidence: number;
+  maxCandidates: number;
+}
+
 const MIN_CANDLES = 60;
 const ANALYSIS_MAX_TOKENS = 2000;
 const DEFAULT_INPUT_COST_PER_MILLION = 0.27;
@@ -262,7 +269,8 @@ export class AiLabService {
         fallback('ИИ не настроен: нет активного ключа.');
       } else {
         prompt = this.buildPrompt(token, input.timeframe, features, candles);
-        const estimatedCost = await this.estimateWorstCost(profile, prompt);
+        const analyst = await this.analystConfig(profile.id);
+        const estimatedCost = this.estimateWorstCost(profile, prompt, analyst);
         if (await this.budgetExceeded(profile, estimatedCost)) {
           fallback('Дневной лимит расходов ИИ исчерпан.');
         } else {
@@ -286,9 +294,11 @@ export class AiLabService {
               parsed.candidates,
               parsed.confidence,
               warnings,
-            );
+            )
+              .filter((candidate) => candidate.confidence >= analyst.minConfidence)
+              .slice(0, analyst.maxCandidates);
             if (validated.length === 0) {
-              throw new Error('AI не предложил допустимых кандидатов');
+              throw new Error('AI не предложил кандидатов выше порога уверенности');
             }
             source = 'ai';
             regime = parsed.regime;
@@ -296,14 +306,13 @@ export class AiLabService {
             summary = parsed.summary;
             prepared = validated;
             warnings.push(...(parsed.warnings ?? []));
-            const rates = await this.analysisRates(profile.id);
             const promptTokens = response.promptTokens ?? Math.ceil(prompt.length / 4);
             const completionTokens = response.completionTokens ?? 0;
             usage = {
               model: profile.modelSettings.model,
               promptTokens,
               completionTokens,
-              costUsd: this.cost(promptTokens, completionTokens, rates).toFixed(8),
+              costUsd: this.cost(promptTokens, completionTokens, analyst).toFixed(8),
               latencyMs: Date.now() - startedAt,
             };
           } catch (error) {
@@ -789,7 +798,7 @@ export class AiLabService {
     });
   }
 
-  private async analysisRates(profileId: string): Promise<{ input: number; output: number }> {
+  private async analystConfig(profileId: string): Promise<AnalystConfig> {
     const [row] = await this.db
       .select()
       .from(aiServiceConfigs)
@@ -800,25 +809,38 @@ export class AiLabService {
     const config = (row?.config ?? {}) as Record<string, unknown>;
     const input = Number(config.inputCostPerMillionUsd ?? DEFAULT_INPUT_COST_PER_MILLION);
     const output = Number(config.outputCostPerMillionUsd ?? DEFAULT_OUTPUT_COST_PER_MILLION);
+    const minConfidence = Number(config.minConfidence ?? 0.5);
+    const maxCandidates = Number(config.maxCandidates ?? 3);
     return {
-      input: Number.isFinite(input) && input >= 0 ? input : DEFAULT_INPUT_COST_PER_MILLION,
-      output: Number.isFinite(output) && output >= 0 ? output : DEFAULT_OUTPUT_COST_PER_MILLION,
+      inputCostPerMillion:
+        Number.isFinite(input) && input >= 0 ? input : DEFAULT_INPUT_COST_PER_MILLION,
+      outputCostPerMillion:
+        Number.isFinite(output) && output >= 0 ? output : DEFAULT_OUTPUT_COST_PER_MILLION,
+      minConfidence:
+        Number.isFinite(minConfidence) && minConfidence >= 0 && minConfidence <= 1
+          ? minConfidence
+          : 0.5,
+      maxCandidates:
+        Number.isFinite(maxCandidates) && maxCandidates >= 1 && maxCandidates <= 3
+          ? Math.floor(maxCandidates)
+          : 3,
     };
   }
 
-  private async estimateWorstCost(profile: AiProfile, prompt: string): Promise<number> {
-    const rates = await this.analysisRates(profile.id);
+  private estimateWorstCost(profile: AiProfile, prompt: string, analyst: AnalystConfig): number {
     const promptTokens = Math.ceil(prompt.length / 4);
     const maxTokens = Math.min(profile.modelSettings.maxTokens, ANALYSIS_MAX_TOKENS);
-    return (promptTokens / 1_000_000) * rates.input + (maxTokens / 1_000_000) * rates.output;
+    return (
+      (promptTokens / 1_000_000) * analyst.inputCostPerMillion +
+      (maxTokens / 1_000_000) * analyst.outputCostPerMillion
+    );
   }
 
-  private cost(
-    promptTokens: number,
-    completionTokens: number,
-    rates: { input: number; output: number },
-  ): number {
-    return (promptTokens / 1_000_000) * rates.input + (completionTokens / 1_000_000) * rates.output;
+  private cost(promptTokens: number, completionTokens: number, analyst: AnalystConfig): number {
+    return (
+      (promptTokens / 1_000_000) * analyst.inputCostPerMillion +
+      (completionTokens / 1_000_000) * analyst.outputCostPerMillion
+    );
   }
 
   private async budgetExceeded(profile: AiProfile, estimated: number): Promise<boolean> {
