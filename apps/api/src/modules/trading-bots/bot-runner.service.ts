@@ -71,14 +71,14 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
   /** Runs one tick synchronously. Used by the interval scheduler and integration tests. */
   async runOnce(): Promise<void> {
-    await this.tick();
+    await this.tick(true);
   }
 
-  private async tick(): Promise<void> {
+  private async tick(force = false): Promise<void> {
     if (this.running) return;
     const runtime = await this.settings.getRuntime().catch(() => null);
     const intervalMs = (runtime?.botTickIntervalSeconds ?? env.BOT_RUNNER_INTERVAL_SECONDS) * 1000;
-    if (Date.now() - this.lastRunAt < intervalMs) return;
+    if (!force && Date.now() - this.lastRunAt < intervalMs) return;
     this.lastRunAt = Date.now();
     this.running = true;
     this.sampledThisTick.clear();

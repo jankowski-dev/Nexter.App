@@ -54,7 +54,7 @@ import { executorAllowlist, routerAllowlist, selectorAllowlist } from './swap-al
 import { assertStepUp, normalizeUsd } from './swap-step-up';
 import { KyberApiError, KyberSwapClient } from './kyber-swap.client';
 import { TradeIntentService } from '../accounting/trade-intent.service';
-import { SettingsService } from '../settings/settings.service';
+import { SettingsService, type RuntimeSettings } from '../settings/settings.service';
 import {
   SWAP_CHAINS,
   getSwapChain,
@@ -166,8 +166,20 @@ export class SwapService {
     private readonly settings: SettingsService,
   ) {}
 
+  private limits(runtime: RuntimeSettings) {
+    const maxSlippageBps = Math.min(runtime.swapMaxSlippageBps, env.SWAP_MAX_SLIPPAGE_BPS);
+    return {
+      maxSlippageBps,
+      defaultSlippageBps: Math.min(runtime.swapDefaultSlippageBps, maxSlippageBps),
+      maxPriceImpactBps: Math.min(runtime.swapMaxPriceImpactBps, env.SWAP_MAX_PRICE_IMPACT_BPS),
+      maxGasUsd: Math.min(runtime.swapMaxGasUsd, Number(env.SWAP_MAX_GAS_USD)),
+      quoteTtlSeconds: Math.min(runtime.swapQuoteTtlSeconds, env.SWAP_QUOTE_TTL_SECONDS),
+    };
+  }
+
   async config(): Promise<SwapConfigResponse> {
     const runtime = await this.settings.getRuntime();
+    const limits = this.limits(runtime);
     const allowlist = parseAddressList(env.SWAP_WALLET_ALLOWLIST);
     const selectors = selectorAllowlist();
     const enabled = env.SWAP_ENABLED && !env.SWAP_KILL_SWITCH;
@@ -199,11 +211,11 @@ export class SwapService {
         rpcConfigured: this.rpc.configuredFor(chain.code),
         executionEnabled: Boolean(executionEnabledForChain(chain.code) && enabled),
       })),
-      quoteTtlSeconds: runtime.swapQuoteTtlSeconds,
-      maxPriceImpactBps: runtime.swapMaxPriceImpactBps,
+      quoteTtlSeconds: limits.quoteTtlSeconds,
+      maxPriceImpactBps: limits.maxPriceImpactBps,
       stepUpThresholdUsd: decimal(env.SWAP_STEP_UP_THRESHOLD_USD).toFixed(2),
-      defaultSlippageBps: runtime.swapDefaultSlippageBps,
-      maxSlippageBps: runtime.swapMaxSlippageBps,
+      defaultSlippageBps: limits.defaultSlippageBps,
+      maxSlippageBps: limits.maxSlippageBps,
     };
   }
 
@@ -263,11 +275,12 @@ export class SwapService {
     this.assertWallet(input.walletAddress);
 
     const runtime = await this.settings.getRuntime();
-    const slippageBps = input.slippageBps ?? runtime.swapDefaultSlippageBps;
-    if (slippageBps > runtime.swapMaxSlippageBps) {
+    const limits = this.limits(runtime);
+    const slippageBps = input.slippageBps ?? limits.defaultSlippageBps;
+    if (slippageBps > limits.maxSlippageBps) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: `slippageBps must be at most ${runtime.swapMaxSlippageBps}`,
+        message: `slippageBps must be at most ${limits.maxSlippageBps}`,
       });
     }
 
@@ -378,7 +391,7 @@ export class SwapService {
       });
     }
 
-    if (priceImpactBps > runtime.swapMaxPriceImpactBps) {
+    if (priceImpactBps > limits.maxPriceImpactBps) {
       throw new BadRequestException({
         code: 'SWAP_PRICE_IMPACT_TOO_HIGH',
         message: `Price impact ${(priceImpactBps / 100).toFixed(2)}% exceeds the configured limit`,
@@ -451,11 +464,12 @@ export class SwapService {
     }
 
     const runtime = await this.settings.getRuntime();
-    const slippageBps = input.slippageBps ?? runtime.swapDefaultSlippageBps;
-    if (slippageBps > runtime.swapMaxSlippageBps) {
+    const limits = this.limits(runtime);
+    const slippageBps = input.slippageBps ?? limits.defaultSlippageBps;
+    if (slippageBps > limits.maxSlippageBps) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
-        message: `slippageBps must be at most ${runtime.swapMaxSlippageBps}`,
+        message: `slippageBps must be at most ${limits.maxSlippageBps}`,
       });
     }
 
@@ -573,7 +587,7 @@ export class SwapService {
       });
     }
 
-    if (priceImpactBps > runtime.swapMaxPriceImpactBps) {
+    if (priceImpactBps > limits.maxPriceImpactBps) {
       throw new BadRequestException({
         code: 'SWAP_PRICE_IMPACT_TOO_HIGH',
         message: `Price impact ${(priceImpactBps / 100).toFixed(2)}% exceeds the configured limit`,
@@ -583,7 +597,7 @@ export class SwapService {
     const warnings: string[] = [];
 
     const minOutBase = (BigInt(amountOutBase) * BigInt(10_000 - slippageBps)) / BigInt(10_000);
-    const quoteExpiresAt = new Date(Date.now() + runtime.swapQuoteTtlSeconds * 1000);
+    const quoteExpiresAt = new Date(Date.now() + limits.quoteTtlSeconds * 1000);
     const routeIdValue =
       typeof route.routeSummary.routeID === 'string'
         ? route.routeSummary.routeID
@@ -603,7 +617,7 @@ export class SwapService {
       });
     }
 
-    if (decimal(gasUsd).gt(decimal(String(runtime.swapMaxGasUsd)))) {
+    if (decimal(gasUsd).gt(decimal(String(limits.maxGasUsd)))) {
       throw new BadRequestException({
         code: 'SWAP_GAS_TOO_HIGH',
         message: 'Quoted gas cost exceeds the configured cap',
@@ -1030,7 +1044,8 @@ export class SwapService {
     }
 
     const gasRuntime = await this.settings.getRuntime();
-    if (decimal(gasUsd!).gt(decimal(String(gasRuntime.swapMaxGasUsd)))) {
+    const gasLimits = this.limits(gasRuntime);
+    if (decimal(gasUsd!).gt(decimal(String(gasLimits.maxGasUsd)))) {
       await fail('gas', 'SWAP_GAS_TOO_HIGH', 'Gas cost exceeds the configured cap');
     }
 
@@ -1245,7 +1260,8 @@ export class SwapService {
     }
 
     const readyRuntime = await this.settings.getRuntime();
-    if (decimal(order.gasUsd).gt(decimal(String(readyRuntime.swapMaxGasUsd)))) {
+    const readyLimits = this.limits(readyRuntime);
+    if (decimal(order.gasUsd).gt(decimal(String(readyLimits.maxGasUsd)))) {
       throw new BadRequestException({
         code: 'SWAP_GAS_TOO_HIGH',
         message: 'Gas cost exceeds the configured cap',
