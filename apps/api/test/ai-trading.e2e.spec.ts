@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { createDb, type Database } from '@nexter/db';
+import { createDb, marketCandles, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -138,6 +138,51 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(refreshed.body.pairs).toBe(1);
     expect(refreshed.body.upserted).toBe(0);
     expect(refreshed.body.failed).toHaveLength(1);
+
+    const assetId = based?.id as string;
+    const now = Date.now();
+    await db.insert(marketCandles).values(
+      Array.from({ length: 120 }, (_, index) => {
+        const close = 100 + index;
+        return {
+          assetId,
+          timeframe: '1d',
+          openTime: new Date(now - (119 - index) * 86_400_000),
+          open: String(close - 0.5),
+          high: String(close + 1),
+          low: String(close - 1),
+          close: String(close),
+          volumeUsd: '1000',
+          source: 'test',
+          quality: 'ok',
+        };
+      }),
+    );
+
+    const analysis = await agent
+      .post('/api/v1/ai-trading/lab/analyze')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframe: '1d', lookbackDays: 180 })
+      .expect(201);
+    expect(analysis.body.source).toBe('fallback');
+    expect(analysis.body.candidates.length).toBeGreaterThan(0);
+    expect(analysis.body.features.candles).toBe(120);
+
+    const latest = await agent
+      .get(`/api/v1/ai-trading/lab?assetId=${assetId}&timeframe=1d`)
+      .expect(200);
+    expect(latest.body.analysis.candidates.length).toBeGreaterThan(0);
+
+    const candidateId = latest.body.analysis.candidates[0].id as string;
+    const backtest = await agent
+      .post('/api/v1/ai-trading/lab/backtest')
+      .set('x-csrf-token', owner.csrf)
+      .send({ candidateId })
+      .expect(201);
+    expect(['backtested', 'rejected']).toContain(backtest.body.status);
+    expect(backtest.body.train.returnPct).toBeDefined();
+    expect(backtest.body.oos.returnPct).toBeDefined();
+    expect(typeof backtest.body.policyScore).toBe('number');
 
     await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)

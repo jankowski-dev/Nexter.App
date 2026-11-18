@@ -8,12 +8,16 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import {
   aiDataRefreshRequestSchema,
+  aiLabAnalyzeRequestSchema,
+  aiLabBacktestRequestSchema,
+  aiLabQuerySchema,
   aiProfileTokenCreateRequestSchema,
   aiProfileTokenUpdateRequestSchema,
   aiProfileUpdateRequestSchema,
@@ -21,6 +25,12 @@ import {
   type AiCoverage,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
+  type AiLabAnalysis,
+  type AiLabAnalyzeRequest,
+  type AiLabBacktestRequest,
+  type AiLabBacktestResponse,
+  type AiLabLatest,
+  type AiLabQuery,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -34,6 +44,7 @@ import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { AiDataService } from './ai-data.service';
+import { AiLabService } from './ai-lab.service';
 import { AiTradingService } from './ai-trading.service';
 
 @ApiTags('ai-trading')
@@ -42,6 +53,7 @@ export class AiTradingController {
   constructor(
     private readonly aiTrading: AiTradingService,
     private readonly aiData: AiDataService,
+    private readonly aiLab: AiLabService,
   ) {}
 
   @Get('profile')
@@ -140,6 +152,38 @@ export class AiTradingController {
   @Get('coverage')
   coverage(@CurrentAuth() auth: AuthContext): Promise<AiCoverage> {
     return this.aiData.coverage(auth.user.id);
+  }
+
+  @Get('lab')
+  latestLab(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(aiLabQuerySchema)) query: AiLabQuery,
+  ): Promise<AiLabLatest> {
+    return this.aiLab.latest(auth.user.id, query);
+  }
+
+  @Post('lab/analyze')
+  analyze(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(aiLabAnalyzeRequestSchema)) body: AiLabAnalyzeRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<AiLabAnalysis> {
+    return this.aiLab.analyze(auth.user.id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Post('lab/backtest')
+  backtestCandidate(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(aiLabBacktestRequestSchema)) body: AiLabBacktestRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<AiLabBacktestResponse> {
+    return this.aiLab.backtest(auth.user.id, body.candidateId, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
   }
 
   @Post('data/refresh')

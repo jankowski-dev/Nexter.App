@@ -21,6 +21,7 @@ export interface AiRequest {
   maxTokens: number;
   messages: AiMessage[];
   jsonMode?: boolean;
+  timeoutMs?: number;
 }
 
 export interface AiResponse {
@@ -58,7 +59,7 @@ export class DeepSeekProvider {
           max_tokens: input.maxTokens,
           ...(input.jsonMode ? { response_format: { type: 'json_object' } } : {}),
         }),
-        signal: AbortSignal.timeout(60_000),
+        signal: AbortSignal.timeout(input.timeoutMs ?? 60_000),
       });
     } catch (error) {
       if (error instanceof Error && error.name === 'TimeoutError') {
