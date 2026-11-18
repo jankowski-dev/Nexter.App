@@ -98,6 +98,7 @@ function dueLabel(value: string, time: string, hasTime: boolean, defaultTime = '
 
 export function TaskDialog({
   task,
+  duplicateFrom,
   initialDue,
   startInEdit = false,
   startWithDelete = false,
@@ -106,6 +107,7 @@ export function TaskDialog({
   onDeleted,
 }: {
   task: Task | null;
+  duplicateFrom?: Task;
   initialDue?: string;
   startInEdit?: boolean;
   startWithDelete?: boolean;
@@ -114,23 +116,37 @@ export function TaskDialog({
   onDeleted: () => void;
 }) {
   const runtime = useRuntimeSettings();
+  const duplicate = !task && Boolean(duplicateFrom);
+  const source = task ?? duplicateFrom ?? null;
+  const duplicatedDueAt = duplicateFrom?.dueAt
+    ? new Date(new Date(duplicateFrom.dueAt).getTime() + 86_400_000).toISOString()
+    : null;
+  const sourceDueAt = task?.dueAt ?? duplicatedDueAt;
   const [mode, setMode] = useState<Mode>(task && !startInEdit ? 'view' : 'edit');
-  const [title, setTitle] = useState(task?.title ?? '');
-  const [description, setDescription] = useState(task?.description ?? '');
-  const [priority, setPriority] = useState(String(task?.priority ?? 1));
-  const [due, setDue] = useState(dueDate(task?.dueAt ?? null) || initialDue || '');
-  const [dueHasTime, setDueHasTime] = useState(Boolean(task?.dueHasTime));
+  const [title, setTitle] = useState(source?.title ?? '');
+  const [description, setDescription] = useState(source?.description ?? '');
+  const [priority, setPriority] = useState(String(source?.priority ?? 1));
+  const [due, setDue] = useState(dueDate(sourceDueAt) || initialDue || '');
+  const [dueHasTime, setDueHasTime] = useState(Boolean(source?.dueHasTime));
   const [dueTimeValue, setDueTimeValue] = useState(
-    dueClock(task?.dueAt ?? null, Boolean(task?.dueHasTime)),
+    dueClock(sourceDueAt, Boolean(source?.dueHasTime)),
   );
-  const [tags, setTags] = useState(task?.tags.join(', ') ?? '');
-  const [status, setStatus] = useState<TaskStatus>(task?.status ?? 'open');
-  const [completedAt, setCompletedAt] = useState<string | null>(task?.completedAt ?? null);
+  const [tags, setTags] = useState(source?.tags.join(', ') ?? '');
+  const [status, setStatus] = useState<TaskStatus>(duplicate ? 'open' : (source?.status ?? 'open'));
+  const [completedAt, setCompletedAt] = useState<string | null>(
+    duplicate ? null : (source?.completedAt ?? null),
+  );
   const [createdAt, setCreatedAt] = useState<string | null>(task?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(task?.updatedAt ?? null);
-  const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>(task?.recurrence ?? 'none');
+  const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>(
+    duplicate ? 'none' : (source?.recurrence ?? 'none'),
+  );
   const [recurrenceEnds, setRecurrenceEnds] = useState(
-    task?.recurrenceEndsAt ? localDateKey(new Date(task.recurrenceEndsAt)) : '',
+    duplicate
+      ? ''
+      : source?.recurrenceEndsAt
+        ? localDateKey(new Date(source.recurrenceEndsAt))
+        : '',
   );
   const [images, setImages] = useState<TaskImage[]>(task?.images ?? []);
   const [seriesLocked, setSeriesLocked] = useState(false);

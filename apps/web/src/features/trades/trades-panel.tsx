@@ -1,7 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { PendingOrdersPanel } from './pending-orders-panel';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -200,8 +199,6 @@ export function TradesPanel({
 
   return (
     <div className="space-y-4">
-      <PendingOrdersPanel />
-
       {!activeMode ? (
         <>
           <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">

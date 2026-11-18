@@ -26,6 +26,7 @@ export function ManualOrderForm({
   onPendingChange,
   stopLossPct,
   takeProfitPct,
+  onQuoteAmountChange,
 }: {
   token: Asset;
   side: Side;
@@ -36,6 +37,7 @@ export function ManualOrderForm({
   onPendingChange?: (pending: boolean) => void;
   stopLossPct?: number | null;
   takeProfitPct?: number | null;
+  onQuoteAmountChange?: (value: string) => void;
 }) {
   const queryClient = useQueryClient();
   const idempotencyKey = useRef<string>(crypto.randomUUID());
@@ -249,7 +251,10 @@ export function ManualOrderForm({
             className="mt-1 font-mono"
             inputMode="decimal"
             value={quoteAmount}
-            onChange={(event) => setQuoteAmount(event.target.value)}
+            onChange={(event) => {
+              setQuoteAmount(event.target.value);
+              onQuoteAmountChange?.(event.target.value);
+            }}
             placeholder="0.00"
             disabled={save.isPending}
           />
