@@ -30,3 +30,11 @@ The previous UI-72 implementation exposed stop-loss, take-profit and delayed buy
 - Existing trade groups have null protection until the owner sets it. Existing pending orders table is new.
 - The migration is additive. `nexter_app` gets SELECT/INSERT/UPDATE and no DELETE on `pending_orders`. A pre-migration backup is required.
 - The old global automation tables are not dropped; removing them is a separate destructive cleanup after a retention decision.
+
+## UI-74 addendum (2026-11-18)
+
+- TP/SL cards have quick `+5/10/20/50%` buttons and show the target price/projected USD result.
+- Existing-order protection auto-saves (700 ms debounce, blur, close); empty values disable it.
+- Delayed buy keeps the market header and mutually converts amount/price/quantity.
+- Sell forms have percentage quick buttons; the execution layout uses a chain icon and a single metrics row.
+- The full-card link is removed from active flows; the route remains for closed trades/diagnostics.

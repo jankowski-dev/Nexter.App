@@ -288,3 +288,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - The close/edit-order drawer has `Защита этой сделки` with editable stop-loss/take-profit.
 - `Ордера` shows `Отложенные покупки` with edit/cancel.
 - The global automation tab and settings page are removed; protection is per order.
+
+## UI-74 order modal polish
+
+- TP/SL colored cards with quick percentages, target/result hints and auto-save; empty disables.
+- Delayed buy keeps market context and converts amount/price/quantity both ways.
+- Sell quick 10/25/50/100%, compact amount/receive/chain row and four metric blocks.
+- Polished current-trade header; full-card link removed from active flows.
