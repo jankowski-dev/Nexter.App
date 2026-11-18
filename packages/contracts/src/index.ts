@@ -20,6 +20,7 @@ export * from './swap';
 export * from './system';
 export * from './tasks';
 export * from './ai';
+export * from './ai-trading';
 export * from './audio-notes';
 export * from './trading-bots';
 export * from './vault';
