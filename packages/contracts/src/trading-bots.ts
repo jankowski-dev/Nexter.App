@@ -13,6 +13,7 @@ export const botStrategyKeys = [
   'bollinger_reversion',
   'squeeze_breakout',
   'failed_breakout',
+  'static_limit',
 ] as const;
 
 export const botStrategyKeySchema = z.enum(botStrategyKeys);

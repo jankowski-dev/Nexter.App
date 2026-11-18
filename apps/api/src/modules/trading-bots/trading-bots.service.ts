@@ -228,6 +228,7 @@ export class TradingBotsService {
     const tokenAssetIds = uniqueAssetIds(input.tokenAssetIds);
     await this.assertTokens(userId, tokenAssetIds);
     this.assertBudget(input.budgetUsd);
+    this.assertStaticLimit(definition.key, strategyParams, tokenAssetIds);
 
     const cash = usdString(decimal(input.budgetUsd));
     let id: string;
@@ -352,6 +353,19 @@ export class TradingBotsService {
         .map((row) => row.assetId)
         .filter((assetId) => !nextTokens.has(assetId));
     }
+
+    const effectiveStrategyKey = nextStrategyKey ?? bot.strategyKey;
+    const effectiveStrategyParams =
+      nextStrategyParams ?? (bot.strategyParams as Record<string, unknown>);
+    const effectiveTokenAssetIds =
+      tokenAssetIds ??
+      (
+        await this.db
+          .select({ assetId: botTokens.assetId })
+          .from(botTokens)
+          .where(eq(botTokens.botId, id))
+      ).map((row) => row.assetId);
+    this.assertStaticLimit(effectiveStrategyKey, effectiveStrategyParams, effectiveTokenAssetIds);
 
     try {
       await this.db.transaction(async (tx) => {
@@ -1213,6 +1227,39 @@ export class TradingBotsService {
         code: 'VALIDATION_ERROR',
         message: 'All bot tokens must be active entries in the token base',
         details: { missing },
+      });
+    }
+  }
+
+  private assertStaticLimit(
+    strategyKey: string,
+    params: Record<string, unknown>,
+    assetIds: string[],
+  ): void {
+    if (strategyKey !== 'static_limit') return;
+
+    if (assetIds.length !== 1) {
+      throw new BadRequestException({
+        code: 'BOT_STATIC_LIMIT_SINGLE_TOKEN',
+        message: 'Static limit strategy requires exactly one token',
+      });
+    }
+
+    const buy = Number(params.buyPriceUsd);
+    const stop = Number(params.stopPriceUsd);
+    const take = Number(params.takeProfitPriceUsd);
+    if (
+      !Number.isFinite(buy) ||
+      !Number.isFinite(stop) ||
+      !Number.isFinite(take) ||
+      buy <= 0 ||
+      stop <= 0 ||
+      take <= 0 ||
+      !(stop < buy && buy < take)
+    ) {
+      throw new BadRequestException({
+        code: 'BOT_STATIC_LIMIT_PRICES',
+        message: 'Static limit requires positive stop < buy < take prices',
       });
     }
   }

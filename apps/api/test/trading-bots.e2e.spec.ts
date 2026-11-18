@@ -772,4 +772,69 @@ describe.runIf(canRun)('Trading bots e2e', () => {
       .expect(200);
     expect(clearedList.body.data).toHaveLength(0);
   }, 60_000);
+
+  it('requires one token and valid levels for static_limit', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const assets = assetsResponse.body.assets as Array<{ id: string; symbol: string }>;
+    const first = assets[0];
+    const second = assets[1];
+    if (!first || !second) throw new Error('Need two seeded assets');
+
+    for (const asset of [first, second]) {
+      await agent
+        .post('/api/v1/watchlist')
+        .set('x-csrf-token', owner.csrf)
+        .send({ assetId: asset.id })
+        .expect(201);
+    }
+
+    const base = {
+      name: 'Static limit bot',
+      strategyKey: 'static_limit',
+      budgetUsd: '1000',
+      maxPositions: 1,
+      positionSizePct: 100,
+      feeBps: 25,
+      slippageBps: 10,
+      maxDailyLossPct: 10,
+      cooldownMinutes: 15,
+    };
+
+    const twoTokens = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        ...base,
+        tokenAssetIds: [first.id, second.id],
+        strategyParams: { buyPriceUsd: 1, stopPriceUsd: 0.9, takeProfitPriceUsd: 1.2 },
+      })
+      .expect(400);
+    expect(twoTokens.body.error.code).toBe('BOT_STATIC_LIMIT_SINGLE_TOKEN');
+
+    const zeroPrices = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({ ...base, tokenAssetIds: [first.id] })
+      .expect(400);
+    expect(zeroPrices.body.error.code).toBe('BOT_STATIC_LIMIT_PRICES');
+
+    const created = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        ...base,
+        tokenAssetIds: [first.id],
+        strategyParams: { buyPriceUsd: 1, stopPriceUsd: 0.9, takeProfitPriceUsd: 1.2 },
+      })
+      .expect(201);
+
+    const updated = await agent
+      .patch(`/api/v1/trading-bots/bots/${created.body.bot.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ tokenAssetIds: [first.id, second.id] })
+      .expect(400);
+    expect(updated.body.error.code).toBe('BOT_STATIC_LIMIT_SINGLE_TOKEN');
+  }, 60_000);
 });
