@@ -17,6 +17,7 @@ const REFRESH_INTERVAL_MS = 60_000;
 export class SwapTokenRegistryService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(SwapTokenRegistryService.name);
   private timer: NodeJS.Timeout | null = null;
+  private lastCount = -1;
 
   constructor(@Inject(DB) private readonly db: Database) {}
 
@@ -78,7 +79,10 @@ export class SwapTokenRegistryService implements OnApplicationBootstrap, OnAppli
       }
 
       replaceDynamicSwapTokens(entries);
-      this.logger.log(`Dynamic swap tokens refreshed: ${entries.length}`);
+      if (entries.length !== this.lastCount) {
+        this.logger.log(`Dynamic swap tokens refreshed: ${entries.length}`);
+        this.lastCount = entries.length;
+      }
     } catch (error) {
       this.logger.warn(
         `Dynamic swap token refresh failed: ${error instanceof Error ? error.message : 'unknown'}`,
