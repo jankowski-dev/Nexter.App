@@ -117,20 +117,22 @@ const responseSchema = z.object({
 type AnalysisResponse = z.infer<typeof responseSchema>;
 
 const STRATEGY_CATALOG = JSON.stringify(
-  strategyDefinitions.map((definition) => ({
-    key: definition.key,
-    name: definition.name,
-    description: definition.description,
-    params: definition.paramFields.map((field) => ({
-      key: field.key,
-      label: field.label,
-      min: field.min,
-      max: field.max,
-      unit: field.unit,
-      integer: field.integer,
+  strategyDefinitions
+    .filter((definition) => definition.aiEligible !== false)
+    .map((definition) => ({
+      key: definition.key,
+      name: definition.name,
+      description: definition.description,
+      params: definition.paramFields.map((field) => ({
+        key: field.key,
+        label: field.label,
+        min: field.min,
+        max: field.max,
+        unit: field.unit,
+        integer: field.integer,
+      })),
+      defaults: definition.defaultParams,
     })),
-    defaults: definition.defaultParams,
-  })),
 );
 
 const SYSTEM_PROMPT = `Ты — аналитик sandbox-торговли криптоактивами. Ты не исполняешь сделки и не обещаешь доходность.
@@ -772,6 +774,10 @@ export class AiLabService {
       const definition = strategyByKey.get(raw.strategyKey);
       if (!definition) {
         warnings.push(`ИИ предложил неизвестную стратегию: ${raw.strategyKey}`);
+        continue;
+      }
+      if (definition.aiEligible === false) {
+        warnings.push(`Стратегия «${definition.name}» доступна только для ручного бота.`);
         continue;
       }
       try {

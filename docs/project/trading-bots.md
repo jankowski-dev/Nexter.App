@@ -181,25 +181,26 @@ interface StrategyDefinition {
 }
 ```
 
-`paramFields` — метаданные для автоматической формы параметров в боте. `guide` — подробное объяснение механики; `bestFor` — когда стратегия уместна; `risks` — основные риски. Всё это показывается в read-only drawer стратегии. `kind` — маркер `Системная`/`Кастомная`; сейчас десять стратегий системные, `crash_protected_grid` — кастомная.
+`paramFields` — метаданные для автоматической формы параметров в боте. `guide` — подробное объяснение механики; `bestFor` — когда стратегия уместна; `risks` — основные риски. Всё это показывается в read-only drawer стратегии. `kind` — маркер `Системная`/`Кастомная`; сейчас одиннадцать стратегий системные, `crash_protected_grid` — кастомная.
 
 Новая стратегия: файл в `apps/api/src/modules/trading-bots/strategies/`, Zod-схема параметров, `paramFields`, `guide`, регистрация в `strategyDefinitions`, unit-тесты и deploy. UI автоматически покажет новую стратегию.
 
 ### 5.2. Встроенные стратегии
 
-| key                    | Название               | Логика входа                                | Логика выхода                                          | Параметры по умолчанию                                                  |
-| ---------------------- | ---------------------- | ------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `momentum_breakout`    | Импульсный пробой      | fast SMA > slow SMA и 24h change ≥ порога   | TP, SL, fast SMA ниже slow SMA                         | fast 5, slow 20, minChange24h 1%, TP 5%, SL 3%                          |
-| `mean_reversion`       | Возврат к среднему     | цена ниже SMA на `entryDropPct`             | возврат к SMA, TP, SL                                  | lookback 20, entryDrop 3%, exitAbove 0.5%, TP 5%, SL 5%                 |
-| `grid_range`           | Сетка в диапазоне      | цена ниже rolling high на шаг сетки         | шаг вверх от средней, SL; докупка на следующей ступени | anchor 20, gridStep 1.5%, maxAdds 4, TP 1.5%, SL 6%                     |
-| `trend_pullback`       | Откат в тренде         | fast > slow и откат к fast SMA              | TP, SL, пробой тренда                                  | fast 8, slow 30, pullback 1%, TP 5%, SL 3%                              |
-| `dca_dip`              | Докупка на просадке    | цена ниже rolling high на `dipPct`          | TP, SL; докупка до `maxAdds`                           | anchor 20, dip 3%, maxAdds 3, TP 5%, SL 8%                              |
-| `trailing_stop`        | Трейлинг-стоп          | пробой максимума за окно                    | жёсткий стоп, активация, скользящий стоп от пика       | entryLookback 20, buffer 0.2%, activation 2%, trail 1.5%, hardStop 5%   |
-| `crash_protected_grid` | Защитная сетка         | ступени ниже опоры                          | TP, защитное закрытие на обвале, пауза до resumeDrop   | maxAdds 4, gridStep 1.5%, TP 2.5%, crash 10%, resume 30%, closeLoss 10% |
-| `donchian_breakout`    | Пробой канала Дончиана | закрытие выше максимума предыдущих N свечей | противоположный канал, TP, SL                          | channel 20, exit 10, buffer 0.2%, TP 10%, SL 5%                         |
-| `bollinger_reversion`  | Возврат к Bollinger    | закрытие ниже нижней полосы                 | возврат к средней, TP, SL                              | period 20, stdDev 2, exitAboveMean 0.5%, TP 8%, SL 5%                   |
-| `squeeze_breakout`     | Выход из сжатия        | сжатие полос + пробой верхней полосы        | возврат под среднюю, TP, SL                            | period 20, stdDev 2, squeeze 2%, buffer 0.2%, TP 12%, SL 5%             |
-| `failed_breakout`      | Неудавшийся пробой     | ложный пробой поддержки и возврат выше неё  | TP, SL                                                 | lookback 20, breakdown 0.5%, TP 8%, SL 4%                               |
+| key                    | Название               | Логика входа                                | Логика выхода                                                                         | Параметры по умолчанию                                                  |
+| ---------------------- | ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `momentum_breakout`    | Импульсный пробой      | fast SMA > slow SMA и 24h change ≥ порога   | TP, SL, fast SMA ниже slow SMA                                                        | fast 5, slow 20, minChange24h 1%, TP 5%, SL 3%                          |
+| `mean_reversion`       | Возврат к среднему     | цена ниже SMA на `entryDropPct`             | возврат к SMA, TP, SL                                                                 | lookback 20, entryDrop 3%, exitAbove 0.5%, TP 5%, SL 5%                 |
+| `grid_range`           | Сетка в диапазоне      | цена ниже rolling high на шаг сетки         | шаг вверх от средней, SL; докупка на следующей ступени                                | anchor 20, gridStep 1.5%, maxAdds 4, TP 1.5%, SL 6%                     |
+| `trend_pullback`       | Откат в тренде         | fast > slow и откат к fast SMA              | TP, SL, пробой тренда                                                                 | fast 8, slow 30, pullback 1%, TP 5%, SL 3%                              |
+| `dca_dip`              | Докупка на просадке    | цена ниже rolling high на `dipPct`          | TP, SL; докупка до `maxAdds`                                                          | anchor 20, dip 3%, maxAdds 3, TP 5%, SL 8%                              |
+| `trailing_stop`        | Трейлинг-стоп          | пробой максимума за окно                    | жёсткий стоп, активация, скользящий стоп от пика                                      | entryLookback 20, buffer 0.2%, activation 2%, trail 1.5%, hardStop 5%   |
+| `crash_protected_grid` | Защитная сетка         | ступени ниже опоры                          | TP, защитное закрытие на обвале, пауза до resumeDrop                                  | maxAdds 4, gridStep 1.5%, TP 2.5%, crash 10%, resume 30%, closeLoss 10% |
+| `donchian_breakout`    | Пробой канала Дончиана | закрытие выше максимума предыдущих N свечей | противоположный канал, TP, SL                                                         | channel 20, exit 10, buffer 0.2%, TP 10%, SL 5%                         |
+| `bollinger_reversion`  | Возврат к Bollinger    | закрытие ниже нижней полосы                 | возврат к средней, TP, SL                                                             | period 20, stdDev 2, exitAboveMean 0.5%, TP 8%, SL 5%                   |
+| `squeeze_breakout`     | Выход из сжатия        | сжатие полос + пробой верхней полосы        | возврат под среднюю, TP, SL                                                           | period 20, stdDev 2, squeeze 2%, buffer 0.2%, TP 12%, SL 5%             |
+| `failed_breakout`      | Неудавшийся пробой     | ложный пробой поддержки и возврат выше неё  | TP, SL                                                                                | lookback 20, breakdown 0.5%, TP 8%, SL 4%                               |
+| `static_limit`         | Статичный лимит        | цена дошла до `buyPriceUsd`                 | `stopPriceUsd` или `takeProfitPriceUsd`; после выхода ждёт восстановления выше лимита | buy/stop/take в USD, один токен, не предлагается ИИ                     |
 
 Все стратегии long-only и работают по каждому токену независимо. Внутри одного токена цикл всегда `покупка → удержание → продажа`; одновременно можно держать позиции по разным токенам. Общий risk layer в runner: max positions, position size, cash, cooldown, daily loss limit, freshness quote (≤5 минут).
 
@@ -366,10 +367,10 @@ interface StrategyDefinition {
 
 ## 12. Проверка
 
-- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для одиннадцати стратегий.
+- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для двенадцати стратегий.
 - Unit: `apps/api/src/modules/trading-bots/backtest/backtest.engine.spec.ts` — buy/sell-циклы, принудительное закрытие, drawdown, buy-and-hold, stateful crash-grid (пауза, закрытие, resume, TP), synthetic TP/SL и вызов `evaluate` на защитном выходе.
 - Unit: `apps/api/src/modules/trading-bots/backtest/historical-data.service.spec.ts` — выбор GeckoTerminal/CoinGecko, synthetic-флаг и fallback при неполном покрытии периода.
-- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — eleven strategies, including `crash_protected_grid` and `failed_breakout` state transitions.
+- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — twelve strategies, including `crash_protected_grid`, `failed_breakout` and `static_limit` state transitions.
 - Unit: `apps/web/src/lib/search.test.ts` — общий поиск (регистр, `ё`, несколько слов).
 - UI: журналы бота загружают по 20 записей с `limit/offset`; журнал бэктеста — первые 20 с кнопкой `Ещё`.
 - E2E: `apps/api/test/trading-bots.e2e.spec.ts` — read-only стратегии, создание бота с `strategyKey`/`strategyParams`, валидация бюджета, buy/sell по котировкам, статистика, диагностика сигналов, смена стратегии, reset, archive, preview/run/list/PDF бэктеста.

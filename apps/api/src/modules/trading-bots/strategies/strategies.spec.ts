@@ -10,6 +10,7 @@ import {
   meanReversion,
   momentumBreakout,
   squeezeBreakout,
+  staticLimit,
   strategyDefinitions,
   strategyTemplates,
   trailingStop,
@@ -42,8 +43,8 @@ function risingHistory(): StrategySample[] {
 }
 
 describe('trading bot strategy registry', () => {
-  it('exposes eleven templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(11);
+  it('exposes twelve templates with valid default params', () => {
+    expect(strategyDefinitions).toHaveLength(12);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
@@ -56,6 +57,7 @@ describe('trading bot strategy registry', () => {
       'bollinger_reversion',
       'squeeze_breakout',
       'failed_breakout',
+      'static_limit',
     ]);
 
     for (const definition of strategyDefinitions) {
@@ -638,5 +640,104 @@ describe('failed_breakout', () => {
         }),
       ).reason,
     ).toBe('стоп-лосс');
+  });
+});
+
+describe('static_limit', () => {
+  const params = {
+    buyPriceUsd: 1,
+    stopPriceUsd: 0.9,
+    takeProfitPriceUsd: 1.2,
+  };
+
+  it('holds until configured and buys at or below the limit', () => {
+    expect(
+      staticLimit.evaluate(
+        context({
+          params: staticLimit.defaultParams,
+          history: risingHistory(),
+          priceUsd: '1.00000000',
+        }),
+      ).reason,
+    ).toBe('задайте цену покупки, стоп и тейк');
+    expect(
+      staticLimit.evaluate(context({ params, history: risingHistory(), priceUsd: '1.01000000' }))
+        .action,
+    ).toBe('hold');
+    expect(
+      staticLimit.evaluate(context({ params, history: risingHistory(), priceUsd: '0.99000000' })),
+    ).toEqual({ action: 'buy', reason: 'лимитная покупка', nextState: { phase: 'armed' } });
+  });
+
+  it('exits on stop and take with a waiting phase', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      staticLimit.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '0.89000000', position }),
+      ),
+    ).toEqual({ action: 'sell', reason: 'стоп-лосс', nextState: { phase: 'waiting' } });
+    expect(
+      staticLimit.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '1.21000000', position }),
+      ),
+    ).toEqual({ action: 'sell', reason: 'тейк-профит', nextState: { phase: 'waiting' } });
+  });
+
+  it('waits for recovery above the limit before re-arming', () => {
+    expect(
+      staticLimit.evaluate(
+        context({
+          params,
+          history: risingHistory(),
+          priceUsd: '0.95000000',
+          state: { phase: 'waiting' },
+        }),
+      ),
+    ).toEqual({
+      action: 'hold',
+      reason: 'ожидание восстановления выше лимита',
+      nextState: { phase: 'waiting' },
+    });
+    expect(
+      staticLimit.evaluate(
+        context({
+          params,
+          history: risingHistory(),
+          priceUsd: '1.01000000',
+          state: { phase: 'waiting' },
+        }),
+      ),
+    ).toEqual({
+      action: 'hold',
+      reason: 'цена вернулась к лимиту',
+      nextState: { phase: 'armed' },
+    });
+  });
+
+  it('re-enters after re-arming and honours disabled protective exits', () => {
+    expect(
+      staticLimit.evaluate(
+        context({
+          params,
+          history: risingHistory(),
+          priceUsd: '1.00000000',
+          state: { phase: 'armed' },
+        }),
+      ).action,
+    ).toBe('buy');
+
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      staticLimit.evaluate(
+        context({
+          params,
+          history: risingHistory(),
+          priceUsd: '0.89000000',
+          position,
+          stopLossEnabled: false,
+          takeProfitEnabled: false,
+        }),
+      ).action,
+    ).toBe('hold');
   });
 });

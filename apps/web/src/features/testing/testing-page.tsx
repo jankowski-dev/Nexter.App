@@ -811,6 +811,12 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                   {selectedTemplate.description}
                 </p>
               ) : null}
+              {selectedTemplate?.key === 'static_limit' ? (
+                <p className="mt-1 text-[11px] leading-4 text-amber-700">
+                  Для «Статичного лимита» нужен ровно один токен. Цены покупки, стопа и тейка
+                  задаются в USD.
+                </p>
+              ) : null}
             </label>
           </div>
           <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">

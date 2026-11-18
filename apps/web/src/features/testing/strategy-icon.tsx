@@ -61,6 +61,17 @@ const visuals: Record<string, Visual> = {
       </>
     ),
   },
+  limit: {
+    tile: 'border-lime-200 bg-lime-50 text-lime-700',
+    icon: (
+      <>
+        <path d="M4 12h16" />
+        <path d="M7 9v6M17 9v6" />
+        <path d="M12 4v5M12 15v5" />
+        <circle cx="12" cy="12" r="2.2" />
+      </>
+    ),
+  },
   channel: {
     tile: 'border-teal-200 bg-teal-50 text-teal-700',
     icon: (

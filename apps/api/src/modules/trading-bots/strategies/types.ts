@@ -55,6 +55,8 @@ export interface StrategyDefinition {
   risks: string;
   icon: string;
   kind: 'system' | 'custom';
+  /** Manual-only strategies set this to false so the AI Analyst never proposes them. */
+  aiEligible?: boolean;
   defaultParams: Record<string, unknown>;
   paramFields: StrategyParamField[];
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;

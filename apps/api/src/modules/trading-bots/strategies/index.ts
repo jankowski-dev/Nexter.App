@@ -844,6 +844,112 @@ export const failedBreakout: StrategyDefinition = {
   },
 };
 
+const staticLimitParamsSchema = z
+  .object({
+    buyPriceUsd: z.number().min(0).max(1e15).default(0),
+    stopPriceUsd: z.number().min(0).max(1e15).default(0),
+    takeProfitPriceUsd: z.number().min(0).max(1e15).default(0),
+  })
+  .refine(
+    (value) => {
+      const configured =
+        value.buyPriceUsd > 0 || value.stopPriceUsd > 0 || value.takeProfitPriceUsd > 0;
+      if (!configured) return true;
+      return (
+        value.stopPriceUsd > 0 &&
+        value.buyPriceUsd > 0 &&
+        value.takeProfitPriceUsd > 0 &&
+        value.stopPriceUsd < value.buyPriceUsd &&
+        value.buyPriceUsd < value.takeProfitPriceUsd
+      );
+    },
+    {
+      message: 'stopPriceUsd must be below buyPriceUsd and takeProfitPriceUsd above it',
+      path: ['buyPriceUsd'],
+    },
+  );
+
+function readStaticLimitPhase(state: Record<string, unknown> | undefined): 'armed' | 'waiting' {
+  return state?.phase === 'waiting' ? 'waiting' : 'armed';
+}
+
+export const staticLimit: StrategyDefinition = {
+  key: 'static_limit',
+  version: 1,
+  icon: 'limit',
+  kind: 'system',
+  aiEligible: false,
+  name: 'Статичный лимит',
+  description:
+    'Покупает по заданной цене, затем выходит по статическому стопу или тейку и ждёт восстановления цены для нового цикла.',
+  guide:
+    'Классическая лимитная покупка для бумажного бота с одним токеном. Пока цена выше buyPriceUsd, стратегия ждёт. Когда цена опускается до лимита, она покупает. В позиции выход только по stopPriceUsd или takeProfitPriceUsd; стоп проверяется первым. После выхода стратегия ждёт, пока цена поднимется обратно до buyPriceUsd, и только затем снова разрешает вход. Это защищает от немедленной повторной покупки ниже лимита после стопа. Цены задаются в USD и не зависят от текущей цены.',
+  bestFor:
+    'Ручной paper-бот с одним токеном, когда владелец хочет заранее задать конкретные уровни входа, стопа и тейка.',
+  risks:
+    'Если цена не дойдёт до лимита, сделки не будет. После стопа повторный вход произойдёт только после возврата выше лимита, поэтому часть движения может быть пропущена. Гэп ниже стопа исполняется по текущей цене, а не по стоп-цене.',
+  paramFields: [
+    {
+      key: 'buyPriceUsd',
+      label: 'Цена покупки',
+      hint: 'Абсолютная цена в USD; бот купит при цене не выше этой',
+      min: 0,
+      max: 1e15,
+      unit: '$',
+    },
+    {
+      key: 'stopPriceUsd',
+      label: 'Стоп-цена',
+      hint: 'Должна быть ниже цены покупки',
+      min: 0,
+      max: 1e15,
+      unit: '$',
+    },
+    {
+      key: 'takeProfitPriceUsd',
+      label: 'Тейк-цена',
+      hint: 'Должна быть выше цены покупки',
+      min: 0,
+      max: 1e15,
+      unit: '$',
+    },
+  ],
+  defaultParams: staticLimitParamsSchema.parse({}),
+  parseParams: (value) => staticLimitParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = staticLimitParamsSchema.parse(ctx.params);
+    const buyPrice = dec(String(params.buyPriceUsd));
+    const stopPrice = dec(String(params.stopPriceUsd));
+    const takePrice = dec(String(params.takeProfitPriceUsd));
+    if (buyPrice.lte(0) || stopPrice.lte(0) || takePrice.lte(0)) {
+      return hold('задайте цену покупки, стоп и тейк');
+    }
+
+    const price = dec(ctx.priceUsd);
+    const phase = readStaticLimitPhase(ctx.state);
+
+    if (ctx.position) {
+      if (ctx.stopLossEnabled !== false && price.lte(stopPrice)) {
+        return sell('стоп-лосс', { phase: 'waiting' });
+      }
+      if (ctx.takeProfitEnabled !== false && price.gte(takePrice)) {
+        return sell('тейк-профит', { phase: 'waiting' });
+      }
+      return hold('позиция между стопом и тейком', { phase });
+    }
+
+    if (phase === 'waiting') {
+      if (price.gte(buyPrice)) {
+        return hold('цена вернулась к лимиту', { phase: 'armed' });
+      }
+      return hold('ожидание восстановления выше лимита', { phase: 'waiting' });
+    }
+
+    if (price.lte(buyPrice)) return buy('лимитная покупка', { phase: 'armed' });
+    return hold('ожидание цены покупки', { phase: 'armed' });
+  },
+};
+
 export const strategyDefinitions = [
   momentumBreakout,
   meanReversion,
@@ -856,6 +962,7 @@ export const strategyDefinitions = [
   bollingerReversion,
   squeezeBreakout,
   failedBreakout,
+  staticLimit,
 ];
 
 export const strategyByKey = new Map(strategyDefinitions.map((item) => [item.key, item]));
