@@ -51,6 +51,8 @@ import {
   noteImageSchema,
   noteSchema,
   notificationsResponseSchema,
+  pendingOrderSchema,
+  pendingOrdersResponseSchema,
   notificationsReadAllResponseSchema,
   notificationUnreadCountSchema,
   notificationsClearResponseSchema,
@@ -158,6 +160,10 @@ import {
   type NoteImage,
   type NotificationUnreadCount,
   type NotificationsResponse,
+  type PendingOrder,
+  type PendingOrderCreateRequest,
+  type PendingOrdersResponse,
+  type PendingOrderUpdateRequest,
   type NotificationsClearResponse,
   type NotificationsReadAllResponse,
   type NoteImageCreateRequest,
@@ -194,6 +200,7 @@ import {
   type VaultItemUpdateRequest,
   type VaultResponse,
   type TradeGroupListQuery,
+  type TradeGroupProtectionRequest,
   type TradeGroupSellRequest,
   type TradeGroupsResponse,
   type TransactionsListQuery,
@@ -1243,4 +1250,26 @@ export async function fetchAutomationRuns(limit = 50): Promise<AutomationRunsRes
 
 export async function pauseAllAutomation(): Promise<AutomationRulesResponse> {
   return apiPost('/api/v1/automation/pause-all', {}, automationRulesResponseSchema);
+}
+
+export async function updateTradeGroupProtection(
+  id: string,
+  body: TradeGroupProtectionRequest,
+): Promise<TradeGroupDetail> {
+  return apiPatch(`/api/v1/trade-groups/${id}/protection`, body, tradeGroupDetailSchema);
+}
+
+export async function fetchPendingOrders(): Promise<PendingOrdersResponse> {
+  return apiFetch('/api/v1/pending-orders', {}, pendingOrdersResponseSchema);
+}
+
+export async function createPendingOrder(body: PendingOrderCreateRequest): Promise<PendingOrder> {
+  return apiPost('/api/v1/pending-orders', body, pendingOrderSchema);
+}
+
+export async function updatePendingOrder(
+  id: string,
+  body: PendingOrderUpdateRequest,
+): Promise<PendingOrder> {
+  return apiPatch(`/api/v1/pending-orders/${id}`, body, pendingOrderSchema);
 }

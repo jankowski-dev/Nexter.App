@@ -404,6 +404,9 @@ export const tradeGroups = pgTable(
     openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     notes: text('notes'),
+    stopLossPct: numeric('stop_loss_pct', { precision: 5, scale: 2 }),
+    takeProfitPct: numeric('take_profit_pct', { precision: 6, scale: 2 }),
+    lastProtectionEventKey: text('last_protection_event_key'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -774,6 +777,31 @@ export const automationRuns = pgTable(
   ],
 );
 
+export const pendingOrders = pgTable(
+  'pending_orders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    amountUsd: numeric('amount_usd', { precision: 24, scale: 2 }).notNull(),
+    triggerPriceUsd: numeric('trigger_price_usd', { precision: 36, scale: 18 }).notNull(),
+    stopLossPct: numeric('stop_loss_pct', { precision: 5, scale: 2 }),
+    takeProfitPct: numeric('take_profit_pct', { precision: 6, scale: 2 }),
+    status: text('status').notNull().default('pending'),
+    lastNotifiedAt: timestamp('last_notified_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('pending_orders_user_status_idx').on(table.userId, table.status),
+    index('pending_orders_asset_idx').on(table.assetId),
+  ],
+);
+
 export const portfolioSnapshots = pgTable(
   'portfolio_snapshots',
   {
@@ -831,6 +859,8 @@ export const swapOrders = pgTable(
     executedAmountOut: numeric('executed_amount_out', { precision: 36, scale: 18 }),
     minOut: numeric('min_out', { precision: 36, scale: 18 }).notNull(),
     slippageBps: integer('slippage_bps').notNull(),
+    stopLossPct: numeric('stop_loss_pct', { precision: 5, scale: 2 }),
+    takeProfitPct: numeric('take_profit_pct', { precision: 6, scale: 2 }),
     priceImpactBps: integer('price_impact_bps'),
     routeId: text('route_id'),
     routeSummary: jsonb('route_summary').notNull(),

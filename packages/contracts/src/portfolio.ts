@@ -65,7 +65,14 @@ export const tradeGroupSummarySchema = z.object({
   holdingDays: z.number().int().nonnegative(),
   source: transactionSourceSchema,
   notes: z.string().nullable(),
+  stopLossPct: z.string().nullable(),
+  takeProfitPct: z.string().nullable(),
   quality: tradeGroupQualitySchema,
+});
+
+export const tradeGroupProtectionRequestSchema = z.object({
+  stopLossPct: z.number().min(1).max(90).nullable(),
+  takeProfitPct: z.number().min(1).max(1000).nullable(),
 });
 
 export const tradeGroupsResponseSchema = z.object({
@@ -252,6 +259,7 @@ export type Lot = z.infer<typeof lotSchema>;
 export type LotConsumption = z.infer<typeof lotConsumptionSchema>;
 export type TradeGroupQuality = z.infer<typeof tradeGroupQualitySchema>;
 export type TradeGroupSummary = z.infer<typeof tradeGroupSummarySchema>;
+export type TradeGroupProtectionRequest = z.infer<typeof tradeGroupProtectionRequestSchema>;
 export type TradeGroupsResponse = z.infer<typeof tradeGroupsResponseSchema>;
 export type TradeGroupDetail = z.infer<typeof tradeGroupDetailSchema>;
 export type TradeGroupSellRequest = z.infer<typeof tradeGroupSellRequestSchema>;

@@ -1262,6 +1262,8 @@ export class SwapTrackingService implements OnApplicationBootstrap, OnApplicatio
           ...(usdValueIn ? { usdValueIn } : {}),
           ...(usdValueOut ? { usdValueOut } : {}),
           ...(closeGroupIds.length > 0 ? { closeGroupIds } : {}),
+          stopLossPct: order.stopLossPct === null ? null : Number(order.stopLossPct),
+          takeProfitPct: order.takeProfitPct === null ? null : Number(order.takeProfitPct),
           ...(fee ?? {}),
           occurredAt,
           notes: `KyberSwap ${tokenIn.symbol} -> ${tokenOut.symbol} (${order.txHash})`,

@@ -25,7 +25,9 @@ Nexter kept most operational values in code or env: quote intervals, liquidity f
 - `GET /swap/config` appends dynamic tokens, deduplicated against the static registry.
 - All existing safety checks remain unchanged: router/executor/selector/wallet allowlists, exact approvals, calldata validation, simulation, gas/impact caps, step-up TOTP and kill switch. Existing env swap limits remain hard upper bounds; settings can only tighten them.
 
-### 3. Automation
+### 3. Automation (superseded by ADR 0070)
+
+The global automation UI/rules described in this section were replaced by per-order protection and delayed buys in ADR 0070. The tables remain dormant; the global module is not registered.
 
 - Add `automation_rules`, `automation_rule_state` and `automation_runs` in migration `0047`; grants are SELECT/INSERT/UPDATE without DELETE.
 - Supported rules: `buy` (price below or drop from high), `stop_loss`, `take_profit`, `trailing_stop`.

@@ -11,6 +11,7 @@ export * from './imports';
 export * from './notes';
 export * from './notifications';
 export * from './pagination';
+export * from './pending-orders';
 export * from './portfolio';
 export * from './reconciliation';
 export * from './reports';

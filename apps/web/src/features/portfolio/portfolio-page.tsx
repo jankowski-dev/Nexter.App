@@ -28,7 +28,6 @@ import { TestingPage } from '../testing/testing-page';
 import { OperationsPage } from '../operations/operations-page';
 import { WatchlistPage } from '../watchlist/watchlist-page';
 import { ReportsPage } from '../reports/reports-page';
-import { AutomationPage } from '../automation/automation-page';
 import { cryptoTabs, hashForTab, tabFromLocation, type CryptoTab } from './portfolio-tabs';
 
 function PortfolioMetric({
@@ -49,11 +48,13 @@ function PortfolioMetric({
   className?: string;
 }) {
   return (
-    <div title={hint} className={className}>
-      <div className="text-[10px] text-zinc-500">{label}</div>
-      <div className={`mt-0.5 font-mono text-xs ${tone ?? 'text-zinc-800'}`}>{value}</div>
+    <div title={hint} className={`text-right tabular-nums ${className ?? ''}`}>
+      <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">{label}</div>
+      <div className={`mt-0.5 font-mono text-[13px] font-semibold ${tone ?? 'text-zinc-800'}`}>
+        {value}
+      </div>
       {subvalue ? (
-        <div className={`mt-0.5 font-mono text-[10px] ${subvalueTone ?? 'text-zinc-500'}`}>
+        <div className={`mt-0.5 font-mono text-[11px] ${subvalueTone ?? 'text-zinc-500'}`}>
           {subvalue}
         </div>
       ) : null}
@@ -310,13 +311,13 @@ export function PortfolioPage() {
                             {item.openOrdersCount}{' '}
                             {pluralizeRu(item.openOrdersCount, 'ордер', 'ордера', 'ордеров')}
                           </div>
-                          <div className="ml-auto grid min-w-0 flex-1 grid-cols-2 gap-x-5 gap-y-2 text-right sm:grid-cols-3 xl:grid-cols-5">
+                          <div className="ml-auto grid min-w-0 grid-cols-2 gap-x-4 gap-y-2 text-right sm:grid-cols-3 xl:grid-cols-[110px_105px_85px_85px_125px] xl:justify-end">
                             <div
                               className="text-right"
                               title={`${formatUsd(item.investedUsd)} — ${share.toFixed(1)}% от всех активных инвестиций`}
                             >
                               <div className="text-[10px] text-zinc-500">Инвестировано</div>
-                              <div className="mt-0.5 font-mono text-xs text-zinc-800">
+                              <div className="mt-0.5 font-mono text-[13px] font-semibold tabular-nums text-zinc-800">
                                 {formatUsd(item.investedUsd)}
                               </div>
                               <div className="mt-1 flex items-center justify-end gap-1.5">
@@ -391,7 +392,6 @@ export function PortfolioPage() {
       ) : null}
       {tab === 'operations' ? <OperationsPage embedded /> : null}
       {tab === 'robots' ? <TestingPage mode="bots" /> : null}
-      {tab === 'automation' ? <AutomationPage /> : null}
       {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
       {tab === 'statistics' ? <ReportsPage embedded /> : null}
 

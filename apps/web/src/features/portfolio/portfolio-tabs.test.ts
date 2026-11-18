@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { cryptoTabs, hashForTab, tabFromLocation } from './portfolio-tabs';
 
 describe('crypto tabs', () => {
-  it('exposes eight crypto sections', () => {
+  it('exposes seven crypto sections', () => {
     expect(cryptoTabs.map((tab) => tab.label)).toEqual([
       'Обзор',
       'Токены',
       'Ордера',
       'Операции',
       'Роботы',
-      'Автоматизация',
       'Стратегии',
       'Статистика',
     ]);

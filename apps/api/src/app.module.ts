@@ -5,13 +5,13 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { AiModule } from './modules/ai/ai.module';
 import { AudioNotesModule } from './modules/audio-notes/audio-notes.module';
-import { AutomationModule } from './modules/automation/automation.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { HealthModule } from './modules/health/health.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { HabitsModule } from './modules/habits/habits.module';
 import { ImportsModule } from './modules/imports/imports.module';
 import { NotesModule } from './modules/notes/notes.module';
+import { PendingOrdersModule } from './modules/pending-orders/pending-orders.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { VaultModule } from './modules/vault/vault.module';
@@ -37,13 +37,13 @@ import { loggerModule } from './shared/logging/logger.module';
     AuthModule,
     AiModule,
     AudioNotesModule,
-    AutomationModule,
     AccountingModule,
     ImportsModule,
     FinanceModule,
     HabitsModule,
     WatchlistModule,
     NotesModule,
+    PendingOrdersModule,
     NotificationsModule,
     TasksModule,
     VaultModule,

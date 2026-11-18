@@ -281,3 +281,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - `Токены` drawer has an explicit `Ончейн-свопы` toggle. Only active default-group tokens with the toggle enabled become dynamic swap tokens.
 - Crypto workspace gains an `Автоматизация` tab with rules, dry-run/proposal modes, test action, journal and pause-all. Stop-loss/take-profit/trailing proposals link to the existing trade card; no automatic signing.
 - Defaults: stop-loss 10%, take-profit 20%, trailing 8% after +10%, auto-buy on a 10% drop for $100, max order $250, max daily $500, 5 actions/day, cooldown 60 minutes.
+
+## UI-73 per-order protection and delayed buys
+
+- The buy modal has `Защита и отложенная покупка`: stop-loss/take-profit percentages for this order, or a delayed buy with amount/trigger/protection.
+- The close/edit-order drawer has `Защита этой сделки` with editable stop-loss/take-profit.
+- `Ордера` shows `Отложенные покупки` with edit/cancel.
+- The global automation tab and settings page are removed; protection is per order.

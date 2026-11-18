@@ -15,7 +15,6 @@ import { TasksPage } from '@/features/tasks/tasks-page';
 import { VaultPage } from '@/features/vault/vault-page';
 import { AccountingSettingsPage } from '@/features/settings/accounting-settings-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
-import { AutomationSettingsPage } from '@/features/settings/automation-settings-page';
 import { BotsSettingsPage } from '@/features/settings/bots-settings-page';
 import { DataSettingsPage } from '@/features/settings/data-settings-page';
 import { DiagnosticsSettingsPage } from '@/features/settings/diagnostics-settings-page';
@@ -329,12 +328,6 @@ const tradingSettingsRoute = createRoute({
   component: TradingSettingsPage,
 });
 
-const automationSettingsRoute = createRoute({
-  getParentRoute: () => appLayoutRoute,
-  path: '/settings/automation',
-  component: AutomationSettingsPage,
-});
-
 const botsSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/bots',
@@ -402,7 +395,6 @@ const routeTree = rootRoute.addChildren([
     accountingSettingsRoute,
     marketSettingsRoute,
     tradingSettingsRoute,
-    automationSettingsRoute,
     botsSettingsRoute,
     tasksSettingsRoute,
     notificationsSettingsRoute,

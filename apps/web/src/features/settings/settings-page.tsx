@@ -160,13 +160,6 @@ export function SettingsPage() {
           tone="violet"
         />
         <SettingsNavCard
-          to="/settings/automation"
-          title="Автоматизация"
-          description="Dry-run, предложения, лимиты и значения по умолчанию."
-          icon="ai"
-          tone="amber"
-        />
-        <SettingsNavCard
           to="/settings/tasks"
           title="Задачи и заметки"
           description="Напоминания, время задачи и автосохранение."

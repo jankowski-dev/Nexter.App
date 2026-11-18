@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { PendingOrdersPanel } from './pending-orders-panel';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -102,6 +103,12 @@ export function TradeGroupBlock({
             <div className="truncate text-[11px] text-zinc-500">
               {group.asset.name} · {group.asset.chainCode}
             </div>
+            {group.stopLossPct || group.takeProfitPct ? (
+              <div className="mt-0.5 whitespace-nowrap text-[10px] text-zinc-500">
+                SL {group.stopLossPct ? `${group.stopLossPct}%` : '—'} · TP{' '}
+                {group.takeProfitPct ? `${group.takeProfitPct}%` : '—'}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -193,6 +200,8 @@ export function TradesPanel({
 
   return (
     <div className="space-y-4">
+      <PendingOrdersPanel />
+
       {!activeMode ? (
         <>
           <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
