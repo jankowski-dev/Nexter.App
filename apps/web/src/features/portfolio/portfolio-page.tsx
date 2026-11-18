@@ -23,10 +23,12 @@ import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
 import { TokenBuyList } from './token-buy-list';
+import { useRuntimeSettings } from '../settings/use-settings';
 import { TestingPage } from '../testing/testing-page';
 import { OperationsPage } from '../operations/operations-page';
 import { WatchlistPage } from '../watchlist/watchlist-page';
 import { ReportsPage } from '../reports/reports-page';
+import { AutomationPage } from '../automation/automation-page';
 import { cryptoTabs, hashForTab, tabFromLocation, type CryptoTab } from './portfolio-tabs';
 
 function PortfolioMetric({
@@ -61,6 +63,8 @@ function PortfolioMetric({
 
 export function PortfolioPage() {
   const navigate = useNavigate();
+  const runtime = useRuntimeSettings();
+  const portfolioPoll = runtime.portfolioPollSeconds * 1000;
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [tab, setTab] = useState<CryptoTab>(() =>
     tabFromLocation(
@@ -84,7 +88,7 @@ export function PortfolioPage() {
   const positions = useQuery({
     queryKey: ['positions'],
     queryFn: fetchPositions,
-    refetchInterval: 15_000,
+    refetchInterval: portfolioPoll,
   });
   const refetchPositions = useCallback(() => {
     void positions.refetch();
@@ -102,13 +106,13 @@ export function PortfolioPage() {
     queryKey: ['portfolio-token-summaries'],
     queryFn: fetchPortfolioTokenSummaries,
     enabled: tab === 'overview',
-    refetchInterval: 15_000,
+    refetchInterval: portfolioPoll,
   });
   const dashboardSummary = useQuery({
     queryKey: ['dashboard-summary'],
     queryFn: fetchDashboardSummary,
     enabled: tab === 'overview',
-    refetchInterval: 30_000,
+    refetchInterval: portfolioPoll * 2,
   });
   const activeTokenRows = (tokenSummaries.data?.data ?? []).filter(
     (item) => item.openOrdersCount > 0,
@@ -387,6 +391,7 @@ export function PortfolioPage() {
       ) : null}
       {tab === 'operations' ? <OperationsPage embedded /> : null}
       {tab === 'robots' ? <TestingPage mode="bots" /> : null}
+      {tab === 'automation' ? <AutomationPage /> : null}
       {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
       {tab === 'statistics' ? <ReportsPage embedded /> : null}
 

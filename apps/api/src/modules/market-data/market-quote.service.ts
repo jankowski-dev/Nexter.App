@@ -1,11 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
 import { assets, chains, marketQuotes, type Database, type MarketQuote } from '@nexter/db';
-import { env } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decimal } from '../../shared/money/decimal';
 import { CoinGeckoClient, type CoinGeckoMarket } from './coingecko.client';
 import { DexScreenerClient } from './dexscreener.client';
+import { SettingsService } from '../settings/settings.service';
 
 export interface MarketQuoteValue {
   priceUsd: string;
@@ -99,6 +99,7 @@ export class MarketQuoteService {
     @Inject(DB) private readonly db: Database,
     private readonly coingecko: CoinGeckoClient,
     private readonly dexscreener: DexScreenerClient,
+    private readonly settings: SettingsService,
   ) {}
 
   async getQuotes(assetIds: string[]): Promise<Map<string, MarketQuoteValue>> {
@@ -113,6 +114,7 @@ export class MarketQuoteService {
   }
 
   async refreshAll(): Promise<void> {
+    const runtime = await this.settings.getRuntime();
     const rows = await this.db
       .select({
         id: assets.id,
@@ -131,7 +133,7 @@ export class MarketQuoteService {
     const existingById = new Map(existingRows.map((row) => [row.assetId, row]));
     const quotes: QuoteInput[] = [];
     const dexCovered = new Set<string>();
-    const minLiquidity = decimal(env.MARKET_QUOTE_MIN_LIQUIDITY_USD);
+    const minLiquidity = decimal(String(runtime.marketMinLiquidityUsd));
     const now = new Date();
 
     for (const row of rows) {
@@ -180,7 +182,7 @@ export class MarketQuoteService {
     });
 
     const cgDue =
-      Date.now() - this.lastCoinGeckoAt >= env.MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS * 1000;
+      Date.now() - this.lastCoinGeckoAt >= runtime.marketCoinGeckoIntervalSeconds * 1000;
     const missingQuoteIds = rows.filter(
       (row) => !row.isCashEquivalent && row.coingeckoId && !existingById.has(row.id),
     );

@@ -63,6 +63,7 @@ import { TransactionsController } from './transactions.controller';
     PricingService,
     TradeIntentService,
     TradePolicyService,
+    TradeGroupsService,
   ],
 })
 export class AccountingModule {}

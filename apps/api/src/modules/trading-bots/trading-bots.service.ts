@@ -49,6 +49,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService } from '../market-data/market-quote.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SettingsService } from '../settings/settings.service';
 import { strategyByKey, strategyTemplates } from './strategies';
 
 interface BotMeta {
@@ -169,6 +170,7 @@ export class TradingBotsService {
     private readonly audit: AuditService,
     private readonly quotes: MarketQuoteService,
     private readonly notifications: NotificationsService,
+    private readonly settings: SettingsService,
   ) {}
 
   templates(): BotStrategyTemplate[] {
@@ -545,16 +547,19 @@ export class TradingBotsService {
         { executor: tx, strict: true },
       );
     });
-    await this.notifications
-      .create({
-        userId,
-        type: 'bot_stopped',
-        title: 'Бот остановлен',
-        body: `Бот «${bot.name}» остановлен.`,
-        href: '/testing',
-        payload: { botId: id },
-      })
-      .catch(() => undefined);
+    const stopRuntime = await this.settings.getRuntime();
+    if (stopRuntime.notifyBotStopped) {
+      await this.notifications
+        .create({
+          userId,
+          type: 'bot_stopped',
+          title: 'Бот остановлен',
+          body: `Бот «${bot.name}» остановлен.`,
+          href: '/portfolio#robots',
+          payload: { botId: id },
+        })
+        .catch(() => undefined);
+    }
     return this.getBot(userId, id);
   }
 
@@ -749,16 +754,19 @@ export class TradingBotsService {
       unrealizedPnlUsd: '0.00000000',
     });
 
-    await this.notifications
-      .create({
-        userId,
-        type: 'bot_positions_closed',
-        title: 'Позиции закрыты',
-        body: `Бот «${bot.name}»: закрыто позиций — ${positions.length}.`,
-        href: '/testing',
-        payload: { botId: id, positions: positions.length },
-      })
-      .catch(() => undefined);
+    const closeRuntime = await this.settings.getRuntime();
+    if (closeRuntime.notifyPositionsClosed) {
+      await this.notifications
+        .create({
+          userId,
+          type: 'bot_positions_closed',
+          title: 'Позиции закрыты',
+          body: `Бот «${bot.name}»: закрыто позиций — ${positions.length}.`,
+          href: '/portfolio#robots',
+          payload: { botId: id, positions: positions.length },
+        })
+        .catch(() => undefined);
+    }
     return this.getBot(userId, id);
   }
 

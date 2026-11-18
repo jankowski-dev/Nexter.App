@@ -105,6 +105,78 @@ export const settings = pgTable(
     timezone: text('timezone').notNull().default('Europe/Minsk'),
     // Keep in sync with AUDIO_MAX_MB_DEFAULT in @nexter/contracts.
     audioMaxMb: integer('audio_max_mb').notNull().default(8),
+    marketQuoteIntervalSeconds: integer('market_quote_interval_seconds').notNull().default(60),
+    marketCoinGeckoIntervalSeconds: integer('market_coingecko_interval_seconds')
+      .notNull()
+      .default(600),
+    marketMinLiquidityUsd: numeric('market_min_liquidity_usd', { precision: 24, scale: 2 })
+      .notNull()
+      .default('25000.00'),
+    chartDefaultDays: integer('chart_default_days').notNull().default(90),
+    chartHistoryRefreshHours: integer('chart_history_refresh_hours').notNull().default(24),
+    swapDefaultSlippageBps: integer('swap_default_slippage_bps').notNull().default(50),
+    swapMaxSlippageBps: integer('swap_max_slippage_bps').notNull().default(200),
+    swapMaxPriceImpactBps: integer('swap_max_price_impact_bps').notNull().default(200),
+    swapMaxGasUsd: numeric('swap_max_gas_usd', { precision: 24, scale: 2 })
+      .notNull()
+      .default('5.00'),
+    swapQuoteTtlSeconds: integer('swap_quote_ttl_seconds').notNull().default(15),
+    botTickIntervalSeconds: integer('bot_tick_interval_seconds').notNull().default(60),
+    botQuoteMaxAgeSeconds: integer('bot_quote_max_age_seconds').notNull().default(300),
+    botDefaultBudgetUsd: numeric('bot_default_budget_usd', { precision: 24, scale: 2 })
+      .notNull()
+      .default('1000.00'),
+    botDefaultMaxPositions: integer('bot_default_max_positions').notNull().default(5),
+    botDefaultPositionSizePct: integer('bot_default_position_size_pct').notNull().default(20),
+    botDefaultFeeBps: integer('bot_default_fee_bps').notNull().default(25),
+    botDefaultSlippageBps: integer('bot_default_slippage_bps').notNull().default(10),
+    botDefaultDailyLossPct: integer('bot_default_daily_loss_pct').notNull().default(10),
+    botDefaultCooldownMinutes: integer('bot_default_cooldown_minutes').notNull().default(15),
+    backtestDefaultCapitalUsd: numeric('backtest_default_capital_usd', {
+      precision: 24,
+      scale: 2,
+    })
+      .notNull()
+      .default('1000.00'),
+    backtestDefaultFeeBps: integer('backtest_default_fee_bps').notNull().default(25),
+    backtestDefaultSlippageBps: integer('backtest_default_slippage_bps').notNull().default(10),
+    backtestDefaultDays: integer('backtest_default_days').notNull().default(365),
+    backtestDefaultStopLoss: boolean('backtest_default_stop_loss').notNull().default(true),
+    backtestDefaultTakeProfit: boolean('backtest_default_take_profit').notNull().default(true),
+    backtestDefaultReinvest: boolean('backtest_default_reinvest').notNull().default(false),
+    taskReminderLeadMinutes: integer('task_reminder_lead_minutes').notNull().default(5),
+    taskDefaultDueTime: text('task_default_due_time').notNull().default('12:00'),
+    autosaveIntervalSeconds: integer('autosave_interval_seconds').notNull().default(10),
+    defaultReportPeriod: text('default_report_period').notNull().default('all'),
+    dashboardPollSeconds: integer('dashboard_poll_seconds').notNull().default(10),
+    portfolioPollSeconds: integer('portfolio_poll_seconds').notNull().default(15),
+    watchlistPollSeconds: integer('watchlist_poll_seconds').notNull().default(30),
+    reportsPollSeconds: integer('reports_poll_seconds').notNull().default(30),
+    notificationsPollSeconds: integer('notifications_poll_seconds').notNull().default(30),
+    notifyBotStopped: boolean('notify_bot_stopped').notNull().default(true),
+    notifyPositionsClosed: boolean('notify_positions_closed').notNull().default(true),
+    automationEnabled: boolean('automation_enabled').notNull().default(false),
+    automationMode: text('automation_mode').notNull().default('dry_run'),
+    automationMaxOrderUsd: numeric('automation_max_order_usd', { precision: 24, scale: 2 })
+      .notNull()
+      .default('250.00'),
+    automationMaxDailyUsd: numeric('automation_max_daily_usd', { precision: 24, scale: 2 })
+      .notNull()
+      .default('500.00'),
+    automationMaxActionsPerDay: integer('automation_max_actions_per_day').notNull().default(5),
+    automationCooldownMinutes: integer('automation_cooldown_minutes').notNull().default(60),
+    automationDefaultStopLossPct: integer('automation_default_stop_loss_pct').notNull().default(10),
+    automationDefaultTakeProfitPct: integer('automation_default_take_profit_pct')
+      .notNull()
+      .default(20),
+    automationDefaultTrailingPct: integer('automation_default_trailing_pct').notNull().default(8),
+    automationDefaultBuyDropPct: integer('automation_default_buy_drop_pct').notNull().default(10),
+    automationDefaultBuyAmountUsd: numeric('automation_default_buy_amount_usd', {
+      precision: 24,
+      scale: 2,
+    })
+      .notNull()
+      .default('100.00'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -112,6 +184,16 @@ export const settings = pgTable(
     check(
       'settings_audio_max_mb_range',
       sql`${table.audioMaxMb} >= 1 and ${table.audioMaxMb} <= 20`,
+    ),
+    check('settings_chart_default_days', sql`${table.chartDefaultDays} in (30, 90, 180, 365)`),
+    check(
+      'settings_default_report_period',
+      sql`${table.defaultReportPeriod} in ('30d', '90d', '365d', 'ytd', 'all')`,
+    ),
+    check('settings_automation_mode', sql`${table.automationMode} in ('dry_run', 'proposal')`),
+    check(
+      'settings_task_default_due_time',
+      sql`${table.taskDefaultDueTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
     ),
   ],
 );
@@ -380,6 +462,7 @@ export const watchlist = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     priority: integer('priority').notNull().default(0),
+    swapEnabled: boolean('swap_enabled').notNull().default(false),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -620,6 +703,75 @@ export const marketHistory = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('market_history_fetched_idx').on(table.fetchedAt)],
+);
+
+export const automationRules = pgTable(
+  'automation_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: text('kind').notNull(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    status: text('status').notNull().default('draft'),
+    executionMode: text('execution_mode').notNull().default('dry_run'),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    maxOrderUsd: numeric('max_order_usd', { precision: 24, scale: 2 }),
+    cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
+    lastTriggeredAt: timestamp('last_triggered_at', { withTimezone: true }),
+    triggerCount: integer('trigger_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('automation_rules_user_status_idx').on(table.userId, table.status),
+    index('automation_rules_asset_idx').on(table.assetId),
+    index('automation_rules_group_idx').on(table.tradeGroupId),
+  ],
+);
+
+export const automationRuleState = pgTable('automation_rule_state', {
+  ruleId: uuid('rule_id')
+    .primaryKey()
+    .references(() => automationRules.id, { onDelete: 'cascade' }),
+  highWaterUsd: numeric('high_water_usd', { precision: 36, scale: 18 }),
+  lastActionAt: timestamp('last_action_at', { withTimezone: true }),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const automationRuns = pgTable(
+  'automation_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => automationRules.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status').notNull(),
+    triggerKey: text('trigger_key').notNull(),
+    reason: text('reason').notNull().default(''),
+    triggerPriceUsd: numeric('trigger_price_usd', { precision: 36, scale: 18 }),
+    amount: numeric('amount', { precision: 36, scale: 18 }),
+    usdValue: numeric('usd_value', { precision: 24, scale: 2 }),
+    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('automation_runs_rule_trigger_unique').on(table.ruleId, table.triggerKey),
+    index('automation_runs_user_time_idx').on(table.userId, table.createdAt),
+  ],
 );
 
 export const portfolioSnapshots = pgTable(

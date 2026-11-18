@@ -132,58 +132,86 @@ export function SettingsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <SettingsNavCard
-          to="/settings/security"
-          title="Безопасность"
-          description="Пароль, 2FA, recovery codes и активные сессии."
-          icon="security"
+          to="/settings/accounting"
+          title="Учёт и отчёты"
+          description="Часовой пояс, gas в стоимости, период статистики."
+          icon="statistics"
           tone="emerald"
         />
         <SettingsNavCard
-          to="/settings/interface"
-          title="Интерфейс и поведение"
-          description="Тема, автоблокировка и сеть кошелька."
-          icon="sliders"
+          to="/settings/market"
+          title="Рынок и графики"
+          description="Котировки, ликвидность, история и период графика."
+          icon="watchlist"
           tone="sky"
         />
         <SettingsNavCard
+          to="/settings/trading"
+          title="Торговля и свопы"
+          description="Slippage, price impact, gas и TTL котировки."
+          icon="operations"
+          tone="amber"
+        />
+        <SettingsNavCard
+          to="/settings/bots"
+          title="Роботы и бэктест"
+          description="Тик, лимиты и значения по умолчанию."
+          icon="testing"
+          tone="violet"
+        />
+        <SettingsNavCard
+          to="/settings/automation"
+          title="Автоматизация"
+          description="Dry-run, предложения, лимиты и значения по умолчанию."
+          icon="ai"
+          tone="amber"
+        />
+        <SettingsNavCard
+          to="/settings/tasks"
+          title="Задачи и заметки"
+          description="Напоминания, время задачи и автосохранение."
+          icon="tasks"
+          tone="sky"
+        />
+        <SettingsNavCard
+          to="/settings/notifications"
+          title="Уведомления"
+          description="События и частота обновления списка."
+          icon="notifications"
+          tone="amber"
+        />
+        <SettingsNavCard
           to="/settings/ai"
-          title="ИИ"
-          description="DeepSeek, ключ API, модель, режим и лимит аудио."
+          title="ИИ и аудио"
+          description="DeepSeek, ключ API, модель и лимит аудио."
           icon="ai"
           tone="violet"
         />
         <SettingsNavCard
-          to="/settings/accounts"
-          title="Счета"
-          description="Кошельки и системные счета учёта."
-          icon="wallet"
-          tone="amber"
+          to="/settings/interface"
+          title="Интерфейс и поведение"
+          description="Тема, автоблокировка, сеть и интервалы обновления."
+          icon="sliders"
+          tone="sky"
         />
         <SettingsNavCard
-          to="/settings/audit"
-          title="Аудит"
-          description="Журнал действий и изменений."
-          icon="audit"
-          tone="violet"
+          to="/settings/security"
+          title="Безопасность и аудит"
+          description="Пароль, 2FA, сессии и журнал действий."
+          icon="security"
+          tone="emerald"
         />
         <SettingsNavCard
-          to="/settings/system"
-          title="Система"
-          description="Котировки, задачи, свопы и провайдеры."
+          to="/settings/diagnostics"
+          title="Диагностика"
+          description="Система и качество данных в одном месте."
           icon="system"
           tone="emerald"
         />
         <SettingsNavCard
-          to="/settings/data-quality"
-          title="Качество данных"
-          description="Расхождения учёта, ордеров и котировок."
-          icon="quality"
-          tone="rose"
-        />
-        <SettingsNavCard
-          to="/import"
-          title="Импорт Notion"
-          description="Legacy-инструмент до clean cutover."
+          to="/settings/data"
+          title="Данные и экспорт"
+          description="Счета, CSV/JSON и импорт Notion."
           icon="upload"
           tone="zinc"
         />
@@ -191,7 +219,9 @@ export function SettingsPage() {
 
       <Card>
         <CardTitle>Общие</CardTitle>
-        <CardDescription>Базовая валюта и метод учёта фиксированы: USD и FIFO.</CardDescription>
+        <CardDescription>
+          Учёт и отчёты. Базовая валюта и метод учёта фиксированы: USD и FIFO.
+        </CardDescription>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="block text-sm text-zinc-600">
             Базовая валюта
@@ -235,10 +265,16 @@ export function SettingsPage() {
             Обновлено {formatDateTime(settings.data.updatedAt)}
           </span>
         </div>
+        <Link
+          className="mt-3 inline-block text-sm text-emerald-800 hover:underline"
+          to="/settings/accounting"
+        >
+          Все настройки учёта →
+        </Link>
       </Card>
 
       <Card>
-        <CardTitle>Экспорт</CardTitle>
+        <CardTitle>Данные и экспорт · быстрые действия</CardTitle>
         <CardDescription>CSV или JSON для транзакций, позиций и торговых групп.</CardDescription>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {(

@@ -9,6 +9,7 @@ import { useState } from 'react';
 import type { Asset, WatchlistEntry } from '@nexter/contracts';
 import { TokenBlock } from '../watchlist/token-block';
 import { TokenDrawer } from '../watchlist/token-drawer';
+import { useRuntimeSettings } from '../settings/use-settings';
 
 type TokenListSort =
   'default' | 'price' | 'change24h' | 'change7d' | 'change30d' | 'change1y' | 'marketCap';
@@ -52,12 +53,13 @@ export function TokenBuyList({
   const [sortKey, setSortKey] = useState<TokenListSort>('default');
   const [sortDirection, setSortDirection] = useState<'desc' | 'asc'>('desc');
   const [selectedEntry, setSelectedEntry] = useState<WatchlistEntry | null>(null);
+  const runtime = useRuntimeSettings();
   const defaultGroup = groups.data?.groups.find((group) => group.isDefault);
   const watchlist = useQuery({
     queryKey: ['buy-list', defaultGroup?.id],
     queryFn: () => fetchWatchlist(false, undefined, defaultGroup?.id, 100),
     enabled: Boolean(defaultGroup?.id),
-    refetchInterval: 15_000,
+    refetchInterval: runtime.portfolioPollSeconds * 1000,
   });
 
   if (groups.isPending || watchlist.isPending) {

@@ -16,7 +16,8 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useRuntimeSettings, useSettings } from '../settings/use-settings';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type PeriodPreset = '30d' | '90d' | '365d' | 'ytd' | 'all' | 'custom';
 
@@ -100,9 +101,18 @@ function Metric({
 }
 
 export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
+  const runtime = useRuntimeSettings();
+  const settings = useSettings();
+  const defaultApplied = useRef(false);
   const [preset, setPreset] = useState<PeriodPreset>('all');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+
+  useEffect(() => {
+    if (!settings.data || defaultApplied.current) return;
+    setPreset(settings.data.defaultReportPeriod);
+    defaultApplied.current = true;
+  }, [settings.data]);
 
   const period = useMemo(() => {
     if (preset === 'custom') {
@@ -132,7 +142,7 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
     queryKey: ['reports', period.from ?? null, period.to ?? null],
     queryFn: () => fetchReports(period.from, period.to),
     enabled: !invalidPeriod,
-    refetchInterval: 30_000,
+    refetchInterval: runtime.reportsPollSeconds * 1000,
   });
 
   const report = reports.data;

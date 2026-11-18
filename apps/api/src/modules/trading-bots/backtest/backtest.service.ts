@@ -66,6 +66,9 @@ export class BacktestService {
       useStopLoss: input.useStopLoss,
       useTakeProfit: input.useTakeProfit,
       reinvestProfit: input.reinvestProfit,
+      initialCapitalUsd: input.capitalUsd,
+      feeBps: input.feeBps,
+      slippageBps: input.slippageBps,
     });
 
     const id = await this.db.transaction(async (tx) => {

@@ -4,7 +4,8 @@ import { fetchPortfolioAssetChart, fetchWatchlistChart } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatPrice } from '@/lib/format';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSettings } from '../settings/use-settings';
 
 const RANGES = [30, 90, 180, 365] as const;
 
@@ -15,7 +16,15 @@ export function TokenPriceChart({
   entryId?: string | null;
   assetId?: string;
 }) {
+  const settings = useSettings();
+  const appliedDefault = useRef(false);
   const [days, setDays] = useState<(typeof RANGES)[number]>(90);
+  useEffect(() => {
+    if (!settings.data || appliedDefault.current) return;
+    appliedDefault.current = true;
+    setDays(settings.data.chartDefaultDays);
+  }, [settings.data]);
+
   const chartKey = entryId ?? assetId ?? '';
   const chart = useQuery({
     queryKey: ['token-chart', chartKey, days],

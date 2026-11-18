@@ -18,6 +18,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/lib/confirm';
+import { useSettings } from '../settings/use-settings';
 import { filterBySearch } from '@/lib/search';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
@@ -47,8 +48,8 @@ export function BacktestPanel({
   tokensError,
   initialAssetId = '',
   initialParams,
-  initialUseStopLoss = true,
-  initialUseTakeProfit = true,
+  initialUseStopLoss = undefined,
+  initialUseTakeProfit = undefined,
   stacked = false,
 }: {
   template: BotStrategyTemplate;
@@ -67,9 +68,11 @@ export function BacktestPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   const [selectedAssetId, setSelectedAssetId] = useState(initialAssetId);
+  const settings = useSettings();
+  const appliedDefaults = useRef(false);
   const [days, setDays] = useState('365');
-  const [useStopLoss, setUseStopLoss] = useState(initialUseStopLoss);
-  const [useTakeProfit, setUseTakeProfit] = useState(initialUseTakeProfit);
+  const [useStopLoss, setUseStopLoss] = useState(initialUseStopLoss ?? true);
+  const [useTakeProfit, setUseTakeProfit] = useState(initialUseTakeProfit ?? true);
   const [reinvestProfit, setReinvestProfit] = useState(false);
   const [paramValues, setParamValues] = useState<Record<string, string>>(
     () => initialParams ?? paramsToForm(template.defaultParams),
@@ -122,6 +125,16 @@ export function BacktestPanel({
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось загрузить исторические данные')),
   });
+
+  useEffect(() => {
+    if (!settings.data || appliedDefaults.current) return;
+    appliedDefaults.current = true;
+    setDays(String(settings.data.backtestDefaultDays));
+    if (initialUseStopLoss === undefined) setUseStopLoss(settings.data.backtestDefaultStopLoss);
+    if (initialUseTakeProfit === undefined)
+      setUseTakeProfit(settings.data.backtestDefaultTakeProfit);
+    setReinvestProfit(settings.data.backtestDefaultReinvest);
+  }, [settings.data, initialUseStopLoss, initialUseTakeProfit]);
 
   const runMutation = useMutation({
     mutationFn: runBotBacktest,
@@ -203,6 +216,9 @@ export function BacktestPanel({
       useStopLoss,
       useTakeProfit,
       reinvestProfit,
+      capitalUsd: settings.data?.backtestDefaultCapitalUsd,
+      feeBps: settings.data?.backtestDefaultFeeBps,
+      slippageBps: settings.data?.backtestDefaultSlippageBps,
     });
   }
 

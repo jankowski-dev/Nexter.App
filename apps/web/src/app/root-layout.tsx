@@ -2,6 +2,7 @@ import { ChainToggle } from '@/components/chain-toggle';
 import { NavIcon } from '@/components/nav-icon';
 import { NexterLogo } from '@/components/nexter-logo';
 import { useLiveRefreshing } from '@/components/live-refresh-indicator';
+import { useRuntimeSettings } from '@/features/settings/use-settings';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { UNAUTHORIZED_EVENT } from '@/lib/auth-events';
@@ -212,6 +213,7 @@ function RootLayoutContent() {
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
   const refreshing = useLiveRefreshing();
+  const runtime = useRuntimeSettings();
   const [theme, setTheme] = useState<'light' | 'dark'>(() => readTheme());
   useEffect(() => {
     return subscribeUiPreference('nexter-theme', () => setTheme(readTheme()));
@@ -220,7 +222,7 @@ function RootLayoutContent() {
   const unreadNotifications = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: fetchNotificationUnreadCount,
-    refetchInterval: 30_000,
+    refetchInterval: runtime.notificationsPollSeconds * 1000,
   });
   const unreadCount = unreadNotifications.data?.count ?? 0;
   const me = useQuery({

@@ -1,9 +1,7 @@
 import {
   Controller,
-  DefaultValuePipe,
   Get,
   Headers,
-  ParseIntPipe,
   Query,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -14,6 +12,7 @@ import type { BotUpcomingTasksResponse } from '@nexter/contracts';
 import { env } from '../../shared/config/env';
 import { Public, SkipOrigin } from '../auth/public.decorator';
 import { TasksService } from './tasks.service';
+import { SettingsService } from '../settings/settings.service';
 
 function tokensEqual(left: string, right: string): boolean {
   const leftHash = createHash('sha256').update(left).digest();
@@ -25,13 +24,16 @@ function tokensEqual(left: string, right: string): boolean {
 @SkipOrigin()
 @Controller('bot')
 export class BotTasksController {
-  constructor(private readonly tasks: TasksService) {}
+  constructor(
+    private readonly tasks: TasksService,
+    private readonly settings: SettingsService,
+  ) {}
 
   @Public()
   @Get('tasks/upcoming')
-  upcoming(
+  async upcoming(
     @Headers('authorization') authorization: string | undefined,
-    @Query('minutes', new DefaultValuePipe(5), ParseIntPipe) minutes: number,
+    @Query('minutes') minutes: string | undefined,
   ): Promise<BotUpcomingTasksResponse> {
     if (!env.BOT_API_TOKEN) {
       throw new ServiceUnavailableException({
@@ -48,7 +50,12 @@ export class BotTasksController {
       });
     }
 
-    const safeMinutes = Math.min(Math.max(minutes, 1), 60);
+    const runtime = await this.settings.getRuntime();
+    const parsed = minutes === undefined ? runtime.taskReminderLeadMinutes : Number(minutes);
+    const safeMinutes = Math.min(
+      Math.max(Number.isFinite(parsed) ? Math.trunc(parsed) : runtime.taskReminderLeadMinutes, 1),
+      60,
+    );
     return this.tasks.upcomingForBot(safeMinutes);
   }
 }

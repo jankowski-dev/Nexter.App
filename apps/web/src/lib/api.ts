@@ -3,6 +3,10 @@ import {
   approvalBuildResponseSchema,
   assetsResponseSchema,
   auditLogResponseSchema,
+  automationRuleSchema,
+  automationRulesResponseSchema,
+  automationRunsResponseSchema,
+  automationTestResponseSchema,
   authMeResponseSchema,
   aiSettingsSchema,
   aiTestResponseSchema,
@@ -84,6 +88,12 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
+  type AutomationRule,
+  type AutomationRuleCreateRequest,
+  type AutomationRuleUpdateRequest,
+  type AutomationRulesResponse,
+  type AutomationRunsResponse,
+  type AutomationTestResponse,
   type BotBacktestClearResponse,
   type BotBacktestListQuery,
   type BotBacktestPreviewRequest,
@@ -1200,4 +1210,37 @@ export async function markAllNotificationsRead(): Promise<NotificationsReadAllRe
 
 export async function clearNotifications(): Promise<NotificationsClearResponse> {
   return apiPost('/api/v1/notifications/clear', {}, notificationsClearResponseSchema);
+}
+
+export async function fetchAutomationRules(): Promise<AutomationRulesResponse> {
+  return apiFetch('/api/v1/automation/rules', {}, automationRulesResponseSchema);
+}
+
+export async function createAutomationRule(
+  body: AutomationRuleCreateRequest,
+): Promise<AutomationRule> {
+  return apiPost('/api/v1/automation/rules', body, automationRuleSchema);
+}
+
+export async function updateAutomationRule(
+  id: string,
+  body: AutomationRuleUpdateRequest,
+): Promise<AutomationRule> {
+  return apiPatch(`/api/v1/automation/rules/${id}`, body, automationRuleSchema);
+}
+
+export async function testAutomationRule(id: string): Promise<AutomationTestResponse> {
+  return apiPost(`/api/v1/automation/rules/${id}/test`, {}, automationTestResponseSchema);
+}
+
+export async function fetchAutomationRuns(limit = 50): Promise<AutomationRunsResponse> {
+  return apiFetch(
+    `/api/v1/automation/runs${queryString({ limit })}`,
+    {},
+    automationRunsResponseSchema,
+  );
+}
+
+export async function pauseAllAutomation(): Promise<AutomationRulesResponse> {
+  return apiPost('/api/v1/automation/pause-all', {}, automationRulesResponseSchema);
 }

@@ -1,6 +1,6 @@
 # UI-71 — owner batch 2026-11-17
 
-Status: UI/prompt/chart work implemented on `ui-71-batch`; settings, allowlist and automation proposals ready in `ui-71-proposals.md`.
+Status: UI/prompt/chart work deployed in UI-71. Owner approved settings, taxonomy, allowlist B and dry-run + semi-auto automation; implemented in UI-72.
 
 ## Items
 

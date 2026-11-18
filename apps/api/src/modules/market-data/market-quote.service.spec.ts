@@ -43,7 +43,17 @@ function createHarness(assets: AssetRow[], existing: ExistingRow[]) {
   };
   const coingecko = { getMarkets: vi.fn().mockResolvedValue(new Map()) };
   const dexscreener = { getBestQuote: vi.fn().mockResolvedValue(null) };
-  const service = new MarketQuoteService(db as never, coingecko as never, dexscreener as never);
+  const service = new MarketQuoteService(
+    db as never,
+    coingecko as never,
+    dexscreener as never,
+    {
+      getRuntime: async () => ({
+        marketMinLiquidityUsd: 25000,
+        marketCoinGeckoIntervalSeconds: 600,
+      }),
+    } as never,
+  );
 
   return { service, upserts, coingecko, dexscreener };
 }

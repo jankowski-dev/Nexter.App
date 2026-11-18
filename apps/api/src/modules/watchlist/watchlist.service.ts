@@ -509,6 +509,7 @@ export class WatchlistService {
             ethereumContractAddress: input.ethereumContractAddress ?? null,
             investors: input.investors ?? [],
             priority: input.priority ?? 0,
+            swapEnabled: input.swapEnabled ?? false,
           })
           .returning({ id: watchlist.id });
 
@@ -597,6 +598,7 @@ export class WatchlistService {
               : existing.ethereumContractAddress,
           investors: input.investors !== undefined ? input.investors : existing.investors,
           priority: input.priority !== undefined ? input.priority : existing.priority,
+          swapEnabled: input.swapEnabled !== undefined ? input.swapEnabled : existing.swapEnabled,
           archivedAt:
             input.archived === undefined ? existing.archivedAt : input.archived ? new Date() : null,
           updatedAt: new Date(),
@@ -849,6 +851,7 @@ export class WatchlistService {
       ethereumContractAddress: row.entry.ethereumContractAddress,
       investors: row.entry.investors,
       priority: row.entry.priority,
+      swapEnabled: row.entry.swapEnabled,
       archivedAt: row.entry.archivedAt?.toISOString() ?? null,
       createdAt: row.entry.createdAt.toISOString(),
       updatedAt: row.entry.updatedAt.toISOString(),

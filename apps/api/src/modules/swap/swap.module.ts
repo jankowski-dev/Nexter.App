@@ -4,15 +4,18 @@ import { ApprovalService } from './approval.service';
 import { EvmRpcService } from './evm-rpc.service';
 import { ExternalApiCallService } from './external-api-call.service';
 import { KyberSwapClient } from './kyber-swap.client';
+import { SettingsModule } from '../settings/settings.module';
+import { SwapTokenRegistryService } from './swap-token-registry.service';
 import { SwapController } from './swap.controller';
 import { SwapService } from './swap.service';
 import { SwapTrackingService } from './swap-tracking.service';
 
 @Module({
-  imports: [AccountingModule],
+  imports: [AccountingModule, SettingsModule],
   controllers: [SwapController],
   providers: [
     SwapService,
+    SwapTokenRegistryService,
     ApprovalService,
     SwapTrackingService,
     ExternalApiCallService,

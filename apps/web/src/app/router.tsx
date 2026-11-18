@@ -13,7 +13,16 @@ import { NotesPage } from '@/features/notes/notes-page';
 import { NotificationsPage } from '@/features/notifications/notifications-page';
 import { TasksPage } from '@/features/tasks/tasks-page';
 import { VaultPage } from '@/features/vault/vault-page';
+import { AccountingSettingsPage } from '@/features/settings/accounting-settings-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
+import { AutomationSettingsPage } from '@/features/settings/automation-settings-page';
+import { BotsSettingsPage } from '@/features/settings/bots-settings-page';
+import { DataSettingsPage } from '@/features/settings/data-settings-page';
+import { DiagnosticsSettingsPage } from '@/features/settings/diagnostics-settings-page';
+import { MarketSettingsPage } from '@/features/settings/market-settings-page';
+import { NotificationsSettingsPage } from '@/features/settings/notifications-settings-page';
+import { TasksSettingsPage } from '@/features/settings/tasks-settings-page';
+import { TradingSettingsPage } from '@/features/settings/trading-settings-page';
 import { AiSettingsPage } from '@/features/settings/ai-settings-page';
 import { AuditSettingsPage } from '@/features/settings/audit-settings-page';
 import { DataQualityPage } from '@/features/settings/data-quality-page';
@@ -302,6 +311,60 @@ const dataQualityRoute = createRoute({
   component: DataQualityPage,
 });
 
+const accountingSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/accounting',
+  component: AccountingSettingsPage,
+});
+
+const marketSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/market',
+  component: MarketSettingsPage,
+});
+
+const tradingSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/trading',
+  component: TradingSettingsPage,
+});
+
+const automationSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/automation',
+  component: AutomationSettingsPage,
+});
+
+const botsSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/bots',
+  component: BotsSettingsPage,
+});
+
+const tasksSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/tasks',
+  component: TasksSettingsPage,
+});
+
+const notificationsSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/notifications',
+  component: NotificationsSettingsPage,
+});
+
+const dataSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/data',
+  component: DataSettingsPage,
+});
+
+const diagnosticsSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/diagnostics',
+  component: DiagnosticsSettingsPage,
+});
+
 const routeTree = rootRoute.addChildren([
   authLayoutRoute.addChildren([
     loginRoute,
@@ -336,6 +399,15 @@ const routeTree = rootRoute.addChildren([
     auditSettingsRoute,
     systemSettingsRoute,
     dataQualityRoute,
+    accountingSettingsRoute,
+    marketSettingsRoute,
+    tradingSettingsRoute,
+    automationSettingsRoute,
+    botsSettingsRoute,
+    tasksSettingsRoute,
+    notificationsSettingsRoute,
+    dataSettingsRoute,
+    diagnosticsSettingsRoute,
   ]),
 ]);
 

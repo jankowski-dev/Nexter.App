@@ -64,6 +64,7 @@ export const watchlistEntrySchema = z.object({
   ethereumContractAddress: z.string().nullable(),
   investors: z.array(z.string()),
   priority: z.number().int(),
+  swapEnabled: z.boolean(),
   archivedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
@@ -105,6 +106,7 @@ export const watchlistCreateRequestSchema = z.object({
     .optional(),
   investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  swapEnabled: z.boolean().optional(),
 });
 
 const manualIconSchema = z
@@ -150,6 +152,7 @@ export const watchlistUpdateRequestSchema = z.object({
     .optional(),
   investors: z.array(z.string().trim().min(1).max(80)).max(30).optional(),
   priority: z.number().int().min(0).max(100).optional(),
+  swapEnabled: z.boolean().optional(),
   logoUrl: manualIconSchema.nullable().optional(),
   archived: z.boolean().optional(),
 });

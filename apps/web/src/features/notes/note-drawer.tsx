@@ -11,6 +11,7 @@ import { compressTaskImage } from '@/lib/image';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useSaveFlash } from '@/lib/use-save-flash';
+import { useRuntimeSettings } from '../settings/use-settings';
 import type { Note, NoteAudio, NoteImage } from '@nexter/contracts';
 import { NoteImageViewer } from './note-image-viewer';
 import { NoteEditor, NoteMarkdown } from './note-markdown';
@@ -123,6 +124,7 @@ export function NoteDrawer({
   onDeleted: () => void;
   onImagesChanged?: () => void;
 }) {
+  const runtime = useRuntimeSettings();
   const [mode, setMode] = useState<'view' | 'edit'>(note && !startInEdit ? 'view' : 'edit');
   const [title, setTitle] = useState(note?.title ?? '');
   const [body, setBody] = useState(note?.body ?? '');
@@ -226,9 +228,9 @@ export function NoteDrawer({
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (mode === 'edit') void saveNowRef.current();
-    }, 10_000);
+    }, runtime.autosaveIntervalSeconds * 1000);
     return () => window.clearInterval(timer);
-  }, [mode]);
+  }, [mode, runtime.autosaveIntervalSeconds]);
 
   async function attemptClose(): Promise<void> {
     if (mode === 'view') {
