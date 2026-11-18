@@ -1406,6 +1406,291 @@ export const notifications = pgTable(
   ],
 );
 
+export const aiProfiles = pgTable(
+  'ai_profiles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull().default('AI Trading'),
+    enabled: boolean('enabled').notNull().default(true),
+    budgetUsd: numeric('budget_usd', { precision: 24, scale: 8 }).notNull().default('10000'),
+    cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull().default('10000'),
+    reservedUsd: numeric('reserved_usd', { precision: 24, scale: 8 }).notNull().default('0'),
+    maxWorkers: integer('max_workers').notNull().default(10),
+    maxWorkerAllocationPct: integer('max_worker_allocation_pct').notNull().default(25),
+    maxTokenExposurePct: integer('max_token_exposure_pct').notNull().default(20),
+    maxInvestedPct: integer('max_invested_pct').notNull().default(80),
+    riskPerTradePct: numeric('risk_per_trade_pct', { precision: 6, scale: 2 })
+      .notNull()
+      .default('1'),
+    dailyLossLimitPct: numeric('daily_loss_limit_pct', { precision: 6, scale: 2 })
+      .notNull()
+      .default('3'),
+    maxDrawdownPct: numeric('max_drawdown_pct', { precision: 6, scale: 2 }).notNull().default('10'),
+    maxAiSpendUsd: numeric('max_ai_spend_usd', { precision: 18, scale: 2 }).notNull().default('5'),
+    maxBacktestsPerDay: integer('max_backtests_per_day').notNull().default(200),
+    workerMaxTokens: integer('worker_max_tokens').notNull().default(5),
+    autoApproveWorkerCreate: boolean('auto_approve_worker_create').notNull().default(true),
+    autoApproveParams: boolean('auto_approve_params').notNull().default(true),
+    autoApproveBudget: boolean('auto_approve_budget').notNull().default(true),
+    autoApprovePauseClose: boolean('auto_approve_pause_close').notNull().default(true),
+    autoApproveReoptimize: boolean('auto_approve_reoptimize').notNull().default(true),
+    modelSettings: jsonb('model_settings')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({ model: 'deepseek-flash', temperature: 0.2, maxTokens: 2000, timeoutSeconds: 60 }),
+    schedule: jsonb('schedule')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({ weeklyReview: true, weeklyDay: 0, weeklyHour: 3, events: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_profiles_user_name_unique').on(table.userId, table.name),
+    index('ai_profiles_user_idx').on(table.userId),
+  ],
+);
+
+export const aiProfileTokens = pgTable(
+  'ai_profile_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    timeframes: text('timeframes')
+      .array()
+      .notNull()
+      .default(sql`'{1h,1d}'::text[]`),
+    priority: integer('priority').notNull().default(0),
+    maxAllocationPct: numeric('max_allocation_pct', { precision: 6, scale: 2 }),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_profile_tokens_profile_asset_unique').on(table.profileId, table.assetId),
+    index('ai_profile_tokens_profile_idx').on(table.profileId),
+  ],
+);
+
+export const aiServiceConfigs = pgTable(
+  'ai_service_configs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    service: text('service').notNull(),
+    enabled: boolean('enabled').notNull().default(true),
+    config: jsonb('config').$type<Record<string, unknown>>().notNull().default({}),
+    concurrency: integer('concurrency').notNull().default(2),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_service_configs_profile_service_unique').on(table.profileId, table.service),
+  ],
+);
+
+export const aiPipelineRuns = pgTable(
+  'ai_pipeline_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    trigger: text('trigger').notNull().default('manual'),
+    status: text('status').notNull().default('queued'),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    summary: jsonb('summary').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('ai_pipeline_runs_profile_created_idx').on(table.profileId, table.createdAt)],
+);
+
+export const aiJobs = pgTable(
+  'ai_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => aiPipelineRuns.id, { onDelete: 'cascade' }),
+    service: text('service').notNull(),
+    stage: text('stage').notNull(),
+    assetId: uuid('asset_id').references(() => assets.id, { onDelete: 'set null' }),
+    timeframe: text('timeframe'),
+    status: text('status').notNull().default('queued'),
+    priority: integer('priority').notNull().default(0),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('max_attempts').notNull().default(3),
+    runAt: timestamp('run_at', { withTimezone: true }).notNull().defaultNow(),
+    lockedBy: text('locked_by'),
+    lockedAt: timestamp('locked_at', { withTimezone: true }),
+    heartbeatAt: timestamp('heartbeat_at', { withTimezone: true }),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    artifactId: uuid('artifact_id'),
+    error: text('error'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('ai_jobs_idempotency_key_unique').on(table.idempotencyKey),
+    index('ai_jobs_queue_idx').on(table.status, table.runAt, table.priority),
+    index('ai_jobs_run_idx').on(table.runId),
+    index('ai_jobs_profile_status_idx').on(table.profileId, table.status),
+  ],
+);
+
+export const aiArtifacts = pgTable(
+  'ai_artifacts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    jobId: uuid('job_id'),
+    type: text('type').notNull(),
+    version: text('version').notNull().default('v1'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    hash: text('hash').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('ai_artifacts_run_type_idx').on(table.runId, table.type),
+    index('ai_artifacts_hash_idx').on(table.hash),
+  ],
+);
+
+export const aiCandidates = pgTable(
+  'ai_candidates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id').notNull(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    timeframe: text('timeframe').notNull(),
+    strategyKey: text('strategy_key').notNull(),
+    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
+    aiScore: numeric('ai_score', { precision: 8, scale: 4 }),
+    aiConfidence: numeric('ai_confidence', { precision: 6, scale: 4 }),
+    aiRationale: text('ai_rationale'),
+    metrics: jsonb('metrics').$type<Record<string, unknown>>().notNull().default({}),
+    policyScore: numeric('policy_score', { precision: 8, scale: 4 }),
+    status: text('status').notNull().default('proposed'),
+    workerId: uuid('worker_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('ai_candidates_profile_status_idx').on(table.profileId, table.status),
+    index('ai_candidates_asset_timeframe_idx').on(table.assetId, table.timeframe),
+  ],
+);
+
+export const aiApprovals = pgTable(
+  'ai_approvals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id'),
+    type: text('type').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    status: text('status').notNull().default('pending'),
+    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    decidedBy: uuid('decided_by'),
+    reason: text('reason'),
+  },
+  (table) => [index('ai_approvals_profile_status_idx').on(table.profileId, table.status)],
+);
+
+export const aiReports = pgTable(
+  'ai_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    periodFrom: date('period_from').notNull(),
+    periodTo: date('period_to').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('ai_reports_profile_created_idx').on(table.profileId, table.createdAt)],
+);
+
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
+    runId: uuid('run_id'),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').notNull().default(0),
+    completionTokens: integer('completion_tokens').notNull().default(0),
+    costUsd: numeric('cost_usd', { precision: 18, scale: 8 }).notNull().default('0'),
+    latencyMs: integer('latency_ms').notNull().default(0),
+    purpose: text('purpose').notNull().default('analysis'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('ai_usage_profile_created_idx').on(table.profileId, table.createdAt)],
+);
+
+export const marketCandles = pgTable(
+  'market_candles',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    assetId: uuid('asset_id')
+      .notNull()
+      .references(() => assets.id, { onDelete: 'cascade' }),
+    timeframe: text('timeframe').notNull(),
+    openTime: timestamp('open_time', { withTimezone: true }).notNull(),
+    open: numeric('open', { precision: 36, scale: 18 }).notNull(),
+    high: numeric('high', { precision: 36, scale: 18 }).notNull(),
+    low: numeric('low', { precision: 36, scale: 18 }).notNull(),
+    close: numeric('close', { precision: 36, scale: 18 }).notNull(),
+    volumeUsd: numeric('volume_usd', { precision: 30, scale: 8 }),
+    source: text('source').notNull(),
+    quality: text('quality').notNull().default('ok'),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('market_candles_asset_timeframe_open_unique').on(
+      table.assetId,
+      table.timeframe,
+      table.openTime,
+    ),
+    index('market_candles_asset_timeframe_open_idx').on(
+      table.assetId,
+      table.timeframe,
+      table.openTime,
+    ),
+  ],
+);
+
 export const tradingBots = pgTable(
   'trading_bots',
   {
@@ -1418,6 +1703,13 @@ export const tradingBots = pgTable(
     name: text('name').notNull(),
     description: text('description').notNull().default(''),
     icon: text('icon'),
+    origin: text('origin').notNull().default('manual'),
+    aiProfileId: uuid('ai_profile_id').references(() => aiProfiles.id, { onDelete: 'set null' }),
+    aiCandidateId: uuid('ai_candidate_id'),
+    evaluationTimeframe: text('evaluation_timeframe'),
+    allocationUsd: numeric('allocation_usd', { precision: 24, scale: 8 }),
+    isolatedBudget: boolean('isolated_budget').notNull().default(false),
+    strategySource: text('strategy_source').notNull().default('manual'),
     status: text('status').notNull().default('draft'),
     budgetUsd: numeric('budget_usd', { precision: 24, scale: 8 }).notNull(),
     cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),
@@ -1446,6 +1738,7 @@ export const tradingBots = pgTable(
       .where(sql`${table.archivedAt} is null`),
     index('trading_bots_user_idx').on(table.userId),
     index('trading_bots_status_idx').on(table.status),
+    index('trading_bots_ai_profile_idx').on(table.aiProfileId),
   ],
 );
 

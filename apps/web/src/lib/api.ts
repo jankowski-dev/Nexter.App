@@ -7,6 +7,12 @@ import {
   automationRulesResponseSchema,
   automationRunsResponseSchema,
   automationTestResponseSchema,
+  aiProfileSchema,
+  aiProfileTokenSchema,
+  aiProfileTokensResponseSchema,
+  aiServiceConfigSchema,
+  aiServiceConfigsResponseSchema,
+  aiTradingDashboardSchema,
   authMeResponseSchema,
   aiSettingsSchema,
   aiTestResponseSchema,
@@ -89,6 +95,14 @@ import {
   type AccountsResponse,
   type ApprovalBuildResponse,
   type AssetsResponse,
+  type AiProfile,
+  type AiProfileToken,
+  type AiProfileTokenCreateRequest,
+  type AiProfileTokenUpdateRequest,
+  type AiProfileUpdateRequest,
+  type AiServiceConfig,
+  type AiServiceConfigUpdateRequest,
+  type AiTradingDashboard,
   type AuditLogResponse,
   type AutomationRule,
   type AutomationRuleCreateRequest,
@@ -1272,4 +1286,46 @@ export async function updatePendingOrder(
   body: PendingOrderUpdateRequest,
 ): Promise<PendingOrder> {
   return apiPatch(`/api/v1/pending-orders/${id}`, body, pendingOrderSchema);
+}
+
+export async function fetchAiProfile(): Promise<AiProfile> {
+  return apiFetch('/api/v1/ai-trading/profile', {}, aiProfileSchema);
+}
+
+export async function updateAiProfile(body: AiProfileUpdateRequest): Promise<AiProfile> {
+  return apiPut('/api/v1/ai-trading/profile', body, aiProfileSchema);
+}
+
+export async function fetchAiTokens(): Promise<{ data: AiProfileToken[] }> {
+  return apiFetch('/api/v1/ai-trading/profile/tokens', {}, aiProfileTokensResponseSchema);
+}
+
+export async function createAiToken(body: AiProfileTokenCreateRequest): Promise<AiProfileToken> {
+  return apiPost('/api/v1/ai-trading/profile/tokens', body, aiProfileTokenSchema);
+}
+
+export async function updateAiToken(
+  id: string,
+  body: AiProfileTokenUpdateRequest,
+): Promise<AiProfileToken> {
+  return apiPatch(`/api/v1/ai-trading/profile/tokens/${id}`, body, aiProfileTokenSchema);
+}
+
+export async function removeAiToken(id: string): Promise<void> {
+  await apiDelete(`/api/v1/ai-trading/profile/tokens/${id}`);
+}
+
+export async function fetchAiServices(): Promise<{ data: AiServiceConfig[] }> {
+  return apiFetch('/api/v1/ai-trading/services', {}, aiServiceConfigsResponseSchema);
+}
+
+export async function updateAiService(
+  service: string,
+  body: AiServiceConfigUpdateRequest,
+): Promise<AiServiceConfig> {
+  return apiPut(`/api/v1/ai-trading/services/${service}`, body, aiServiceConfigSchema);
+}
+
+export async function fetchAiDashboard(): Promise<AiTradingDashboard> {
+  return apiFetch('/api/v1/ai-trading/dashboard', {}, aiTradingDashboardSchema);
 }
