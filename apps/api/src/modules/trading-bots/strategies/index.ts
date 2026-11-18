@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { Decimal } from 'decimal.js';
-import { rollingHigh, sma } from './indicators';
+import {
+  bollingerBands,
+  rollingHigh,
+  rollingHighBefore,
+  rollingLow,
+  rollingLowBefore,
+  sma,
+} from './indicators';
 import { buy, dec, hold, sell, type StrategyDefinition, type StrategyState } from './types';
 
 const momentumParamsSchema = z
@@ -564,6 +571,279 @@ export const crashProtectedGrid: StrategyDefinition = {
   },
 };
 
+const donchianParamsSchema = z.object({
+  channelPeriod: z.number().int().min(5).max(200).default(20),
+  exitPeriod: z.number().int().min(3).max(100).default(10),
+  breakoutBufferPct: z.number().min(0).max(5).default(0.2),
+  takeProfitPct: z.number().min(0.1).max(100).default(10),
+  stopLossPct: z.number().min(0.1).max(50).default(5),
+});
+
+export const donchianBreakout: StrategyDefinition = {
+  key: 'donchian_breakout',
+  version: 1,
+  icon: 'channel',
+  kind: 'system',
+  name: 'Пробой канала Дончиана',
+  description:
+    'Покупает пробой максимума за выбранное окно и выходит при пробое нижнего канала или по TP/SL.',
+  guide:
+    'Стратегия строит канал по закрытиям: вход — когда цена закрывается выше максимума предыдущих N свечей с небольшим буфером. В позиции она держит её до противоположного канала, тейк-профита или стоп-лосса. Это чистый trend-following без SMA и 24-часового импульса, поэтому он ловит начало движения иначе, чем momentum_breakout.',
+  bestFor:
+    'Сильные направленные движения, выход из длинной консолидации, тренды с последовательными максимумами.',
+  risks:
+    'В боковике даёт ложные пробои и быстро накапливает убытки. Вход происходит после движения, а разворот канала иногда запаздывает.',
+  paramFields: [
+    { key: 'channelPeriod', label: 'Окно канала', min: 5, max: 200, step: 1, integer: true },
+    { key: 'exitPeriod', label: 'Окно выхода', min: 3, max: 100, step: 1, integer: true },
+    {
+      key: 'breakoutBufferPct',
+      label: 'Буфер пробоя',
+      min: 0,
+      max: 5,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'takeProfitPct', label: 'Тейк-профит', min: 0.1, max: 100, step: 0.1, unit: '%' },
+    { key: 'stopLossPct', label: 'Стоп-лосс', min: 0.1, max: 50, step: 0.1, unit: '%' },
+  ],
+  defaultParams: donchianParamsSchema.parse({}),
+  parseParams: (value) => donchianParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = donchianParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
+
+      const low = rollingLow(ctx.history, params.exitPeriod);
+      if (low && price.lte(low)) return sell('пробой нижнего канала');
+      return hold('позиция внутри канала');
+    }
+
+    const high = rollingHighBefore(ctx.history, params.channelPeriod);
+    if (!high) return hold('недостаточно истории');
+    if (price.gt(high.mul(1 + params.breakoutBufferPct / 100))) {
+      return buy('пробой верхнего канала');
+    }
+    return hold('цена внутри канала');
+  },
+};
+
+const bollingerParamsSchema = z.object({
+  period: z.number().int().min(10).max(100).default(20),
+  stdDev: z.number().min(0.5).max(5).default(2),
+  exitAboveMeanPct: z.number().min(0).max(10).default(0.5),
+  takeProfitPct: z.number().min(0.1).max(100).default(8),
+  stopLossPct: z.number().min(0.1).max(50).default(5),
+});
+
+export const bollingerReversion: StrategyDefinition = {
+  key: 'bollinger_reversion',
+  version: 1,
+  icon: 'bands',
+  kind: 'system',
+  name: 'Возврат к Bollinger',
+  description: 'Покупает закрытие ниже нижней полосы Bollinger и продаёт при возврате к средней.',
+  guide:
+    'Стратегия считает среднюю и стандартное отклонение цены за период. Вход — когда цена закрывается ниже нижней полосы, то есть отклонение стало необычно большим. Выход — при возврате к средней (с небольшим буфером), по тейк-профиту или стоп-лоссу. В отличие от mean_reversion, порог входа адаптируется к волатильности.',
+  bestFor:
+    'Боковик, здоровые откаты в тренде, ликвидные активы с выраженными возвратами к средней.',
+  risks:
+    'В сильном падающем тренде цена может долго оставаться ниже нижней полосы; вход против тренда требует дисциплины по стопу.',
+  paramFields: [
+    { key: 'period', label: 'Период средней', min: 10, max: 100, step: 1, integer: true },
+    { key: 'stdDev', label: 'Отклонение', min: 0.5, max: 5, step: 0.1 },
+    {
+      key: 'exitAboveMeanPct',
+      label: 'Выход выше средней',
+      min: 0,
+      max: 10,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'takeProfitPct', label: 'Тейк-профит', min: 0.1, max: 100, step: 0.1, unit: '%' },
+    { key: 'stopLossPct', label: 'Стоп-лосс', min: 0.1, max: 50, step: 0.1, unit: '%' },
+  ],
+  defaultParams: bollingerParamsSchema.parse({}),
+  parseParams: (value) => bollingerParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = bollingerParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+    const bands = bollingerBands(ctx.history, params.period, params.stdDev);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
+      if (bands && price.gte(bands.mean.mul(1 + params.exitAboveMeanPct / 100))) {
+        return sell('возврат к средней');
+      }
+      return hold('позиция ниже средней');
+    }
+
+    if (!bands) return hold('недостаточно истории');
+    if (price.lt(bands.lower)) return buy('ниже нижней полосы');
+    return hold('цена внутри полос');
+  },
+};
+
+const squeezeParamsSchema = z.object({
+  period: z.number().int().min(10).max(100).default(20),
+  stdDev: z.number().min(1).max(4).default(2),
+  squeezeThresholdPct: z.number().min(0.5).max(10).default(2),
+  breakoutBufferPct: z.number().min(0).max(5).default(0.2),
+  takeProfitPct: z.number().min(5).max(50).default(12),
+  stopLossPct: z.number().min(1).max(20).default(5),
+});
+
+export const squeezeBreakout: StrategyDefinition = {
+  key: 'squeeze_breakout',
+  version: 1,
+  icon: 'squeeze',
+  kind: 'system',
+  name: 'Выход из сжатия',
+  description: 'Ждёт сжатия полос Bollinger и покупает пробой верхней полосы после него.',
+  guide:
+    'Стратегия измеряет ширину полос Bollinger относительно средней. Когда ширина падает ниже порога, рынок находится в сжатии — обычно перед движением. Вход происходит только при пробое верхней полосы с буфером; выход — при возврате под среднюю, по тейк-профиту или стоп-лоссу. Это попытка поймать начало движения, а не уже состоявшийся тренд.',
+  bestFor:
+    'Переход от боковика к тренду, периоды низкой волатильности с последующим расширением диапазона.',
+  risks:
+    'Ложные пробои после сжатия; на тонких рынках ширина полос может искажаться одной сделкой. Требует дисциплины по стопу.',
+  paramFields: [
+    { key: 'period', label: 'Период полос', min: 10, max: 100, step: 1, integer: true },
+    { key: 'stdDev', label: 'Отклонение', min: 1, max: 4, step: 0.1 },
+    {
+      key: 'squeezeThresholdPct',
+      label: 'Порог сжатия',
+      min: 0.5,
+      max: 10,
+      step: 0.1,
+      unit: '%',
+    },
+    {
+      key: 'breakoutBufferPct',
+      label: 'Буфер пробоя',
+      min: 0,
+      max: 5,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'takeProfitPct', label: 'Тейк-профит', min: 5, max: 50, step: 0.1, unit: '%' },
+    { key: 'stopLossPct', label: 'Стоп-лосс', min: 1, max: 20, step: 0.1, unit: '%' },
+  ],
+  defaultParams: squeezeParamsSchema.parse({}),
+  parseParams: (value) => squeezeParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = squeezeParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+    const bands = bollingerBands(ctx.history.slice(0, -1), params.period, params.stdDev);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
+      if (bands && price.lt(bands.mean)) return sell('возврат под среднюю');
+      return hold('позиция выше средней');
+    }
+
+    if (!bands) return hold('недостаточно истории');
+    if (bands.bandwidthPct.gt(params.squeezeThresholdPct)) return hold('нет сжатия');
+    if (price.gt(bands.upper.mul(1 + params.breakoutBufferPct / 100))) {
+      return buy('выход из сжатия');
+    }
+    return hold('сжатие без пробоя');
+  },
+};
+
+const failedBreakoutParamsSchema = z.object({
+  lookback: z.number().int().min(10).max(100).default(20),
+  breakdownBufferPct: z.number().min(0).max(5).default(0.5),
+  takeProfitPct: z.number().min(5).max(30).default(8),
+  stopLossPct: z.number().min(1).max(20).default(4),
+});
+
+function readBreakdownLevel(state: Record<string, unknown> | undefined): Decimal | null {
+  if (!state || typeof state.breakdownLevel !== 'string') return null;
+  try {
+    const level = dec(state.breakdownLevel);
+    return level.gt(0) ? level : null;
+  } catch {
+    return null;
+  }
+}
+
+export const failedBreakout: StrategyDefinition = {
+  key: 'failed_breakout',
+  version: 1,
+  icon: 'reversal',
+  kind: 'system',
+  name: 'Неудавшийся пробой',
+  description: 'Ждёт ложного пробоя поддержки и покупает возврат цены выше неё.',
+  guide:
+    'Стратегия запоминает уровень поддержки и ждёт, когда цена закроется ниже него с буфером. Это ещё не вход: если падение продолжится, покупки нет. Вход появляется только при возврате выше пробитого уровня — то есть когда пробой не подтвердился. Выход — по тейк-профиту или стоп-лоссу; состояние сбрасывается после закрытия позиции.',
+  bestFor:
+    'Боковик, высокая волатильность с ложными проколами, активы с выраженными уровнями поддержки.',
+  risks:
+    'Если пробой окажется настоящим, стратегия просто не входит — но может пропустить сильное движение. В пиле возможны повторные ложные сигналы и мелкие убытки.',
+  paramFields: [
+    { key: 'lookback', label: 'Окно поддержки', min: 10, max: 100, step: 1, integer: true },
+    {
+      key: 'breakdownBufferPct',
+      label: 'Буфер пробоя',
+      min: 0,
+      max: 5,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'takeProfitPct', label: 'Тейк-профит', min: 5, max: 30, step: 0.1, unit: '%' },
+    { key: 'stopLossPct', label: 'Стоп-лосс', min: 1, max: 20, step: 0.1, unit: '%' },
+  ],
+  defaultParams: failedBreakoutParamsSchema.parse({}),
+  parseParams: (value) => failedBreakoutParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = failedBreakoutParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит', { breakdownLevel: null });
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс', { breakdownLevel: null });
+      }
+      return hold('позиция открыта');
+    }
+
+    const remembered = readBreakdownLevel(ctx.state);
+    if (remembered && price.gte(remembered)) {
+      return buy('возврат после ложного пробоя', { breakdownLevel: null });
+    }
+
+    const support = rollingLowBefore(ctx.history, params.lookback);
+    if (!support) return hold('недостаточно истории');
+    if (price.lt(support.mul(1 - params.breakdownBufferPct / 100))) {
+      return hold('пробой поддержки', { breakdownLevel: support.toString() });
+    }
+    return hold('цена выше поддержки');
+  },
+};
+
 export const strategyDefinitions = [
   momentumBreakout,
   meanReversion,
@@ -572,6 +852,10 @@ export const strategyDefinitions = [
   dcaDip,
   trailingStop,
   crashProtectedGrid,
+  donchianBreakout,
+  bollingerReversion,
+  squeezeBreakout,
+  failedBreakout,
 ];
 
 export const strategyByKey = new Map(strategyDefinitions.map((item) => [item.key, item]));

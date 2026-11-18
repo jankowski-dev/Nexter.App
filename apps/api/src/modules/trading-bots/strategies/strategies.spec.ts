@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { botStrategyKeySchema } from '@nexter/contracts';
 import {
+  bollingerReversion,
   crashProtectedGrid,
   dcaDip,
+  donchianBreakout,
+  failedBreakout,
   gridRange,
   meanReversion,
   momentumBreakout,
+  squeezeBreakout,
   strategyDefinitions,
   strategyTemplates,
   trailingStop,
@@ -38,8 +42,8 @@ function risingHistory(): StrategySample[] {
 }
 
 describe('trading bot strategy registry', () => {
-  it('exposes seven templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(7);
+  it('exposes eleven templates with valid default params', () => {
+    expect(strategyDefinitions).toHaveLength(11);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
@@ -48,6 +52,10 @@ describe('trading bot strategy registry', () => {
       'dca_dip',
       'trailing_stop',
       'crash_protected_grid',
+      'donchian_breakout',
+      'bollinger_reversion',
+      'squeeze_breakout',
+      'failed_breakout',
     ]);
 
     for (const definition of strategyDefinitions) {
@@ -392,5 +400,243 @@ describe('trailing_stop', () => {
       }),
     );
     expect(hardStop).toMatchObject({ action: 'sell', reason: 'жёсткий стоп' });
+  });
+});
+
+describe('donchian_breakout', () => {
+  const params = donchianBreakout.defaultParams;
+
+  it('buys a break above the previous channel high', () => {
+    const prices = [...Array.from({ length: 20 }, () => 1), 1.01];
+    expect(
+      donchianBreakout.evaluate(
+        context({ params, history: history(prices), priceUsd: '1.01000000' }),
+      ),
+    ).toEqual({ action: 'buy', reason: 'пробой верхнего канала' });
+  });
+
+  it('holds inside the channel and without enough history', () => {
+    const inside = [...Array.from({ length: 20 }, () => 1), 1.001];
+    expect(
+      donchianBreakout.evaluate(
+        context({ params, history: history(inside), priceUsd: '1.00100000' }),
+      ).action,
+    ).toBe('hold');
+    expect(
+      donchianBreakout.evaluate(
+        context({ params, history: history([1, 2, 3]), priceUsd: '3.00000000' }),
+      ).action,
+    ).toBe('hold');
+  });
+
+  it('exits on take-profit, stop-loss and the opposite channel', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      donchianBreakout.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '1.11000000', position }),
+      ).reason,
+    ).toBe('тейк-профит');
+    expect(
+      donchianBreakout.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '0.94000000', position }),
+      ).reason,
+    ).toBe('стоп-лосс');
+
+    const lower = [
+      ...Array.from({ length: 20 }, () => 1.1),
+      ...Array.from({ length: 9 }, () => 1.05),
+      1,
+    ];
+    expect(
+      donchianBreakout.evaluate(
+        context({
+          params,
+          history: history(lower),
+          priceUsd: '1.00000000',
+          position: { amount: '10', avgCostUsd: '1.05000000', costBasisUsd: '10.50000000' },
+        }),
+      ).reason,
+    ).toBe('пробой нижнего канала');
+  });
+});
+
+describe('bollinger_reversion', () => {
+  const params = bollingerReversion.defaultParams;
+
+  it('buys below the lower band and exits at the mean', () => {
+    const prices = [...Array.from({ length: 39 }, () => 1), 0.9];
+    expect(
+      bollingerReversion.evaluate(
+        context({ params, history: history(prices), priceUsd: '0.90000000' }),
+      ).action,
+    ).toBe('buy');
+
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    const exit = bollingerReversion.evaluate(
+      context({
+        params,
+        history: history([...Array.from({ length: 39 }, () => 1), 1.01]),
+        priceUsd: '1.01000000',
+        position,
+      }),
+    );
+    expect(exit.reason).toBe('возврат к средней');
+  });
+
+  it('holds near the mean and with insufficient history', () => {
+    expect(
+      bollingerReversion.evaluate(
+        context({
+          params,
+          history: history(Array.from({ length: 40 }, () => 1)),
+          priceUsd: '1.00000000',
+        }),
+      ).action,
+    ).toBe('hold');
+    expect(
+      bollingerReversion.evaluate(
+        context({ params, history: history([1, 1, 1]), priceUsd: '0.90000000' }),
+      ).action,
+    ).toBe('hold');
+  });
+
+  it('exits on take-profit and stop-loss', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      bollingerReversion.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '1.09000000', position }),
+      ).reason,
+    ).toBe('тейк-профит');
+    expect(
+      bollingerReversion.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '0.94000000', position }),
+      ).reason,
+    ).toBe('стоп-лосс');
+  });
+
+  it('honours disabled protective exits', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      bollingerReversion.evaluate(
+        context({
+          params,
+          history: history(Array.from({ length: 40 }, () => 1)),
+          priceUsd: '0.90000000',
+          position,
+          stopLossEnabled: false,
+          takeProfitEnabled: false,
+        }),
+      ).action,
+    ).toBe('hold');
+  });
+});
+
+describe('squeeze_breakout', () => {
+  const params = squeezeBreakout.defaultParams;
+
+  it('buys a breakout after a volatility squeeze', () => {
+    const quiet = [...Array.from({ length: 20 }, (_, index) => 1 + (index % 2) * 0.0001), 1.01];
+    expect(
+      squeezeBreakout.evaluate(
+        context({ params, history: history(quiet), priceUsd: '1.01000000' }),
+      ),
+    ).toEqual({ action: 'buy', reason: 'выход из сжатия' });
+  });
+
+  it('holds outside a squeeze and when there is no breakout', () => {
+    const wide = [...Array.from({ length: 20 }, (_, index) => (index % 2 === 0 ? 1 : 1.1)), 1.2];
+    expect(
+      squeezeBreakout.evaluate(context({ params, history: history(wide), priceUsd: '1.20000000' }))
+        .action,
+    ).toBe('hold');
+
+    const quietNoBreakout = [...Array.from({ length: 20 }, () => 1), 1];
+    expect(
+      squeezeBreakout.evaluate(
+        context({ params, history: history(quietNoBreakout), priceUsd: '1.00000000' }),
+      ).action,
+    ).toBe('hold');
+  });
+
+  it('exits on take-profit and stop-loss', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      squeezeBreakout.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '1.13000000', position }),
+      ).reason,
+    ).toBe('тейк-профит');
+    expect(
+      squeezeBreakout.evaluate(
+        context({ params, history: risingHistory(), priceUsd: '0.94000000', position }),
+      ).reason,
+    ).toBe('стоп-лосс');
+  });
+});
+
+describe('failed_breakout', () => {
+  const params = failedBreakout.defaultParams;
+
+  it('remembers a breakdown and buys the reclaim', () => {
+    const breakdown = [...Array.from({ length: 20 }, () => 1), 0.99];
+    const decision = failedBreakout.evaluate(
+      context({ params, history: history(breakdown), priceUsd: '0.99000000' }),
+    );
+    expect(decision).toMatchObject({ action: 'hold', reason: 'пробой поддержки' });
+    expect(decision.nextState?.breakdownLevel).toBe('1');
+
+    const reclaim = failedBreakout.evaluate(
+      context({
+        params,
+        history: history([...Array.from({ length: 20 }, () => 1), 1.005]),
+        priceUsd: '1.00500000',
+        state: { breakdownLevel: '1' },
+      }),
+    );
+    expect(reclaim).toMatchObject({ action: 'buy', reason: 'возврат после ложного пробоя' });
+    expect(reclaim.nextState?.breakdownLevel).toBeNull();
+  });
+
+  it('holds with insufficient history and without a breakdown', () => {
+    expect(
+      failedBreakout.evaluate(
+        context({ params, history: history([1, 2, 3]), priceUsd: '3.00000000' }),
+      ).action,
+    ).toBe('hold');
+    expect(
+      failedBreakout.evaluate(
+        context({
+          params,
+          history: history(Array.from({ length: 30 }, () => 1)),
+          priceUsd: '1.00000000',
+        }),
+      ).action,
+    ).toBe('hold');
+  });
+
+  it('exits on take-profit/stop-loss and clears the breakdown state', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    const takeProfit = failedBreakout.evaluate(
+      context({
+        params,
+        history: risingHistory(),
+        priceUsd: '1.09000000',
+        position,
+        state: { breakdownLevel: '1' },
+      }),
+    );
+    expect(takeProfit.reason).toBe('тейк-профит');
+    expect(takeProfit.nextState?.breakdownLevel).toBeNull();
+
+    expect(
+      failedBreakout.evaluate(
+        context({
+          params,
+          history: risingHistory(),
+          priceUsd: '0.95000000',
+          position,
+          state: { breakdownLevel: '1' },
+        }),
+      ).reason,
+    ).toBe('стоп-лосс');
   });
 });

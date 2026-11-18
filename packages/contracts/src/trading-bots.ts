@@ -9,6 +9,10 @@ export const botStrategyKeys = [
   'dca_dip',
   'trailing_stop',
   'crash_protected_grid',
+  'donchian_breakout',
+  'bollinger_reversion',
+  'squeeze_breakout',
+  'failed_breakout',
 ] as const;
 
 export const botStrategyKeySchema = z.enum(botStrategyKeys);
