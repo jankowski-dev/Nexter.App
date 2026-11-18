@@ -472,15 +472,18 @@ export class AiLabService {
     }
 
     const backtestConfig = await this.backtestConfig(profile.id);
+    const changeLookbackCandles = Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
     const train = runBacktest(definition, params, toBotCandles(trainCandles), {
       initialCapitalUsd: '1000',
       feeBps: backtestConfig.feeBps,
       slippageBps: backtestConfig.slippageBps,
+      changeLookbackCandles,
     });
     const oos = runBacktest(definition, params, toBotCandles(oosCandles), {
       initialCapitalUsd: '1000',
       feeBps: backtestConfig.feeBps,
       slippageBps: backtestConfig.slippageBps,
+      changeLookbackCandles,
     });
 
     const trainStats = toStats(train.stats);
