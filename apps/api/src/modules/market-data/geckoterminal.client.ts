@@ -21,6 +21,9 @@ const GECKO_TIMEFRAMES: Record<
 };
 
 const POOL_CACHE_TTL_MS = 10 * 60 * 1000;
+// The public GeckoTerminal API rate-limits bursts. Serialize calls with a
+// small gap so multi-token AI refreshes and backtests do not trip HTTP 429.
+const MIN_REQUEST_INTERVAL_MS = 1500;
 
 interface PoolCandidate {
   address: string;
@@ -32,6 +35,7 @@ interface PoolCandidate {
 export class GeckoTerminalClient {
   private readonly logger = new Logger(GeckoTerminalClient.name);
   private readonly poolCache = new Map<string, { expiresAt: number; pool: PoolCandidate | null }>();
+  private nextRequestAt = 0;
 
   async getOhlcvCandles(
     chainCode: string,
@@ -178,7 +182,17 @@ export class GeckoTerminalClient {
     this.poolCache.set(key, { expiresAt: Date.now() + POOL_CACHE_TTL_MS, pool });
   }
 
+  private async throttle(): Promise<void> {
+    const now = Date.now();
+    const wait = Math.max(0, this.nextRequestAt - now);
+    this.nextRequestAt = Math.max(now, this.nextRequestAt) + MIN_REQUEST_INTERVAL_MS;
+    if (wait > 0) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+
   private async fetchJson(path: string): Promise<unknown | null> {
+    await this.throttle();
     try {
       const response = await fetch(`${env.GECKOTERMINAL_BASE_URL}${path}`, {
         headers: {
