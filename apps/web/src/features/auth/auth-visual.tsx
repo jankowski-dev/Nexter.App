@@ -27,7 +27,7 @@ export function AuthVisualProvider({ children }: { children: ReactNode }) {
     () => ({
       lit,
       state,
-      setLit: (value) => setLitValue(Math.max(0, Math.min(12, value))),
+      setLit: (value) => setLitValue(Math.max(0, Math.min(8, value))),
       setState: setStateValue,
       reset: () => {
         setLitValue(0);

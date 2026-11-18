@@ -1,5 +1,4 @@
 import type { NavIconName } from '@/components/nav-icon';
-
 export type CryptoTab =
   | 'overview'
   | 'tokens'

@@ -198,7 +198,7 @@ function UnlockScreen({
     <LockShell>
       <div className="flex flex-col items-center text-center">
         <NexterLogo
-          lit={success ? 12 : Math.min(12, pin.length * 2)}
+          lit={success ? 8 : Math.min(8, Math.ceil((pin.length / 6) * 8))}
           state={success ? 'ok' : error ? 'error' : 'idle'}
           className="auth-logo"
         />
@@ -308,7 +308,7 @@ function SetupScreen({
   return (
     <LockShell>
       <div className="flex flex-col items-center text-center">
-        <NexterLogo lit={Math.min(12, pin.length * 2)} className="auth-logo" />
+        <NexterLogo lit={Math.min(8, Math.ceil((pin.length / 6) * 8))} className="auth-logo" />
         <h1 className="mt-7 text-xl font-semibold">Код блокировки</h1>
         <p className="mt-1 text-sm text-[#c7c7c7]">
           Придумайте 6 цифр для быстрой разблокировки. Код хранится только на этом устройстве.
