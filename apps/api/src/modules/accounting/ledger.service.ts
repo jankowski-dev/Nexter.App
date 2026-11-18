@@ -331,7 +331,10 @@ export class LedgerService {
           addFeePostings(account.id, fee);
 
           if (!base.isCashEquivalent) {
-            tradeGroupId = await this.createGroup(userId, base.id, occurredAt, tx);
+            tradeGroupId = await this.createGroup(userId, base.id, occurredAt, tx, {
+              stopLossPct: input.stopLossPct,
+              takeProfitPct: input.takeProfitPct,
+            });
             work.push({
               kind: 'acquire',
               asset: base,
@@ -582,7 +585,10 @@ export class LedgerService {
           }
 
           if (!tokenOut.isCashEquivalent) {
-            tradeGroupId = await this.createGroup(userId, tokenOut.id, occurredAt, tx);
+            tradeGroupId = await this.createGroup(userId, tokenOut.id, occurredAt, tx, {
+              stopLossPct: input.stopLossPct,
+              takeProfitPct: input.takeProfitPct,
+            });
             work.push({
               kind: 'acquire',
               asset: tokenOut,
@@ -1159,6 +1165,7 @@ export class LedgerService {
     assetId: string,
     openedAt: Date,
     executor: DbExecutor,
+    protection?: { stopLossPct?: number | null; takeProfitPct?: number | null },
   ): Promise<string> {
     const [group] = await executor
       .insert(tradeGroups)
@@ -1167,6 +1174,14 @@ export class LedgerService {
         assetId,
         status: 'open',
         openedAt,
+        stopLossPct:
+          protection?.stopLossPct === null || protection?.stopLossPct === undefined
+            ? null
+            : String(protection.stopLossPct),
+        takeProfitPct:
+          protection?.takeProfitPct === null || protection?.takeProfitPct === undefined
+            ? null
+            : String(protection.takeProfitPct),
       })
       .returning({ id: tradeGroups.id });
 

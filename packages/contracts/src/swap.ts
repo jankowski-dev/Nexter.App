@@ -91,6 +91,8 @@ export const swapQuoteRequestSchema = z
       .max(50)
       .refine((ids) => new Set(ids).size === ids.length, 'Duplicate close group ids')
       .optional(),
+    stopLossPct: z.number().min(1).max(90).nullable().optional(),
+    takeProfitPct: z.number().min(1).max(1000).nullable().optional(),
   })
   .refine((value) => value.tokenIn.toLowerCase() !== value.tokenOut.toLowerCase(), {
     message: 'tokenIn and tokenOut must differ',
@@ -145,6 +147,8 @@ export const swapOrderSummarySchema = z.object({
   networkFeeUsd: z.string().nullable(),
   accountingTransactionId: z.uuid().nullable(),
   tradeGroupId: z.uuid().nullable(),
+  stopLossPct: z.string().nullable(),
+  takeProfitPct: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 

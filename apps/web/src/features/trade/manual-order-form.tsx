@@ -24,6 +24,8 @@ export function ManualOrderForm({
   onSaved,
   onClose,
   onPendingChange,
+  stopLossPct,
+  takeProfitPct,
 }: {
   token: Asset;
   side: Side;
@@ -32,6 +34,8 @@ export function ManualOrderForm({
   onSaved?: () => void;
   onClose: () => void;
   onPendingChange?: (pending: boolean) => void;
+  stopLossPct?: number | null;
+  takeProfitPct?: number | null;
 }) {
   const queryClient = useQueryClient();
   const idempotencyKey = useRef<string>(crypto.randomUUID());
@@ -117,6 +121,8 @@ export function ManualOrderForm({
           ...common,
           quoteAssetId,
           quoteAmount,
+          ...(stopLossPct != null ? { stopLossPct } : {}),
+          ...(takeProfitPct != null ? { takeProfitPct } : {}),
         });
       }
 

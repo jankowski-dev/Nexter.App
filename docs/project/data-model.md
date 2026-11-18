@@ -39,6 +39,7 @@
 | `lot_consumptions`      | FIFO-списания                | lotId, disposalTransactionId, amount, costBasisUsd, proceedsUsd, realizedPnlUsd                                                   |
 | `prices`                | Ручные/импортированные цены  | assetId, priceUsd, observedAt, source                                                                                             |
 | `market_quotes`         | Последняя рыночная котировка | assetId PK, priceUsd, change24hPct, change7d/30d/1yPct, marketCapUsd, source, liquidityUsd, fetchedAt, changedAt                  |
+| `pending_orders`        | Отложенные покупки           | assetId, amountUsd, triggerPriceUsd, stopLossPct, takeProfitPct, status, lastNotifiedAt                                           |
 | `automation_rules`      | Правила автоматизации        | userId, name, kind, assetId, tradeGroupId, status, executionMode, params jsonb, maxOrderUsd, cooldownMinutes, triggerCount        |
 | `automation_rule_state` | Состояние правила            | ruleId PK, highWaterUsd, lastActionAt, metadata jsonb                                                                             |
 | `automation_runs`       | Журнал срабатываний          | ruleId, userId, status, triggerKey, reason, triggerPriceUsd, amount, usdValue, tradeGroupId                                       |

@@ -642,6 +642,14 @@ export class SwapService {
           minOut: fromBaseUnits(minOutBase.toString(), tokenOut.decimals),
           slippageBps,
           priceImpactBps,
+          stopLossPct:
+            input.stopLossPct === null || input.stopLossPct === undefined
+              ? null
+              : String(input.stopLossPct),
+          takeProfitPct:
+            input.takeProfitPct === null || input.takeProfitPct === undefined
+              ? null
+              : String(input.takeProfitPct),
           routeId,
           routeSummary: route.routeSummary,
           routerAddress: normalizeAddress(route.routerAddress),
@@ -2135,6 +2143,8 @@ export class SwapService {
       networkFeeUsd: order.networkFeeUsd,
       accountingTransactionId: order.accountingTransactionId,
       tradeGroupId: order.tradeGroupId,
+      stopLossPct: order.stopLossPct,
+      takeProfitPct: order.takeProfitPct,
       createdAt: order.createdAt.toISOString(),
     };
   }

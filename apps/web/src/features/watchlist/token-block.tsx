@@ -9,10 +9,10 @@ import { WeeklyPriceChart } from './weekly-price-chart';
 
 function TokenMetric({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="text-right">
-      <div className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">{label}</div>
+    <div className="w-full text-right">
+      <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">{label}</div>
       <div
-        className={`mt-0.5 font-mono text-[13px] font-semibold tabular-nums ${tone ?? 'text-zinc-700'}`}
+        className={`mt-0.5 font-mono text-[14px] font-semibold tabular-nums ${tone ?? 'text-zinc-700'}`}
       >
         {value}
       </div>
@@ -110,7 +110,7 @@ export function TokenBlock({
           </Button>
         ) : null}
 
-        <div className="ml-auto flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+        <div className="ml-auto grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-[64px_64px_70px_94px] sm:justify-end">
           <TokenMetric label="7д" value={change7d} tone={pnlTone(entry.change7dPct)} />
           <TokenMetric label="30д" value={change30d} tone={pnlTone(entry.change30dPct)} />
           <TokenMetric label="1г" value={change1y} tone={pnlTone(entry.change1yPct)} />

@@ -9,7 +9,7 @@ import {
   buildSwap,
   buildSwapApproval,
   cancelSwap,
-  createAutomationRule,
+  createPendingOrder,
   cancelSwapSigning,
   fetchSwapBalances,
   fetchSwapConfig,
@@ -23,7 +23,7 @@ import {
   stepUp,
   submitSwap,
   submitSwapApproval,
-  updateAutomationRule,
+  updateTradeGroupProtection,
   type SwapBuildResponse,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -160,8 +160,16 @@ export function TokenTradeDrawer({
   const balanceBySymbol = new Map(
     (balances.data?.balances ?? []).map((item) => [item.symbol, item.balance]),
   );
+  const runtime = useRuntimeSettings();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [channel, setChannel] = useState<'onchain' | 'manual'>('onchain');
+  const [stopLossPct, setStopLossPct] = useState(String(runtime.automationDefaultStopLossPct));
+  const [takeProfitPct, setTakeProfitPct] = useState(
+    String(runtime.automationDefaultTakeProfitPct),
+  );
+  const [delayed, setDelayed] = useState(false);
+  const [delayedAmountUsd, setDelayedAmountUsd] = useState(runtime.automationDefaultBuyAmountUsd);
+  const [delayedTriggerPrice, setDelayedTriggerPrice] = useState('');
   const [manualPending, setManualPending] = useState(false);
   const [quoteSymbol, setQuoteSymbol] = useState('USDC');
   const [amount, setAmount] = useState('');
@@ -239,6 +247,12 @@ export function TokenTradeDrawer({
         amountIn: previewAmount,
         slippageBps: slippageBps ?? config.data?.defaultSlippageBps ?? 50,
         walletAddress: wallet.address ?? undefined,
+        ...(mode === 'buy'
+          ? {
+              stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
+              takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+            }
+          : {}),
       }),
     enabled: Boolean(
       channel === 'onchain' &&
@@ -464,6 +478,12 @@ export function TokenTradeDrawer({
         slippageBps: slippageBps ?? config.data.defaultSlippageBps,
         walletAddress: wallet.address,
         ...(mode === 'sell' && tradeGroupId ? { closeGroupIds: [tradeGroupId] } : {}),
+        ...(mode === 'buy'
+          ? {
+              stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
+              takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+            }
+          : {}),
       };
 
       const quotedResult = await buildWithRecovery(request);
@@ -655,20 +675,56 @@ export function TokenTradeDrawer({
     !executing &&
     !pendingSubmit;
 
+  const createPendingMutation = useMutation({
+    mutationFn: () =>
+      createPendingOrder({
+        assetId: token.id,
+        amountUsd: delayedAmountUsd,
+        triggerPriceUsd: delayedTriggerPrice,
+        stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
+        takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+      }),
+    onSuccess: () => {
+      onCompletedRef.current?.();
+      onClose();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось создать отложенную покупку')),
+  });
+
   return (
     <>
       <Drawer
         open
         onClose={onClose}
         closeDisabled={closeBlocked}
-        title={`${isBuy ? 'Создание ордера' : 'Закрытие ордера'} · ${assetSymbol}`}
+        title={
+          delayed
+            ? `Отложенная покупка · ${assetSymbol}`
+            : `${isBuy ? 'Создание ордера' : 'Закрытие ордера'} · ${assetSymbol}`
+        }
         titleIcon={
           <TokenIcon logoUrl={token.logoUrl} symbol={token.symbol} className="h-7 w-7 text-xs" />
         }
         description={`${token.name} · ${token.chainCode.toUpperCase()}`}
         size="third"
         footer={
-          channel === 'manual' ? (
+          delayed ? (
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              <Button variant="secondary" onClick={onClose}>
+                Отмена
+              </Button>
+              <Button
+                onClick={() => createPendingMutation.mutate()}
+                disabled={
+                  createPendingMutation.isPending ||
+                  !isPositiveDecimal(delayedAmountUsd) ||
+                  !isPositiveDecimal(delayedTriggerPrice)
+                }
+              >
+                {createPendingMutation.isPending ? 'Создаю…' : 'Создать отложенную покупку'}
+              </Button>
+            </div>
+          ) : channel === 'manual' ? (
             <div className="flex w-full flex-wrap items-center justify-end gap-2">
               <Button variant="secondary" onClick={onClose} disabled={manualPending}>
                 Отмена
@@ -725,20 +781,89 @@ export function TokenTradeDrawer({
           {trade ? (
             <>
               <TradeSummary trade={trade} currentPrice={effectiveMarketPrice} />
-              <ProtectionCard trade={trade} />
+              <ProtectionEditor trade={trade} onUpdated={setTrade} />
             </>
           ) : mode === 'sell' ? (
             <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />
           ) : null}
 
-          <TradeChannelTabs
-            value={channel}
-            onChange={setChannel}
-            disabled={executing || pendingSubmit || manualPending}
-            onchainConfigured={onchainConfigured}
-          />
+          {isBuy ? (
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+                    Защита и отложенная покупка
+                  </div>
+                  <div className="text-[11px] text-zinc-500">
+                    Настройки применяются только к этому ордеру.
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs text-zinc-700">
+                  <input
+                    type="checkbox"
+                    checked={delayed}
+                    onChange={(event) => setDelayed(event.target.checked)}
+                  />
+                  Отложенная покупка
+                </label>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <label className="text-[11px] text-zinc-600">
+                  Стоп-лосс, %
+                  <Input
+                    className="mt-1 h-8 text-xs"
+                    type="number"
+                    placeholder="не задан"
+                    value={stopLossPct}
+                    onChange={(event) => setStopLossPct(event.target.value)}
+                  />
+                </label>
+                <label className="text-[11px] text-zinc-600">
+                  Тейк-профит, %
+                  <Input
+                    className="mt-1 h-8 text-xs"
+                    type="number"
+                    placeholder="не задан"
+                    value={takeProfitPct}
+                    onChange={(event) => setTakeProfitPct(event.target.value)}
+                  />
+                </label>
+              </div>
+              {delayed ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="text-[11px] text-zinc-600">
+                    Сумма, USD
+                    <Input
+                      className="mt-1 h-8 text-xs"
+                      inputMode="decimal"
+                      value={delayedAmountUsd}
+                      onChange={(event) => setDelayedAmountUsd(event.target.value)}
+                    />
+                  </label>
+                  <label className="text-[11px] text-zinc-600">
+                    Купить при цене ≤, USD
+                    <Input
+                      className="mt-1 h-8 text-xs"
+                      inputMode="decimal"
+                      value={delayedTriggerPrice}
+                      onChange={(event) => setDelayedTriggerPrice(event.target.value)}
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
-          <div className={channel === 'onchain' ? 'space-y-5' : 'hidden'}>
+          {delayed ? null : (
+            <TradeChannelTabs
+              value={channel}
+              onChange={setChannel}
+              disabled={executing || pendingSubmit || manualPending}
+              onchainConfigured={onchainConfigured}
+            />
+          )}
+
+          <div className={!delayed && channel === 'onchain' ? 'space-y-5' : 'hidden'}>
             <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
               <div>
                 <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
@@ -987,7 +1112,7 @@ export function TokenTradeDrawer({
             ) : null}
           </div>
 
-          <div className={channel === 'manual' ? '' : 'hidden'}>
+          <div className={!delayed && channel === 'manual' ? '' : 'hidden'}>
             <ManualOrderForm
               key={`${mode}-${token.id}-${tradeGroupId ?? 'new'}`}
               token={token}
@@ -997,6 +1122,8 @@ export function TokenTradeDrawer({
               onSaved={() => onCompletedRef.current?.()}
               onClose={onClose}
               onPendingChange={setManualPending}
+              stopLossPct={stopLossPct.trim() ? Number(stopLossPct) : null}
+              takeProfitPct={takeProfitPct.trim() ? Number(takeProfitPct) : null}
             />
           </div>
         </div>
@@ -1086,76 +1213,65 @@ function TradeChannelTabs({
   );
 }
 
-function ProtectionCard({ trade }: { trade: TradeGroupDetail }) {
-  const runtime = useRuntimeSettings();
+function ProtectionEditor({
+  trade,
+  onUpdated,
+}: {
+  trade: TradeGroupDetail;
+  onUpdated: (trade: TradeGroupDetail) => void;
+}) {
   const queryClient = useQueryClient();
   const group = trade.group;
-  const [stopPct, setStopPct] = useState(String(runtime.automationDefaultStopLossPct));
-  const [takePct, setTakePct] = useState(String(runtime.automationDefaultTakeProfitPct));
+  const [stopPct, setStopPct] = useState(group.stopLossPct ?? '');
+  const [takePct, setTakePct] = useState(group.takeProfitPct ?? '');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const createRule = useMutation({
-    mutationFn: async ({ kind, pct }: { kind: 'stop_loss' | 'take_profit'; pct: string }) => {
-      const name =
-        kind === 'stop_loss'
-          ? `Стоп-лосс ${group.asset.symbol}`
-          : `Тейк-профит ${group.asset.symbol}`;
-      const base = {
-        name,
-        assetId: group.asset.id,
-        tradeGroupId: group.id,
-        executionMode: runtime.automationMode,
-        maxOrderUsd: null,
-        cooldownMinutes: runtime.automationCooldownMinutes,
-      };
-      const created =
-        kind === 'stop_loss'
-          ? await createAutomationRule({
-              ...base,
-              kind: 'stop_loss',
-              params: { stopLossPct: Number(pct) },
-            })
-          : await createAutomationRule({
-              ...base,
-              kind: 'take_profit',
-              params: { takeProfitPct: Number(pct) },
-            });
-      await updateAutomationRule(created.id, { status: 'armed' });
-      return created;
-    },
-    onSuccess: () => {
-      setNotice('Правило создано и взведено.');
+  useEffect(() => {
+    setStopPct(group.stopLossPct ?? '');
+    setTakePct(group.takeProfitPct ?? '');
+  }, [group.id, group.stopLossPct, group.takeProfitPct]);
+
+  const saveProtection = useMutation({
+    mutationFn: () =>
+      updateTradeGroupProtection(group.id, {
+        stopLossPct: stopPct.trim() ? Number(stopPct) : null,
+        takeProfitPct: takePct.trim() ? Number(takePct) : null,
+      }),
+    onSuccess: (updated) => {
+      onUpdated(updated);
+      setNotice('Защита сохранена.');
       setError(null);
-      void queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+      void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ['portfolio-token-summaries'] });
     },
     onError: (err) => {
       setNotice(null);
-      setError(toRussianError(err, 'Не удалось создать правило защиты'));
+      setError(toRussianError(err, 'Не удалось сохранить защиту'));
     },
   });
 
   if (group.status === 'closed') return null;
 
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-3 py-2">
+    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-800">
-            Защита сделки
+          <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+            Защита этой сделки
           </div>
-          <div className="text-[11px] text-emerald-800/80">
-            Создаёт взведённое правило в режиме{' '}
-            {runtime.automationMode === 'proposal' ? 'предложения' : 'dry-run'}.
+          <div className="text-[11px] text-zinc-500">
+            Стоп-лосс и тейк-профит применяются только к этому ордеру.
           </div>
         </div>
-        <Link
-          to="/portfolio"
-          hash="automation"
-          className="text-[11px] text-emerald-800 hover:underline"
+        <Button
+          variant="secondary"
+          className="h-8 px-2.5 text-xs"
+          disabled={saveProtection.isPending}
+          onClick={() => saveProtection.mutate()}
         >
-          Все правила →
-        </Link>
+          {saveProtection.isPending ? 'Сохраняю…' : 'Сохранить защиту'}
+        </Button>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-2">
         <label className="text-[11px] text-zinc-600">
@@ -1163,6 +1279,7 @@ function ProtectionCard({ trade }: { trade: TradeGroupDetail }) {
           <Input
             className="mt-1 h-8 text-xs"
             type="number"
+            placeholder="не задан"
             value={stopPct}
             onChange={(event) => setStopPct(event.target.value)}
           />
@@ -1172,28 +1289,11 @@ function ProtectionCard({ trade }: { trade: TradeGroupDetail }) {
           <Input
             className="mt-1 h-8 text-xs"
             type="number"
+            placeholder="не задан"
             value={takePct}
             onChange={(event) => setTakePct(event.target.value)}
           />
         </label>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          className="h-8 px-2.5 text-xs"
-          disabled={createRule.isPending}
-          onClick={() => createRule.mutate({ kind: 'stop_loss', pct: stopPct })}
-        >
-          Создать стоп-лосс
-        </Button>
-        <Button
-          variant="secondary"
-          className="h-8 px-2.5 text-xs"
-          disabled={createRule.isPending}
-          onClick={() => createRule.mutate({ kind: 'take_profit', pct: takePct })}
-        >
-          Создать тейк-профит
-        </Button>
       </div>
       {notice ? <div className="mt-1 text-[11px] text-emerald-700">{notice}</div> : null}
       {error ? <div className="mt-1 text-[11px] text-red-700">{error}</div> : null}

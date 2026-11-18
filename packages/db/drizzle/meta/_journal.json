@@ -337,6 +337,13 @@
       "when": 1794982987610,
       "tag": "0047_faithful_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794992804656,
+      "tag": "0048_spotty_romulus",
+      "breakpoints": true
     }
   ]
 }

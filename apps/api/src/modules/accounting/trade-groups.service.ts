@@ -306,6 +306,54 @@ export class TradeGroupsService {
     return this.get(userId, groupId);
   }
 
+  async setProtection(
+    userId: string,
+    groupId: string,
+    input: { stopLossPct: number | null; takeProfitPct: number | null },
+    meta: LedgerMeta,
+  ): Promise<TradeGroupDetail> {
+    const [group] = await this.db
+      .select()
+      .from(tradeGroups)
+      .where(and(eq(tradeGroups.id, groupId), eq(tradeGroups.userId, userId)))
+      .limit(1);
+
+    if (!group) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Trade group not found' });
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(tradeGroups)
+        .set({
+          stopLossPct: input.stopLossPct === null ? null : String(input.stopLossPct),
+          takeProfitPct: input.takeProfitPct === null ? null : String(input.takeProfitPct),
+          lastProtectionEventKey: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(tradeGroups.id, groupId));
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'trade_group.protection_updated',
+          entityType: 'trade_group',
+          entityId: groupId,
+          before: {
+            stopLossPct: group.stopLossPct,
+            takeProfitPct: group.takeProfitPct,
+          },
+          after: input,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
+
+    return this.get(userId, groupId);
+  }
+
   async sell(
     userId: string,
     groupId: string,
@@ -640,6 +688,8 @@ export class TradeGroupsService {
       holdingDays,
       source,
       notes: row.group.notes,
+      stopLossPct: row.group.stopLossPct,
+      takeProfitPct: row.group.takeProfitPct,
       quality: {
         assetVerified: row.asset.isVerified,
         chainKnown,

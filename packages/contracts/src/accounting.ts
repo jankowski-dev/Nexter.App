@@ -116,6 +116,8 @@ export const manualBuySchema = z.object({
   quoteAssetId: z.uuid(),
   quoteAmount: positiveDecimalSchema,
   usdValue: positiveDecimalSchema.optional(),
+  stopLossPct: z.number().min(1).max(90).nullable().optional(),
+  takeProfitPct: z.number().min(1).max(1000).nullable().optional(),
   ...feeFields,
   ...manualBase,
 });
@@ -142,6 +144,8 @@ export const manualSwapSchema = z.object({
   amountOut: positiveDecimalSchema,
   usdValueIn: positiveDecimalSchema.optional(),
   usdValueOut: positiveDecimalSchema.optional(),
+  stopLossPct: z.number().min(1).max(90).nullable().optional(),
+  takeProfitPct: z.number().min(1).max(1000).nullable().optional(),
   closeGroupIds: z
     .array(z.uuid())
     .min(1)

@@ -17,12 +17,14 @@ import type {
   TradeGroupDetail,
   TradeGroupListQuery,
   TradeGroupNotesRequest,
+  TradeGroupProtectionRequest,
   TradeGroupsResponse,
   TradeGroupSellRequest,
 } from '@nexter/contracts';
 import {
   tradeGroupListQuerySchema,
   tradeGroupNotesRequestSchema,
+  tradeGroupProtectionRequestSchema,
   tradeGroupSellRequestSchema,
 } from '@nexter/contracts';
 import type { FastifyRequest } from 'fastify';
@@ -61,6 +63,20 @@ export class TradeGroupsController {
     @Req() request: FastifyRequest,
   ): Promise<TradeGroupDetail> {
     return this.tradeGroups.updateNotes(auth.user.id, id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Patch(':id/protection')
+  setProtection(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body(new ZodValidationPipe(tradeGroupProtectionRequestSchema))
+    body: TradeGroupProtectionRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<TradeGroupDetail> {
+    return this.tradeGroups.setProtection(auth.user.id, id, body, {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
