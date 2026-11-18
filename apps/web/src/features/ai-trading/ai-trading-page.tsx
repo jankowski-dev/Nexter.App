@@ -111,7 +111,7 @@ export function AiTradingPage() {
   const coverage = useQuery({
     queryKey: ['ai-coverage'],
     queryFn: fetchAiCoverage,
-    enabled: section === 'data',
+    enabled: section === 'data' || section === 'lab',
     refetchInterval: 60_000,
   });
   const watchlist = useQuery({
@@ -235,7 +235,12 @@ export function AiTradingPage() {
       ) : null}
 
       {section === 'lab' ? (
-        <LabSection tokens={tokenRows} onChanged={() => invalidateAi(queryClient)} />
+        <LabSection
+          tokens={tokenRows}
+          coverage={coverage.data}
+          onOpenData={() => setSection('data')}
+          onChanged={() => invalidateAi(queryClient)}
+        />
       ) : null}
 
       {section === 'services' ? (
@@ -412,12 +417,29 @@ function LabFeature({ label, value }: { label: string; value: string }) {
   );
 }
 
-function LabSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged: () => void }) {
+function LabSection({
+  tokens,
+  coverage,
+  onOpenData,
+  onChanged,
+}: {
+  tokens: AiProfileToken[];
+  coverage: AiCoverage | undefined;
+  onOpenData: () => void;
+  onChanged: () => void;
+}) {
   const enabled = tokens.filter((token) => token.enabled);
   const [assetId, setAssetId] = useState(enabled[0]?.asset.id ?? '');
   const [timeframe, setTimeframe] = useState<AiTimeframe>(enabled[0]?.timeframes[0] ?? '1d');
   const [error, setError] = useState<string | null>(null);
+  const [dataNotice, setDataNotice] = useState<string | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
   const selected = enabled.find((token) => token.asset.id === assetId);
+  const timeframeCoverage = coverage?.tokens
+    .find((token) => token.assetId === assetId)
+    ?.timeframes.find((item) => item.timeframe === timeframe);
+  const missingData =
+    timeframeCoverage?.status === 'missing' || timeframeCoverage?.status === 'stale';
 
   const labQuery = useQuery({
     queryKey: ['ai-lab', assetId, timeframe],
@@ -432,6 +454,20 @@ function LabSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged
       onChanged();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось выполнить анализ')),
+  });
+
+  const loadData = useMutation({
+    mutationFn: () => refreshAiData({ assetId, timeframes: [timeframe], days: 90 }),
+    onSuccess: (result) => {
+      setDataError(null);
+      setDataNotice(
+        `Загружено свечей: ${result.upserted}${
+          result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''
+        }. Теперь нажмите «Анализировать».`,
+      );
+      onChanged();
+    },
+    onError: (err) => setDataError(toRussianError(err, 'Не удалось загрузить данные')),
   });
 
   const backtest = useMutation({
@@ -510,11 +546,39 @@ function LabSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged
                 ))}
               </Select>
             </label>
-            <Button disabled={!assetId || analyze.isPending} onClick={() => analyze.mutate()}>
+            <Button
+              disabled={!assetId || analyze.isPending || missingData}
+              onClick={() => analyze.mutate()}
+            >
               {analyze.isPending ? 'Анализирую…' : 'Анализировать'}
             </Button>
           </div>
         </div>
+        {missingData ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2 text-xs text-amber-800">
+            <span>
+              {timeframeCoverage?.status === 'stale' ? 'Данные устарели' : 'Нет свечей'} для{' '}
+              {selected?.asset.symbol ?? 'токена'} {timeframe}. Загрузите историю перед анализом.
+            </span>
+            <Button
+              variant="secondary"
+              className="h-7 px-2 text-[11px]"
+              disabled={loadData.isPending}
+              onClick={() => loadData.mutate()}
+            >
+              {loadData.isPending ? 'Загружаю…' : 'Загрузить данные'}
+            </Button>
+            <button
+              type="button"
+              className="text-[11px] text-amber-800 underline"
+              onClick={onOpenData}
+            >
+              Открыть «Данные»
+            </button>
+          </div>
+        ) : null}
+        {dataNotice ? <p className="mt-2 text-xs text-emerald-700">{dataNotice}</p> : null}
+        {dataError ? <p className="mt-2 text-xs text-red-700">{dataError}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
       </Card>
 
