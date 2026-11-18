@@ -1021,19 +1021,20 @@ export function TokenTradeDrawer({
                 />
               </div>
               <div className="block text-sm text-zinc-600">
-                <span className="sr-only">Сеть</span>
+                Сеть
                 <div
-                  className="mt-1 flex h-10 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-700"
+                  className="mt-1 flex h-10 w-10 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50"
                   title={chain?.name ?? 'Сеть'}
+                  role="img"
+                  aria-label={chain?.name ?? 'Сеть'}
                 >
                   {chainCode === 'bsc' ? (
                     <BnbIcon />
                   ) : chainCode === 'ethereum' ? (
                     <EthIcon />
-                  ) : null}
-                  <span>
-                    {chainCode === 'bsc' ? 'BNB' : chainCode === 'ethereum' ? 'ETH' : '—'}
-                  </span>
+                  ) : (
+                    <span className="text-[10px] text-zinc-400">—</span>
+                  )}
                 </div>
               </div>
             </div>
