@@ -29,6 +29,7 @@ import {
   type AiTradingDashboard,
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
+import { decimal } from '../../shared/money/decimal';
 import { DB } from '../../shared/db/db.module';
 
 interface AiTradingMeta {
@@ -158,13 +159,25 @@ export class AiTradingService {
     meta: AiTradingMeta,
   ): Promise<AiProfile> {
     const before = await this.ensureProfile(userId);
+    const budget = input.budgetUsd !== undefined ? decimal(input.budgetUsd) : null;
+    const reserved = decimal(input.reservedUsd ?? before.reservedUsd);
+    const derivedCash =
+      budget !== null && input.cashUsd === undefined
+        ? budget.minus(reserved).lt(0)
+          ? '0'
+          : budget.minus(reserved).toFixed(8)
+        : null;
     const [updated] = await this.db
       .update(aiProfiles)
       .set({
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
         ...(input.budgetUsd !== undefined ? { budgetUsd: input.budgetUsd } : {}),
-        ...(input.cashUsd !== undefined ? { cashUsd: input.cashUsd } : {}),
+        ...(input.cashUsd !== undefined
+          ? { cashUsd: input.cashUsd }
+          : derivedCash !== null
+            ? { cashUsd: derivedCash }
+            : {}),
         ...(input.reservedUsd !== undefined ? { reservedUsd: input.reservedUsd } : {}),
         ...(input.maxWorkers !== undefined ? { maxWorkers: input.maxWorkers } : {}),
         ...(input.maxWorkerAllocationPct !== undefined
