@@ -513,6 +513,22 @@ describe('bollinger_reversion', () => {
       ).reason,
     ).toBe('стоп-лосс');
   });
+
+  it('honours disabled protective exits', () => {
+    const position = { amount: '10', avgCostUsd: '1.00000000', costBasisUsd: '10.00000000' };
+    expect(
+      bollingerReversion.evaluate(
+        context({
+          params,
+          history: history(Array.from({ length: 40 }, () => 1)),
+          priceUsd: '0.90000000',
+          position,
+          stopLossEnabled: false,
+          takeProfitEnabled: false,
+        }),
+      ).action,
+    ).toBe('hold');
+  });
 });
 
 describe('squeeze_breakout', () => {

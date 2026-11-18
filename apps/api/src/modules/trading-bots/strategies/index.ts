@@ -615,8 +615,12 @@ export const donchianBreakout: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
 
       const low = rollingLow(ctx.history, params.exitPeriod);
       if (low && price.lte(low)) return sell('пробой нижнего канала');
@@ -676,8 +680,12 @@ export const bollingerReversion: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (bands && price.gte(bands.mean.mul(1 + params.exitAboveMeanPct / 100))) {
         return sell('возврат к средней');
       }
@@ -743,8 +751,12 @@ export const squeezeBreakout: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) return sell('тейк-профит');
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) return sell('стоп-лосс');
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
       if (bands && price.lt(bands.mean)) return sell('возврат под среднюю');
       return hold('позиция выше средней');
     }
@@ -809,10 +821,10 @@ export const failedBreakout: StrategyDefinition = {
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);
-      if (price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
         return sell('тейк-профит', { breakdownLevel: null });
       }
-      if (price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
         return sell('стоп-лосс', { breakdownLevel: null });
       }
       return hold('позиция открыта');
