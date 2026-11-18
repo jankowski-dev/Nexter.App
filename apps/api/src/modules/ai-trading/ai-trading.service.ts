@@ -381,7 +381,7 @@ export class AiTradingService {
     await this.updateToken(userId, id, { enabled: false }, meta);
   }
 
-  async listServices(userId: string): Promise<AiServiceConfig[]> {
+  async listServices(userId: string, meta: AiTradingMeta): Promise<AiServiceConfig[]> {
     const profile = await this.ensureProfile(userId);
     const existing = await this.db
       .select()
@@ -402,7 +402,10 @@ export class AiTradingService {
         })
         .onConflictDoNothing()
         .returning();
-      if (created) byService.set(service, created);
+      if (created) {
+        byService.set(service, created);
+        await this.auditServiceCreated(userId, created, meta);
+      }
     }
 
     return aiServiceKeys
@@ -440,6 +443,7 @@ export class AiTradingService {
         })
         .returning();
       if (!created) throw new Error('Failed to create AI service config');
+      await this.auditServiceCreated(userId, created, meta);
       return toService(created);
     }
 
@@ -525,6 +529,30 @@ export class AiTradingService {
       lastRunAt: latest?.createdAt.toISOString() ?? null,
       lastRunStatus: latest?.status ?? null,
     };
+  }
+
+  private async auditServiceCreated(
+    userId: string,
+    created: typeof aiServiceConfigs.$inferSelect,
+    meta: AiTradingMeta,
+  ): Promise<void> {
+    await this.audit.log(
+      {
+        userId,
+        action: 'ai_trading.service_created',
+        entityType: 'ai_service_config',
+        entityId: created.id,
+        after: {
+          service: created.service,
+          enabled: created.enabled,
+          concurrency: created.concurrency,
+          config: created.config,
+        },
+        ip: meta.ip,
+        userAgent: meta.userAgent,
+      },
+      { strict: true },
+    );
   }
 
   private async ensureProfile(userId: string): Promise<typeof aiProfiles.$inferSelect> {

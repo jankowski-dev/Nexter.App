@@ -98,8 +98,16 @@ export class AiTradingController {
   }
 
   @Get('services')
-  listServices(@CurrentAuth() auth: AuthContext): Promise<{ data: AiServiceConfig[] }> {
-    return this.aiTrading.listServices(auth.user.id).then((data) => ({ data }));
+  listServices(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+  ): Promise<{ data: AiServiceConfig[] }> {
+    return this.aiTrading
+      .listServices(auth.user.id, {
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+      })
+      .then((data) => ({ data }));
   }
 
   @Put('services/:service')

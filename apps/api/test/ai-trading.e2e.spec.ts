@@ -123,6 +123,11 @@ describe.runIf(canRun)('AI trading control center API', () => {
     const services = await agent.get('/api/v1/ai-trading/services').expect(200);
     expect(services.body.data).toHaveLength(5);
 
+    const serviceAudit = await db.execute(
+      sql`select count(*)::int as n from audit_log where action = 'ai_trading.service_created'`,
+    );
+    expect((serviceAudit.rows[0] as { n: number } | undefined)?.n).toBe(5);
+
     const service = await agent
       .put('/api/v1/ai-trading/services/data')
       .set('x-csrf-token', owner.csrf)
