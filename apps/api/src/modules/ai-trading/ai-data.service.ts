@@ -135,7 +135,7 @@ export class AiDataService {
     let pairs = 0;
 
     for (const token of selected) {
-      const timeframes = input.timeframes ?? token.timeframes;
+      const timeframes = [...new Set(input.timeframes ?? token.timeframes)];
       for (const timeframe of timeframes) {
         pairs += 1;
         const days = Math.min(input.days, MAX_LOOKBACK_DAYS[timeframe]);
