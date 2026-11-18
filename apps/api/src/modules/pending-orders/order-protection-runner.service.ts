@@ -205,7 +205,7 @@ export class OrderProtectionRunnerService implements OnApplicationBootstrap, OnA
           type: 'order_protection',
           title: `${label}: ${group.asset.symbol}`,
           body: `${pnlPct.gte(0) ? '+' : ''}${pnlPct.toFixed(2)}% к средней цене. Цена ${new Decimal(quote.priceUsd).toFixed(8)}.`,
-          href: `/trades/${row.id}`,
+          href: '/portfolio#orders',
           payload: {
             tradeGroupId: row.id,
             eventType,
