@@ -295,3 +295,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - Delayed buy keeps market context and converts amount/price/quantity both ways.
 - Sell quick 10/25/50/100%, compact amount/receive/chain row and four metric blocks.
 - Polished current-trade header; full-card link removed from active flows.
+
+## UI-75 task duplicates and layout refinements
+
+- Right-click a calendar task to open a prefilled copy with the due date +1 day; status open, recurrence/images not copied.
+- Removed the Orders `Отложенные покупки` panel.
+- Operations embedded toolbar holds search, filters and `Новая операция` in one row.
+- Buy TP/SL hints show projected USD from the entered amount; chain selector is a compact icon badge.
