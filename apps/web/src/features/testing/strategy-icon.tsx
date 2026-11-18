@@ -61,6 +61,46 @@ const visuals: Record<string, Visual> = {
       </>
     ),
   },
+  channel: {
+    tile: 'border-teal-200 bg-teal-50 text-teal-700',
+    icon: (
+      <>
+        <path d="M4 7.5h16M4 16.5h16" />
+        <path d="M6 12h9M15 12l-2.5-2.5M15 12l-2.5 2.5" />
+        <path d="M18.5 9.5 21 12l-2.5 2.5" />
+      </>
+    ),
+  },
+  bands: {
+    tile: 'border-cyan-200 bg-cyan-50 text-cyan-700',
+    icon: (
+      <>
+        <path d="M4 5c4 2 12 2 16 0M4 19c4-2 12-2 16 0" />
+        <path d="M4 12h16" />
+        <path d="m8 14.5-2-2 2-2M16 9.5l2 2-2 2" />
+      </>
+    ),
+  },
+  squeeze: {
+    tile: 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700',
+    icon: (
+      <>
+        <path d="M4 6h5M15 6h5M4 18h5M15 18h5" />
+        <path d="m10 9 2 3-2 3M14 9l-2 3 2 3" />
+        <path d="M12 3v3M12 18v3" />
+      </>
+    ),
+  },
+  reversal: {
+    tile: 'border-orange-200 bg-orange-50 text-orange-700',
+    icon: (
+      <>
+        <path d="M6 5v7a4 4 0 0 0 4 4h9" />
+        <path d="m15.5 12.5 3.5 3.5-3.5 3.5" />
+        <path d="M4.5 8.5 6 12l3.5-1.5" />
+      </>
+    ),
+  },
   beaker: {
     tile: 'border-zinc-200 bg-zinc-100 text-zinc-700',
     icon: (
