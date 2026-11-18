@@ -289,6 +289,15 @@ export class AiLabService {
               ],
             });
             rawResponse = response.content.slice(0, MAX_RESPONSE_CHARS);
+            const promptTokens = response.promptTokens ?? Math.ceil(prompt.length / 4);
+            const completionTokens = response.completionTokens ?? 0;
+            usage = {
+              model: profile.modelSettings.model,
+              promptTokens,
+              completionTokens,
+              costUsd: this.cost(promptTokens, completionTokens, analyst).toFixed(8),
+              latencyMs: Date.now() - startedAt,
+            };
             const parsed = responseSchema.parse(extractJson(response.content));
             const validated = this.validateCandidates(
               parsed.candidates,
@@ -306,15 +315,6 @@ export class AiLabService {
             summary = parsed.summary;
             prepared = validated;
             warnings.push(...(parsed.warnings ?? []));
-            const promptTokens = response.promptTokens ?? Math.ceil(prompt.length / 4);
-            const completionTokens = response.completionTokens ?? 0;
-            usage = {
-              model: profile.modelSettings.model,
-              promptTokens,
-              completionTokens,
-              costUsd: this.cost(promptTokens, completionTokens, analyst).toFixed(8),
-              latencyMs: Date.now() - startedAt,
-            };
           } catch (error) {
             fallback(`ИИ недоступен: ${safeMessage(error)}.`);
           }
