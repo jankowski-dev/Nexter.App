@@ -23,7 +23,7 @@ Nexter kept most operational values in code or env: quote intervals, liquidity f
 - A token is swappable only when it is active, belongs to the default `Основная` group, and the owner explicitly enabled swaps in the token drawer.
 - `SwapTokenRegistryService` loads these tokens into an in-process map at startup and refreshes every 60 seconds. `getSwapToken` checks the static registry first, then the dynamic map.
 - `GET /swap/config` appends dynamic tokens, deduplicated against the static registry.
-- All existing safety checks remain unchanged: router/executor/selector/wallet allowlists, exact approvals, calldata validation, simulation, gas/impact caps, step-up TOTP and kill switch.
+- All existing safety checks remain unchanged: router/executor/selector/wallet allowlists, exact approvals, calldata validation, simulation, gas/impact caps, step-up TOTP and kill switch. Existing env swap limits remain hard upper bounds; settings can only tighten them.
 
 ### 3. Automation
 
