@@ -4,6 +4,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { TokenIcon } from '@/components/token-icon';
+import { BnbIcon, EthIcon } from '@/components/chain-toggle';
 import {
   ApiError,
   buildSwap,
@@ -29,6 +30,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { useConfirm } from '@/lib/confirm';
 import {
+  formatDate,
   formatPct,
   formatPrice,
   formatSignedUsd,
@@ -47,11 +49,10 @@ import {
   isSwapSettled,
   phaseAfterExecutionFailure,
 } from './swap-execution';
-import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   Asset,
   SwapConfigResponse,
@@ -170,6 +171,8 @@ export function TokenTradeDrawer({
   const [delayed, setDelayed] = useState(false);
   const [delayedAmountUsd, setDelayedAmountUsd] = useState(runtime.automationDefaultBuyAmountUsd);
   const [delayedTriggerPrice, setDelayedTriggerPrice] = useState('');
+  const [delayedQuantity, setDelayedQuantity] = useState('');
+  const delayedLastEdited = useRef<'price' | 'quantity' | 'amount'>('price');
   const [manualPending, setManualPending] = useState(false);
   const [quoteSymbol, setQuoteSymbol] = useState('USDC');
   const [amount, setAmount] = useState('');
@@ -675,6 +678,51 @@ export function TokenTradeDrawer({
     !executing &&
     !pendingSubmit;
 
+  function quantityFor(amountUsd: string, price: string): string {
+    if (!isPositiveDecimal(amountUsd) || !isPositiveDecimal(price)) return '';
+    return normalizeDecimalInput(new Decimal(amountUsd).div(price).toFixed(8));
+  }
+
+  function priceFor(amountUsd: string, quantity: string): string {
+    if (!isPositiveDecimal(amountUsd) || !isPositiveDecimal(quantity)) return '';
+    return normalizeDecimalInput(new Decimal(amountUsd).div(quantity).toFixed(12));
+  }
+
+  function changeDelayedAmount(value: string): void {
+    setDelayedAmountUsd(value);
+    if (delayedLastEdited.current === 'quantity' && delayedQuantity) {
+      setDelayedTriggerPrice(priceFor(value, delayedQuantity));
+    } else if (delayedTriggerPrice) {
+      setDelayedQuantity(quantityFor(value, delayedTriggerPrice));
+    }
+  }
+
+  function changeDelayedPrice(value: string): void {
+    setDelayedTriggerPrice(value);
+    delayedLastEdited.current = 'price';
+    setDelayedQuantity(quantityFor(delayedAmountUsd, value));
+  }
+
+  function changeDelayedQuantity(value: string): void {
+    setDelayedQuantity(value);
+    delayedLastEdited.current = 'quantity';
+    setDelayedTriggerPrice(priceFor(delayedAmountUsd, value));
+  }
+
+  function buyTargetHint(pct: string, direction: 1 | -1): string | undefined {
+    const value = Number(pct);
+    if (!effectiveMarketPrice || !pct.trim() || !Number.isFinite(value) || value <= 0) {
+      return undefined;
+    }
+    const target = new Decimal(effectiveMarketPrice).mul(1 + (direction * value) / 100);
+    return `Цель ${formatPrice(target.toFixed(18))}`;
+  }
+
+  const delayedDiff =
+    isPositiveDecimal(delayedTriggerPrice) && effectiveMarketPrice
+      ? new Decimal(delayedTriggerPrice).div(effectiveMarketPrice).minus(1).times(100)
+      : null;
+
   const createPendingMutation = useMutation({
     mutationFn: () =>
       createPendingOrder({
@@ -781,21 +829,48 @@ export function TokenTradeDrawer({
           {trade ? (
             <>
               <TradeSummary trade={trade} currentPrice={effectiveMarketPrice} />
-              <ProtectionEditor trade={trade} onUpdated={setTrade} />
+              <ProtectionEditor
+                trade={trade}
+                currentPrice={effectiveMarketPrice}
+                onUpdated={setTrade}
+              />
             </>
           ) : mode === 'sell' ? (
             <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />
           ) : null}
 
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <div>
+              <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                Рынок
+              </div>
+              <div className="font-mono text-lg font-semibold text-zinc-900">
+                {formatPrice(effectiveMarketPrice)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-zinc-500">KyberSwap</div>
+              <div className="font-mono text-sm font-semibold text-zinc-900">
+                {kyberPrice ? formatPrice(kyberPrice) : '—'}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] text-zinc-500">Разница</div>
+              <div className={`font-mono text-sm ${pnlTone(difference?.toString())}`}>
+                {difference === null ? '—' : formatPct(difference.toFixed(2))}
+              </div>
+            </div>
+          </div>
+
           {isBuy ? (
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
                     Защита и отложенная покупка
                   </div>
                   <div className="text-[11px] text-zinc-500">
-                    Настройки применяются только к этому ордеру.
+                    Только для этого ордера. Пустые поля отключают защиту.
                   </div>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-zinc-700">
@@ -807,48 +882,68 @@ export function TokenTradeDrawer({
                   Отложенная покупка
                 </label>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-zinc-600">
-                  Стоп-лосс, %
-                  <Input
-                    className="mt-1 h-8 text-xs"
-                    type="number"
-                    placeholder="не задан"
-                    value={stopLossPct}
-                    onChange={(event) => setStopLossPct(event.target.value)}
-                  />
-                </label>
-                <label className="text-[11px] text-zinc-600">
-                  Тейк-профит, %
-                  <Input
-                    className="mt-1 h-8 text-xs"
-                    type="number"
-                    placeholder="не задан"
-                    value={takeProfitPct}
-                    onChange={(event) => setTakeProfitPct(event.target.value)}
-                  />
-                </label>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <ProtectionInputCard
+                  tone="sky"
+                  title="Тейк-профит"
+                  value={takeProfitPct}
+                  onChange={setTakeProfitPct}
+                  direction={1}
+                  hint={buyTargetHint(takeProfitPct, 1)}
+                />
+                <ProtectionInputCard
+                  tone="rose"
+                  title="Стоп-лосс"
+                  value={stopLossPct}
+                  onChange={setStopLossPct}
+                  direction={-1}
+                  hint={buyTargetHint(stopLossPct, -1)}
+                />
               </div>
               {delayed ? (
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <label className="text-[11px] text-zinc-600">
-                    Сумма, USD
-                    <Input
-                      className="mt-1 h-8 text-xs"
-                      inputMode="decimal"
-                      value={delayedAmountUsd}
-                      onChange={(event) => setDelayedAmountUsd(event.target.value)}
-                    />
-                  </label>
-                  <label className="text-[11px] text-zinc-600">
-                    Купить при цене ≤, USD
-                    <Input
-                      className="mt-1 h-8 text-xs"
-                      inputMode="decimal"
-                      value={delayedTriggerPrice}
-                      onChange={(event) => setDelayedTriggerPrice(event.target.value)}
-                    />
-                  </label>
+                <div className="mt-2 space-y-2 rounded-lg border border-zinc-200 bg-white/70 p-2">
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <label className="text-[11px] text-zinc-600">
+                      Сумма, USD
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        inputMode="decimal"
+                        value={delayedAmountUsd}
+                        onChange={(event) => changeDelayedAmount(event.target.value)}
+                      />
+                    </label>
+                    <label className="text-[11px] text-zinc-600">
+                      Цена покупки
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        inputMode="decimal"
+                        value={delayedTriggerPrice}
+                        onChange={(event) => changeDelayedPrice(event.target.value)}
+                      />
+                    </label>
+                    <label className="text-[11px] text-zinc-600">
+                      Количество {assetSymbol}
+                      <Input
+                        className="mt-1 h-8 text-xs"
+                        inputMode="decimal"
+                        value={delayedQuantity}
+                        onChange={(event) => changeDelayedQuantity(event.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+                    <span>Текущий курс: {formatPrice(effectiveMarketPrice)}</span>
+                    {delayedDiff !== null ? (
+                      <span className={pnlTone(delayedDiff.toString())}>
+                        К рынку: {formatPct(delayedDiff.toFixed(2))}
+                      </span>
+                    ) : null}
+                    {delayedQuantity ? (
+                      <span>
+                        Получите ~{delayedQuantity} {assetSymbol}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -864,30 +959,44 @@ export function TokenTradeDrawer({
           )}
 
           <div className={!delayed && channel === 'onchain' ? 'space-y-5' : 'hidden'}>
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-              <div>
-                <div className="text-xs text-zinc-500" title="DexScreener/CoinGecko">
-                  Рынок
-                </div>
-                <div className="font-mono text-lg font-semibold text-zinc-900">
-                  {formatPrice(effectiveMarketPrice)}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-zinc-500">KyberSwap</div>
-                <div className="font-mono text-lg font-semibold text-zinc-900">
-                  {kyberPrice ? formatPrice(kyberPrice) : '—'}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-zinc-500">Разница</div>
-                <div className={`font-mono text-sm ${pnlTone(difference?.toString())}`}>
-                  {difference === null ? '—' : formatPct(difference.toFixed(2))}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <label className="block text-sm text-zinc-600">
+                {isBuy ? `Сколько ${quoteDisplay} потратить` : `Сколько ${assetSymbol} продать`}
+                <Input
+                  className="mt-1 font-mono"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  placeholder="0.00"
+                  disabled={executing}
+                  aria-invalid={sellExceedsRemaining}
+                />
+                {!isBuy && remainingForSell ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {[10, 25, 50, 100].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        className="rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] text-zinc-600 hover:border-emerald-300 hover:text-emerald-700"
+                        onClick={() =>
+                          setAmount(
+                            normalizeDecimalInput(remainingForSell.mul(pct).div(100).toFixed(8)),
+                          )
+                        }
+                        disabled={executing}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {sellExceedsRemaining && trade ? (
+                  <p className="mt-1 text-xs text-red-700">
+                    Нельзя продать больше остатка:{' '}
+                    {formatTokenAmount(trade.group.remainingAmount, 8)} {assetSymbol}.
+                  </p>
+                ) : null}
+              </label>
               <div className="block text-sm text-zinc-600">
                 {isBuy ? 'Плачу' : 'Получаю'}
                 <StablecoinSelect
@@ -898,32 +1007,23 @@ export function TokenTradeDrawer({
                   disabled={executing}
                 />
               </div>
-              <label className="block text-sm text-zinc-600">
-                Сеть
-                <div className="mt-1 flex h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
-                  {chain?.name ?? '—'}
+              <div className="block text-sm text-zinc-600">
+                <span className="sr-only">Сеть</span>
+                <div
+                  className="mt-1 flex h-10 items-center gap-1.5 rounded-md border border-zinc-200 bg-zinc-50 px-2.5 text-xs text-zinc-700"
+                  title={chain?.name ?? 'Сеть'}
+                >
+                  {chainCode === 'bsc' ? (
+                    <BnbIcon />
+                  ) : chainCode === 'ethereum' ? (
+                    <EthIcon />
+                  ) : null}
+                  <span>
+                    {chainCode === 'bsc' ? 'BNB' : chainCode === 'ethereum' ? 'ETH' : '—'}
+                  </span>
                 </div>
-              </label>
+              </div>
             </div>
-
-            <label className="block text-sm text-zinc-600">
-              {isBuy ? `Сколько ${quoteDisplay} потратить` : `Сколько ${assetSymbol} продать`}
-              <Input
-                className="mt-1 font-mono"
-                inputMode="decimal"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-                placeholder="0.00"
-                disabled={executing}
-                aria-invalid={sellExceedsRemaining}
-              />
-              {sellExceedsRemaining && trade ? (
-                <p className="mt-1 text-xs text-red-700">
-                  Нельзя продать больше остатка: {formatTokenAmount(trade.group.remainingAmount, 8)}{' '}
-                  {assetSymbol}.
-                </p>
-              ) : null}
-            </label>
 
             <div className={`grid gap-2 ${!isBuy ? 'sm:grid-cols-2' : ''}`}>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
@@ -971,23 +1071,23 @@ export function TokenTradeDrawer({
               ) : null}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-sm">
+            <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
               <div className="rounded-lg border border-zinc-200 p-2">
-                <div className="text-xs text-zinc-500">Газ</div>
-                <div className="font-mono text-zinc-800">
+                <div className="text-[10px] text-zinc-500">Газ</div>
+                <div className="font-mono text-xs text-zinc-800">
                   {previewData?.gasUsd ? formatUsd(previewData.gasUsd) : '—'}
                 </div>
               </div>
               <div className="rounded-lg border border-zinc-200 p-2">
-                <div className="text-xs text-zinc-500">Price impact</div>
-                <div className="font-mono text-zinc-800">
+                <div className="text-[10px] text-zinc-500">Price impact</div>
+                <div className="font-mono text-xs text-zinc-800">
                   {previewData?.priceImpactBps == null
                     ? '—'
                     : formatPct((previewData.priceImpactBps / 100).toFixed(2))}
                 </div>
               </div>
               <div className="rounded-lg border border-zinc-200 p-2">
-                <div className="text-xs text-zinc-500">Проскальзывание</div>
+                <div className="text-[10px] text-zinc-500">Проскальзывание</div>
                 <Select
                   className="mt-1 h-8 border-0 bg-transparent px-0 pr-6 font-mono text-xs"
                   value={String(slippageBps ?? config.data?.defaultSlippageBps ?? 50)}
@@ -1005,11 +1105,15 @@ export function TokenTradeDrawer({
                 </Select>
               </div>
               <div className="rounded-lg border border-zinc-200 p-2">
-                <div className="text-xs text-zinc-500">Остаток</div>
-                <div className="font-mono text-zinc-800">
-                  {trade
-                    ? `${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}`
-                    : '—'}
+                <div className="text-[10px] text-zinc-500">{isBuy ? 'Мин. выход' : 'Остаток'}</div>
+                <div className="font-mono text-xs text-zinc-800">
+                  {isBuy
+                    ? minimumOut
+                      ? `${formatTokenAmount(minimumOut, 8)} ${assetSymbol}`
+                      : '—'
+                    : trade
+                      ? `${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}`
+                      : '—'}
                 </div>
               </div>
             </div>
@@ -1213,90 +1317,214 @@ function TradeChannelTabs({
   );
 }
 
+function ProtectionInputCard({
+  tone,
+  title,
+  value,
+  onChange,
+  onBlur,
+  direction,
+  hint,
+}: {
+  tone: 'sky' | 'rose';
+  title: string;
+  value: string;
+  onChange: (value: string) => void;
+  onBlur?: () => void;
+  direction: 1 | -1;
+  hint?: string;
+}) {
+  const styles =
+    tone === 'sky'
+      ? {
+          card: 'border-sky-200 bg-sky-50/70',
+          label: 'text-sky-800',
+          button: 'border-sky-200 text-sky-800 hover:bg-sky-100',
+          hint: 'text-sky-800/70',
+        }
+      : {
+          card: 'border-red-200 bg-red-50/70',
+          label: 'text-red-800',
+          button: 'border-red-200 text-red-800 hover:bg-red-100',
+          hint: 'text-red-800/70',
+        };
+
+  return (
+    <div className={`rounded-xl border p-2.5 ${styles.card}`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className={`text-[11px] font-semibold uppercase tracking-wide ${styles.label}`}>
+          {title}
+        </div>
+        <span className={`text-[10px] ${styles.hint}`}>%</span>
+      </div>
+      <Input
+        className="mt-1 h-8 text-xs"
+        type="number"
+        min={1}
+        placeholder="не задан"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+      />
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        {[5, 10, 20, 50].map((pct) => (
+          <button
+            key={pct}
+            type="button"
+            className={`rounded-md border bg-white/60 px-1.5 py-0.5 text-[10px] font-medium ${styles.button}`}
+            onClick={() => onChange(String(pct))}
+          >
+            {direction > 0 ? '+' : '−'}
+            {pct}%
+          </button>
+        ))}
+      </div>
+      {hint ? <div className={`mt-1 text-[10px] ${styles.hint}`}>{hint}</div> : null}
+    </div>
+  );
+}
+
 function ProtectionEditor({
   trade,
+  currentPrice,
   onUpdated,
 }: {
   trade: TradeGroupDetail;
+  currentPrice: string | null | undefined;
   onUpdated: (trade: TradeGroupDetail) => void;
 }) {
   const queryClient = useQueryClient();
   const group = trade.group;
   const [stopPct, setStopPct] = useState(group.stopLossPct ?? '');
   const [takePct, setTakePct] = useState(group.takeProfitPct ?? '');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
+  const valuesRef = useRef({ stopPct, takePct });
+  valuesRef.current = { stopPct, takePct };
+  const savedRef = useRef(`${group.stopLossPct ?? ''}|${group.takeProfitPct ?? ''}`);
+  const savingRef = useRef(false);
 
   useEffect(() => {
+    if (group.status === 'closed') return;
     setStopPct(group.stopLossPct ?? '');
     setTakePct(group.takeProfitPct ?? '');
-  }, [group.id, group.stopLossPct, group.takeProfitPct]);
+    savedRef.current = `${group.stopLossPct ?? ''}|${group.takeProfitPct ?? ''}`;
+    // Only reset the draft when the edited order changes, not on each poll.
+  }, [group.id]);
 
-  const saveProtection = useMutation({
-    mutationFn: () =>
-      updateTradeGroupProtection(group.id, {
-        stopLossPct: stopPct.trim() ? Number(stopPct) : null,
-        takeProfitPct: takePct.trim() ? Number(takePct) : null,
-      }),
-    onSuccess: (updated) => {
+  const saveNow = useCallback(async () => {
+    const current = valuesRef.current;
+    const key = `${current.stopPct}|${current.takePct}`;
+    if (key === savedRef.current || savingRef.current) return;
+    savingRef.current = true;
+    setStatus('saving');
+    setError(null);
+    let saved = false;
+    try {
+      const updated = await updateTradeGroupProtection(group.id, {
+        stopLossPct: current.stopPct.trim() ? Number(current.stopPct) : null,
+        takeProfitPct: current.takePct.trim() ? Number(current.takePct) : null,
+      });
+      savedRef.current = key;
+      saved = true;
       onUpdated(updated);
-      setNotice('Защита сохранена.');
-      setError(null);
+      setStatus('saved');
       void queryClient.invalidateQueries({ queryKey: ['trade-groups'] });
       void queryClient.invalidateQueries({ queryKey: ['portfolio-token-summaries'] });
-    },
-    onError: (err) => {
-      setNotice(null);
+    } catch (err) {
+      setStatus('error');
       setError(toRussianError(err, 'Не удалось сохранить защиту'));
+    } finally {
+      savingRef.current = false;
+      const latest = valuesRef.current;
+      if (saved && `${latest.stopPct}|${latest.takePct}` !== savedRef.current) {
+        void saveNow();
+      }
+    }
+  }, [group.id, onUpdated, queryClient]);
+
+  useEffect(() => {
+    const key = `${stopPct}|${takePct}`;
+    if (key === savedRef.current) return;
+    const timer = window.setTimeout(() => void saveNow(), 700);
+    return () => window.clearTimeout(timer);
+  }, [stopPct, takePct, saveNow]);
+
+  useEffect(
+    () => () => {
+      const current = valuesRef.current;
+      const key = `${current.stopPct}|${current.takePct}`;
+      if (key === savedRef.current) return;
+      void updateTradeGroupProtection(group.id, {
+        stopLossPct: current.stopPct.trim() ? Number(current.stopPct) : null,
+        takeProfitPct: current.takePct.trim() ? Number(current.takePct) : null,
+      }).catch(() => undefined);
     },
-  });
+    [group.id],
+  );
 
   if (group.status === 'closed') return null;
 
+  const remaining = new Decimal(group.remainingAmount);
+  const cost = new Decimal(group.remainingCostBasisUsd);
+  const average = remaining.gt(0) ? cost.div(remaining) : null;
+  const reference = average ?? (currentPrice ? new Decimal(currentPrice) : null);
+
+  function targetHint(pct: string, direction: 1 | -1): string | undefined {
+    const value = Number(pct);
+    if (!reference || !pct.trim() || !Number.isFinite(value) || value <= 0) return undefined;
+    const target = reference.mul(1 + (direction * value) / 100);
+    if (!remaining.gt(0)) return `Цель ${formatPrice(target.toFixed(18))}`;
+    const diff = remaining.mul(target.minus(reference));
+    return `Цель ${formatPrice(target.toFixed(18))} · ${
+      diff.gte(0) ? '+' : '−'
+    }${formatUsd(diff.abs().toFixed(2))}`;
+  }
+
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
+    <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-            Защита этой сделки
-          </div>
-          <div className="text-[11px] text-zinc-500">
-            Стоп-лосс и тейк-профит применяются только к этому ордеру.
-          </div>
+        <div className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
+          Защита этой сделки
         </div>
-        <Button
-          variant="secondary"
-          className="h-8 px-2.5 text-xs"
-          disabled={saveProtection.isPending}
-          onClick={() => saveProtection.mutate()}
-        >
-          {saveProtection.isPending ? 'Сохраняю…' : 'Сохранить защиту'}
-        </Button>
+        <div className="text-[10px] text-zinc-400">
+          {status === 'saving'
+            ? 'Сохраняю…'
+            : status === 'error'
+              ? error
+              : status === 'saved' && !stopPct && !takePct
+                ? 'Защита отключена'
+                : status === 'saved'
+                  ? 'Сохранено'
+                  : 'Сохраняется автоматически'}
+        </div>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2">
-        <label className="text-[11px] text-zinc-600">
-          Стоп-лосс, %
-          <Input
-            className="mt-1 h-8 text-xs"
-            type="number"
-            placeholder="не задан"
-            value={stopPct}
-            onChange={(event) => setStopPct(event.target.value)}
-          />
-        </label>
-        <label className="text-[11px] text-zinc-600">
-          Тейк-профит, %
-          <Input
-            className="mt-1 h-8 text-xs"
-            type="number"
-            placeholder="не задан"
-            value={takePct}
-            onChange={(event) => setTakePct(event.target.value)}
-          />
-        </label>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <ProtectionInputCard
+          tone="sky"
+          title="Тейк-профит"
+          value={takePct}
+          onChange={(value) => {
+            setTakePct(value);
+            setStatus('idle');
+          }}
+          onBlur={() => void saveNow()}
+          direction={1}
+          hint={targetHint(takePct, 1)}
+        />
+        <ProtectionInputCard
+          tone="rose"
+          title="Стоп-лосс"
+          value={stopPct}
+          onChange={(value) => {
+            setStopPct(value);
+            setStatus('idle');
+          }}
+          onBlur={() => void saveNow()}
+          direction={-1}
+          hint={targetHint(stopPct, -1)}
+        />
       </div>
-      {notice ? <div className="mt-1 text-[11px] text-emerald-700">{notice}</div> : null}
-      {error ? <div className="mt-1 text-[11px] text-red-700">{error}</div> : null}
     </div>
   );
 }
@@ -1313,59 +1541,95 @@ function TradeSummary({
     trade.lots.reduce((total, lot) => total.plus(lot.amount), new Decimal(0)) || new Decimal(0);
   const buyPrice = originalAmount.gt(0) ? new Decimal(group.buyUsd).div(originalAmount) : null;
   const pnl = group.totalPnlUsd;
+  const pnlValue = pnl ? Number(pnl) : 0;
+  const surface =
+    pnlValue > 0
+      ? 'tone-surface tone-surface-emerald border-emerald-200'
+      : pnlValue < 0
+        ? 'tone-surface tone-surface-rose border-rose-200'
+        : 'border-zinc-200 bg-zinc-50';
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-            Текущая сделка
-          </span>
-          <Badge tone={group.status === 'closed' ? 'neutral' : 'info'}>
-            {group.status === 'closed' ? 'Закрыта' : 'Открыта'}
-          </Badge>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-[10px] text-zinc-500">Результат</div>
-            <div className={`font-mono text-base font-semibold ${pnlTone(pnl)}`}>
-              {pnl ? formatSignedUsd(pnl) : '—'}
+    <div className={`rounded-2xl border p-3.5 ${surface}`}>
+      <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+        Текущая сделка
+      </div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <TokenIcon
+            logoUrl={group.asset.logoUrl}
+            symbol={group.asset.symbol}
+            className="h-10 w-10 text-[10px]"
+          />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-base font-semibold text-zinc-900">
+                {group.asset.symbol}
+              </span>
+              <Badge tone={group.status === 'closed' ? 'neutral' : 'info'}>
+                {group.status === 'closed'
+                  ? 'Закрыта'
+                  : group.status === 'partial'
+                    ? 'Частично'
+                    : 'Открыта'}
+              </Badge>
+            </div>
+            <div className="truncate text-[11px] text-zinc-500">
+              {group.asset.name} · {group.asset.chainCode.toUpperCase()}
             </div>
           </div>
-          <Link
-            to="/trades/$tradeId"
-            params={{ tradeId: group.id }}
-            className="text-[11px] text-emerald-800 hover:underline"
-          >
-            Полная карточка
-          </Link>
+        </div>
+        <div className="text-right">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Результат
+          </div>
+          <div className={`font-mono text-2xl font-semibold tracking-tight ${pnlTone(pnl)}`}>
+            {pnl ? formatSignedUsd(pnl) : '—'}
+          </div>
+          <div className={`text-[11px] font-medium ${pnlTone(group.returnPct)}`}>
+            {group.returnPct ? formatPct(group.returnPct) : '—'}
+          </div>
         </div>
       </div>
-      <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-4">
+
+      <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
         <div>
-          <div className="text-[10px] text-zinc-500">Куплено по</div>
-          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Куплено по
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
             {buyPrice ? formatPrice(buyPrice.toFixed(12)) : '—'}
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-zinc-500">Сейчас</div>
-          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Сейчас
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
             {formatPrice(currentPrice)}
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-zinc-500">Остаток</div>
-          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Остаток
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
             {formatTokenAmount(group.remainingAmount, 8)} {group.asset.symbol}
           </div>
         </div>
         <div>
-          <div className="text-[10px] text-zinc-500">Вложено</div>
-          <div className="font-mono text-[13px] font-semibold text-zinc-900">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+            Вложено
+          </div>
+          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
             {formatUsd(group.buyUsd)}
           </div>
         </div>
+      </div>
+
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-zinc-500">
+        <span>Открыта {formatDate(group.openedAt)}</span>
+        <span>{group.holdingDays} дн. в сделке</span>
       </div>
     </div>
   );

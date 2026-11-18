@@ -180,11 +180,6 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   let sellDrawer = page.getByRole('dialog');
   await expect(sellDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(sellDrawer.getByText('Текущая сделка')).toBeVisible();
-  await sellDrawer.getByRole('link', { name: 'Полная карточка' }).click();
-  await expect(page).toHaveURL(/\/trades\//);
-  await expect(page.getByText('Ноги сделки')).toBeVisible();
-  await expect(page.getByText('Списания').first()).toBeVisible();
-
   // Partial manual sell from the selected trade.
   await page.goto('/portfolio');
   await page.getByRole('tab', { name: 'Ордера' }).click();

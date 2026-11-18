@@ -179,18 +179,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   const tradeDrawer = page.getByRole('dialog');
   await expect(tradeDrawer.getByRole('heading', { name: 'Закрытие ордера · BASED' })).toBeVisible();
   await expect(tradeDrawer.getByText('Текущая сделка')).toBeVisible();
-  await tradeDrawer.getByRole('link', { name: 'Полная карточка' }).click();
-  await expect(page).toHaveURL(/\/trades\//);
-  await expect(page.getByText('Ноги сделки')).toBeVisible();
-  await expect(page.getByText('Лоты').first()).toBeVisible();
-  await expect(page.getByText('Списания').first()).toBeVisible();
-  await expect(page.getByText('Аудит').first()).toBeVisible();
-
-  await page.getByRole('button', { name: 'Заметка' }).click();
-  const noteDialog = page.getByRole('dialog');
-  await noteDialog.getByRole('textbox').fill('Playwright trade note');
-  await noteDialog.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Playwright trade note').first()).toBeVisible();
+  await tradeDrawer.getByLabel('Закрыть').click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await post('/api/v1/watchlist', { assetId: xny?.id });
 

@@ -220,6 +220,23 @@ export function ManualOrderForm({
             disabled={save.isPending}
           />
           {side === 'sell' && remaining ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {[10, 25, 50, 100].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  className="rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] text-zinc-600 hover:border-emerald-300 hover:text-emerald-700"
+                  onClick={() =>
+                    setAmount(normalizeDecimalInput(remaining.mul(pct).div(100).toFixed(8)))
+                  }
+                  disabled={save.isPending}
+                >
+                  {pct}%
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {side === 'sell' && remaining ? (
             <span className="mt-1 block text-xs text-zinc-500">
               Остаток ордера: {formatTokenAmount(trade?.group.remainingAmount ?? '0', 8)}{' '}
               {token.symbol}
