@@ -110,7 +110,7 @@ export function TokenBlock({
           </Button>
         ) : null}
 
-        <div className="ml-auto grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-[64px_64px_70px_94px] sm:justify-end">
+        <div className="ml-auto grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-[72px_72px_78px_100px] sm:justify-end">
           <TokenMetric label="7д" value={change7d} tone={pnlTone(entry.change7dPct)} />
           <TokenMetric label="30д" value={change30d} tone={pnlTone(entry.change30dPct)} />
           <TokenMetric label="1г" value={change1y} tone={pnlTone(entry.change1yPct)} />
