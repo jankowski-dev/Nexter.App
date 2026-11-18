@@ -105,11 +105,7 @@ export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className="space-y-6">
-      {embedded ? (
-        <div className="flex justify-end">
-          <Button onClick={() => setManualOpen(true)}>Новая операция</Button>
-        </div>
-      ) : (
+      {embedded ? null : (
         <PageHeader
           title="Операции"
           subtitle="Обмен, пополнение, вывод и корректировка. Только ручной ввод."
@@ -122,6 +118,9 @@ export function OperationsPage({ embedded = false }: { embedded?: boolean }) {
         onSearch={setSearch}
         searchPlaceholder="Поиск по операциям"
         searchAriaLabel="Поиск по операциям"
+        actions={
+          embedded ? <Button onClick={() => setManualOpen(true)}>Новая операция</Button> : undefined
+        }
       >
         <TabGroup
           value={filter}

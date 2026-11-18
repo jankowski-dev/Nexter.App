@@ -30,6 +30,7 @@ export function TaskCalendar({
   onNext,
   onToday,
   onOpen,
+  onDuplicate,
   onCreate,
   onMove,
   busy,
@@ -40,6 +41,7 @@ export function TaskCalendar({
   onNext: () => void;
   onToday: () => void;
   onOpen: (task: Task) => void;
+  onDuplicate: (task: Task) => void;
   onCreate: (date: string) => void;
   onMove: (task: Task, date: string) => void;
   busy: boolean;
@@ -178,7 +180,7 @@ export function TaskCalendar({
                           type="button"
                           draggable
                           data-task-id={task.id}
-                          title={`${task.title}${task.recurrence ? ' · повтор' : ''}`}
+                          title={`${task.title}${task.recurrence ? ' · повтор' : ''} · правый клик — копия`}
                           className={`w-full rounded border px-1.5 py-1 text-left text-xs ${taskTone(
                             task,
                             now,
@@ -186,6 +188,10 @@ export function TaskCalendar({
                             busy ? 'cursor-wait' : 'cursor-grab'
                           }`}
                           onClick={() => onOpen(task)}
+                          onContextMenu={(event) => {
+                            event.preventDefault();
+                            onDuplicate(task);
+                          }}
                           onDragStart={(event) => {
                             event.dataTransfer.setData('text/task-id', task.id);
                             event.dataTransfer.effectAllowed = 'move';

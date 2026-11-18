@@ -172,6 +172,7 @@ export function TokenTradeDrawer({
   const [delayedAmountUsd, setDelayedAmountUsd] = useState(runtime.automationDefaultBuyAmountUsd);
   const [delayedTriggerPrice, setDelayedTriggerPrice] = useState('');
   const [delayedQuantity, setDelayedQuantity] = useState('');
+  const [manualQuoteAmount, setManualQuoteAmount] = useState('');
   const delayedLastEdited = useRef<'price' | 'quantity' | 'amount'>('price');
   const [manualPending, setManualPending] = useState(false);
   const [quoteSymbol, setQuoteSymbol] = useState('USDC');
@@ -709,13 +710,25 @@ export function TokenTradeDrawer({
     setDelayedTriggerPrice(priceFor(delayedAmountUsd, value));
   }
 
+  const buyAmountUsd = delayed
+    ? Number(delayedAmountUsd)
+    : channel === 'manual'
+      ? Number(manualQuoteAmount)
+      : previewData?.amountInUsd
+        ? Number(previewData.amountInUsd)
+        : Number(amount);
+
   function buyTargetHint(pct: string, direction: 1 | -1): string | undefined {
     const value = Number(pct);
     if (!effectiveMarketPrice || !pct.trim() || !Number.isFinite(value) || value <= 0) {
       return undefined;
     }
     const target = new Decimal(effectiveMarketPrice).mul(1 + (direction * value) / 100);
-    return `Цель ${formatPrice(target.toFixed(18))}`;
+    const result =
+      Number.isFinite(buyAmountUsd) && buyAmountUsd > 0 ? buyAmountUsd * (value / 100) : null;
+    return `Цель ${formatPrice(target.toFixed(18))}${
+      result !== null ? ` · ${direction > 0 ? '+' : '−'}${formatUsd(result.toFixed(2))}` : ''
+    }`;
   }
 
   const delayedDiff =
@@ -1228,6 +1241,7 @@ export function TokenTradeDrawer({
               onPendingChange={setManualPending}
               stopLossPct={stopLossPct.trim() ? Number(stopLossPct) : null}
               takeProfitPct={takeProfitPct.trim() ? Number(takeProfitPct) : null}
+              onQuoteAmountChange={setManualQuoteAmount}
             />
           </div>
         </div>

@@ -18,6 +18,7 @@ type TaskView = 'list' | 'calendar';
 
 interface TaskDrawerState {
   task: Task | null;
+  duplicateFrom?: Task;
   initialDue?: string;
   startInEdit?: boolean;
   startWithDelete?: boolean;
@@ -110,6 +111,10 @@ export function TasksPage() {
 
   function openView(task: Task) {
     setDrawer({ task });
+  }
+
+  function openDuplicate(task: Task) {
+    setDrawer({ task: null, duplicateFrom: task, startInEdit: true });
   }
 
   function closeDrawer() {
@@ -211,6 +216,7 @@ export function TasksPage() {
             onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
             onToday={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
             onOpen={openView}
+            onDuplicate={openDuplicate}
             onCreate={(date) => openCreate(date)}
             onMove={(task, date) => moveMutation.mutate({ task, date })}
             busy={moveMutation.isPending}
@@ -266,6 +272,7 @@ export function TasksPage() {
       {drawer ? (
         <TaskDialog
           task={drawer.task}
+          duplicateFrom={drawer.duplicateFrom}
           initialDue={drawer.initialDue}
           startInEdit={drawer.startInEdit}
           startWithDelete={drawer.startWithDelete}
