@@ -146,7 +146,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 
 ## 13. Production/deploy
 
-- Railway API URL: `https://nexterapi-production.up.railway.app`.
+- Railway API URL: `https://nexter.up.railway.app`.
 - API serves SPA; frontend-only changes require API service redeploy (watch patterns include `apps/web/**`, `packages/**`).
 - Before production migration/data repair: encrypted backup + restore check; record IDs/paths.
 - Use `railway ssh` into Postgres for dumps/checks; do not print DB passwords.

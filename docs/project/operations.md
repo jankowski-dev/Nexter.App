@@ -2,7 +2,7 @@
 
 ## 1. Окружения и деплой
 
-- Production: Railway project `generous-radiance`, API + Postgres. API URL: `https://nexterapi-production.up.railway.app`. Viber-бот — отдельный проект `Viber-Bot's` (сервис `Nexter.Bot`).
+- Production: Railway project `generous-radiance`, API + Postgres. API URL: `https://nexter.up.railway.app`. Viber-бот — отдельный проект `Viber-Bot's` (сервис `Nexter.Bot`).
 - API собирается из `Dockerfile`; pre-deploy запускает `node packages/db/dist/migrate.js` с `MIGRATION_DATABASE_URL`.
 - API раздаёт SPA из `apps/api/public`; Railway watch patterns API: `apps/api/**`, `apps/web/**`, `packages/**`.
 - Production API использует роль `nexter_app` (SELECT/INSERT/UPDATE, ограниченный DELETE). Миграции выполняются owner-ролью через `MIGRATION_DATABASE_URL`.
