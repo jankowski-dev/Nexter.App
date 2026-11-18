@@ -739,7 +739,7 @@ export const squeezeBreakout: StrategyDefinition = {
   evaluate: (ctx) => {
     const params = squeezeParamsSchema.parse(ctx.params);
     const price = dec(ctx.priceUsd);
-    const bands = bollingerBands(ctx.history, params.period, params.stdDev);
+    const bands = bollingerBands(ctx.history.slice(0, -1), params.period, params.stdDev);
 
     if (ctx.position) {
       const avg = dec(ctx.position.avgCostUsd);

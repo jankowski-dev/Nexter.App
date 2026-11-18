@@ -519,7 +519,7 @@ describe('squeeze_breakout', () => {
   const params = squeezeBreakout.defaultParams;
 
   it('buys a breakout after a volatility squeeze', () => {
-    const quiet = [...Array.from({ length: 19 }, (_, index) => 1 + (index % 2) * 0.0001), 1.01];
+    const quiet = [...Array.from({ length: 20 }, (_, index) => 1 + (index % 2) * 0.0001), 1.01];
     expect(
       squeezeBreakout.evaluate(
         context({ params, history: history(quiet), priceUsd: '1.01000000' }),
@@ -528,13 +528,13 @@ describe('squeeze_breakout', () => {
   });
 
   it('holds outside a squeeze and when there is no breakout', () => {
-    const wide = [...Array.from({ length: 19 }, (_, index) => (index % 2 === 0 ? 1 : 1.1)), 1.2];
+    const wide = [...Array.from({ length: 20 }, (_, index) => (index % 2 === 0 ? 1 : 1.1)), 1.2];
     expect(
       squeezeBreakout.evaluate(context({ params, history: history(wide), priceUsd: '1.20000000' }))
         .action,
     ).toBe('hold');
 
-    const quietNoBreakout = [...Array.from({ length: 20 }, () => 1)];
+    const quietNoBreakout = [...Array.from({ length: 20 }, () => 1), 1];
     expect(
       squeezeBreakout.evaluate(
         context({ params, history: history(quietNoBreakout), priceUsd: '1.00000000' }),
