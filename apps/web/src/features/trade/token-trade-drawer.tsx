@@ -9,6 +9,7 @@ import {
   buildSwap,
   buildSwapApproval,
   cancelSwap,
+  createAutomationRule,
   cancelSwapSigning,
   fetchSwapBalances,
   fetchSwapConfig,
@@ -22,6 +23,7 @@ import {
   stepUp,
   submitSwap,
   submitSwapApproval,
+  updateAutomationRule,
   type SwapBuildResponse,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
@@ -36,6 +38,7 @@ import {
   pnlTone,
 } from '@/lib/format';
 import { useWallet } from '@/lib/wallet-context';
+import { useRuntimeSettings } from '../settings/use-settings';
 import { ManualOrderForm } from './manual-order-form';
 import { StablecoinSelect } from './stablecoin-select';
 import {
@@ -45,7 +48,7 @@ import {
   phaseAfterExecutionFailure,
 } from './swap-execution';
 import { Link } from '@tanstack/react-router';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
 import { useEffect, useRef, useState } from 'react';
@@ -720,7 +723,10 @@ export function TokenTradeDrawer({
       >
         <div className="space-y-5">
           {trade ? (
-            <TradeSummary trade={trade} currentPrice={effectiveMarketPrice} />
+            <>
+              <TradeSummary trade={trade} currentPrice={effectiveMarketPrice} />
+              <ProtectionCard trade={trade} />
+            </>
           ) : mode === 'sell' ? (
             <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />
           ) : null}
@@ -1076,6 +1082,121 @@ function TradeChannelTabs({
       >
         Вручную
       </button>
+    </div>
+  );
+}
+
+function ProtectionCard({ trade }: { trade: TradeGroupDetail }) {
+  const runtime = useRuntimeSettings();
+  const queryClient = useQueryClient();
+  const group = trade.group;
+  const [stopPct, setStopPct] = useState(String(runtime.automationDefaultStopLossPct));
+  const [takePct, setTakePct] = useState(String(runtime.automationDefaultTakeProfitPct));
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const createRule = useMutation({
+    mutationFn: async ({ kind, pct }: { kind: 'stop_loss' | 'take_profit'; pct: string }) => {
+      const name =
+        kind === 'stop_loss'
+          ? `Стоп-лосс ${group.asset.symbol}`
+          : `Тейк-профит ${group.asset.symbol}`;
+      const base = {
+        name,
+        assetId: group.asset.id,
+        tradeGroupId: group.id,
+        executionMode: runtime.automationMode,
+        maxOrderUsd: null,
+        cooldownMinutes: runtime.automationCooldownMinutes,
+      };
+      const created =
+        kind === 'stop_loss'
+          ? await createAutomationRule({
+              ...base,
+              kind: 'stop_loss',
+              params: { stopLossPct: Number(pct) },
+            })
+          : await createAutomationRule({
+              ...base,
+              kind: 'take_profit',
+              params: { takeProfitPct: Number(pct) },
+            });
+      await updateAutomationRule(created.id, { status: 'armed' });
+      return created;
+    },
+    onSuccess: () => {
+      setNotice('Правило создано и взведено.');
+      setError(null);
+      void queryClient.invalidateQueries({ queryKey: ['automation-rules'] });
+    },
+    onError: (err) => {
+      setNotice(null);
+      setError(toRussianError(err, 'Не удалось создать правило защиты'));
+    },
+  });
+
+  if (group.status === 'closed') return null;
+
+  return (
+    <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="text-[11px] font-medium uppercase tracking-wide text-emerald-800">
+            Защита сделки
+          </div>
+          <div className="text-[11px] text-emerald-800/80">
+            Создаёт взведённое правило в режиме{' '}
+            {runtime.automationMode === 'proposal' ? 'предложения' : 'dry-run'}.
+          </div>
+        </div>
+        <Link
+          to="/portfolio"
+          hash="automation"
+          className="text-[11px] text-emerald-800 hover:underline"
+        >
+          Все правила →
+        </Link>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <label className="text-[11px] text-zinc-600">
+          Стоп-лосс, %
+          <Input
+            className="mt-1 h-8 text-xs"
+            type="number"
+            value={stopPct}
+            onChange={(event) => setStopPct(event.target.value)}
+          />
+        </label>
+        <label className="text-[11px] text-zinc-600">
+          Тейк-профит, %
+          <Input
+            className="mt-1 h-8 text-xs"
+            type="number"
+            value={takePct}
+            onChange={(event) => setTakePct(event.target.value)}
+          />
+        </label>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button
+          variant="secondary"
+          className="h-8 px-2.5 text-xs"
+          disabled={createRule.isPending}
+          onClick={() => createRule.mutate({ kind: 'stop_loss', pct: stopPct })}
+        >
+          Создать стоп-лосс
+        </Button>
+        <Button
+          variant="secondary"
+          className="h-8 px-2.5 text-xs"
+          disabled={createRule.isPending}
+          onClick={() => createRule.mutate({ kind: 'take_profit', pct: takePct })}
+        >
+          Создать тейк-профит
+        </Button>
+      </div>
+      {notice ? <div className="mt-1 text-[11px] text-emerald-700">{notice}</div> : null}
+      {error ? <div className="mt-1 text-[11px] text-red-700">{error}</div> : null}
     </div>
   );
 }
