@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { decimal, priceString, usdString } from '../../shared/money/decimal';
 import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
+import type { RawCandle } from './candle.types';
 
 export interface CoinGeckoToken {
   coingeckoId: string;
@@ -226,6 +227,64 @@ export class CoinGeckoClient {
           lowUsd: priceString(decimal(String(low))),
           closeUsd: priceString(decimal(String(close))),
           volumeUsd: entry.volumes.length > 0 ? decimal(String(volume)).toFixed(2) : null,
+        };
+      });
+  }
+
+  async getHourlyCandles(coingeckoId: string, days: number): Promise<RawCandle[]> {
+    if (env.NODE_ENV === 'test') return [];
+
+    const body = await this.fetchJson(
+      `/coins/${encodeURIComponent(coingeckoId)}/market_chart?vs_currency=usd&days=${Math.min(days, 90)}`,
+    );
+    if (!body || typeof body !== 'object') return [];
+
+    const data = body as { prices?: unknown; total_volumes?: unknown };
+    if (!Array.isArray(data.prices)) return [];
+
+    const volumeByTimestamp = new Map<number, number>();
+    if (Array.isArray(data.total_volumes)) {
+      for (const point of data.total_volumes) {
+        if (!Array.isArray(point) || point.length < 2) continue;
+        const timestamp = Number(point[0]);
+        const volume = Number(point[1]);
+        if (Number.isFinite(timestamp) && Number.isFinite(volume)) {
+          volumeByTimestamp.set(timestamp, volume);
+        }
+      }
+    }
+
+    const byHour = new Map<number, { prices: number[]; volumes: number[] }>();
+    for (const point of data.prices) {
+      if (!Array.isArray(point) || point.length < 2) continue;
+      const timestamp = Number(point[0]);
+      const price = Number(point[1]);
+      if (!Number.isFinite(timestamp) || !Number.isFinite(price) || price <= 0) continue;
+      const hour = Math.floor(timestamp / 3_600_000) * 3_600_000;
+      const entry = byHour.get(hour) ?? { prices: [], volumes: [] };
+      entry.prices.push(price);
+      const volume = volumeByTimestamp.get(timestamp);
+      if (volume !== undefined) entry.volumes.push(volume);
+      byHour.set(hour, entry);
+    }
+
+    return [...byHour.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([hour, entry]) => {
+        const open = entry.prices[0] as number;
+        const close = entry.prices[entry.prices.length - 1] as number;
+        const high = Math.max(...entry.prices);
+        const low = Math.min(...entry.prices);
+        const volume = entry.volumes.reduce((total, value) => total + value, 0);
+        return {
+          openTime: new Date(hour),
+          open: priceString(decimal(String(open))),
+          high: priceString(decimal(String(high))),
+          low: priceString(decimal(String(low))),
+          close: priceString(decimal(String(close))),
+          volumeUsd: entry.volumes.length > 0 ? decimal(String(volume)).toFixed(2) : null,
+          source: 'coingecko',
+          quality: 'synthetic' as const,
         };
       });
   }

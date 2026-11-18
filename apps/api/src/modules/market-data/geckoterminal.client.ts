@@ -2,11 +2,25 @@ import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { decimal, priceString } from '../../shared/money/decimal';
 import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
+import type { MarketTimeframe, RawCandle } from './candle.types';
 
 const NETWORK: Record<string, string> = {
   bsc: 'bsc',
   ethereum: 'eth',
 };
+
+const GECKO_TIMEFRAMES: Record<
+  MarketTimeframe,
+  { unit: 'day' | 'hour' | 'minute'; aggregate: number }
+> = {
+  '1d': { unit: 'day', aggregate: 1 },
+  '4h': { unit: 'hour', aggregate: 4 },
+  '1h': { unit: 'hour', aggregate: 1 },
+  '15m': { unit: 'minute', aggregate: 15 },
+  '5m': { unit: 'minute', aggregate: 5 },
+};
+
+const POOL_CACHE_TTL_MS = 10 * 60 * 1000;
 
 interface PoolCandidate {
   address: string;
@@ -17,12 +31,14 @@ interface PoolCandidate {
 @Injectable()
 export class GeckoTerminalClient {
   private readonly logger = new Logger(GeckoTerminalClient.name);
+  private readonly poolCache = new Map<string, { expiresAt: number; pool: PoolCandidate | null }>();
 
-  async getDailyCandles(
+  async getOhlcvCandles(
     chainCode: string,
     contractAddress: string,
-    days: number,
-  ): Promise<HistoricalCandle[]> {
+    timeframe: MarketTimeframe,
+    limit: number,
+  ): Promise<RawCandle[]> {
     if (env.NODE_ENV === 'test') return [];
 
     const network = NETWORK[chainCode];
@@ -31,8 +47,9 @@ export class GeckoTerminalClient {
     const pool = await this.findTopPool(network, contractAddress);
     if (!pool) return [];
 
+    const config = GECKO_TIMEFRAMES[timeframe];
     const body = await this.fetchJson(
-      `/networks/${network}/pools/${encodeURIComponent(pool.address)}/ohlcv/day?aggregate=1&limit=${Math.min(days, 1000)}&currency=usd&token=${pool.tokenSide}`,
+      `/networks/${network}/pools/${encodeURIComponent(pool.address)}/ohlcv/${config.unit}?aggregate=${config.aggregate}&limit=${Math.max(1, Math.min(limit, 1000))}&currency=usd&token=${pool.tokenSide}`,
     );
     if (!body || typeof body !== 'object') return [];
 
@@ -40,7 +57,7 @@ export class GeckoTerminalClient {
     const list = data.data?.attributes?.ohlcv_list;
     if (!Array.isArray(list)) return [];
 
-    const byDate = new Map<string, HistoricalCandle>();
+    const byTime = new Map<number, RawCandle>();
     for (const entry of list) {
       if (!Array.isArray(entry) || entry.length < 6) continue;
       const timestamp = Number(entry[0]);
@@ -62,14 +79,40 @@ export class GeckoTerminalClient {
       ) {
         continue;
       }
-      const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+
+      byTime.set(timestamp, {
+        openTime: new Date(timestamp * 1000),
+        open: priceString(decimal(String(open))),
+        high: priceString(decimal(String(high))),
+        low: priceString(decimal(String(low))),
+        close: priceString(decimal(String(close))),
+        volumeUsd: Number.isFinite(volume) ? decimal(String(volume)).toFixed(2) : null,
+        source: 'geckoterminal',
+        quality: 'ok',
+      });
+    }
+
+    return [...byTime.values()].sort(
+      (left, right) => left.openTime.getTime() - right.openTime.getTime(),
+    );
+  }
+
+  async getDailyCandles(
+    chainCode: string,
+    contractAddress: string,
+    days: number,
+  ): Promise<HistoricalCandle[]> {
+    const candles = await this.getOhlcvCandles(chainCode, contractAddress, '1d', days);
+    const byDate = new Map<string, HistoricalCandle>();
+    for (const candle of candles) {
+      const date = candle.openTime.toISOString().slice(0, 10);
       byDate.set(date, {
         date,
-        openUsd: priceString(decimal(String(open))),
-        highUsd: priceString(decimal(String(high))),
-        lowUsd: priceString(decimal(String(low))),
-        closeUsd: priceString(decimal(String(close))),
-        volumeUsd: Number.isFinite(volume) ? decimal(String(volume)).toFixed(2) : null,
+        openUsd: candle.open,
+        highUsd: candle.high,
+        lowUsd: candle.low,
+        closeUsd: candle.close,
+        volumeUsd: candle.volumeUsd,
       });
     }
 
@@ -80,13 +123,23 @@ export class GeckoTerminalClient {
     network: string,
     contractAddress: string,
   ): Promise<PoolCandidate | null> {
+    const cacheKey = `${network}:${contractAddress.toLowerCase()}`;
+    const cached = this.poolCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.pool;
+
     const body = await this.fetchJson(
       `/networks/${network}/tokens/${encodeURIComponent(contractAddress.toLowerCase())}/pools?page=1`,
     );
-    if (!body || typeof body !== 'object') return null;
+    if (!body || typeof body !== 'object') {
+      this.writePoolCache(cacheKey, null);
+      return null;
+    }
 
     const data = body as { data?: unknown };
-    if (!Array.isArray(data.data)) return null;
+    if (!Array.isArray(data.data)) {
+      this.writePoolCache(cacheKey, null);
+      return null;
+    }
 
     const wanted = contractAddress.toLowerCase();
     const pools: PoolCandidate[] = [];
@@ -112,7 +165,17 @@ export class GeckoTerminalClient {
     }
 
     pools.sort((left, right) => right.reserveUsd - left.reserveUsd);
-    return pools[0] ?? null;
+    const pool = pools[0] ?? null;
+    this.writePoolCache(cacheKey, pool);
+    return pool;
+  }
+
+  private writePoolCache(key: string, pool: PoolCandidate | null): void {
+    if (this.poolCache.size > 200) {
+      const oldest = this.poolCache.keys().next().value;
+      if (oldest) this.poolCache.delete(oldest);
+    }
+    this.poolCache.set(key, { expiresAt: Date.now() + POOL_CACHE_TTL_MS, pool });
   }
 
   private async fetchJson(path: string): Promise<unknown | null> {

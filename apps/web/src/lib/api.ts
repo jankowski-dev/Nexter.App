@@ -7,6 +7,8 @@ import {
   automationRulesResponseSchema,
   automationRunsResponseSchema,
   automationTestResponseSchema,
+  aiCoverageSchema,
+  aiDataRefreshResponseSchema,
   aiProfileSchema,
   aiProfileTokenSchema,
   aiProfileTokensResponseSchema,
@@ -95,6 +97,9 @@ import {
   type AccountsResponse,
   type ApprovalBuildResponse,
   type AssetsResponse,
+  type AiCoverage,
+  type AiDataRefreshRequest,
+  type AiDataRefreshResponse,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -1328,4 +1333,12 @@ export async function updateAiService(
 
 export async function fetchAiDashboard(): Promise<AiTradingDashboard> {
   return apiFetch('/api/v1/ai-trading/dashboard', {}, aiTradingDashboardSchema);
+}
+
+export async function fetchAiCoverage(): Promise<AiCoverage> {
+  return apiFetch('/api/v1/ai-trading/coverage', {}, aiCoverageSchema);
+}
+
+export async function refreshAiData(body: AiDataRefreshRequest): Promise<AiDataRefreshResponse> {
+  return apiPost('/api/v1/ai-trading/data/refresh', body, aiDataRefreshResponseSchema);
 }
