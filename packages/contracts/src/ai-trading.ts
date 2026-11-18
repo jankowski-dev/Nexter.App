@@ -178,6 +178,105 @@ export const aiDataRefreshResponseSchema = z.object({
   ),
 });
 
+export const aiLabRegimeSchema = z.enum([
+  'trend_up',
+  'trend_down',
+  'range',
+  'high_volatility',
+  'unclear',
+]);
+
+export const aiLabFeaturesSchema = z.object({
+  candles: z.number().int(),
+  lastPriceUsd: z.string(),
+  change24hPct: z.string().nullable(),
+  return30Pct: z.string().nullable(),
+  return90Pct: z.string().nullable(),
+  volatilityPct: z.string(),
+  maxDrawdownPct: z.string(),
+  sma20Usd: z.string().nullable(),
+  sma50Usd: z.string().nullable(),
+  trend: z.enum(['up', 'down', 'flat']),
+  volume24hUsd: z.string().nullable(),
+  stale: z.boolean(),
+});
+
+export const aiLabStatsSchema = z.object({
+  returnPct: z.string(),
+  maxDrawdownPct: z.string(),
+  profitFactor: z.string().nullable(),
+  winRate: z.string().nullable(),
+  trades: z.number().int(),
+  buyHoldPct: z.string().nullable(),
+});
+
+export const aiLabCandidateMetricsSchema = z.object({
+  train: aiLabStatsSchema.optional(),
+  oos: aiLabStatsSchema.optional(),
+  policyScore: z.number().optional(),
+  backtestedAt: z.iso.datetime().optional(),
+  reasons: z.array(z.string()).optional(),
+});
+
+export const aiLabCandidateSchema = z.object({
+  id: z.uuid(),
+  strategyKey: z.string(),
+  strategyName: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  aiScore: z.number().nullable(),
+  aiConfidence: z.number().nullable(),
+  rationale: z.string().nullable(),
+  risks: z.array(z.string()),
+  metrics: aiLabCandidateMetricsSchema,
+  policyScore: z.number().nullable(),
+  status: z.string(),
+  createdAt: z.iso.datetime(),
+});
+
+export const aiLabAnalysisSchema = z.object({
+  runId: z.uuid(),
+  assetId: z.uuid(),
+  symbol: z.string(),
+  timeframe: aiTimeframeSchema,
+  generatedAt: z.iso.datetime(),
+  source: z.enum(['ai', 'fallback']),
+  regime: aiLabRegimeSchema,
+  confidence: z.number(),
+  summary: z.string(),
+  features: aiLabFeaturesSchema,
+  warnings: z.array(z.string()),
+  candidates: z.array(aiLabCandidateSchema),
+});
+
+export const aiLabLatestSchema = z.object({
+  analysis: aiLabAnalysisSchema.nullable(),
+});
+
+export const aiLabAnalyzeRequestSchema = z.object({
+  assetId: z.uuid(),
+  timeframe: aiTimeframeSchema.default('1d'),
+  lookbackDays: z.number().int().min(30).max(365).default(180),
+});
+
+export const aiLabQuerySchema = z.object({
+  assetId: z.uuid(),
+  timeframe: aiTimeframeSchema.default('1d'),
+});
+
+export const aiLabBacktestRequestSchema = z.object({
+  candidateId: z.uuid(),
+});
+
+export const aiLabBacktestResponseSchema = z.object({
+  candidateId: z.uuid(),
+  strategyKey: z.string(),
+  train: aiLabStatsSchema,
+  oos: aiLabStatsSchema,
+  policyScore: z.number(),
+  status: z.string(),
+  reasons: z.array(z.string()),
+});
+
 export const aiTradingDashboardSchema = z.object({
   profile: aiProfileSchema,
   tokensCount: z.number().int(),
@@ -207,4 +306,15 @@ export type AiCoverageToken = z.infer<typeof aiCoverageTokenSchema>;
 export type AiCoverage = z.infer<typeof aiCoverageSchema>;
 export type AiDataRefreshRequest = z.infer<typeof aiDataRefreshRequestSchema>;
 export type AiDataRefreshResponse = z.infer<typeof aiDataRefreshResponseSchema>;
+export type AiLabRegime = z.infer<typeof aiLabRegimeSchema>;
+export type AiLabFeatures = z.infer<typeof aiLabFeaturesSchema>;
+export type AiLabStats = z.infer<typeof aiLabStatsSchema>;
+export type AiLabCandidateMetrics = z.infer<typeof aiLabCandidateMetricsSchema>;
+export type AiLabCandidate = z.infer<typeof aiLabCandidateSchema>;
+export type AiLabAnalysis = z.infer<typeof aiLabAnalysisSchema>;
+export type AiLabLatest = z.infer<typeof aiLabLatestSchema>;
+export type AiLabAnalyzeRequest = z.infer<typeof aiLabAnalyzeRequestSchema>;
+export type AiLabQuery = z.infer<typeof aiLabQuerySchema>;
+export type AiLabBacktestRequest = z.infer<typeof aiLabBacktestRequestSchema>;
+export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
 export type AiTradingDashboard = z.infer<typeof aiTradingDashboardSchema>;

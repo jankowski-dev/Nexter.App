@@ -9,6 +9,9 @@ import {
   automationTestResponseSchema,
   aiCoverageSchema,
   aiDataRefreshResponseSchema,
+  aiLabAnalysisSchema,
+  aiLabBacktestResponseSchema,
+  aiLabLatestSchema,
   aiProfileSchema,
   aiProfileTokenSchema,
   aiProfileTokensResponseSchema,
@@ -100,6 +103,12 @@ import {
   type AiCoverage,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
+  type AiLabAnalysis,
+  type AiLabAnalyzeRequest,
+  type AiLabBacktestRequest,
+  type AiLabBacktestResponse,
+  type AiLabLatest,
+  type AiLabQuery,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -1341,4 +1350,22 @@ export async function fetchAiCoverage(): Promise<AiCoverage> {
 
 export async function refreshAiData(body: AiDataRefreshRequest): Promise<AiDataRefreshResponse> {
   return apiPost('/api/v1/ai-trading/data/refresh', body, aiDataRefreshResponseSchema);
+}
+
+export async function fetchAiLab(query: AiLabQuery): Promise<AiLabLatest> {
+  return apiFetch(
+    `/api/v1/ai-trading/lab${queryString({ assetId: query.assetId, timeframe: query.timeframe })}`,
+    {},
+    aiLabLatestSchema,
+  );
+}
+
+export async function analyzeAiToken(body: AiLabAnalyzeRequest): Promise<AiLabAnalysis> {
+  return apiPost('/api/v1/ai-trading/lab/analyze', body, aiLabAnalysisSchema);
+}
+
+export async function backtestAiCandidate(
+  body: AiLabBacktestRequest,
+): Promise<AiLabBacktestResponse> {
+  return apiPost('/api/v1/ai-trading/lab/backtest', body, aiLabBacktestResponseSchema);
 }

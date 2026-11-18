@@ -9,9 +9,12 @@ import { StatCard } from '@/components/ui/stat-card';
 import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import {
+  analyzeAiToken,
+  backtestAiCandidate,
   createAiToken,
   fetchAiCoverage,
   fetchAiDashboard,
+  fetchAiLab,
   fetchAiServices,
   fetchAiTokens,
   fetchWatchlist,
@@ -22,11 +25,14 @@ import {
   updateAiToken,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDateTime, formatUsd } from '@/lib/format';
+import { formatDateTime, formatPct, formatPrice, formatUsd, formatUsdCompact } from '@/lib/format';
 import type {
   AiCoverage,
   AiCoverageStatus,
   AiCoverageTimeframe,
+  AiLabAnalysis,
+  AiLabCandidate,
+  AiLabRegime,
   AiProfile,
   AiProfileToken,
   AiProfileUpdateRequest,
@@ -38,7 +44,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-type Section = 'panel' | 'universe' | 'data' | 'services' | 'settings';
+type Section = 'panel' | 'universe' | 'data' | 'lab' | 'services' | 'settings';
 
 const coverageLabels: Record<AiCoverageStatus, string> = {
   ok: 'OK',
@@ -52,6 +58,20 @@ const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> 
   partial: 'warning',
   stale: 'warning',
   missing: 'danger',
+};
+
+const regimeLabels: Record<AiLabRegime, string> = {
+  trend_up: 'Восходящий тренд',
+  trend_down: 'Нисходящий тренд',
+  range: 'Боковик',
+  high_volatility: 'Высокая волатильность',
+  unclear: 'Неопределённый режим',
+};
+
+const labStatusTones: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
+  proposed: 'neutral',
+  backtested: 'success',
+  rejected: 'danger',
 };
 
 const serviceLabels: Record<AiServiceKey, string> = {
@@ -73,7 +93,7 @@ const serviceDescriptions: Record<AiServiceKey, string> = {
 const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m', '5m'];
 
 function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
-  for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services', 'ai-coverage']) {
+  for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services', 'ai-coverage', 'ai-lab']) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
 }
@@ -179,6 +199,7 @@ export function AiTradingPage() {
           { value: 'panel', label: 'Панель' },
           { value: 'universe', label: 'Вселенная' },
           { value: 'data', label: 'Данные' },
+          { value: 'lab', label: 'Лаборатория' },
           { value: 'services', label: 'Сервисы' },
           { value: 'settings', label: 'Настройки' },
         ]}
@@ -211,6 +232,10 @@ export function AiTradingPage() {
           onRetry={() => void coverage.refetch()}
           onChanged={() => invalidateAi(queryClient)}
         />
+      ) : null}
+
+      {section === 'lab' ? (
+        <LabSection tokens={tokenRows} onChanged={() => invalidateAi(queryClient)} />
       ) : null}
 
       {section === 'services' ? (
@@ -367,6 +392,297 @@ function UniverseSection({
             </div>
           ))
         )}
+      </div>
+    </Card>
+  );
+}
+
+function percentMagnitude(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(2)}%` : '—';
+}
+
+function LabFeature({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-zinc-50 px-2.5 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-zinc-400">{label}</div>
+      <div className="mt-0.5 text-sm font-medium text-zinc-800">{value}</div>
+    </div>
+  );
+}
+
+function LabSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged: () => void }) {
+  const enabled = tokens.filter((token) => token.enabled);
+  const [assetId, setAssetId] = useState(enabled[0]?.asset.id ?? '');
+  const [timeframe, setTimeframe] = useState<AiTimeframe>(enabled[0]?.timeframes[0] ?? '1d');
+  const [error, setError] = useState<string | null>(null);
+  const selected = enabled.find((token) => token.asset.id === assetId);
+
+  const labQuery = useQuery({
+    queryKey: ['ai-lab', assetId, timeframe],
+    queryFn: () => fetchAiLab({ assetId, timeframe }),
+    enabled: Boolean(assetId),
+  });
+
+  const analyze = useMutation({
+    mutationFn: () => analyzeAiToken({ assetId, timeframe, lookbackDays: 180 }),
+    onSuccess: () => {
+      setError(null);
+      onChanged();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось выполнить анализ')),
+  });
+
+  const backtest = useMutation({
+    mutationFn: (candidateId: string) => backtestAiCandidate({ candidateId }),
+    onSuccess: () => {
+      setError(null);
+      onChanged();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось выполнить бэктест')),
+  });
+
+  useEffect(() => {
+    if (enabled.length > 0 && !enabled.some((token) => token.asset.id === assetId)) {
+      setAssetId(enabled[0]?.asset.id ?? '');
+    }
+  }, [assetId, enabled]);
+
+  useEffect(() => {
+    if (selected && !selected.timeframes.includes(timeframe)) {
+      setTimeframe(selected.timeframes[0] ?? '1d');
+    }
+  }, [selected, timeframe]);
+
+  if (enabled.length === 0) {
+    return (
+      <Card>
+        <CardTitle>Лаборатория стратегий</CardTitle>
+        <CardDescription>
+          Сначала добавьте включённые токены на вкладке «Вселенная».
+        </CardDescription>
+      </Card>
+    );
+  }
+
+  const analysis: AiLabAnalysis | null = labQuery.data?.analysis ?? null;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <CardTitle>Лаборатория стратегий</CardTitle>
+            <CardDescription>
+              ИИ анализирует режим рынка и предлагает стратегии из реестра. Бэктест проверяет
+              кандидата на train и OOS; реальные ордера не создаются.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-zinc-600">
+              Токен
+              <Select
+                className="mt-1 h-9 min-w-44"
+                value={assetId}
+                onChange={(event) => setAssetId(event.target.value)}
+                aria-label="Токен для лаборатории"
+              >
+                {enabled.map((token) => (
+                  <option key={token.asset.id} value={token.asset.id}>
+                    {token.asset.symbol} · {token.asset.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs text-zinc-600">
+              Таймфрейм
+              <Select
+                className="mt-1 h-9 w-24"
+                value={timeframe}
+                onChange={(event) => setTimeframe(event.target.value as AiTimeframe)}
+                aria-label="Таймфрейм анализа"
+              >
+                {selected?.timeframes.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <Button disabled={!assetId || analyze.isPending} onClick={() => analyze.mutate()}>
+              {analyze.isPending ? 'Анализирую…' : 'Анализировать'}
+            </Button>
+          </div>
+        </div>
+        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+      </Card>
+
+      {labQuery.isPending ? <LoadingRows rows={4} /> : null}
+      {labQuery.isError ? (
+        <ErrorState
+          message={toRussianError(labQuery.error, 'Не удалось загрузить лабораторию')}
+          onRetry={() => void labQuery.refetch()}
+        />
+      ) : null}
+
+      {!labQuery.isPending && !labQuery.isError && !analysis ? (
+        <Card>
+          <CardDescription>
+            Для выбранного токена и таймфрейма анализ ещё не запускался. Нажмите «Анализировать» —
+            без ключа ИИ сработает детерминированный fallback.
+          </CardDescription>
+        </Card>
+      ) : null}
+
+      {analysis ? (
+        <>
+          <Card>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={analysis.source === 'ai' ? 'info' : 'warning'}>
+                {analysis.source === 'ai' ? 'ИИ' : 'Fallback'}
+              </Badge>
+              <Badge tone="neutral">{regimeLabels[analysis.regime]}</Badge>
+              <Badge tone="info">Уверенность {(analysis.confidence * 100).toFixed(0)}%</Badge>
+              {analysis.features.stale ? <Badge tone="danger">Данные устарели</Badge> : null}
+              <span className="text-xs text-zinc-400">{formatDateTime(analysis.generatedAt)}</span>
+            </div>
+            <p className="mt-3 text-sm text-zinc-700">{analysis.summary}</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <LabFeature label="Цена" value={formatPrice(analysis.features.lastPriceUsd)} />
+              <LabFeature label="24 часа" value={formatPct(analysis.features.change24hPct)} />
+              <LabFeature label="30 дней" value={formatPct(analysis.features.return30Pct)} />
+              <LabFeature label="90 дней" value={formatPct(analysis.features.return90Pct)} />
+              <LabFeature
+                label="Волатильность"
+                value={percentMagnitude(analysis.features.volatilityPct)}
+              />
+              <LabFeature
+                label="Макс. просадка"
+                value={percentMagnitude(analysis.features.maxDrawdownPct)}
+              />
+              <LabFeature label="Свечей" value={String(analysis.features.candles)} />
+              <LabFeature
+                label="Объём 24ч"
+                value={formatUsdCompact(analysis.features.volume24hUsd)}
+              />
+            </div>
+            {analysis.warnings.length > 0 ? (
+              <ul className="mt-3 space-y-1 text-xs text-amber-700">
+                {analysis.warnings.map((warning) => (
+                  <li key={warning}>• {warning}</li>
+                ))}
+              </ul>
+            ) : null}
+          </Card>
+
+          <div className="grid gap-3 xl:grid-cols-2">
+            {analysis.candidates.map((candidate) => (
+              <LabCandidateCard
+                key={candidate.id}
+                candidate={candidate}
+                pending={backtest.isPending && backtest.variables === candidate.id}
+                disabled={backtest.isPending}
+                onBacktest={() => backtest.mutate(candidate.id)}
+              />
+            ))}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function LabCandidateCard({
+  candidate,
+  pending,
+  disabled,
+  onBacktest,
+}: {
+  candidate: AiLabCandidate;
+  pending: boolean;
+  disabled: boolean;
+  onBacktest: () => void;
+}) {
+  const statusLabels: Record<string, string> = {
+    proposed: 'Предложен',
+    backtested: 'Прошёл бэктест',
+    rejected: 'Отклонён',
+  };
+  const oos = candidate.metrics.oos;
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-900">{candidate.strategyName}</div>
+          <div className="text-[11px] text-zinc-500">{candidate.strategyKey}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          {candidate.aiConfidence !== null ? (
+            <span className="text-xs text-zinc-500">
+              {(candidate.aiConfidence * 100).toFixed(0)}%
+            </span>
+          ) : null}
+          <Badge tone={labStatusTones[candidate.status] ?? 'neutral'}>
+            {statusLabels[candidate.status] ?? candidate.status}
+          </Badge>
+        </div>
+      </div>
+      {candidate.rationale ? (
+        <p className="mt-2 text-sm text-zinc-600">{candidate.rationale}</p>
+      ) : null}
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {Object.entries(candidate.params).map(([key, value]) => (
+          <span key={key} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600">
+            {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+          </span>
+        ))}
+      </div>
+
+      {candidate.risks.length > 0 ? (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-amber-700">
+          {candidate.risks.map((risk) => (
+            <li key={risk}>• {risk}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      {oos ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <LabFeature label="OOS доходность" value={formatPct(oos.returnPct)} />
+          <LabFeature label="OOS просадка" value={percentMagnitude(oos.maxDrawdownPct)} />
+          <LabFeature label="OOS сделки" value={String(oos.trades)} />
+          <LabFeature
+            label="OOS profit factor"
+            value={oos.profitFactor === null ? '—' : oos.profitFactor}
+          />
+        </div>
+      ) : null}
+
+      {candidate.metrics.reasons && candidate.metrics.reasons.length > 0 ? (
+        <ul className="mt-2 space-y-0.5 text-[11px] text-red-700">
+          {candidate.metrics.reasons.map((reason) => (
+            <li key={reason}>• {reason}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-zinc-400">
+          {candidate.policyScore === null
+            ? 'Политика: —'
+            : `Политика: ${candidate.policyScore.toFixed(2)}`}
+        </span>
+        <Button
+          variant="secondary"
+          className="h-8 px-3 text-xs"
+          disabled={disabled}
+          onClick={onBacktest}
+        >
+          {pending ? 'Считаю…' : 'Бэктест'}
+        </Button>
       </div>
     </Card>
   );

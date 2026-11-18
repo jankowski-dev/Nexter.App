@@ -18,6 +18,8 @@ export interface BacktestOptions {
   useStopLoss?: boolean;
   useTakeProfit?: boolean;
   reinvestProfit?: boolean;
+  /** Number of candles used for the "24h" change; defaults to the previous candle. */
+  changeLookbackCandles?: number;
 }
 
 export interface BacktestResult {
@@ -153,7 +155,9 @@ export function runBacktest(
   for (let index = 0; index < candles.length; index += 1) {
     const candle = candles[index] as BotCandle;
     const close = decimal(candle.closeUsd);
-    const previous = index > 0 ? candles[index - 1] : null;
+    const changeLookback = Math.max(1, Math.floor(options.changeLookbackCandles ?? 1));
+    const previousIndex = index - changeLookback;
+    const previous = previousIndex >= 0 ? candles[previousIndex] : null;
     const previousClose = previous ? decimal(previous.closeUsd) : null;
     const change24hPct = previousClose
       ? close.minus(previousClose).div(previousClose).mul(100).toFixed(4)
