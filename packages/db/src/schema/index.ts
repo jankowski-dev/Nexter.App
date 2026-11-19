@@ -155,23 +155,10 @@ export const settings = pgTable(
     notificationsPollSeconds: integer('notifications_poll_seconds').notNull().default(30),
     notifyBotStopped: boolean('notify_bot_stopped').notNull().default(true),
     notifyPositionsClosed: boolean('notify_positions_closed').notNull().default(true),
-    automationEnabled: boolean('automation_enabled').notNull().default(false),
-    automationMode: text('automation_mode').notNull().default('dry_run'),
-    automationMaxOrderUsd: numeric('automation_max_order_usd', { precision: 24, scale: 2 })
-      .notNull()
-      .default('250.00'),
-    automationMaxDailyUsd: numeric('automation_max_daily_usd', { precision: 24, scale: 2 })
-      .notNull()
-      .default('500.00'),
-    automationMaxActionsPerDay: integer('automation_max_actions_per_day').notNull().default(5),
-    automationCooldownMinutes: integer('automation_cooldown_minutes').notNull().default(60),
-    automationDefaultStopLossPct: integer('automation_default_stop_loss_pct').notNull().default(10),
-    automationDefaultTakeProfitPct: integer('automation_default_take_profit_pct')
-      .notNull()
-      .default(20),
-    automationDefaultTrailingPct: integer('automation_default_trailing_pct').notNull().default(8),
-    automationDefaultBuyDropPct: integer('automation_default_buy_drop_pct').notNull().default(10),
-    automationDefaultBuyAmountUsd: numeric('automation_default_buy_amount_usd', {
+    // Per-order protection and delayed-buy defaults; not a global automation feature.
+    tradeDefaultStopLossPct: integer('automation_default_stop_loss_pct').notNull().default(10),
+    tradeDefaultTakeProfitPct: integer('automation_default_take_profit_pct').notNull().default(20),
+    tradeDefaultBuyAmountUsd: numeric('automation_default_buy_amount_usd', {
       precision: 24,
       scale: 2,
     })
@@ -190,7 +177,6 @@ export const settings = pgTable(
       'settings_default_report_period',
       sql`${table.defaultReportPeriod} in ('30d', '90d', '365d', 'ytd', 'all')`,
     ),
-    check('settings_automation_mode', sql`${table.automationMode} in ('dry_run', 'proposal')`),
     check(
       'settings_task_default_due_time',
       sql`${table.taskDefaultDueTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
@@ -706,75 +692,6 @@ export const marketHistory = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index('market_history_fetched_idx').on(table.fetchedAt)],
-);
-
-export const automationRules = pgTable(
-  'automation_rules',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    name: text('name').notNull(),
-    kind: text('kind').notNull(),
-    assetId: uuid('asset_id')
-      .notNull()
-      .references(() => assets.id, { onDelete: 'cascade' }),
-    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
-      onDelete: 'set null',
-    }),
-    status: text('status').notNull().default('draft'),
-    executionMode: text('execution_mode').notNull().default('dry_run'),
-    params: jsonb('params').$type<Record<string, unknown>>().notNull().default({}),
-    maxOrderUsd: numeric('max_order_usd', { precision: 24, scale: 2 }),
-    cooldownMinutes: integer('cooldown_minutes').notNull().default(60),
-    lastTriggeredAt: timestamp('last_triggered_at', { withTimezone: true }),
-    triggerCount: integer('trigger_count').notNull().default(0),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    index('automation_rules_user_status_idx').on(table.userId, table.status),
-    index('automation_rules_asset_idx').on(table.assetId),
-    index('automation_rules_group_idx').on(table.tradeGroupId),
-  ],
-);
-
-export const automationRuleState = pgTable('automation_rule_state', {
-  ruleId: uuid('rule_id')
-    .primaryKey()
-    .references(() => automationRules.id, { onDelete: 'cascade' }),
-  highWaterUsd: numeric('high_water_usd', { precision: 36, scale: 18 }),
-  lastActionAt: timestamp('last_action_at', { withTimezone: true }),
-  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const automationRuns = pgTable(
-  'automation_runs',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    ruleId: uuid('rule_id')
-      .notNull()
-      .references(() => automationRules.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    status: text('status').notNull(),
-    triggerKey: text('trigger_key').notNull(),
-    reason: text('reason').notNull().default(''),
-    triggerPriceUsd: numeric('trigger_price_usd', { precision: 36, scale: 18 }),
-    amount: numeric('amount', { precision: 36, scale: 18 }),
-    usdValue: numeric('usd_value', { precision: 24, scale: 2 }),
-    tradeGroupId: uuid('trade_group_id').references(() => tradeGroups.id, {
-      onDelete: 'set null',
-    }),
-    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex('automation_runs_rule_trigger_unique').on(table.ruleId, table.triggerKey),
-    index('automation_runs_user_time_idx').on(table.userId, table.createdAt),
-  ],
 );
 
 export const pendingOrders = pgTable(
@@ -1432,11 +1349,6 @@ export const aiProfiles = pgTable(
     maxAiSpendUsd: numeric('max_ai_spend_usd', { precision: 18, scale: 2 }).notNull().default('5'),
     maxBacktestsPerDay: integer('max_backtests_per_day').notNull().default(200),
     workerMaxTokens: integer('worker_max_tokens').notNull().default(5),
-    autoApproveWorkerCreate: boolean('auto_approve_worker_create').notNull().default(true),
-    autoApproveParams: boolean('auto_approve_params').notNull().default(true),
-    autoApproveBudget: boolean('auto_approve_budget').notNull().default(true),
-    autoApprovePauseClose: boolean('auto_approve_pause_close').notNull().default(true),
-    autoApproveReoptimize: boolean('auto_approve_reoptimize').notNull().default(true),
     modelSettings: jsonb('model_settings')
       .$type<Record<string, unknown>>()
       .notNull()
@@ -1602,25 +1514,6 @@ export const aiCandidates = pgTable(
     index('ai_candidates_profile_status_idx').on(table.profileId, table.status),
     index('ai_candidates_asset_timeframe_idx').on(table.assetId, table.timeframe),
   ],
-);
-
-export const aiApprovals = pgTable(
-  'ai_approvals',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => aiProfiles.id, { onDelete: 'cascade' }),
-    runId: uuid('run_id'),
-    type: text('type').notNull(),
-    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
-    status: text('status').notNull().default('pending'),
-    requestedAt: timestamp('requested_at', { withTimezone: true }).notNull().defaultNow(),
-    decidedAt: timestamp('decided_at', { withTimezone: true }),
-    decidedBy: uuid('decided_by'),
-    reason: text('reason'),
-  },
-  (table) => [index('ai_approvals_profile_status_idx').on(table.profileId, table.status)],
 );
 
 export const aiReports = pgTable(

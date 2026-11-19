@@ -84,11 +84,6 @@ function toProfile(row: typeof aiProfiles.$inferSelect): AiProfile {
     maxAiSpendUsd: row.maxAiSpendUsd,
     maxBacktestsPerDay: row.maxBacktestsPerDay,
     workerMaxTokens: row.workerMaxTokens,
-    autoApproveWorkerCreate: row.autoApproveWorkerCreate,
-    autoApproveParams: row.autoApproveParams,
-    autoApproveBudget: row.autoApproveBudget,
-    autoApprovePauseClose: row.autoApprovePauseClose,
-    autoApproveReoptimize: row.autoApproveReoptimize,
     modelSettings: row.modelSettings as AiProfile['modelSettings'],
     schedule: row.schedule as AiProfile['schedule'],
     createdAt: row.createdAt.toISOString(),
@@ -197,21 +192,6 @@ export class AiTradingService {
           ? { maxBacktestsPerDay: input.maxBacktestsPerDay }
           : {}),
         ...(input.workerMaxTokens !== undefined ? { workerMaxTokens: input.workerMaxTokens } : {}),
-        ...(input.autoApproveWorkerCreate !== undefined
-          ? { autoApproveWorkerCreate: input.autoApproveWorkerCreate }
-          : {}),
-        ...(input.autoApproveParams !== undefined
-          ? { autoApproveParams: input.autoApproveParams }
-          : {}),
-        ...(input.autoApproveBudget !== undefined
-          ? { autoApproveBudget: input.autoApproveBudget }
-          : {}),
-        ...(input.autoApprovePauseClose !== undefined
-          ? { autoApprovePauseClose: input.autoApprovePauseClose }
-          : {}),
-        ...(input.autoApproveReoptimize !== undefined
-          ? { autoApproveReoptimize: input.autoApproveReoptimize }
-          : {}),
         ...(input.modelSettings !== undefined ? { modelSettings: input.modelSettings } : {}),
         ...(input.schedule !== undefined ? { schedule: input.schedule } : {}),
         updatedAt: new Date(),

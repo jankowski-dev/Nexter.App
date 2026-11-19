@@ -1,7 +1,9 @@
 # ADR 0071 — AI Trading Control Center
 
-Status: proposed (design review; implementation not started)
+Status: accepted (Phase 1–3 implemented); partially superseded by ADR 0072
 Date: 2026-11-18
+
+> **2026-11-19 update:** the owner removed autonomous worker creation and auto-approvals. The recommendation-only flow, short-swing 1–10 day horizon, purged walk-forward search and transparent statistics are defined in [ADR 0072](0072-recommendation-only-short-swing.md). This ADR remains authoritative for the data/analyst/backtest foundation, sandbox boundary, audit and no-keys rules.
 
 ## Context
 

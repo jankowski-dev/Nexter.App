@@ -230,3 +230,24 @@ Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankow
 | DELETE | `/trading-bots/backtests/:id`            | удалить прогон                                |
 
 Стратегии — read-only code registry; отдельных CRUD-эндпоинтов стратегий больше нет. Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются. Подробности — в `trading-bots.md`.
+
+## 14. AI trading (research/recommendation)
+
+Owner-only; CSRF and audit. The module is recommendation-only: it does not create or start bots.
+
+| Метод        | Путь                             | Назначение                                  |
+| ------------ | -------------------------------- | ------------------------------------------- |
+| GET          | `/ai-trading/profile`            | профиль: бюджет, лимиты, модель             |
+| PUT          | `/ai-trading/profile`            | обновить профиль                            |
+| GET/POST     | `/ai-trading/profile/tokens`     | AI-вселенная                                |
+| PATCH/DELETE | `/ai-trading/profile/tokens/:id` | изменить/мягко отключить токен              |
+| GET          | `/ai-trading/services`           | конфиги Data/Analyst/Backtest/Risk/Reporter |
+| PUT          | `/ai-trading/services/:service`  | изменить конфиг сервиса                     |
+| GET          | `/ai-trading/dashboard`          | бюджет, токены, роботы, очередь             |
+| GET          | `/ai-trading/coverage`           | покрытие свечей по токенам/ТФ               |
+| POST         | `/ai-trading/data/refresh`       | загрузить OHLCV                             |
+| GET          | `/ai-trading/lab`                | последний анализ по токену/ТФ               |
+| POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                          |
+| POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                 |
+
+Phase 4 adds asynchronous `POST /ai-trading/search`, `GET /search/:runId` (progress/stats), `GET /search/:runId/results`, `POST /search/:runId/cancel`, `GET /recommendations`, and accept/reject actions that open a prefilled draft bot. No approvals endpoints.

@@ -1,351 +1,256 @@
-# AI Trading Control Center — техническая спецификация (v0.1)
+# AI Trading — рекомендательный short-swing модуль (v0.2)
 
-Статус: проект, без реализации. Основано на решениях владельца от 2026-11-18.
-
+Статус: Phase 1–3 реализованы; Phase 4+ пересмотрены 2026-11-19. Автономный запуск роботов отменён.
 Связанные документы:
 
-- `docs/adr/0071-ai-trading-control-center.md` — архитектурное решение.
-- `docs/plans/ai-trading-schema-contracts-2026-11.md` — схема БД и контракты сервисов.
+- `docs/adr/0072-recommendation-only-short-swing.md` — актуальное архитектурное решение.
+- `docs/adr/0071-ai-trading-control-center.md` — foundation: data/analyst/backtest, sandbox, audit.
+- `docs/plans/ai-trading-schema-contracts-2026-11.md` — схема и контракты (обновляется под v0.2).
 
-## 1. Термины
+## 1. Продукт
 
-- **Control Center** — раздел `ИИ-торговля`: приборная панель, настройки, сервисы, пайплайн, воркеры, одобрения, отчёты.
-- **Orchestrator** — детерминированный сервис, который ведёт очередь задач и применяет правила. Не бот, не ИИ.
-- **Profile** — набор настроек ИИ-торговли: вселенная, бюджет, риск, таймфреймы, approvals, модель.
-- **Service** — жёстко запрограммированный обработчик задач: Data, Analyst, Backtest, Risk, Reporter.
-- **WorkerBot** — paper-бот: одна стратегия, список токенов, один evaluation timeframe, бюджет.
-- **Candidate** — стратегия + параметры + токен + таймфрейм, прошедшая анализ/бэктест.
-- **Pipeline Run** — один запуск цепочки по профилю.
-- **Job** — задача очереди для конкретного сервиса/токена/таймфрейма.
-- **Artifact** — версионированный результат задачи (данные, признаки, AI-ответ, бэктест, аллокация).
-- **Approval** — предложенное действие, ожидающее решения владельца.
+Это **система поддержки решений**, а не автотрейдер.
 
-## 2. Принятые решения
+Она:
 
-1. Отдельной сущности «Mainbot» нет. Есть Control Center и Orchestrator.
-2. ИИ даёт анализ и оценку. Решение принимает policy engine по жёстким правилам. Сервисы исполняют.
-3. Один worker = одна стратегия + список токенов.
-4. Пока один профиль; схема и UI допускают несколько профилей позже.
-5. Стартовые таймфреймы: `1h` и `1d`. Позже `4h`, `15m`, `5m`.
-6. Общий виртуальный пул капитала; опционально изолированный бюджет worker-а.
-7. Все действия в paper-режиме могут выполняться автоматически (переключатели в настройках). Каждое действие логируется и уведомляется.
-8. Лимиты — по предложенной таблице (см. §9).
-9. Ре-оптимизация: еженедельно + события; 1–2 shadow-кандидата.
-10. Параметры сервисов — на усмотрение реализации, ключевые редактируются в UI.
-11. Реальный режим — позже, отдельный проект. Хранение ключей на сервере противоречит правилу 1 проекта; требуется отдельный signer/HSM/AA и security review.
-12. Максимум токенов у одного worker-а — **5**.
-13. После `1h`/`1d` добавляем таймфреймы в порядке **`4h` → `15m` → `5m`**.
-14. Текущий режим — **sandbox**: реальные рыночные данные и математика, виртуальные деньги. Реальные ордера, кошельки, ключи и подпись не используются. Будущий real-mode — только через внешний signer/HSM/AA, отдельным этапом.
+- собирает рыночные данные;
+- считает признаки и режим рынка;
+- массово перебирает стратегии и параметры;
+- проверяет варианты на purged walk-forward и финальном holdout;
+- показывает прозрачную статистику;
+- выдаёт рекомендацию с параметрами, горизонтом, TTL и условиями инвалидации;
+- связывает рекомендацию с paper-роботом, которого владелец создаёт и запускает вручную;
+- подсказывает, когда запущенного робота стоит остановить или пересмотреть.
 
-## 3.1. Sandbox contract
+Она **не**:
 
-- Цены, свечи, объёмы, ликвидность и комиссии — реальные/рыночные.
-- Исполнение — paper: текущая котировка + slippage + fee; без реального ордера.
-- Деньги, equity, P&L, DD — виртуальные; отдельный paper-леджер.
-- Реальный ledger, кошельки, WalletConnect и подпись в AI-модуле не участвуют.
-- Все расчёты — Decimal/Postgres numeric, без JS-float.
-- Backtests — на реальной истории; forward — на реальных котировках.
-- Никаких приватных ключей, seed-фраз и signing keys.
-- Real-mode adapter и signer не реализуются в текущем этапе; только интерфейс `ExecutionAdapter` с `PaperAdapter`.
+- создаёт и не запускает роботов автоматически;
+- не принимает решения об изменении бюджета или параметров за владельца;
+- не торгует реальными деньгами;
+- не хранит ключи, seed-фразы и не подписывает транзакции.
+
+## 2. Термины
+
+- **Profile** — бюджет, лимиты, AI-вселенная, модель, расписание поиска.
+- **Search Run** — один массовый поиск по токену, таймфрейму, горизонту и бюджету вариантов.
+- **Candidate** — стратегия + параметры + токен + таймфрейм, прошедшая поиск и проверки.
+- **Recommendation** — карточка кандидата с параметрами, TTL, аллокацией и условиями инвалидации.
+- **WorkerBot** — paper-бот, созданный владельцем из рекомендации; одна стратегия + до 5 токенов + один timeframe.
+- **Invalidation** — правило или событие, по которому система рекомендует остановить/пересмотреть робота.
+- **Service** — детерминированный обработчик: Data, Analyst, Search/Backtest, Risk, Reporter.
 
 ## 3. Архитектура
 
-```
-Пользователь
-  → Control Center (settings, approvals, reports)
-  → Orchestrator (policy + job graph)
-      → Data Service
-      → Analyst Service (AI)
-      → Backtest Service
-      → Risk Service
-      → WorkerBot(s)
-  ← Artifacts / Events / Reports
+```text
+Рынок / GeckoTerminal / CoinGecko
+        │
+        ▼
+┌──────────────────┐
+│   Data Service   │  OHLCV, coverage, gaps, stale, source/quality
+│  market_candles  │  1d / 4h / 1h / 15m
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Analyst Service  │  признаки + режим + AI-кандидаты
+│   (DeepSeek)     │  только стратегии из реестра
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Search/Backtest  │  5 000 вариантов, purged walk-forward,
+│     Service      │  9 фолдов, финальный holdout, статистика
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│   Risk Service   │  лимиты, аллокация, корреляция, издержки
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  Recommendation  │  карточка + TTL + invalidation rules
+└────────┬─────────┘
+         │
+         ▼
+   владелец: «Создать робота» / «Отклонить»
+         │
+         ▼
+┌──────────────────┐
+│   Paper Bot      │  draft → owner start → signals/trades/equity
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│ Invalidation     │  рекомендации «остановить/пересмотреть»,
+│    Monitor       │  без авто-стопа
+└──────────────────┘
 ```
 
 Правила:
 
-- Сервисы не вызывают друг друга напрямую.
-- Каждая стадия читает артефакт предыдущей и создаёт свой.
-- Orchestrator управляет зависимостями, retry, cooldown и approvals.
-- Один Profile может иметь несколько одновременных Pipeline Run, но активные воркеры ограничены.
-- Все действия идемпотентны; повторный job не создаёт дубль.
+- Сервисы не вызывают друг друга напрямую: обмен через БД/артефакты.
+- Search Run идемпотентен по конфигу; повторный запуск не дублирует результаты.
+- Все действия владельца и системы пишутся в audit log.
+- Автоматика может выполнять только исследование/анализ/бэктест; исполнение — владелец.
 
-## 4. Control Center (UI)
+## 4. UI
 
-Раздел `ИИ-торговля` внутри Крипты. Вкладки/панели:
+`ИИ-торговля`:
 
-1. **Панель** — бюджет, свободный кэш, equity, P&L, DD, активные воркеры, очередь, ошибки, кнопки Start/Pause/Kill.
-2. **Настройки** — профиль, AI-вселенная, таймфреймы, бюджет, риск, approvals, модель, расписание.
-3. **Сервисы** — карточки Data/Analyst/Backtest/Risk/Reporter: статус, очередь, последний запуск, параметры, включить/выключить, логи.
-4. **Пайплайн** — по токену/таймфрейму стадии, артефакты, ошибки, retry.
-5. **Воркеры** — стратегия, токены, timeframe, allocation, equity, P&L, DD, статус, pause/stop.
-6. **Лаборатория** — кандидаты, AI-оценка, метрики бэктеста, policy score, решение.
-7. **Одобрения** — очередь действий с причиной и diff.
-8. **Отчёты** — daily/weekly.
-9. **Журнал** — решения, запуски, ошибки, стоимость ИИ.
+1. **Обзор** — бюджет, свободный капитал, активные рекомендации, ИИ-роботы, алерты, расходы ИИ.
+2. **Рекомендации** — карточки/таблица, TTL, инвалидация, `Создать робота`, `Отклонить`.
+3. **Поиск** — запуск массового поиска, прогресс, статистика, топ-варианты, экспорт.
+4. **Мои ИИ-роботы** — paper-боты, созданные из рекомендаций; связь, здоровье, стоп/пересмотр.
+5. **Данные** — покрытие, gaps, stale, source/quality, обновление.
+6. **Настройки** — профиль, лимиты, бюджет поиска, модель, расписание.
+
+`Крипта → Роботы` остаётся местом ручного создания/запуска paper-ботов. `Лаборатория` заменяется на `Поиск`.
 
 ## 5. Настройки профиля
 
-- название, enabled;
-- AI-вселенная: отдельный список токенов (не группа `Основная`);
-- таймфреймы по токену: `1h`, `1d` (позже другие);
 - бюджет, cash buffer;
-- max workers, max allocation на worker, max exposure на токен, max invested;
+- AI-вселенная: отдельный список токенов;
+- основные таймфреймы: `1h`, `4h`, `1d`; `15m` — только для уточнения входа;
+- лимиты: max active AI bots, max allocation на робота, max token exposure, max invested;
 - risk per trade, daily loss, max DD;
-- max AI spend/day, max backtest candidates/day;
-- auto-approve toggles: worker create, params change, budget reallocate, pause/close, reoptimize;
-- модель ИИ: model, temperature, max tokens, timeout, fallback;
-- расписание: weekly review, events;
-- reporters: daily/weekly, in-app/Viber.
+- max AI spend/day;
+- persisted backtests/day (200) и search budget (до 5 000 вариантов на поиск, до 20 поисков/день);
+- модель ИИ и timeout;
+- расписание поиска/обзора (без авто-запуска роботов).
 
-## 6. Сервисы
+Auto-approve переключатели удалены: автономных действий больше нет.
 
-### Data Service
+## 6. Data Service
 
-Вход: профиль, токен, timeframe, период.
-Выход: `dataset` artifact.
+- OHLCV из GeckoTerminal/CoinGecko, `market_candles`;
+- `source`, `quality` (`ok`/`synthetic`), coverage, gaps, duplicate/stale checks;
+- минимальная ликвидность и объём;
+- 1h история для поиска — до 180 дней (пагинация провайдера);
+- 4h/1d — для режима и подтверждения;
+- 15m — опционально, только для ликвидных токенов;
+- 5m не входит в short-swing MVP.
 
-- источник: GeckoTerminal / CoinGecko;
-- OHLCV, coverage, gaps, duplicates, stale, synthetic;
-- минимальная ликвидность;
-- кэш и персистентность в `market_candles`;
-- инкрементальное обновление;
-- при недостатке данных — статус `unavailable`, pipeline останавливается для этой пары.
+## 7. Analyst Service
 
-### Analyst Service (AI)
+- детерминированные признаки: returns, volatility, drawdown, SMA/EMA, trend, volume/liquidity, regime, correlations;
+- AI получает признаки и каталог стратегий;
+- ответ — строгий JSON: regime, confidence, summary, 1–3 кандидата, warnings;
+- стратегии и параметры валидируются реестром;
+- fallback при недоступности ИИ;
+- AI confidence не считается вероятностью прибыли.
 
-Вход: dataset artifact.
-Выход: `analysis` artifact.
+## 8. Search/Backtest Service
 
-- признаки: trend, volatility, drawdown, volume, liquidity, regime, correlations;
-- AI-запрос с структурированным профилем;
-- выход JSON: regime, confidence, candidates[], warnings;
-- стратегии только из реестра, параметры в допустимых диапазонах;
-- fallback при ошибке;
-- сохранение prompt/response/usage.
+Один Search Run:
 
-### Backtest Service
+```text
+180 дней
+├──────────── 150 дней поиска ────────────┤ 30 дней holdout
+fold 1: train 60 → purge 2 → OOS 10
+fold 2:        train 60 → purge 2 → OOS 10
+...
+fold 9:                              train 60 → purge 2 → OOS 10
+```
 
-Вход: dataset + candidates + constraints.
-Выход: `backtest` artifact.
+- до 5 000 вариантов параметров;
+- 9 фолдов; train 60 дней, purge 2, OOS 10, шаг 10;
+- финальный 30-дневный holdout не участвует в выборе;
+- для каждого варианта считаются агрегированные OOS-метрики и стабильность;
+- фильтры: min trades, средний/медианный OOS > 0, худший фолд не ниже порога, DD, финальный holdout;
+- поиск асинхронный: прогресс, ETA, отмена;
+- 5 000 оценок — это search evaluations, не 5 000 сохранённых backtest artifacts.
 
-- walk-forward: train/validation/test;
-- OOS обязателен;
-- комиссии/слиппедж;
-- метрики: return, max DD, Sharpe/Sortino, profit factor, win rate, expectancy, turnover, stability;
-- сравнение с buy-and-hold;
-- top-N, score;
-- отсев нестабильных/малосделочных кандидатов.
+Статистика:
 
-### Risk Service
+- total/valid/rejected variants;
+- best/avg/median/worst;
+- % прибыльных вариантов/фолдов;
+- OOS best/median/worst;
+- train→OOS degradation;
+- stability across folds;
+- final holdout;
+- top-N таблица;
+- histogram returns/drawdowns;
+- причины отклонения;
+- сравнение с buy-and-hold и default params;
+- конфиг поиска и data quality.
 
-Вход: выбранные кандидаты + бюджет + текущие экспозиции.
-Выход: `allocation` artifact.
+## 9. Recommendation
 
-- размер allocation на worker;
-- per-token cap;
-- max workers/exposure;
-- cash buffer;
-- correlation;
-- проверка лимитов;
-- план создания worker-а или отклонение.
+Рекомендация содержит:
 
-### Reporter Service
+- token, timeframe, strategyKey, params;
+- entry/stop/take (если применимо);
+- expected horizon 1–10 дней;
+- suggested allocation;
+- OOS/stability/holdout metrics;
+- data quality;
+- TTL (`expiresAt`);
+- invalidation rules;
+- searchRunId/candidateId;
+- status: `proposed` / `accepted` / `rejected` / `expired` / `closed`.
 
-Вход: run/period.
-Выход: `report` artifact.
+`Создать робота` открывает prefilled draft. Робот не стартует автоматически. После старта сохраняется связь `recommendationId`/`candidateId`.
 
-- daily/weekly;
-- equity, P&L, DD, trades, win rate, profit factor;
-- benchmark;
-- AI rationale;
-- service health, errors, stale data;
-- AI cost;
-- approvals.
+## 10. Invalidation
 
-## 7. WorkerBot
+Монитор проверяет ИИ-роботов и выдаёт рекомендации, не останавливая их сам.
 
-- одна стратегия + params;
-- список токенов, максимум 5;
-- один evaluation timeframe;
-- allocation;
-- max positions, position size, fee/slippage;
-- daily loss, max DD, cooldown;
-- paper execution через существующий bot engine;
-- signals/trades/equity/events;
-- P&L по каждому токену и агрегированный;
-- pause/stop без потери истории.
+Красный — остановить:
 
-Signal timeframe определяет, когда стратегия принимает решение. Исполнение и equity обновляются по текущим котировкам. ИИ в тиках не участвует.
+- стоп/тейк;
+- max DD / daily loss;
+- stale/missing data;
+- ошибка бота;
+- стратегия нарушила свои правила.
 
-## 8. Данные
+Жёлтый — пересмотреть:
 
-`market_candles`:
+- истёк горизонт/TTL;
+- сменился режим;
+- деградация vs OOS;
+- рост корреляции;
+- рекомендация истекла, а бот работает.
 
-- `asset_id`, `timeframe`, `open_time`, `open`, `high`, `low`, `close`, `volume`;
-- `source`, `quality`, `fetched_at`;
-- unique `(asset_id, timeframe, open_time)`.
+UI робота показывает рекомендацию, горизонт, health и причины. Действия: `Остановить`, `Продлить наблюдение`, `Открыть поиск`.
 
-Таймфреймы MVP: `1h`, `1d`. Далее: `4h`, `15m`, `5m` (в этом порядке). Проверка покрытия обязательна. Для intraday — отдельная проверка лимитов провайдера.
+## 11. Лимиты
 
-## 9. Лимиты (подтверждены)
+| Лимит                |                Значение |
+| -------------------- | ----------------------: |
+| Active AI bots       |                      10 |
+| Allocation на робота |                     25% |
+| Token exposure       |                     20% |
+| Max invested         |                     80% |
+| Risk per trade       |                      1% |
+| Daily loss           |   3% профиль / 5% робот |
+| Max DD               | 10% профиль / 15% робот |
+| AI spend             |                 $5/день |
+| Persisted backtests  |                200/день |
+| Search evaluations   |             5 000/поиск |
+| Searches             |                 20/день |
+| Stale candles        |            2× timeframe |
+| Stale quotes         |                 5 минут |
+| Loss cooldown        |                   1 час |
+| Correlation          |                     0.8 |
+| Reoptimization       | не чаще 1 раза в 7 дней |
 
-| Лимит                        | Значение                      |
-| ---------------------------- | ----------------------------- |
-| Общий бюджет                 | задаёт пользователь           |
-| Max workers                  | 10                            |
-| Max на worker                | 25% бюджета                   |
-| Max на токен                 | 20%                           |
-| Max invested                 | 80%                           |
-| Risk per trade               | 1%                            |
-| Daily loss: profile / worker | 3% / 5%                       |
-| Max DD: profile / worker     | 10% / 15%                     |
-| Max AI spend                 | $5/день                       |
-| Max backtest candidates      | 200/день                      |
-| Stale data                   | 2× timeframe, котировки 5 мин |
-| Cooldown после убытка        | 1 час                         |
-| Correlation threshold        | 0.8                           |
-| Re-optimization cooldown     | 7 дней на токен               |
+## 12. Этапы
 
-При breach — автоматическая пауза/закрытие и уведомление.
+**Phase 1** — Control Center, profile, AI universe, service configs (done).
+**Phase 2** — Data Service, `market_candles`, coverage UI (done).
+**Phase 3** — Analyst, Backtest, Lab UI (done).
+**Phase 4** — Search/Recommendation Engine, 5k variants, purged walk-forward, statistics; no auto bots.
+**Phase 5** — Recommendation UI, manual bot creation, linkage.
+**Phase 6** — Invalidation monitor, reports, monitoring.
+**Phase 7** — Short-swing data expansion (1h up to 180 days), 15m optional.
+**Phase 8** — Hardening; future real execution adapter remains a separate security project.
 
-## 10. Капитал
+## 13. Безопасность
 
-- Общий виртуальный пул: `cash_usd`.
-- Allocation worker-а — резервирование, а не безвозвратный перевод.
-- Опционально `isolated_budget` — отдельный бюджет worker-а.
-- Risk Service ведёт резервы и не даёт двум worker-ам потратить один кэш.
-- Paper-леджер отдельный; реальный ledger не затрагивается.
-
-## 11. Одобрения
-
-В paper по умолчанию все действия auto (по решению владельца), но с уведомлением и audit.
-
-| Действие                  | Paper         | Real (future)   |
-| ------------------------- | ------------- | --------------- |
-| Pipeline run              | auto          | auto            |
-| Создание worker           | auto          | approval        |
-| Смена параметров          | auto          | approval        |
-| Перераспределение бюджета | auto          | approval        |
-| Pause/close по риску      | auto + notify | auto + notify   |
-| Pause/close вручную       | auto          | approval        |
-| Ре-оптимизация            | auto          | approval        |
-| Покупка/продажа           | paper only    | approval + TOTP |
-
-Каждый auto-approve переключаем в настройках.
-
-## 12. Ре-оптимизация
-
-### Триггеры
-
-- еженедельный обзор;
-- DD worker-а > 15%;
-- underperformance vs buy-and-hold 14 дней;
-- profit factor < 1 / падение win rate;
-- смена режима;
-- новый токен;
-- плохие данные;
-- ручная кнопка.
-
-### Правила
-
-- не чаще 1 раза в 7 дней на токен;
-- 1–2 shadow-кандидата;
-- shadow allocation 10–20%, наблюдение 7–14 дней;
-- promote только при лучших OOS + paper;
-- старый worker работает до promotion;
-- risk-стопы срабатывают сразу, без ожидания ре-оптимизации;
-- real — только approval.
-
-### Действия
-
-- refresh params;
-- switch strategy;
-- replace worker;
-- retire strategy (если плоха на большинстве токенов).
-
-## 13. Отчёты
-
-Daily:
-
-- equity, P&L, DD, cash;
-- trades, win rate, profit factor;
-- benchmark;
-- AI rationale;
-- service health/errors/stale data;
-- AI cost.
-
-Weekly:
-
-- по стратегиям/токенам;
-- лучшие/худшие worker-ы;
-- кандидаты на замену;
-- approvals/auto actions;
-- рекомендации.
-
-## 14. Надёжность и производительность
-
-- Postgres job queue: `FOR UPDATE SKIP LOCKED`;
-- statuses, heartbeat, retry/backoff, dead-letter;
-- advisory locks для singleton;
-- idempotency keys; unique `(profile, token, timeframe, stage)`;
-- artifacts versioned (data/features/prompt/strategy registry);
-- AI/backtests вне горячего пути tick;
-- cache candles/results; batch; concurrency 2–4;
-- timeouts/cancellation;
-- в v1 job-runner в API-процессе; отдельный worker-процесс при тяжёлых бэктестах.
-
-## 15. Данные/БД
-
-- `ai_profiles`
-- `ai_profile_tokens`
-- `ai_service_configs`
-- `ai_pipeline_runs`
-- `ai_jobs`
-- `ai_artifacts`
-- `ai_candidates`
-- `ai_approvals`
-- `ai_reports`
-- `ai_usage`
-- `market_candles`
-- extend `trading_bots`: `origin`, `ai_profile_id`, `ai_candidate_id`, `evaluation_timeframe`, `allocation_usd`, `isolated_budget`.
-- reuse `bot_trades`, `bot_positions`, `bot_equity_snapshots`, `bot_signals`, `bot_backtest_runs`.
-
-## 16. Этапы
-
-**Phase 0** — спецификация, ADR, схема, wireframes.
-**Phase 1** — Control Center shell, profile/settings, AI universe, service configs.
-**Phase 2** — Data Service, `market_candles`, coverage UI.
-**Phase 3** — Analyst + Backtest + Lab UI.
-**Phase 4** — Orchestrator + Risk + worker creation + paper workers.
-**Phase 5** — approvals, reports, journal, monitoring.
-**Phase 6** — shadow tournament + reoptimization + auto-approve + multi-profile.
-**Phase 7** — hardening + real execution adapter (separate security project).
-
-## 17. MVP
-
-- 1 профиль;
-- 5 токенов в AI-списке;
-- `1h` + `1d`;
-- 3 стратегии;
-- Data/Analyst/Backtest/Risk;
-- 3–5 worker-ов;
-- auto-approve в paper (как решено), уведомления;
-- shadow 1–2 кандидата;
-- dashboard, pipeline, reports;
-- без полноценной еженедельной ре-оптимизации (ручной запуск).
-
-## 18. Безопасность
-
-- Сейчас только sandbox/paper: реальные данные и математика, виртуальные деньги, без кошельков и ключей.
-- Приватные ключи/seed-фразы на сервере запрещены правилом 1 проекта.
-- Будущий real-режим: отдельный кошелёк, внешний signer (HSM/KMS/ERC-4337 session key), API формирует intents, подпись — вне API; allowlist, лимиты, kill switch, TOTP, отдельный security review.
-- ИИ: недоверенный текст — данные; JSON schema; no tools; no code generation; cost caps; redaction.
-
-## 19. Открытые вопросы
-
-1. Нужен ли профилю отдельный «intraday» и «long-term» бюджет уже в MVP или позже?
-2. Подтвердить порядок `4h → 15m → 5m` (или изменить).
-3. Какие параметры сервисов точно должны быть в UI (data range, concurrency, model, thresholds)?
-4. Нужен ли отдельный экран «История решений ИИ» с полными промптами/ответами (с redaction)?
-5. Формат real-режима: внешний signer/AA — подтверждено, реализация отложена до Phase 7.
+- Только sandbox/paper: реальные данные, виртуальные деньги.
+- Нет кошельков, ключей, seed-фраз, подписи и реальных ордеров.
+- Владелец вручную создаёт и запускает робота.
+- Все действия — audit log.
+- Real-mode — только через внешний signer/HSM/AA, approvals и TOTP, отдельным проектом.

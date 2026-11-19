@@ -27,7 +27,7 @@ Nexter kept most operational values in code or env: quote intervals, liquidity f
 
 ### 3. Automation (superseded by ADR 0070)
 
-The global automation UI/rules described in this section were replaced by per-order protection and delayed buys in ADR 0070. The tables remain dormant; the global module is not registered.
+The global automation UI/rules described in this section were replaced by per-order protection and delayed buys in ADR 0070. The module was never registered; its code and `automation_*` tables are removed by ADR 0072 / migration `0050`.
 
 - Add `automation_rules`, `automation_rule_state` and `automation_runs` in migration `0047`; grants are SELECT/INSERT/UPDATE without DELETE.
 - Supported rules: `buy` (price below or drop from high), `stop_loss`, `take_profit`, `trailing_stop`.

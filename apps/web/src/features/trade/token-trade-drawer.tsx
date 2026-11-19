@@ -164,12 +164,10 @@ export function TokenTradeDrawer({
   const runtime = useRuntimeSettings();
   const [mode, setMode] = useState<Mode>(initialMode);
   const [channel, setChannel] = useState<'onchain' | 'manual'>('onchain');
-  const [stopLossPct, setStopLossPct] = useState(String(runtime.automationDefaultStopLossPct));
-  const [takeProfitPct, setTakeProfitPct] = useState(
-    String(runtime.automationDefaultTakeProfitPct),
-  );
+  const [stopLossPct, setStopLossPct] = useState(String(runtime.tradeDefaultStopLossPct));
+  const [takeProfitPct, setTakeProfitPct] = useState(String(runtime.tradeDefaultTakeProfitPct));
   const [delayed, setDelayed] = useState(false);
-  const [delayedAmountUsd, setDelayedAmountUsd] = useState(runtime.automationDefaultBuyAmountUsd);
+  const [delayedAmountUsd, setDelayedAmountUsd] = useState(runtime.tradeDefaultBuyAmountUsd);
   const [delayedTriggerPrice, setDelayedTriggerPrice] = useState('');
   const [delayedQuantity, setDelayedQuantity] = useState('');
   const [manualQuoteAmount, setManualQuoteAmount] = useState('');

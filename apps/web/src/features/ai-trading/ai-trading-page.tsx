@@ -1022,11 +1022,6 @@ function SettingsSection({ profile, onSaved }: { profile: AiProfile; onSaved: ()
     maxDrawdownPct: profile.maxDrawdownPct,
     maxAiSpendUsd: profile.maxAiSpendUsd,
     maxBacktestsPerDay: String(profile.maxBacktestsPerDay),
-    autoApproveWorkerCreate: profile.autoApproveWorkerCreate,
-    autoApproveParams: profile.autoApproveParams,
-    autoApproveBudget: profile.autoApproveBudget,
-    autoApprovePauseClose: profile.autoApprovePauseClose,
-    autoApproveReoptimize: profile.autoApproveReoptimize,
     weeklyReview: profile.schedule.weeklyReview,
     events: profile.schedule.events,
     model: profile.modelSettings.model,
@@ -1050,11 +1045,6 @@ function SettingsSection({ profile, onSaved }: { profile: AiProfile; onSaved: ()
         maxDrawdownPct: values.maxDrawdownPct,
         maxAiSpendUsd: values.maxAiSpendUsd,
         maxBacktestsPerDay: Number(values.maxBacktestsPerDay),
-        autoApproveWorkerCreate: values.autoApproveWorkerCreate,
-        autoApproveParams: values.autoApproveParams,
-        autoApproveBudget: values.autoApproveBudget,
-        autoApprovePauseClose: values.autoApprovePauseClose,
-        autoApproveReoptimize: values.autoApproveReoptimize,
         schedule: {
           weeklyReview: values.weeklyReview,
           weeklyDay: profile.schedule.weeklyDay,
@@ -1175,14 +1165,9 @@ function SettingsSection({ profile, onSaved }: { profile: AiProfile; onSaved: ()
       </Card>
 
       <Card>
-        <CardTitle>Автоматизация и ИИ</CardTitle>
+        <CardTitle>ИИ и расписание</CardTitle>
         <div className="mt-3 space-y-2">
           {[
-            ['autoApproveWorkerCreate', 'Автосоздание worker'],
-            ['autoApproveParams', 'Автоизменение параметров'],
-            ['autoApproveBudget', 'Автоперераспределение бюджета'],
-            ['autoApprovePauseClose', 'Авто-пауза/закрытие'],
-            ['autoApproveReoptimize', 'Авто-ре-оптимизация'],
             ['weeklyReview', 'Еженедельный обзор'],
             ['events', 'Событийная ре-оптимизация'],
           ].map(([key, label]) => (

@@ -6,10 +6,20 @@ The full implementation contract is [`docs/mega-prompt.md`](docs/mega-prompt.md)
 
 ## Current phase
 
+### AI direction (2026-11-19)
+
+The AI trading module is **recommendation-only**. The system may collect data, run analysis and mass searches, but it never creates, starts, stops or reallocates paper bots; the owner reviews a recommendation and creates/starts the bot manually. See ADR 0072 and the v0.2 plans.
+
+- Horizon: short swing 1–10 days. Primary timeframe `1h`, confirmation `4h`, regime `1d`; `15m` optional for entry timing; `5m` is out of scope.
+- Search: up to 5,000 parameter variants per run, purged walk-forward on 150 days (60 train / 2 purge / 10 OOS, 9 folds) plus a final 30-day holdout. Recommendations require OOS, fold stability and holdout; statistics are persisted and shown.
+- Removed/abandoned: global `automation_*` module/tables, AI auto-approval toggles, `ai_approvals`, and the autonomous worker-creation path. Migration `0050` drops these empty artifacts; the three per-order defaults remain under `tradeDefault*` API names.
+- UI direction: `Обзор`, `Рекомендации`, `Поиск`, `Мои ИИ-роботы`, `Данные`, `Настройки`. `Лаборатория` becomes `Поиск`; linked bots show invalidation health and stop/review recommendations without auto-stop.
+- Docs: ADR 0072, `docs/plans/ai-trading-2026-11.md` v0.2, `docs/plans/ai-trading-schema-contracts-2026-11.md` v0.2.
+
 ### Current state (2026-11-17)
 
 - Production topology: one `@nexter/api` Railway service + Postgres. The unused `@nexter/worker` was removed; background work runs in the API process under advisory locks/intervals.
-- Crypto is one sidebar link (`/portfolio`) with seven tabs: `Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Стратегии`, `Статистика`. `Обзор` combines summary cards, consolidated token blocks and the main token list; `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab. See ADR 0067.
+- Crypto is one sidebar link (`/portfolio`) with eight tabs: `Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика`. `Обзор` combines summary cards, consolidated token blocks and the main token list; `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab. See ADR 0067.
 - Audio limit: `settings.audio_max_mb` default 8, max 20, UI `Настройки → ИИ → Аудио`; `Nexter.Bot` remains a separate repo/service and accepts up to 20 MB.
 - Security: pending sessions 15m, TOTP replay protection (`users.last_totp_step`), `audit_log` append-only trigger, CSRF missing-origin rejection, 401 frontend redirect. See ADRs 0063/0064.
 - Latest production: UI-68 deployment `aa690f6d-f573-495e-b143-e3927bc4769a`, bundle `assets/index-CMVCnlfX.js`, migrations `0043`/`0044`, `/health` and `/ready` 200.
