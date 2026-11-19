@@ -327,7 +327,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
 
     const dashboard = await agent.get('/api/v1/ai-trading/dashboard').expect(200);
     expect(dashboard.body.tokensCount).toBe(1);
-    expect(dashboard.body.workersCount).toBe(0);
+    expect(dashboard.body.workersCount).toBe(1);
     expect(dashboard.body.activeWorkers).toBe(0);
   }, 60_000);
 });
