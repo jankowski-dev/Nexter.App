@@ -63,7 +63,7 @@ For a 180-day dataset:
   - purge/embargo 2 days;
   - OOS 10 days;
   - step 10 days;
-  - 9 folds.
+  - 8 folds.
 - Evaluate every parameter variant on every fold. Rank by aggregate OOS metrics and fold stability, not by one best in-sample run.
 - A recommendation is emitted only if the variant passes the OOS filters and the final 30-day holdout.
 - Parameter search budget: up to **5,000 variants per search**, configurable; searches are asynchronous with progress, ETA and cancellation.
@@ -114,5 +114,5 @@ The AI confidence is not treated as a probability of profit. The recommendation 
 - The owner is the bottleneck and must review recommendations; the UI must keep the number of active recommendations small and expire stale ones.
 - Mass search increases multiple-testing risk; the walk-forward, final holdout, stability filters and transparent statistics are mandatory, not optional.
 - Intraday/short-swing data requirements are higher: `1h` history must cover at least 180 days for search, with pagination where providers cap a single request.
-- Destructive migration `0050` drops empty abandoned tables/columns; a fresh encrypted backup is required before production deployment.
+- Destructive migration `0050` drops abandoned tables/columns verified empty on 2026-11-19 (automation_rules=0, automation_rule_state=0, automation_runs=0, ai_approvals=0, modified automation settings=0); pre-cleanup encrypted backup `nexter-2026-11-19-pre-ai-cleanup.dump.enc` SHA-256 `ed35dc9b283ff9714fac3dfca07a7c011fc79dd5c9d3fb5f57f153c44aac1a5a`; migration `0050` was applied successfully to a restored production copy.
 - Future real execution still requires an external signer/HSM/AA, approvals and step-up TOTP; it is not part of this ADR.

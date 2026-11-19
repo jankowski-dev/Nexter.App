@@ -90,7 +90,8 @@ const serviceDescriptions: Record<AiServiceKey, string> = {
   reporter: 'Ежедневные и еженедельные отчёты, здоровье сервисов.',
 };
 
-const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m', '5m'];
+// 5m remains supported for legacy data but is not offered for the short-swing AI universe.
+const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m'];
 
 function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
   for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services', 'ai-coverage', 'ai-lab']) {
@@ -176,7 +177,7 @@ export function AiTradingPage() {
           tone="sky"
         />
         <StatCard
-          title="Воркеры"
+          title="ИИ-роботы"
           value={`${dashboard.data.activeWorkers} / ${dashboard.data.workersCount}`}
           description="Активные / всего"
           icon="testing"
@@ -209,9 +210,9 @@ export function AiTradingPage() {
         <Card className="tone-surface tone-surface-sky">
           <CardTitle>Следующий этап</CardTitle>
           <CardDescription>
-            Настройки, AI-вселенная и сервисные конфигурации готовы. Пайплайн Data → Analyst →
-            Backtest → Risk → Workers будет подключён на следующем этапе. Сейчас профиль хранит
-            бюджет, лимиты и расписание, но торговые задачи ещё не запускает.
+            Настройки, AI-вселенная, данные и лаборатория готовы. Следующий этап — поиск и
+            рекомендации: Data → Analyst → Search/Backtest → Risk → Recommendation. Рекомендация
+            открывает draft-робота, но не запускает его: старт остаётся за тобой.
           </CardDescription>
         </Card>
       ) : null}
@@ -304,7 +305,7 @@ function UniverseSection({
       <CardTitle>AI-вселенная</CardTitle>
       <CardDescription>
         Отдельный список токенов для ИИ. Не связан с группой «Основная». До 5 токенов на одного
-        worker-а.
+        ИИ-бота.
       </CardDescription>
 
       <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto_auto]">
@@ -1085,7 +1086,7 @@ function SettingsSection({ profile, onSaved }: { profile: AiProfile; onSaved: ()
             />
           </label>
           <label className="text-xs text-zinc-600">
-            Max workers
+            Max ИИ-ботов
             <Input
               className="mt-1"
               type="number"
@@ -1094,7 +1095,7 @@ function SettingsSection({ profile, onSaved }: { profile: AiProfile; onSaved: ()
             />
           </label>
           <label className="text-xs text-zinc-600">
-            Max на worker, %
+            Max на ИИ-бота, %
             <Input
               className="mt-1"
               type="number"

@@ -4,7 +4,7 @@
 
 **Goal:** Replace the autonomous pipeline with an asynchronous mass-search engine that produces transparent short-swing recommendations; the owner creates and starts paper bots manually.
 
-**Architecture:** Data Service supplies 1h/4h/1d candles. `AiSearchService` generates up to 5,000 validated parameter variants, runs purged walk-forward on 150 days (60 train / 2 purge / 10 OOS, 9 folds) plus a 30-day holdout, aggregates statistics, and stores a search artifact plus top candidates. A recommendation is a candidate with TTL/invalidation metadata. The owner accepts it into a prefilled draft bot; nothing auto-starts.
+**Architecture:** Data Service supplies 1h/4h/1d candles. `AiSearchService` generates up to 5,000 validated parameter variants, runs purged walk-forward on 150 days (60 train / 2 purge / 10 OOS, 8 folds) plus a 30-day holdout, aggregates statistics, and stores a search artifact plus top candidates. A recommendation is a candidate with TTL/invalidation metadata. The owner accepts it into a prefilled draft bot; nothing auto-starts.
 
 **Tech Stack:** NestJS, Drizzle/Postgres, Zod, Vitest, React/TanStack Query.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Up to 5,000 variants per search; up to 20 searches/day.
-- Purged walk-forward: 60 train / 2 purge / 10 OOS, 9 folds on 150 days; final 30-day holdout untouched.
+- Purged walk-forward: 60 train / 2 purge / 10 OOS, 8 folds on 150 days; final 30-day holdout untouched.
 - Short swing 1–10 days; 1h primary, 4h confirmation, 1d regime, 15m optional; no 5m MVP.
 - Recommendation-only; no automatic bot create/start/stop.
 - All money values decimal strings / Postgres numeric.
