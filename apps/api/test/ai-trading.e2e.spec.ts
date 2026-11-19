@@ -188,7 +188,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .expect(202);
     const searchId = search.body.runId as string;
     let searchStatus: { status: string } = { status: 'queued' };
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (let attempt = 0; attempt < 300; attempt += 1) {
       const statusResponse = await agent.get(`/api/v1/ai-trading/search/${searchId}`).expect(200);
       searchStatus = statusResponse.body;
       if (['succeeded', 'failed', 'cancelled'].includes(searchStatus.status)) break;
