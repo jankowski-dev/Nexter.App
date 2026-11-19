@@ -138,6 +138,11 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(refreshed.body.failed).toHaveLength(1);
 
     const assetId = based?.id as string;
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId })
+      .expect(201);
     const now = Date.now();
     await db.insert(marketCandles).values(
       Array.from({ length: 120 }, (_, index) => {
