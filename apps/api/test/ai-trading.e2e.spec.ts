@@ -253,6 +253,15 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .where(eq(aiCandidates.id, recommendationId));
     expect(accepted?.status).toBe('accepted');
 
+    const afterAccept = await agent
+      .get(`/api/v1/ai-trading/search/${searchId}/results`)
+      .expect(200);
+    const acceptedCandidate = (afterAccept.body.candidates as Array<Record<string, unknown>>).find(
+      (item) => item.id === recommendationId,
+    );
+    expect(acceptedCandidate?.status).toBe('accepted');
+    expect(acceptedCandidate?.linkedBotId).toBe(draft.body.bot.id);
+
     await agent
       .post('/api/v1/trading-bots/bots')
       .set('x-csrf-token', owner.csrf)

@@ -305,7 +305,11 @@ export class TradingBotsService {
         if (candidate) {
           await tx
             .update(aiCandidates)
-            .set({ status: 'accepted', updatedAt: new Date() })
+            .set({
+              status: 'accepted',
+              metrics: { ...candidate.metrics, botId: created.id },
+              updatedAt: new Date(),
+            })
             .where(eq(aiCandidates.id, candidate.id));
         }
 

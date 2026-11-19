@@ -545,6 +545,7 @@ export class AiSearchService {
     return {
       id: row.id,
       status: row.status === 'accepted' || row.status === 'rejected' ? row.status : 'recommended',
+      linkedBotId: typeof metrics.botId === 'string' ? metrics.botId : null,
       strategyKey: row.strategyKey,
       strategyName: strategyByKey.get(row.strategyKey)?.name ?? row.strategyKey,
       params: row.params,
