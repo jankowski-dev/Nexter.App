@@ -31,7 +31,7 @@ There is no `Mainbot` table or bot process. The module consists of:
 - a deterministic **Orchestrator** service that owns the job graph and policy;
 - **Services** (Data, Analyst, Backtest, Risk, Reporter) implemented as idempotent job handlers;
 - **WorkerBots**, reusing the existing paper bot engine;
-- **Approvals** and a decision journal.
+- **Recommendations** and a decision journal (the approvals model was superseded by ADR 0072).
 
 ### 2. Services are jobs, not autonomous bots
 
@@ -53,7 +53,7 @@ The AI does not:
 
 The policy engine combines deterministic scoring, backtest metrics and the AI assessment. Every AI call stores prompt version, model, usage, cost and response.
 
-### 4. Worker model
+### 4. Worker model (manual only after ADR 0072)
 
 One worker = one strategy + up to five tokens + one evaluation timeframe. It reuses `trading_bots` and the `bot_*` tables, extended with `origin='ai'`, `ai_profile_id`, `ai_candidate_id`, `evaluation_timeframe`, `allocation_usd` and `isolated_budget`.
 
@@ -71,13 +71,13 @@ The module runs with real market data and realistic fees/slippage, but virtual m
 
 The profile has a shared virtual pool. Worker allocations are reservations; an optional isolated budget can be enabled per worker. Risk Service prevents double-spending and enforces exposure, daily loss, drawdown, stale data and correlation limits.
 
-### 7. Approvals and automation
+### 7. Approvals and automation (superseded by ADR 0072; removed by migration 0050)
 
 In paper mode all actions can auto-run, controlled by explicit toggles. Every automatic action produces a notification and an audit record. Risk stops (pause/close on breach) may run automatically.
 
 In the future real mode, every order and every worker/budget change requires owner approval and step-up TOTP. No real execution is implemented in this ADR.
 
-### 8. Re-optimization
+### 8. Re-optimization (superseded; now recommendation/monitor driven)
 
 Re-optimization is weekly plus event-driven, with a seven-day cooldown per token. Events include drawdown breach, underperformance versus buy-and-hold, profit factor degradation, regime change, new token and data-quality failure.
 
@@ -120,8 +120,8 @@ The API will only create execution intents. A separate signer (HSM/KMS, dedicate
 2. Control Center shell, profile, AI universe, service configs.
 3. `market_candles` and Data Service.
 4. Analyst and Backtest services plus the lab UI.
-5. Orchestrator, Risk Service and worker creation.
-6. Approvals, reports, journal and monitoring.
+5. Risk Service and manual bot creation from recommendations.
+6. Reports, invalidation monitoring and journal.
 7. Shadow tournament, re-optimization and multi-profile.
 8. Hardening and, separately, real-execution readiness with an external signer.
 
