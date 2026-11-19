@@ -3,6 +3,7 @@ import {
   approvalBuildResponseSchema,
   assetsResponseSchema,
   auditLogResponseSchema,
+  aiBotHealthResponseSchema,
   aiCoverageSchema,
   aiDataRefreshResponseSchema,
   aiLabAnalysisSchema,
@@ -118,6 +119,7 @@ import {
   type AiProfileUpdateRequest,
   type AiServiceConfig,
   type AiServiceConfigUpdateRequest,
+  type AiBotHealthResponse,
   type AiTradingDashboard,
   type AuditLogResponse,
   type BotBacktestClearResponse,
@@ -1347,4 +1349,8 @@ export async function fetchAiSearchResults(runId: string): Promise<AiSearchResul
 
 export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
   return apiPost(`/api/v1/ai-trading/search/${runId}/cancel`, {}, aiSearchStatusSchema);
+}
+
+export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
+  return apiFetch('/api/v1/ai-trading/bots/health', {}, aiBotHealthResponseSchema);
 }

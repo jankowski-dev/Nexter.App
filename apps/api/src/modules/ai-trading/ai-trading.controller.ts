@@ -32,6 +32,7 @@ import {
   type AiLabBacktestRequest,
   type AiLabBacktestResponse,
   type AiLabLatest,
+  type AiBotHealthResponse,
   type AiLabQuery,
   type AiSearchRequest,
   type AiSearchResults,
@@ -49,6 +50,7 @@ import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { AiDataService } from './ai-data.service';
+import { AiHealthService } from './ai-health.service';
 import { AiLabService } from './ai-lab.service';
 import { AiSearchService } from './ai-search.service';
 import { AiTradingService } from './ai-trading.service';
@@ -61,6 +63,7 @@ export class AiTradingController {
     private readonly aiData: AiDataService,
     private readonly aiLab: AiLabService,
     private readonly aiSearch: AiSearchService,
+    private readonly aiHealth: AiHealthService,
   ) {}
 
   @Get('profile')
@@ -187,6 +190,11 @@ export class AiTradingController {
     @Param('runId', new ParseUUIDPipe()) runId: string,
   ): Promise<AiSearchStatus> {
     return this.aiSearch.cancel(auth.user.id, runId);
+  }
+
+  @Get('bots/health')
+  botHealth(@CurrentAuth() auth: AuthContext): Promise<AiBotHealthResponse> {
+    return this.aiHealth.list(auth.user.id);
   }
 
   @Get('dashboard')
