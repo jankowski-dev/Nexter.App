@@ -250,4 +250,4 @@ Owner-only; CSRF and audit. The module is recommendation-only: it does not creat
 | POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                          |
 | POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                 |
 
-Phase 4 adds asynchronous `POST /ai-trading/search`, `GET /search/:runId` (progress/stats), `GET /search/:runId/results`, `POST /search/:runId/cancel`, `GET /recommendations`, and accept/reject actions that open a prefilled draft bot. No approvals endpoints.
+Mass search is implemented: asynchronous `POST /ai-trading/search`, `GET /search/:runId` (progress/stats), `GET /search/:runId/results` and `POST /search/:runId/cancel`. The next phase adds `GET /recommendations` and accept/reject actions that open a prefilled draft bot. No approvals endpoints.
