@@ -29,22 +29,19 @@
 
 ## 3. Ledger
 
-| Таблица                 | Назначение                   | Связи                                                                                                                             |
-| ----------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `transactions`          | Заголовок операции           | userId, type, subtype, source, importId, tradeGroupId, occurredAt, feesUsd, notes                                                 |
-| `postings`              | Проводки по счетам/активам   | transactionId, accountId, assetId, amount, usdValue                                                                               |
-| `trade_groups`          | Торговая группа/позиция      | userId, assetId, status, openedAt, closedAt                                                                                       |
-| `trade_details`         | Детали сделки                | tradeGroupId, transactionId, referencePriceUsd, executionCostUsd                                                                  |
-| `lots`                  | FIFO-лоты                    | userId, assetId, tradeGroupId, acquisitionTransactionId, amount, remainingAmount, costBasisUsd, remainingCostBasisUsd, acquiredAt |
-| `lot_consumptions`      | FIFO-списания                | lotId, disposalTransactionId, amount, costBasisUsd, proceedsUsd, realizedPnlUsd                                                   |
-| `prices`                | Ручные/импортированные цены  | assetId, priceUsd, observedAt, source                                                                                             |
-| `market_quotes`         | Последняя рыночная котировка | assetId PK, priceUsd, change24hPct, change7d/30d/1yPct, marketCapUsd, source, liquidityUsd, fetchedAt, changedAt                  |
-| `pending_orders`        | Отложенные покупки           | assetId, amountUsd, triggerPriceUsd, stopLossPct, takeProfitPct, status, lastNotifiedAt                                           |
-| `automation_rules`      | Правила автоматизации        | userId, name, kind, assetId, tradeGroupId, status, executionMode, params jsonb, maxOrderUsd, cooldownMinutes, triggerCount        |
-| `automation_rule_state` | Состояние правила            | ruleId PK, highWaterUsd, lastActionAt, metadata jsonb                                                                             |
-| `automation_runs`       | Журнал срабатываний          | ruleId, userId, status, triggerKey, reason, triggerPriceUsd, amount, usdValue, tradeGroupId                                       |
-| `market_history`        | Кэш дневной истории графиков | cacheKey PK (`chain:contract:coingeckoId`), source, points jsonb (до 365 дней, 18 знаков), fetchedAt, nextAttemptAt, failures     |
-| `portfolio_snapshots`   | Дневной снимок капитала      | userId, snapshotDate, cashUsd, positionsValueUsd, equityUsd                                                                       |
+| Таблица               | Назначение                   | Связи                                                                                                                             |
+| --------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `transactions`        | Заголовок операции           | userId, type, subtype, source, importId, tradeGroupId, occurredAt, feesUsd, notes                                                 |
+| `postings`            | Проводки по счетам/активам   | transactionId, accountId, assetId, amount, usdValue                                                                               |
+| `trade_groups`        | Торговая группа/позиция      | userId, assetId, status, openedAt, closedAt                                                                                       |
+| `trade_details`       | Детали сделки                | tradeGroupId, transactionId, referencePriceUsd, executionCostUsd                                                                  |
+| `lots`                | FIFO-лоты                    | userId, assetId, tradeGroupId, acquisitionTransactionId, amount, remainingAmount, costBasisUsd, remainingCostBasisUsd, acquiredAt |
+| `lot_consumptions`    | FIFO-списания                | lotId, disposalTransactionId, amount, costBasisUsd, proceedsUsd, realizedPnlUsd                                                   |
+| `prices`              | Ручные/импортированные цены  | assetId, priceUsd, observedAt, source                                                                                             |
+| `market_quotes`       | Последняя рыночная котировка | assetId PK, priceUsd, change24hPct, change7d/30d/1yPct, marketCapUsd, source, liquidityUsd, fetchedAt, changedAt                  |
+| `pending_orders`      | Отложенные покупки           | assetId, amountUsd, triggerPriceUsd, stopLossPct, takeProfitPct, status, lastNotifiedAt                                           |
+| `market_history`      | Кэш дневной истории графиков | cacheKey PK (`chain:contract:coingeckoId`), source, points jsonb (до 365 дней, 18 знаков), fetchedAt, nextAttemptAt, failures     |
+| `portfolio_snapshots` | Дневной снимок капитала      | userId, snapshotDate, cashUsd, positionsValueUsd, equityUsd                                                                       |
 
 `transactions` + `postings` — append-only. `lots`/`lot_consumptions` — производные FIFO-структуры. Удаление старых транзакций запрещено; исправления — новые операции.
 

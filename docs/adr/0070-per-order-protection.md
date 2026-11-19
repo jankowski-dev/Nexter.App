@@ -29,7 +29,7 @@ The previous UI-72 implementation exposed stop-loss, take-profit and delayed buy
 - There is still no server-side signer: notifications are proposals; the owner confirms the actual buy/close in the existing flows.
 - Existing trade groups have null protection until the owner sets it. Existing pending orders table is new.
 - The migration is additive. `nexter_app` gets SELECT/INSERT/UPDATE and no DELETE on `pending_orders`. A pre-migration backup is required.
-- The old global automation tables are not dropped; removing them is a separate destructive cleanup after a retention decision.
+- The old global automation tables are now dropped by ADR 0072 / migration `0050`; per-order protection and delayed buys remain.
 
 ## UI-74 addendum (2026-11-18)
 

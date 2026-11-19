@@ -351,6 +351,13 @@
       "when": 1795017726532,
       "tag": "0049_striped_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1795107738673,
+      "tag": "0050_absurd_mephisto",
+      "breakpoints": true
     }
   ]
 }

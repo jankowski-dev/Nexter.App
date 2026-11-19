@@ -18,7 +18,6 @@ export const chartDefaultDaysSchema = z.union([
 ]);
 
 export const reportPeriodDefaultSchema = z.enum(['30d', '90d', '365d', 'ytd', 'all']);
-export const automationModeSchema = z.enum(['dry_run', 'proposal']);
 export const taskDefaultDueTimeSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected HH:MM');
@@ -70,17 +69,9 @@ export const settingsInputSchema = z.object({
   notifyBotStopped: z.boolean(),
   notifyPositionsClosed: z.boolean(),
 
-  automationEnabled: z.boolean(),
-  automationMode: automationModeSchema,
-  automationMaxOrderUsd: usdString,
-  automationMaxDailyUsd: usdString,
-  automationMaxActionsPerDay: intRange(1, 100),
-  automationCooldownMinutes: intRange(5, 1440),
-  automationDefaultStopLossPct: intRange(1, 90),
-  automationDefaultTakeProfitPct: intRange(1, 1000),
-  automationDefaultTrailingPct: intRange(1, 90),
-  automationDefaultBuyDropPct: intRange(1, 90),
-  automationDefaultBuyAmountUsd: usdString,
+  tradeDefaultStopLossPct: intRange(1, 90),
+  tradeDefaultTakeProfitPct: intRange(1, 1000),
+  tradeDefaultBuyAmountUsd: usdString,
 });
 
 export const settingsSchema = settingsInputSchema.extend({
@@ -136,17 +127,9 @@ export const settingsInputDefaults = {
   notificationsPollSeconds: 30,
   notifyBotStopped: true,
   notifyPositionsClosed: true,
-  automationEnabled: false,
-  automationMode: 'dry_run' as const,
-  automationMaxOrderUsd: '250.00',
-  automationMaxDailyUsd: '500.00',
-  automationMaxActionsPerDay: 5,
-  automationCooldownMinutes: 60,
-  automationDefaultStopLossPct: 10,
-  automationDefaultTakeProfitPct: 20,
-  automationDefaultTrailingPct: 8,
-  automationDefaultBuyDropPct: 10,
-  automationDefaultBuyAmountUsd: '100.00',
+  tradeDefaultStopLossPct: 10,
+  tradeDefaultTakeProfitPct: 20,
+  tradeDefaultBuyAmountUsd: '100.00',
 } as const;
 
 export type SettingsInput = z.infer<typeof settingsInputSchema>;
@@ -154,4 +137,3 @@ export type Settings = z.infer<typeof settingsSchema>;
 export type UpdateSettingsRequest = z.infer<typeof updateSettingsRequestSchema>;
 export type ChartDefaultDays = z.infer<typeof chartDefaultDaysSchema>;
 export type ReportPeriodDefault = z.infer<typeof reportPeriodDefaultSchema>;
-export type AutomationMode = z.infer<typeof automationModeSchema>;

@@ -21,18 +21,14 @@ type UsdKey =
   | 'swapMaxGasUsd'
   | 'botDefaultBudgetUsd'
   | 'backtestDefaultCapitalUsd'
-  | 'automationMaxOrderUsd'
-  | 'automationMaxDailyUsd'
-  | 'automationDefaultBuyAmountUsd';
+  | 'tradeDefaultBuyAmountUsd';
 
 export interface RuntimeSettings extends Omit<SettingsInput, UsdKey> {
   marketMinLiquidityUsd: number;
   swapMaxGasUsd: number;
   botDefaultBudgetUsd: number;
   backtestDefaultCapitalUsd: number;
-  automationMaxOrderUsd: number;
-  automationMaxDailyUsd: number;
-  automationDefaultBuyAmountUsd: number;
+  tradeDefaultBuyAmountUsd: number;
 }
 
 @Injectable()
@@ -205,17 +201,9 @@ export class SettingsService {
       notificationsPollSeconds: row.notificationsPollSeconds,
       notifyBotStopped: row.notifyBotStopped,
       notifyPositionsClosed: row.notifyPositionsClosed,
-      automationEnabled: row.automationEnabled,
-      automationMode: row.automationMode as Settings['automationMode'],
-      automationMaxOrderUsd: row.automationMaxOrderUsd,
-      automationMaxDailyUsd: row.automationMaxDailyUsd,
-      automationMaxActionsPerDay: row.automationMaxActionsPerDay,
-      automationCooldownMinutes: row.automationCooldownMinutes,
-      automationDefaultStopLossPct: row.automationDefaultStopLossPct,
-      automationDefaultTakeProfitPct: row.automationDefaultTakeProfitPct,
-      automationDefaultTrailingPct: row.automationDefaultTrailingPct,
-      automationDefaultBuyDropPct: row.automationDefaultBuyDropPct,
-      automationDefaultBuyAmountUsd: row.automationDefaultBuyAmountUsd,
+      tradeDefaultStopLossPct: row.tradeDefaultStopLossPct,
+      tradeDefaultTakeProfitPct: row.tradeDefaultTakeProfitPct,
+      tradeDefaultBuyAmountUsd: row.tradeDefaultBuyAmountUsd,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
@@ -266,17 +254,9 @@ export class SettingsService {
       notificationsPollSeconds: get('notificationsPollSeconds'),
       notifyBotStopped: get('notifyBotStopped'),
       notifyPositionsClosed: get('notifyPositionsClosed'),
-      automationEnabled: get('automationEnabled'),
-      automationMode: get('automationMode'),
-      automationMaxOrderUsd: Number(get('automationMaxOrderUsd')),
-      automationMaxDailyUsd: Number(get('automationMaxDailyUsd')),
-      automationMaxActionsPerDay: get('automationMaxActionsPerDay'),
-      automationCooldownMinutes: get('automationCooldownMinutes'),
-      automationDefaultStopLossPct: get('automationDefaultStopLossPct'),
-      automationDefaultTakeProfitPct: get('automationDefaultTakeProfitPct'),
-      automationDefaultTrailingPct: get('automationDefaultTrailingPct'),
-      automationDefaultBuyDropPct: get('automationDefaultBuyDropPct'),
-      automationDefaultBuyAmountUsd: Number(get('automationDefaultBuyAmountUsd')),
+      tradeDefaultStopLossPct: get('tradeDefaultStopLossPct'),
+      tradeDefaultTakeProfitPct: get('tradeDefaultTakeProfitPct'),
+      tradeDefaultBuyAmountUsd: Number(get('tradeDefaultBuyAmountUsd')),
     };
   }
 }

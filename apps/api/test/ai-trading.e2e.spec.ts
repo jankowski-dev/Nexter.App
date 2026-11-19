@@ -79,16 +79,14 @@ describe.runIf(canRun)('AI trading control center API', () => {
     const profile = await agent.get('/api/v1/ai-trading/profile').expect(200);
     expect(Number(profile.body.budgetUsd)).toBe(10000);
     expect(profile.body.workerMaxTokens).toBe(5);
-    expect(profile.body.autoApproveWorkerCreate).toBe(true);
 
     const updated = await agent
       .put('/api/v1/ai-trading/profile')
       .set('x-csrf-token', owner.csrf)
-      .send({ budgetUsd: '25000', maxWorkers: 8, autoApproveWorkerCreate: false })
+      .send({ budgetUsd: '25000', maxWorkers: 8 })
       .expect(200);
     expect(Number(updated.body.budgetUsd)).toBe(25000);
     expect(updated.body.maxWorkers).toBe(8);
-    expect(updated.body.autoApproveWorkerCreate).toBe(false);
 
     const assets = await agent.get('/api/v1/assets').expect(200);
     const based = (assets.body.assets as Array<{ id: string; symbol: string }>).find(

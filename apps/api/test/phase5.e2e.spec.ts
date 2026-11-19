@@ -559,6 +559,24 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
       taxMethod: 'FIFO',
       includeGasInCostBasis: true,
       timezone: 'Europe/Minsk',
+      tradeDefaultStopLossPct: 10,
+      tradeDefaultTakeProfitPct: 20,
+      tradeDefaultBuyAmountUsd: '100.00',
+    });
+
+    const updatedTradeDefaults = await agent
+      .patch('/api/v1/settings')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        tradeDefaultStopLossPct: 12,
+        tradeDefaultTakeProfitPct: 25,
+        tradeDefaultBuyAmountUsd: '150.00',
+      })
+      .expect(200);
+    expect(updatedTradeDefaults.body).toMatchObject({
+      tradeDefaultStopLossPct: 12,
+      tradeDefaultTakeProfitPct: 25,
+      tradeDefaultBuyAmountUsd: '150.00',
     });
 
     const updatedSettings = await agent
