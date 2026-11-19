@@ -157,6 +157,51 @@ describe.runIf(canRun)('AI trading control center API', () => {
       }),
     );
 
+    const hourly = Array.from({ length: 4320 }, (_, index) => {
+      const close = 1 + index * 0.0001;
+      return {
+        assetId,
+        timeframe: '1h',
+        openTime: new Date(now - (4319 - index) * 3_600_000),
+        open: String(close - 0.00005),
+        high: String(close + 0.0001),
+        low: String(close - 0.0001),
+        close: String(close),
+        volumeUsd: '1000',
+        source: 'test',
+        quality: 'ok',
+      };
+    });
+    for (let index = 0; index < hourly.length; index += 1000) {
+      await db.insert(marketCandles).values(hourly.slice(index, index + 1000));
+    }
+    await agent
+      .patch(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ timeframes: ['1h', '1d'] })
+      .expect(200);
+
+    const search = await agent
+      .post('/api/v1/ai-trading/search')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframe: '1h', horizonDays: 5, variants: 100, seed: 1 })
+      .expect(202);
+    const searchId = search.body.runId as string;
+    let searchStatus: { status: string } = { status: 'queued' };
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const statusResponse = await agent.get(`/api/v1/ai-trading/search/${searchId}`).expect(200);
+      searchStatus = statusResponse.body;
+      if (['succeeded', 'failed', 'cancelled'].includes(searchStatus.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(searchStatus.status).toBe('succeeded');
+    const searchResults = await agent
+      .get(`/api/v1/ai-trading/search/${searchId}/results`)
+      .expect(200);
+    expect(searchResults.body.stats.total).toBeGreaterThan(0);
+    expect(searchResults.body.stats.evaluated).toBe(searchResults.body.stats.total);
+    expect(Array.isArray(searchResults.body.candidates)).toBe(true);
+
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')
       .set('x-csrf-token', owner.csrf)

@@ -267,6 +267,73 @@ export const aiLabBacktestResponseSchema = z.object({
   reasons: z.array(z.string()),
 });
 
+export const aiSearchTimeframes = ['1h', '4h'] as const;
+export const aiSearchTimeframeSchema = z.enum(aiSearchTimeframes);
+
+export const aiSearchRequestSchema = z.object({
+  assetId: z.uuid(),
+  timeframe: aiSearchTimeframeSchema.default('1h'),
+  horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
+  variants: z.number().int().min(100).max(5000).default(5000),
+  seed: z.number().int().min(0).max(2_147_483_647).optional(),
+});
+
+export const aiSearchStartResponseSchema = z.object({ runId: z.uuid() });
+
+export const aiSearchStatsSchema = z.object({
+  total: z.number().int(),
+  evaluated: z.number().int(),
+  valid: z.number().int(),
+  recommended: z.number().int(),
+  bestReturnPct: z.string(),
+  averageReturnPct: z.string(),
+  medianReturnPct: z.string(),
+  worstReturnPct: z.string(),
+  profitablePct: z.string(),
+  averageDrawdownPct: z.string(),
+  bestOosReturnPct: z.string(),
+  medianOosReturnPct: z.string(),
+  worstOosReturnPct: z.string(),
+  stabilityPct: z.string(),
+  holdoutReturnPct: z.string().nullable(),
+});
+
+export const aiSearchCandidateSchema = z.object({
+  id: z.uuid(),
+  strategyKey: z.string(),
+  strategyName: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  oosMedianReturnPct: z.string(),
+  oosMeanReturnPct: z.string(),
+  oosWorstReturnPct: z.string(),
+  maxDrawdownPct: z.string(),
+  trades: z.number().int(),
+  positiveFolds: z.number().int(),
+  stabilityPct: z.string(),
+  holdoutReturnPct: z.string().nullable(),
+  policyScore: z.string(),
+});
+
+export const aiSearchStatusSchema = z.object({
+  runId: z.uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  evaluated: z.number().int(),
+  total: z.number().int(),
+  percent: z.number(),
+  stats: aiSearchStatsSchema.nullable(),
+  error: z.string().nullable(),
+  startedAt: z.iso.datetime().nullable(),
+  finishedAt: z.iso.datetime().nullable(),
+});
+
+export const aiSearchResultsSchema = z.object({
+  runId: z.uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  stats: aiSearchStatsSchema,
+  candidates: z.array(aiSearchCandidateSchema),
+  rejectionReasons: z.record(z.string(), z.number().int()),
+});
+
 export const aiTradingDashboardSchema = z.object({
   profile: aiProfileSchema,
   tokensCount: z.number().int(),
@@ -307,4 +374,12 @@ export type AiLabAnalyzeRequest = z.infer<typeof aiLabAnalyzeRequestSchema>;
 export type AiLabQuery = z.infer<typeof aiLabQuerySchema>;
 export type AiLabBacktestRequest = z.infer<typeof aiLabBacktestRequestSchema>;
 export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
+export type AiSearchTimeframe = z.infer<typeof aiSearchTimeframeSchema>;
+export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
+export type AiSearchStartResponse = z.infer<typeof aiSearchStartResponseSchema>;
+export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
+export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
+export type AiSearchStatus = z.infer<typeof aiSearchStatusSchema>;
+export type AiSearchResults = z.infer<typeof aiSearchResultsSchema>;
+
 export type AiTradingDashboard = z.infer<typeof aiTradingDashboardSchema>;
