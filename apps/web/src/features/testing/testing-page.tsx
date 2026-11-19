@@ -622,6 +622,11 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                                 : 'Остановлен'}
                           </Badge>
                           <Badge tone="info">{bot.strategy.name}</Badge>
+                          {bot.origin === 'ai' ? (
+                            <Badge tone="warning">
+                              ИИ{bot.evaluationTimeframe ? ` · ${bot.evaluationTimeframe}` : ''}
+                            </Badge>
+                          ) : null}
                         </div>
                         <div className="mt-1 text-xs text-zinc-500">
                           {bot.description || 'Без описания'} · бюджет {formatUsd(bot.budgetUsd)}

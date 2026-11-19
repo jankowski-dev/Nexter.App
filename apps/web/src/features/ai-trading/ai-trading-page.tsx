@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { TabGroup } from '@/components/ui/list-toolbar';
 import { Select } from '@/components/ui/select';
@@ -12,6 +13,7 @@ import {
   analyzeAiToken,
   backtestAiCandidate,
   cancelAiSearch,
+  createTradingBot,
   fetchAiSearchResults,
   fetchAiSearchStatus,
   startAiSearch,
@@ -46,6 +48,7 @@ import type {
   AiServiceConfig,
   AiServiceKey,
   AiTimeframe,
+  BotCreateRequest,
   WatchlistEntry,
 } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -802,6 +805,11 @@ function SearchSection({
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dataNotice, setDataNotice] = useState<string | null>(null);
+  const [acceptCandidate, setAcceptCandidate] = useState<AiSearchCandidate | null>(null);
+  const [acceptName, setAcceptName] = useState('');
+  const [acceptBudget, setAcceptBudget] = useState('1000');
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [createdBot, setCreatedBot] = useState<{ id: string; name: string } | null>(null);
   const timeframeCoverage = coverage?.tokens
     .find((token) => token.assetId === assetId)
     ?.timeframes.find((item) => item.timeframe === timeframe);
@@ -859,6 +867,34 @@ function SearchSection({
       onChanged();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось загрузить 180 дней')),
+  });
+
+  const accept = useMutation({
+    mutationFn: () => {
+      if (!acceptCandidate) throw new Error('No candidate selected');
+      return createTradingBot({
+        name: acceptName.trim(),
+        description: `Рекомендация ИИ: ${acceptCandidate.strategyName}, OOS ${acceptCandidate.oosMedianReturnPct}%, стабильность ${acceptCandidate.stabilityPct}%.`,
+        strategyKey: acceptCandidate.strategyKey as BotCreateRequest['strategyKey'],
+        strategyParams: acceptCandidate.params,
+        tokenAssetIds: [assetId],
+        budgetUsd: acceptBudget,
+        maxPositions: 5,
+        positionSizePct: 20,
+        feeBps: 25,
+        slippageBps: 10,
+        maxDailyLossPct: 10,
+        cooldownMinutes: 15,
+        aiCandidateId: acceptCandidate.id,
+      });
+    },
+    onSuccess: (result) => {
+      setCreatedBot({ id: result.bot.id, name: result.bot.name });
+      setAcceptCandidate(null);
+      setAcceptError(null);
+      onChanged();
+    },
+    onError: (err) => setAcceptError(toRussianError(err, 'Не удалось создать черновик')),
   });
 
   if (searchable.length === 0) {
@@ -1034,12 +1070,22 @@ function SearchSection({
         </Card>
       ) : null}
 
+      {createdBot ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">
+          Черновик «{createdBot.name}» создан и не запущен.{' '}
+          <a className="underline" href="/portfolio#robots">
+            Открыть роботов
+          </a>{' '}
+          и запустить вручную.
+        </div>
+      ) : null}
+
       {currentResults ? (
         <Card>
           <CardTitle>Кандидаты</CardTitle>
           <CardDescription>
-            Показаны варианты, прошедшие OOS, стабильность и финальный holdout. Создание робота из
-            рекомендации — следующий этап; сейчас параметры можно использовать вручную.
+            Показаны варианты, прошедшие OOS, стабильность и финальный holdout. Создайте черновик
+            робота и запустите его вручную в разделе «Роботы».
           </CardDescription>
           {currentResults.candidates.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-500">
@@ -1049,7 +1095,16 @@ function SearchSection({
           ) : (
             <div className="mt-3 space-y-2">
               {currentResults.candidates.map((candidate) => (
-                <SearchCandidateCard key={candidate.id} candidate={candidate} />
+                <SearchCandidateCard
+                  key={candidate.id}
+                  candidate={candidate}
+                  onAccept={(item) => {
+                    setAcceptCandidate(item);
+                    setAcceptName(`${selected?.asset.symbol ?? 'AI'} · ${item.strategyName}`);
+                    setAcceptBudget('1000');
+                    setAcceptError(null);
+                  }}
+                />
               ))}
             </div>
           )}
@@ -1069,11 +1124,85 @@ function SearchSection({
           ) : null}
         </Card>
       ) : null}
+
+      <Drawer
+        open={Boolean(acceptCandidate)}
+        onClose={() => {
+          if (!accept.isPending) setAcceptCandidate(null);
+        }}
+        title="Создать черновик робота"
+        description="Рекомендация предзаполнит стратегию, параметры и токен. Робот останется черновиком, пока вы не запустите его вручную."
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              disabled={accept.isPending}
+              onClick={() => setAcceptCandidate(null)}
+            >
+              Отмена
+            </Button>
+            <Button
+              disabled={accept.isPending || acceptName.trim().length === 0}
+              onClick={() => accept.mutate()}
+            >
+              {accept.isPending ? 'Создаю…' : 'Создать черновик'}
+            </Button>
+          </div>
+        }
+      >
+        {acceptCandidate ? (
+          <div className="space-y-3">
+            <label className="block text-xs text-zinc-600">
+              Название
+              <Input
+                className="mt-1"
+                value={acceptName}
+                maxLength={120}
+                onChange={(event) => setAcceptName(event.target.value)}
+              />
+            </label>
+            <label className="block text-xs text-zinc-600">
+              Бюджет, USD
+              <Input
+                className="mt-1"
+                inputMode="decimal"
+                value={acceptBudget}
+                onChange={(event) => setAcceptBudget(event.target.value)}
+              />
+            </label>
+            <div className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+              <div>
+                Стратегия: <span className="text-zinc-900">{acceptCandidate.strategyName}</span>
+              </div>
+              <div>Токен: {selected?.asset.symbol ?? '—'}</div>
+              <div>Таймфрейм: {timeframe}</div>
+              <div>
+                OOS: {formatPct(acceptCandidate.oosMedianReturnPct)} · DD{' '}
+                {percentMagnitude(acceptCandidate.maxDrawdownPct)} · Holdout{' '}
+                {acceptCandidate.holdoutReturnPct === null
+                  ? '—'
+                  : formatPct(acceptCandidate.holdoutReturnPct)}
+              </div>
+            </div>
+            <p className="text-xs text-zinc-500">
+              Минимальный бюджет — 100 USD. После создания робот появится в разделе «Роботы» в
+              статусе «Черновик».
+            </p>
+            {acceptError ? <p className="text-sm text-red-700">{acceptError}</p> : null}
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 }
 
-function SearchCandidateCard({ candidate }: { candidate: AiSearchCandidate }) {
+function SearchCandidateCard({
+  candidate,
+  onAccept,
+}: {
+  candidate: AiSearchCandidate;
+  onAccept: (candidate: AiSearchCandidate) => void;
+}) {
   return (
     <div className="rounded-xl border border-zinc-200 px-3 py-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1102,6 +1231,19 @@ function SearchCandidateCard({ candidate }: { candidate: AiSearchCandidate }) {
             {key}: {String(value)}
           </span>
         ))}
+      </div>
+      <div className="mt-2 flex justify-end">
+        {candidate.status === 'accepted' ? (
+          <Badge tone="info">Черновик создан</Badge>
+        ) : (
+          <Button
+            variant="secondary"
+            className="h-8 px-3 text-xs"
+            onClick={() => onAccept(candidate)}
+          >
+            Создать черновик
+          </Button>
+        )}
       </div>
     </div>
   );

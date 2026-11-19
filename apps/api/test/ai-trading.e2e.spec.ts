@@ -1,10 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { createDb, marketCandles, type Database } from '@nexter/db';
+import { aiCandidates, createDb, marketCandles, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -201,6 +201,69 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(searchResults.body.stats.total).toBeGreaterThan(0);
     expect(searchResults.body.stats.evaluated).toBe(searchResults.body.stats.total);
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
+
+    const [recommendation] = await db
+      .insert(aiCandidates)
+      .values({
+        profileId: profile.body.id as string,
+        runId: searchId,
+        assetId,
+        timeframe: '1h',
+        strategyKey: 'momentum_breakout',
+        params: {
+          fastPeriod: 5,
+          slowPeriod: 20,
+          minChange24hPct: 1,
+          takeProfitPct: 5,
+          stopLossPct: 3,
+        },
+        metrics: { horizonDays: 5 },
+        policyScore: '1.5000',
+        status: 'recommended',
+      })
+      .returning({ id: aiCandidates.id });
+    const recommendationId = recommendation?.id as string;
+
+    const draft = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'AI recommendation draft',
+        strategyKey: 'momentum_breakout',
+        tokenAssetIds: [assetId],
+        budgetUsd: '1000.00',
+        maxPositions: 5,
+        positionSizePct: 20,
+        feeBps: 25,
+        slippageBps: 10,
+        maxDailyLossPct: 10,
+        cooldownMinutes: 15,
+        aiCandidateId: recommendationId,
+      })
+      .expect(201);
+    expect(draft.body.bot.status).toBe('draft');
+    expect(draft.body.bot.origin).toBe('ai');
+    expect(draft.body.bot.aiCandidateId).toBe(recommendationId);
+    expect(draft.body.bot.evaluationTimeframe).toBe('1h');
+    expect(draft.body.bot.startedAt).toBeNull();
+
+    const [accepted] = await db
+      .select({ status: aiCandidates.status })
+      .from(aiCandidates)
+      .where(eq(aiCandidates.id, recommendationId));
+    expect(accepted?.status).toBe('accepted');
+
+    await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'AI recommendation reuse',
+        strategyKey: 'momentum_breakout',
+        tokenAssetIds: [assetId],
+        budgetUsd: '1000.00',
+        aiCandidateId: recommendationId,
+      })
+      .expect(409);
 
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')

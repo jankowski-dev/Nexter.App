@@ -544,6 +544,7 @@ export class AiSearchService {
       typeof metrics[key] === 'string' ? (metrics[key] as string) : fallback;
     return {
       id: row.id,
+      status: row.status === 'accepted' || row.status === 'rejected' ? row.status : 'recommended',
       strategyKey: row.strategyKey,
       strategyName: strategyByKey.get(row.strategyKey)?.name ?? row.strategyKey,
       params: row.params,
