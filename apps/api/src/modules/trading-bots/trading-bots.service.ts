@@ -8,6 +8,8 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import {
+  aiCandidates,
+  aiProfiles,
   assets,
   botEquitySnapshots,
   botEvents,
@@ -230,6 +232,24 @@ export class TradingBotsService {
     this.assertBudget(input.budgetUsd);
     this.assertStaticLimit(definition.key, strategyParams, tokenAssetIds);
 
+    const candidate = input.aiCandidateId
+      ? await this.requireRecommendation(userId, input.aiCandidateId)
+      : null;
+    if (candidate) {
+      if (candidate.strategyKey !== definition.key) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'AI recommendation strategy does not match the bot strategy',
+        });
+      }
+      if (tokenAssetIds.length !== 1 || tokenAssetIds[0] !== candidate.assetId) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'AI recommendation must be linked to the bot with exactly its token',
+        });
+      }
+    }
+
     const cash = usdString(decimal(input.budgetUsd));
     let id: string;
 
@@ -244,6 +264,11 @@ export class TradingBotsService {
             name: input.name,
             description: input.description ?? '',
             icon: input.icon ?? null,
+            origin: candidate ? 'ai' : 'manual',
+            aiProfileId: candidate?.profileId ?? null,
+            aiCandidateId: candidate?.id ?? null,
+            evaluationTimeframe: candidate?.timeframe ?? null,
+            strategySource: candidate ? 'ai' : 'manual',
             status: 'draft',
             budgetUsd: cash,
             cashUsd: cash,
@@ -271,8 +296,22 @@ export class TradingBotsService {
           botId: created.id,
           type: 'created',
           message: 'Бот создан',
-          payload: { strategyKey: definition.key },
+          payload: {
+            strategyKey: definition.key,
+            ...(candidate ? { aiCandidateId: candidate.id } : {}),
+          },
         });
+
+        if (candidate) {
+          await tx
+            .update(aiCandidates)
+            .set({
+              status: 'accepted',
+              metrics: { ...candidate.metrics, botId: created.id },
+              updatedAt: new Date(),
+            })
+            .where(eq(aiCandidates.id, candidate.id));
+        }
 
         await this.audit.log(
           {
@@ -287,6 +326,12 @@ export class TradingBotsService {
               budgetUsd: cash,
               tokenAssetIds,
               icon: iconForAudit(input.icon),
+              ...(candidate
+                ? {
+                    aiCandidateId: candidate.id,
+                    evaluationTimeframe: candidate.timeframe,
+                  }
+                : {}),
             },
             ip: meta.ip,
             userAgent: meta.userAgent,
@@ -1013,6 +1058,28 @@ export class TradingBotsService {
     };
   }
 
+  private async requireRecommendation(userId: string, candidateId: string) {
+    const [row] = await this.db
+      .select({ candidate: aiCandidates })
+      .from(aiCandidates)
+      .innerJoin(aiProfiles, eq(aiCandidates.profileId, aiProfiles.id))
+      .where(and(eq(aiCandidates.id, candidateId), eq(aiProfiles.userId, userId)))
+      .limit(1);
+    if (!row) {
+      throw new NotFoundException({
+        code: 'NOT_FOUND',
+        message: 'AI recommendation not found',
+      });
+    }
+    if (row.candidate.status !== 'recommended') {
+      throw new ConflictException({
+        code: 'CONFLICT',
+        message: 'AI recommendation is no longer available',
+      });
+    }
+    return row.candidate;
+  }
+
   private async toSummary(bot: TradingBotRecord): Promise<BotSummary> {
     const [positions, tradeStats] = await Promise.all([
       this.loadPositions(bot.id),
@@ -1054,6 +1121,9 @@ export class TradingBotsService {
       slippageBps: bot.slippageBps,
       maxDailyLossPct: Number(bot.maxDailyLossPct),
       cooldownMinutes: bot.cooldownMinutes,
+      origin: bot.origin === 'ai' ? 'ai' : 'manual',
+      aiCandidateId: bot.aiCandidateId ?? null,
+      evaluationTimeframe: bot.evaluationTimeframe ?? null,
       startedAt: bot.startedAt?.toISOString() ?? null,
       stoppedAt: bot.stoppedAt?.toISOString() ?? null,
       lastTickAt: bot.lastTickAt?.toISOString() ?? null,

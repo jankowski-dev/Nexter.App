@@ -300,6 +300,8 @@ export const aiSearchStatsSchema = z.object({
 
 export const aiSearchCandidateSchema = z.object({
   id: z.uuid(),
+  status: z.enum(['recommended', 'accepted', 'rejected']),
+  linkedBotId: z.uuid().nullable(),
   strategyKey: z.string(),
   strategyName: z.string(),
   params: z.record(z.string(), z.unknown()),
