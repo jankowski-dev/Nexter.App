@@ -127,7 +127,7 @@ export function AiTradingPage() {
   const coverage = useQuery({
     queryKey: ['ai-coverage'],
     queryFn: fetchAiCoverage,
-    enabled: section === 'data' || section === 'lab',
+    enabled: section === 'data' || section === 'lab' || section === 'search',
     refetchInterval: 60_000,
   });
   const watchlist = useQuery({
@@ -261,7 +261,11 @@ export function AiTradingPage() {
       ) : null}
 
       {section === 'search' ? (
-        <SearchSection tokens={tokenRows} onChanged={() => invalidateAi(queryClient)} />
+        <SearchSection
+          tokens={tokenRows}
+          coverage={coverage.data}
+          onChanged={() => invalidateAi(queryClient)}
+        />
       ) : null}
 
       {section === 'services' ? (
@@ -773,7 +777,15 @@ function LabCandidateCard({
   );
 }
 
-function SearchSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged: () => void }) {
+function SearchSection({
+  tokens,
+  coverage,
+  onChanged,
+}: {
+  tokens: AiProfileToken[];
+  coverage: AiCoverage | undefined;
+  onChanged: () => void;
+}) {
   const searchable = tokens.filter(
     (token) =>
       token.enabled &&
@@ -789,6 +801,11 @@ function SearchSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChan
   const [horizon, setHorizon] = useState('5');
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dataNotice, setDataNotice] = useState<string | null>(null);
+  const timeframeCoverage = coverage?.tokens
+    .find((token) => token.assetId === assetId)
+    ?.timeframes.find((item) => item.timeframe === timeframe);
+  const missingData = Boolean(timeframeCoverage && timeframeCoverage.status !== 'ok');
 
   useEffect(() => {
     if (selected && !timeframes.includes(timeframe)) {
@@ -831,6 +848,17 @@ function SearchSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChan
   const cancel = useMutation({
     mutationFn: () => cancelAiSearch(runId as string),
     onError: (err) => setError(toRussianError(err, 'Не удалось остановить поиск')),
+  });
+
+  const loadData = useMutation({
+    mutationFn: () => refreshAiData({ assetId, timeframes: [timeframe], days: 180 }),
+    onSuccess: (result) => {
+      setDataNotice(
+        `Загружено свечей: ${result.upserted}${result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''}.`,
+      );
+      onChanged();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось загрузить 180 дней')),
   });
 
   if (searchable.length === 0) {
@@ -927,6 +955,20 @@ function SearchSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChan
             </Button>
           </div>
         </div>
+        {missingData ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2 text-xs text-amber-800">
+            <span>Для поиска нужны 180 дней {timeframe}. Загрузите историю перед запуском.</span>
+            <Button
+              variant="secondary"
+              className="h-7 px-2 text-[11px]"
+              disabled={loadData.isPending}
+              onClick={() => loadData.mutate()}
+            >
+              {loadData.isPending ? 'Загружаю…' : 'Загрузить 180 дней'}
+            </Button>
+          </div>
+        ) : null}
+        {dataNotice ? <p className="mt-2 text-xs text-emerald-700">{dataNotice}</p> : null}
         {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
         {currentStatus?.error ? (
           <p className="mt-2 text-sm text-red-700">{currentStatus.error}</p>
