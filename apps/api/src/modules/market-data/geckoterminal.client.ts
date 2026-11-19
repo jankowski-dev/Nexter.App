@@ -52,53 +52,66 @@ export class GeckoTerminalClient {
     if (!pool) return [];
 
     const config = GECKO_TIMEFRAMES[timeframe];
-    const body = await this.fetchJson(
-      `/networks/${network}/pools/${encodeURIComponent(pool.address)}/ohlcv/${config.unit}?aggregate=${config.aggregate}&limit=${Math.max(1, Math.min(limit, 1000))}&currency=usd&token=${pool.tokenSide}`,
-    );
-    if (!body || typeof body !== 'object') return [];
-
-    const data = body as { data?: { attributes?: { ohlcv_list?: unknown } } };
-    const list = data.data?.attributes?.ohlcv_list;
-    if (!Array.isArray(list)) return [];
-
+    const target = Math.min(5000, Math.max(1, limit));
     const byTime = new Map<number, RawCandle>();
-    for (const entry of list) {
-      if (!Array.isArray(entry) || entry.length < 6) continue;
-      const timestamp = Number(entry[0]);
-      const open = Number(entry[1]);
-      const high = Number(entry[2]);
-      const low = Number(entry[3]);
-      const close = Number(entry[4]);
-      const volume = Number(entry[5]);
-      if (
-        !Number.isFinite(timestamp) ||
-        !Number.isFinite(open) ||
-        !Number.isFinite(high) ||
-        !Number.isFinite(low) ||
-        !Number.isFinite(close) ||
-        open <= 0 ||
-        high <= 0 ||
-        low <= 0 ||
-        close <= 0
-      ) {
-        continue;
+    let beforeTimestamp: number | null = null;
+
+    while (byTime.size < target) {
+      const pageSize = Math.min(1000, target - byTime.size);
+      const beforeQuery = beforeTimestamp === null ? '' : `&before_timestamp=${beforeTimestamp}`;
+      const body = await this.fetchJson(
+        `/networks/${network}/pools/${encodeURIComponent(pool.address)}/ohlcv/${config.unit}?aggregate=${config.aggregate}&limit=${pageSize}&currency=usd&token=${pool.tokenSide}${beforeQuery}`,
+      );
+      if (!body || typeof body !== 'object') break;
+
+      const data = body as { data?: { attributes?: { ohlcv_list?: unknown } } };
+      const list = data.data?.attributes?.ohlcv_list;
+      if (!Array.isArray(list) || list.length === 0) break;
+
+      let oldestTimestamp: number | null = null;
+      for (const entry of list) {
+        if (!Array.isArray(entry) || entry.length < 6) continue;
+        const timestamp = Number(entry[0]);
+        const open = Number(entry[1]);
+        const high = Number(entry[2]);
+        const low = Number(entry[3]);
+        const close = Number(entry[4]);
+        const volume = Number(entry[5]);
+        if (
+          !Number.isFinite(timestamp) ||
+          !Number.isFinite(open) ||
+          !Number.isFinite(high) ||
+          !Number.isFinite(low) ||
+          !Number.isFinite(close) ||
+          open <= 0 ||
+          high <= 0 ||
+          low <= 0 ||
+          close <= 0
+        ) {
+          continue;
+        }
+        if (oldestTimestamp === null || timestamp < oldestTimestamp) oldestTimestamp = timestamp;
+        byTime.set(timestamp, {
+          openTime: new Date(timestamp * 1000),
+          open: priceString(decimal(String(open))),
+          high: priceString(decimal(String(high))),
+          low: priceString(decimal(String(low))),
+          close: priceString(decimal(String(close))),
+          volumeUsd: Number.isFinite(volume) ? decimal(String(volume)).toFixed(2) : null,
+          source: 'geckoterminal',
+          quality: 'ok',
+        });
       }
 
-      byTime.set(timestamp, {
-        openTime: new Date(timestamp * 1000),
-        open: priceString(decimal(String(open))),
-        high: priceString(decimal(String(high))),
-        low: priceString(decimal(String(low))),
-        close: priceString(decimal(String(close))),
-        volumeUsd: Number.isFinite(volume) ? decimal(String(volume)).toFixed(2) : null,
-        source: 'geckoterminal',
-        quality: 'ok',
-      });
+      if (list.length < pageSize || oldestTimestamp === null) break;
+      const nextBefore = oldestTimestamp - 1;
+      if (beforeTimestamp !== null && nextBefore >= beforeTimestamp) break;
+      beforeTimestamp = nextBefore;
     }
 
-    return [...byTime.values()].sort(
-      (left, right) => left.openTime.getTime() - right.openTime.getTime(),
-    );
+    return [...byTime.values()]
+      .sort((left, right) => left.openTime.getTime() - right.openTime.getTime())
+      .slice(-target);
   }
 
   async getDailyCandles(

@@ -37,17 +37,17 @@ const TIMEFRAME_MS: Record<AiTimeframe, number> = {
 
 const MAX_LOOKBACK_DAYS: Record<AiTimeframe, number> = {
   '1d': 365,
-  '4h': 90,
-  '1h': 30,
-  '15m': 7,
+  '4h': 180,
+  '1h': 180,
+  '15m': 30,
   '5m': 3,
 };
 
 const EXPECTED_LOOKBACK_DAYS: Record<AiTimeframe, number> = {
   '1d': 90,
-  '4h': 90,
-  '1h': 30,
-  '15m': 7,
+  '4h': 180,
+  '1h': 180,
+  '15m': 30,
   '5m': 3,
 };
 
@@ -206,7 +206,7 @@ export class AiDataService {
     const contract = this.contractFor(token, contracts);
     if (contract && (token.asset.chainCode === 'bsc' || token.asset.chainCode === 'ethereum')) {
       const limit = Math.min(
-        1000,
+        5000,
         Math.max(1, Math.floor((days * 86_400_000) / TIMEFRAME_MS[timeframe])),
       );
       const candles = await this.geckoterminal.getOhlcvCandles(
