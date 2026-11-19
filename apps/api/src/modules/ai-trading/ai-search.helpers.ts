@@ -1,0 +1,170 @@
+import type { BotCandle } from '@nexter/contracts';
+import type { StrategyDefinition } from '../trading-bots/strategies/types';
+import { TIMEFRAME_MS } from './ai-features';
+import type { AiSearchTimeframe } from '@nexter/contracts';
+
+export interface SearchVariant {
+  strategyKey: string;
+  params: Record<string, unknown>;
+}
+
+export interface SearchFold {
+  oos: BotCandle[];
+}
+
+export interface SearchFoldSet {
+  folds: SearchFold[];
+  holdout: BotCandle[];
+}
+
+export interface VariantMetrics {
+  oosMedianReturnPct: string;
+  oosMeanReturnPct: string;
+  oosWorstReturnPct: string;
+  maxDrawdownPct: string;
+  trades: number;
+  positiveFolds: number;
+  stabilityPct: string;
+  policyScore: string;
+}
+
+export function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randomFieldValue(
+  definition: StrategyDefinition,
+  fieldKey: string,
+  rng: () => number,
+): number {
+  const field = definition.paramFields.find((item) => item.key === fieldKey);
+  const fallback = Number(definition.defaultParams[fieldKey] ?? 0);
+  if (!field) return fallback;
+  const min = field.min ?? fallback;
+  const max = field.max ?? fallback;
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return fallback;
+  const step = field.step ?? (field.integer ? 1 : (max - min) / 20);
+  if (!Number.isFinite(step) || step <= 0) return fallback;
+  const steps = Math.max(0, Math.floor((max - min) / step));
+  const index = Math.floor(rng() * (steps + 1));
+  const value = min + index * step;
+  return field.integer ? Math.round(value) : Number(value.toFixed(8));
+}
+
+export function generateSearchVariants(
+  definitions: StrategyDefinition[],
+  total: number,
+  seed = 7,
+): SearchVariant[] {
+  const capped = Math.max(1, Math.min(5000, Math.floor(total)));
+  const eligible = definitions.filter((definition) => definition.aiEligible !== false);
+  if (eligible.length === 0) return [];
+  const perStrategy = Math.floor(capped / eligible.length);
+  const remainder = capped % eligible.length;
+  const variants: SearchVariant[] = [];
+  const rng = mulberry32(seed);
+
+  for (let index = 0; index < eligible.length; index += 1) {
+    const definition = eligible[index] as StrategyDefinition;
+    const target = perStrategy + (index < remainder ? 1 : 0);
+    const seen = new Set<string>();
+    const add = (params: Record<string, unknown>) => {
+      if (variants.length >= capped) return;
+      const key = JSON.stringify(params);
+      if (seen.has(key)) return;
+      seen.add(key);
+      variants.push({ strategyKey: definition.key, params });
+    };
+
+    try {
+      add(definition.parseParams(definition.defaultParams));
+    } catch {
+      // A broken default must not stop the search; skip this strategy.
+      continue;
+    }
+
+    let attempts = 0;
+    while (seen.size < target && attempts < target * 30) {
+      attempts += 1;
+      const raw: Record<string, unknown> = {};
+      for (const field of definition.paramFields) {
+        raw[field.key] = randomFieldValue(definition, field.key, rng);
+      }
+      try {
+        add(definition.parseParams(raw));
+      } catch {
+        // Invalid combinations are expected; try another.
+      }
+    }
+  }
+
+  return variants.slice(0, capped);
+}
+
+export function buildSearchFolds(
+  candles: BotCandle[],
+  timeframe: AiSearchTimeframe,
+): SearchFoldSet {
+  const perDay = Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
+  const total = 180 * perDay;
+  const searchEnd = 150 * perDay;
+  if (candles.length < total) {
+    throw new Error(`Need at least ${total} candles, got ${candles.length}`);
+  }
+  const use = candles.slice(-total);
+  const folds: SearchFold[] = [];
+  for (let index = 0; index < 8; index += 1) {
+    const trainStart = index * 10 * perDay;
+    const trainEnd = trainStart + 60 * perDay;
+    const oosStart = trainEnd + 2 * perDay;
+    const oosEnd = oosStart + 10 * perDay;
+    if (oosEnd > searchEnd) break;
+    folds.push({ oos: use.slice(oosStart, oosEnd) });
+  }
+  return {
+    folds,
+    holdout: use.slice(searchEnd, total),
+  };
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2
+    : (sorted[middle] as number);
+}
+
+export function aggregateVariant(
+  results: Array<{ totalReturnPct: string; maxDrawdownPct: string; tradesCount: number }>,
+): VariantMetrics {
+  const returns = results.map((result) => Number(result.totalReturnPct));
+  const drawdowns = results.map((result) => Number(result.maxDrawdownPct));
+  const trades = results.reduce((sum, result) => sum + result.tradesCount, 0);
+  const positiveFolds = returns.filter((value) => value > 0).length;
+  const oosMedian = median(returns);
+  const maxDrawdown = drawdowns.length > 0 ? Math.max(...drawdowns) : 0;
+  const policyScore = oosMedian - 0.5 * maxDrawdown;
+
+  return {
+    oosMedianReturnPct: oosMedian.toFixed(2),
+    oosMeanReturnPct: (returns.length > 0
+      ? returns.reduce((sum, value) => sum + value, 0) / returns.length
+      : 0
+    ).toFixed(2),
+    oosWorstReturnPct: (returns.length > 0 ? Math.min(...returns) : 0).toFixed(2),
+    maxDrawdownPct: maxDrawdown.toFixed(2),
+    trades,
+    positiveFolds,
+    stabilityPct: ((positiveFolds / Math.max(1, returns.length)) * 100).toFixed(2),
+    policyScore: policyScore.toFixed(4),
+  };
+}

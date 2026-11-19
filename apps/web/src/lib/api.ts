@@ -8,6 +8,9 @@ import {
   aiLabAnalysisSchema,
   aiLabBacktestResponseSchema,
   aiLabLatestSchema,
+  aiSearchResultsSchema,
+  aiSearchStartResponseSchema,
+  aiSearchStatusSchema,
   aiProfileSchema,
   aiProfileTokenSchema,
   aiProfileTokensResponseSchema,
@@ -105,6 +108,9 @@ import {
   type AiLabBacktestResponse,
   type AiLabLatest,
   type AiLabQuery,
+  type AiSearchRequest,
+  type AiSearchResults,
+  type AiSearchStatus,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -1325,4 +1331,20 @@ export async function backtestAiCandidate(
   body: AiLabBacktestRequest,
 ): Promise<AiLabBacktestResponse> {
   return apiPost('/api/v1/ai-trading/lab/backtest', body, aiLabBacktestResponseSchema);
+}
+
+export async function startAiSearch(body: AiSearchRequest): Promise<{ runId: string }> {
+  return apiPost('/api/v1/ai-trading/search', body, aiSearchStartResponseSchema);
+}
+
+export async function fetchAiSearchStatus(runId: string): Promise<AiSearchStatus> {
+  return apiFetch(`/api/v1/ai-trading/search/${runId}`, {}, aiSearchStatusSchema);
+}
+
+export async function fetchAiSearchResults(runId: string): Promise<AiSearchResults> {
+  return apiFetch(`/api/v1/ai-trading/search/${runId}/results`, {}, aiSearchResultsSchema);
+}
+
+export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
+  return apiPost(`/api/v1/ai-trading/search/${runId}/cancel`, {}, aiSearchStatusSchema);
 }

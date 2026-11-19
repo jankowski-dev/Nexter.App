@@ -11,6 +11,10 @@ import { TokenIcon } from '@/components/token-icon';
 import {
   analyzeAiToken,
   backtestAiCandidate,
+  cancelAiSearch,
+  fetchAiSearchResults,
+  fetchAiSearchStatus,
+  startAiSearch,
   createAiToken,
   fetchAiCoverage,
   fetchAiDashboard,
@@ -36,6 +40,9 @@ import type {
   AiProfile,
   AiProfileToken,
   AiProfileUpdateRequest,
+  AiSearchCandidate,
+  AiSearchResults,
+  AiSearchTimeframe,
   AiServiceConfig,
   AiServiceKey,
   AiTimeframe,
@@ -44,7 +51,7 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-type Section = 'panel' | 'universe' | 'data' | 'lab' | 'services' | 'settings';
+type Section = 'panel' | 'universe' | 'data' | 'lab' | 'search' | 'services' | 'settings';
 
 const coverageLabels: Record<AiCoverageStatus, string> = {
   ok: 'OK',
@@ -94,7 +101,15 @@ const serviceDescriptions: Record<AiServiceKey, string> = {
 const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m'];
 
 function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
-  for (const key of ['ai-dashboard', 'ai-tokens', 'ai-services', 'ai-coverage', 'ai-lab']) {
+  for (const key of [
+    'ai-dashboard',
+    'ai-tokens',
+    'ai-services',
+    'ai-coverage',
+    'ai-lab',
+    'ai-search-status',
+    'ai-search-results',
+  ]) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
 }
@@ -201,6 +216,7 @@ export function AiTradingPage() {
           { value: 'universe', label: 'Вселенная' },
           { value: 'data', label: 'Данные' },
           { value: 'lab', label: 'Лаборатория' },
+          { value: 'search', label: 'Поиск' },
           { value: 'services', label: 'Сервисы' },
           { value: 'settings', label: 'Настройки' },
         ]}
@@ -242,6 +258,10 @@ export function AiTradingPage() {
           onOpenData={() => setSection('data')}
           onChanged={() => invalidateAi(queryClient)}
         />
+      ) : null}
+
+      {section === 'search' ? (
+        <SearchSection tokens={tokenRows} onChanged={() => invalidateAi(queryClient)} />
       ) : null}
 
       {section === 'services' ? (
@@ -750,6 +770,298 @@ function LabCandidateCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function SearchSection({ tokens, onChanged }: { tokens: AiProfileToken[]; onChanged: () => void }) {
+  const searchable = tokens.filter(
+    (token) =>
+      token.enabled &&
+      token.timeframes.some((timeframe) => timeframe === '1h' || timeframe === '4h'),
+  );
+  const [assetId, setAssetId] = useState(searchable[0]?.asset.id ?? '');
+  const selected = searchable.find((token) => token.asset.id === assetId);
+  const timeframes = (selected?.timeframes ?? []).filter(
+    (item): item is AiSearchTimeframe => item === '1h' || item === '4h',
+  );
+  const [timeframe, setTimeframe] = useState<AiSearchTimeframe>(timeframes[0] ?? '1h');
+  const [variants, setVariants] = useState('5000');
+  const [horizon, setHorizon] = useState('5');
+  const [runId, setRunId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selected && !timeframes.includes(timeframe)) {
+      setTimeframe(timeframes[0] ?? '1h');
+    }
+  }, [selected, timeframe, timeframes]);
+
+  const start = useMutation({
+    mutationFn: () =>
+      startAiSearch({
+        assetId,
+        timeframe,
+        horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
+        variants: Number(variants),
+      }),
+    onSuccess: (result) => {
+      setRunId(result.runId);
+      setError(null);
+      onChanged();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось запустить поиск')),
+  });
+
+  const status = useQuery({
+    queryKey: ['ai-search-status', runId],
+    queryFn: () => fetchAiSearchStatus(runId as string),
+    enabled: Boolean(runId),
+    refetchInterval: (query) => {
+      const value = query.state.data?.status;
+      return value === 'queued' || value === 'running' ? 1000 : false;
+    },
+  });
+
+  const results = useQuery({
+    queryKey: ['ai-search-results', runId],
+    queryFn: () => fetchAiSearchResults(runId as string),
+    enabled: Boolean(runId) && status.data?.status === 'succeeded',
+  });
+
+  const cancel = useMutation({
+    mutationFn: () => cancelAiSearch(runId as string),
+    onError: (err) => setError(toRussianError(err, 'Не удалось остановить поиск')),
+  });
+
+  if (searchable.length === 0) {
+    return (
+      <Card>
+        <CardTitle>Поиск стратегий</CardTitle>
+        <CardDescription>
+          Добавьте включённый токен с таймфреймом 1h или 4h на вкладке «Вселенная».
+        </CardDescription>
+      </Card>
+    );
+  }
+
+  const currentStatus = status.data;
+  const currentResults: AiSearchResults | undefined = results.data;
+  const running = currentStatus?.status === 'queued' || currentStatus?.status === 'running';
+  const stats = currentResults?.stats ?? currentStatus?.stats;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <CardTitle>Поиск стратегий</CardTitle>
+            <CardDescription>
+              Массовый подбор параметров на purged walk-forward: 150 дней поиска, 8 фолдов и
+              30-дневный holdout. Рекомендация не запускает робота.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs text-zinc-600">
+              Токен
+              <Select
+                className="mt-1 h-9 min-w-40"
+                value={assetId}
+                onChange={(event) => setAssetId(event.target.value)}
+                aria-label="Токен для поиска"
+              >
+                {searchable.map((token) => (
+                  <option key={token.asset.id} value={token.asset.id}>
+                    {token.asset.symbol} · {token.asset.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs text-zinc-600">
+              ТФ
+              <Select
+                className="mt-1 h-9 w-20"
+                value={timeframe}
+                onChange={(event) => setTimeframe(event.target.value as AiSearchTimeframe)}
+                aria-label="Таймфрейм поиска"
+              >
+                {timeframes.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </Select>
+            </label>
+            <label className="text-xs text-zinc-600">
+              Горизонт
+              <Select
+                className="mt-1 h-9 w-24"
+                value={horizon}
+                onChange={(event) => setHorizon(event.target.value)}
+                aria-label="Горизонт"
+              >
+                <option value="1">1 день</option>
+                <option value="3">3 дня</option>
+                <option value="5">5 дней</option>
+                <option value="10">10 дней</option>
+              </Select>
+            </label>
+            <label className="text-xs text-zinc-600">
+              Вариантов
+              <Select
+                className="mt-1 h-9 w-24"
+                value={variants}
+                onChange={(event) => setVariants(event.target.value)}
+                aria-label="Количество вариантов"
+              >
+                <option value="100">100</option>
+                <option value="500">500</option>
+                <option value="1000">1 000</option>
+                <option value="5000">5 000</option>
+              </Select>
+            </label>
+            <Button
+              disabled={!assetId || start.isPending || running}
+              onClick={() => start.mutate()}
+            >
+              {start.isPending ? 'Запускаю…' : 'Запустить поиск'}
+            </Button>
+          </div>
+        </div>
+        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
+        {currentStatus?.error ? (
+          <p className="mt-2 text-sm text-red-700">{currentStatus.error}</p>
+        ) : null}
+      </Card>
+
+      {currentStatus ? (
+        <Card>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Badge
+                tone={
+                  currentStatus.status === 'succeeded'
+                    ? 'success'
+                    : currentStatus.status === 'failed'
+                      ? 'danger'
+                      : currentStatus.status === 'cancelled'
+                        ? 'warning'
+                        : 'info'
+                }
+              >
+                {currentStatus.status}
+              </Badge>
+              <span className="text-xs text-zinc-500">
+                {currentStatus.evaluated} / {currentStatus.total} вариантов
+              </span>
+            </div>
+            {running ? (
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                disabled={cancel.isPending}
+                onClick={() => cancel.mutate()}
+              >
+                Остановить
+              </Button>
+            ) : null}
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all"
+              style={{ width: `${currentStatus.percent}%` }}
+            />
+          </div>
+          {stats ? (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <LabFeature label="Всего" value={String(stats.total)} />
+              <LabFeature label="Оценено" value={String(stats.evaluated)} />
+              <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
+              <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
+              <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
+              <LabFeature label="Медиана OOS" value={formatPct(stats.medianOosReturnPct)} />
+              <LabFeature label="Худший OOS" value={formatPct(stats.worstOosReturnPct)} />
+              <LabFeature label="Прибыльных" value={percentMagnitude(stats.profitablePct)} />
+              <LabFeature label="Средняя DD" value={percentMagnitude(stats.averageDrawdownPct)} />
+              <LabFeature label="Стабильность" value={percentMagnitude(stats.stabilityPct)} />
+              <LabFeature
+                label="Holdout"
+                value={stats.holdoutReturnPct === null ? '—' : formatPct(stats.holdoutReturnPct)}
+              />
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {currentResults ? (
+        <Card>
+          <CardTitle>Кандидаты</CardTitle>
+          <CardDescription>
+            Показаны варианты, прошедшие OOS, стабильность и финальный holdout. Создание робота из
+            рекомендации — следующий этап; сейчас параметры можно использовать вручную.
+          </CardDescription>
+          {currentResults.candidates.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500">
+              Ни один вариант не прошёл фильтры. Это нормальный результат: рынок не дал устойчивого
+              преимущества.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {currentResults.candidates.map((candidate) => (
+                <SearchCandidateCard key={candidate.id} candidate={candidate} />
+              ))}
+            </div>
+          )}
+          {Object.keys(currentResults.rejectionReasons).length > 0 ? (
+            <div className="mt-4 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+              <div className="font-medium text-zinc-700">Причины отклонения</div>
+              <div className="mt-1 flex flex-wrap gap-2">
+                {Object.entries(currentResults.rejectionReasons)
+                  .sort((left, right) => right[1] - left[1])
+                  .map(([reason, count]) => (
+                    <span key={reason} className="rounded bg-white px-2 py-1">
+                      {reason}: {count}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchCandidateCard({ candidate }: { candidate: AiSearchCandidate }) {
+  return (
+    <div className="rounded-xl border border-zinc-200 px-3 py-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="text-sm font-semibold text-zinc-900">{candidate.strategyName}</div>
+          <div className="text-[11px] text-zinc-500">{candidate.strategyKey}</div>
+        </div>
+        <Badge tone="success">OOS {formatPct(candidate.oosMedianReturnPct)}</Badge>
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <LabFeature label="Средний OOS" value={formatPct(candidate.oosMeanReturnPct)} />
+        <LabFeature label="Худший OOS" value={formatPct(candidate.oosWorstReturnPct)} />
+        <LabFeature label="Макс. DD" value={percentMagnitude(candidate.maxDrawdownPct)} />
+        <LabFeature label="Сделок" value={String(candidate.trades)} />
+        <LabFeature label="Стабильность" value={percentMagnitude(candidate.stabilityPct)} />
+        <LabFeature
+          label="Holdout"
+          value={candidate.holdoutReturnPct === null ? '—' : formatPct(candidate.holdoutReturnPct)}
+        />
+        <LabFeature label="Policy" value={candidate.policyScore} />
+        <LabFeature label="Фолды" value={`${candidate.positiveFolds} / 8`} />
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {Object.entries(candidate.params).map(([key, value]) => (
+          <span key={key} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600">
+            {key}: {String(value)}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

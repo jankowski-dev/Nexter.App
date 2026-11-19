@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -18,6 +19,7 @@ import {
   aiLabAnalyzeRequestSchema,
   aiLabBacktestRequestSchema,
   aiLabQuerySchema,
+  aiSearchRequestSchema,
   aiProfileTokenCreateRequestSchema,
   aiProfileTokenUpdateRequestSchema,
   aiProfileUpdateRequestSchema,
@@ -31,6 +33,9 @@ import {
   type AiLabBacktestResponse,
   type AiLabLatest,
   type AiLabQuery,
+  type AiSearchRequest,
+  type AiSearchResults,
+  type AiSearchStatus,
   type AiProfile,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -45,6 +50,7 @@ import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { AiDataService } from './ai-data.service';
 import { AiLabService } from './ai-lab.service';
+import { AiSearchService } from './ai-search.service';
 import { AiTradingService } from './ai-trading.service';
 
 @ApiTags('ai-trading')
@@ -54,6 +60,7 @@ export class AiTradingController {
     private readonly aiTrading: AiTradingService,
     private readonly aiData: AiDataService,
     private readonly aiLab: AiLabService,
+    private readonly aiSearch: AiSearchService,
   ) {}
 
   @Get('profile')
@@ -142,6 +149,44 @@ export class AiTradingController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Post('search')
+  @HttpCode(202)
+  startSearch(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(aiSearchRequestSchema)) body: AiSearchRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<{ runId: string }> {
+    return this.aiSearch.start(auth.user.id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Get('search/:runId')
+  searchStatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('runId', new ParseUUIDPipe()) runId: string,
+  ): Promise<AiSearchStatus> {
+    return this.aiSearch.status(auth.user.id, runId);
+  }
+
+  @Get('search/:runId/results')
+  searchResults(
+    @CurrentAuth() auth: AuthContext,
+    @Param('runId', new ParseUUIDPipe()) runId: string,
+  ): Promise<AiSearchResults> {
+    return this.aiSearch.results(auth.user.id, runId);
+  }
+
+  @Post('search/:runId/cancel')
+  @HttpCode(200)
+  cancelSearch(
+    @CurrentAuth() auth: AuthContext,
+    @Param('runId', new ParseUUIDPipe()) runId: string,
+  ): Promise<AiSearchStatus> {
+    return this.aiSearch.cancel(auth.user.id, runId);
   }
 
   @Get('dashboard')
