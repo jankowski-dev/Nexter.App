@@ -76,9 +76,12 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
       const rows = await this.loadBots();
       const health = await this.evaluateRows(rows);
       for (const item of health) {
-        if (item.level === 'ok') continue;
         const row = rows.find((entry) => entry.bot.id === item.botId);
         if (!row) continue;
+        if (item.level === 'ok') {
+          await this.emitRecovery(row, item);
+          continue;
+        }
         await this.emitRecommendation(row, item);
       }
     } catch (error) {
@@ -183,6 +186,38 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
         equityUsd: latest,
         totalPnlPct: evaluation.totalPnlPct,
       };
+    });
+  }
+
+  private async emitRecovery(row: BotRow, health: AiBotHealth): Promise<void> {
+    const [previous] = await this.db
+      .select({ payload: notifications.payload })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, row.bot.userId),
+          eq(notifications.type, 'ai_bot_health'),
+          sql`${notifications.payload}->>'botId' = ${row.bot.id}`,
+        ),
+      )
+      .orderBy(sql`${notifications.createdAt} desc`)
+      .limit(1);
+
+    if (typeof previous?.payload.level !== 'string' || previous.payload.level === 'ok') return;
+
+    await this.notifications.create({
+      userId: row.bot.userId,
+      type: 'ai_bot_health',
+      title: `ИИ-робот «${row.bot.name}»: здоровье восстановлено`,
+      body: 'Инвалидации больше не обнаружены.',
+      href: '/portfolio#robots',
+      payload: {
+        botId: row.bot.id,
+        candidateId: health.candidateId,
+        level: 'ok',
+        signature: 'ok',
+        reasons: [],
+      },
     });
   }
 
