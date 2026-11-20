@@ -197,7 +197,7 @@ export class AiSearchService {
       .where(
         and(
           eq(aiPipelineRuns.profileId, profile.id),
-          sql`${aiPipelineRuns.summary}->>'assetId' is not null`,
+          sql`${aiPipelineRuns.summary}->>'variants' is not null`,
         ),
       )
       .orderBy(desc(aiPipelineRuns.createdAt))

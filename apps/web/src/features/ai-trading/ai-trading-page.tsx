@@ -647,7 +647,9 @@ function LabSection({
               >
                 {enabled.map((token) => (
                   <option key={token.asset.id} value={token.asset.id}>
-                    {token.asset.symbol} · {token.asset.name}
+                    {token.asset.symbol === token.asset.name
+                      ? token.asset.name
+                      : `${token.asset.symbol} · ${token.asset.name}`}
                   </option>
                 ))}
               </Select>
@@ -1339,12 +1341,21 @@ function SearchSection({
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dataNotice, setDataNotice] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState<{
+    upserted: number;
+    failed: number;
+    details: string[];
+  } | null>(null);
   const [acceptTarget, setAcceptTarget] = useState<RecommendationTarget | null>(null);
   const [createdBot, setCreatedBot] = useState<{ id: string; name: string } | null>(null);
   const timeframeCoverage = coverage?.tokens
     .find((token) => token.assetId === assetId)
     ?.timeframes.find((item) => item.timeframe === timeframe);
   const missingData = Boolean(timeframeCoverage && timeframeCoverage.status !== 'ok');
+  const requiredCandles = timeframeCoverage?.expected ?? 0;
+  const availableCandles = timeframeCoverage?.candles ?? 0;
+  const availableDays =
+    requiredCandles > 0 ? Math.floor((availableCandles / requiredCandles) * 180) : 0;
 
   useEffect(() => {
     if (selected && !timeframes.includes(timeframe)) {
@@ -1366,6 +1377,10 @@ function SearchSection({
         horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
         variants: Number(variants),
       }),
+    onMutate: () => {
+      setError(null);
+      setDataNotice(null);
+    },
     onSuccess: (result) => {
       setRunId(result.runId);
       setError(null);
@@ -1397,10 +1412,17 @@ function SearchSection({
 
   const loadData = useMutation({
     mutationFn: () => refreshAiData({ assetId, timeframes: [timeframe], days: 180 }),
+    onMutate: () => {
+      setError(null);
+      setDataNotice(null);
+    },
     onSuccess: (result) => {
-      setDataNotice(
-        `Загружено свечей: ${result.upserted}${result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''}.`,
-      );
+      setLoadAttempt({
+        upserted: result.upserted,
+        failed: result.failed.length,
+        details: result.failed.map((item) => `${item.symbol} ${item.timeframe}: ${item.reason}`),
+      });
+      setDataNotice(`Загружено свечей: ${result.upserted}.`);
       onChanged();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось загрузить 180 дней')),
@@ -1493,24 +1515,48 @@ function SearchSection({
               </Select>
             </label>
             <Button
-              disabled={!assetId || start.isPending || running}
+              disabled={!assetId || start.isPending || running || missingData}
+              title={missingData ? 'Сначала загрузите 180 дней истории' : undefined}
               onClick={() => start.mutate()}
             >
-              {start.isPending ? 'Запускаю…' : 'Запустить поиск'}
+              {start.isPending ? 'Запускаю…' : missingData ? 'Нужно 180 дней' : 'Запустить поиск'}
             </Button>
           </div>
         </div>
         {missingData ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2 text-xs text-amber-800">
-            <span>Для поиска нужны 180 дней {timeframe}. Загрузите историю перед запуском.</span>
-            <Button
-              variant="secondary"
-              className="h-7 px-2 text-[11px]"
-              disabled={loadData.isPending}
-              onClick={() => loadData.mutate()}
-            >
-              {loadData.isPending ? 'Загружаю…' : 'Загрузить 180 дней'}
-            </Button>
+          <div className="mt-2 space-y-1.5 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2 text-xs text-amber-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                Для поиска нужны 180 дней {timeframe} ({requiredCandles} свечей). Доступно{' '}
+                {availableCandles}
+                {requiredCandles > 0 ? ` (~${availableDays} дн.)` : ''}.
+              </span>
+              <Button
+                variant="secondary"
+                className="h-7 px-2 text-[11px]"
+                disabled={loadData.isPending}
+                onClick={() => loadData.mutate()}
+              >
+                {loadData.isPending
+                  ? 'Загружаю…'
+                  : loadAttempt
+                    ? 'Повторить загрузку'
+                    : 'Загрузить 180 дней'}
+              </Button>
+            </div>
+            {loadAttempt ? (
+              <div className="text-amber-700">
+                Загрузка добавила {loadAttempt.upserted} свечей
+                {loadAttempt.failed > 0 ? `, ошибок: ${loadAttempt.failed}` : ''}. Если история не
+                выросла, источник не отдаёт 180 дней для этого токена — выберите другой токен или
+                таймфрейм.
+                {loadAttempt.details.length > 0 ? (
+                  <div className="mt-1 text-[11px] text-amber-600">
+                    {loadAttempt.details.slice(0, 3).join(' · ')}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
         {dataNotice ? <p className="mt-2 text-xs text-emerald-700">{dataNotice}</p> : null}
@@ -1806,17 +1852,26 @@ function DataSection({
   onRetry: () => void;
   onChanged: () => void;
 }) {
-  const [days, setDays] = useState('90');
+  const [days, setDays] = useState('180');
   const [message, setMessage] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const refresh = useMutation({
-    mutationFn: () => refreshAiData({ days: Number(days) || 90 }),
+    mutationFn: () => refreshAiData({ days: Number(days) || 180 }),
+    onMutate: () => {
+      setMessage(null);
+      setRefreshError(null);
+    },
     onSuccess: (result) => {
       setRefreshError(null);
+      const failed = result.failed
+        .slice(0, 3)
+        .map((item) => `${item.symbol} ${item.timeframe}: ${item.reason}`);
       setMessage(
         `Пар: ${result.pairs}, свечей: ${result.upserted}${
-          result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''
+          result.failed.length > 0
+            ? `, ошибок: ${result.failed.length}${failed.length > 0 ? ` (${failed.join('; ')})` : ''}`
+            : ''
         }`,
       );
       onChanged();
@@ -1917,7 +1972,8 @@ function CoverageChip({ item }: { item: AiCoverageTimeframe }) {
         <Badge tone={tone}>{coverageLabels[item.status]}</Badge>
       </div>
       <div className="mt-1 text-[11px] text-zinc-500">
-        {item.candles} / {item.expected} свечей
+        {item.candles} свечей
+        {item.candles < item.expected ? ` · нужно ${item.expected}` : ''}
       </div>
       <div className="text-[11px] text-zinc-500">
         {item.lastOpenTime ? formatDateTime(item.lastOpenTime) : 'Нет данных'}

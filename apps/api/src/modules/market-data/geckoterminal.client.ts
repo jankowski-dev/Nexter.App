@@ -23,7 +23,7 @@ const GECKO_TIMEFRAMES: Record<
 const POOL_CACHE_TTL_MS = 10 * 60 * 1000;
 // The public GeckoTerminal API rate-limits bursts. Serialize calls with a
 // small gap so multi-token AI refreshes and backtests do not trip HTTP 429.
-const MIN_REQUEST_INTERVAL_MS = 1500;
+const MIN_REQUEST_INTERVAL_MS = 2200;
 
 interface PoolCandidate {
   address: string;
@@ -205,25 +205,36 @@ export class GeckoTerminalClient {
   }
 
   private async fetchJson(path: string): Promise<unknown | null> {
-    await this.throttle();
-    try {
-      const response = await fetch(`${env.GECKOTERMINAL_BASE_URL}${path}`, {
-        headers: {
-          accept: 'application/json;version=20230302',
-        },
-        signal: AbortSignal.timeout(env.GECKOTERMINAL_TIMEOUT_MS),
-      });
-      if (!response.ok) {
-        this.logger.warn(`GeckoTerminal request failed: HTTP ${response.status}`);
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      await this.throttle();
+      try {
+        const response = await fetch(`${env.GECKOTERMINAL_BASE_URL}${path}`, {
+          headers: {
+            accept: 'application/json;version=20230302',
+          },
+          signal: AbortSignal.timeout(env.GECKOTERMINAL_TIMEOUT_MS),
+        });
+        if (response.status === 429) {
+          const retryAfter = Number(response.headers.get('retry-after'));
+          const waitMs = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 15_000;
+          this.logger.warn(`GeckoTerminal rate limited; retrying in ${waitMs}ms`);
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
+          continue;
+        }
+        if (!response.ok) {
+          this.logger.warn(`GeckoTerminal request failed: HTTP ${response.status}`);
+          return null;
+        }
+        return await response.json();
+      } catch (error) {
+        this.logger.warn(
+          `GeckoTerminal request failed: ${error instanceof Error ? error.name : 'unknown error'}`,
+        );
         return null;
       }
-      return await response.json();
-    } catch (error) {
-      this.logger.warn(
-        `GeckoTerminal request failed: ${error instanceof Error ? error.name : 'unknown error'}`,
-      );
-      return null;
     }
+    this.logger.warn('GeckoTerminal rate limit retries exhausted');
+    return null;
   }
 }
 
