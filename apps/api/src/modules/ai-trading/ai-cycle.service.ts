@@ -10,7 +10,14 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
-import { aiJobs, aiPipelineRuns, tradingBots, type Database } from '@nexter/db';
+import {
+  aiJobs,
+  aiPipelineRuns,
+  tradingBots,
+  watchlist,
+  watchlistGroups,
+  type Database,
+} from '@nexter/db';
 import {
   aiCycleStepKeys,
   type AiCycleRequest,
@@ -52,7 +59,7 @@ const STEP_LABELS: Record<AiCycleStepKey, string> = {
   drafts: 'Черновики',
 };
 
-const MAX_CYCLE_MS = 5 * 60_000;
+const MAX_CYCLE_MS = 15 * 60_000;
 
 function emptyStep(key: AiCycleStepKey): AiCycleStep {
   return {
@@ -125,6 +132,31 @@ export class AiCycleService implements OnModuleInit {
         code: 'AI_CYCLE_BUSY',
         message: 'AI cycle is already running',
       });
+    }
+
+    if (input.maxDrafts > 0) {
+      const [watched] = await this.db
+        .select({ id: watchlist.id })
+        .from(watchlist)
+        .innerJoin(
+          watchlistGroups,
+          and(eq(watchlistGroups.id, watchlist.groupId), eq(watchlistGroups.isDefault, true)),
+        )
+        .where(
+          and(
+            eq(watchlist.userId, userId),
+            eq(watchlist.assetId, input.assetId),
+            isNull(watchlist.archivedAt),
+          ),
+        )
+        .limit(1);
+      if (!watched) {
+        throw new ConflictException({
+          code: 'AI_CYCLE_TOKEN_NOT_WATCHLIST',
+          message:
+            'Чтобы создать черновик, токен должен быть активной записью группы «Основная». Добавьте его в watchlist или выберите «Черновиков: 0».',
+        });
+      }
     }
 
     const [daily] = await this.db
@@ -355,7 +387,7 @@ export class AiCycleService implements OnModuleInit {
     }
     throw new ServiceUnavailableException({
       code: 'AI_SEARCH_TIMEOUT',
-      message: 'Поиск не завершился за 5 минут',
+      message: 'Поиск не завершился за 15 минут',
     });
   }
 
@@ -609,7 +641,7 @@ export class AiCycleService implements OnModuleInit {
         and(
           inArray(aiPipelineRuns.status, ['queued', 'running']),
           sql`${aiPipelineRuns.summary}->>'kind' = 'cycle'`,
-          sql`${aiPipelineRuns.createdAt} < now() - interval '10 minutes'`,
+          sql`${aiPipelineRuns.createdAt} < now() - interval '20 minutes'`,
         ),
       )
       .limit(50);
