@@ -315,6 +315,36 @@ export const aiRecommendationsResponseSchema = z.object({
 
 export const aiSearchStartResponseSchema = z.object({ runId: z.uuid() });
 
+export const aiCycleStepKeys = ['data', 'search', 'recommendations', 'drafts'] as const;
+export const aiCycleStepStatuses = ['queued', 'running', 'succeeded', 'failed', 'skipped'] as const;
+export const aiCycleRequestSchema = z.object({
+  assetId: z.uuid(),
+  timeframe: z.enum(['1h', '4h']).default('1h'),
+  horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
+  variants: z.number().int().min(100).max(5000).default(5000),
+  maxDrafts: z.number().int().min(0).max(10).default(3),
+});
+export const aiCycleStepSchema = z.object({
+  key: z.enum(aiCycleStepKeys),
+  status: z.enum(aiCycleStepStatuses),
+  message: z.string().nullable(),
+  error: z.string().nullable(),
+  startedAt: z.iso.datetime().nullable(),
+  finishedAt: z.iso.datetime().nullable(),
+});
+export const aiCycleStartResponseSchema = z.object({ cycleId: z.uuid() });
+export const aiCycleStatusSchema = z.object({
+  cycleId: z.uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  steps: z.array(aiCycleStepSchema),
+  searchRunId: z.uuid().nullable(),
+  recommended: z.number().int(),
+  draftsCreated: z.number().int(),
+  error: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  finishedAt: z.iso.datetime().nullable(),
+});
+
 export const aiSearchHistogramBucketSchema = z.object({
   label: z.string(),
   count: z.number().int(),
@@ -477,6 +507,12 @@ export type AiSearchHistogramBucket = z.infer<typeof aiSearchHistogramBucketSche
 export type AiSearchRunSummary = z.infer<typeof aiSearchRunSummarySchema>;
 export type AiSearchRunsResponse = z.infer<typeof aiSearchRunsResponseSchema>;
 export type AiSearchStartResponse = z.infer<typeof aiSearchStartResponseSchema>;
+export type AiCycleStepKey = z.infer<typeof aiCycleStepSchema>['key'];
+export type AiCycleStepStatus = z.infer<typeof aiCycleStepSchema>['status'];
+export type AiCycleStep = z.infer<typeof aiCycleStepSchema>;
+export type AiCycleRequest = z.infer<typeof aiCycleRequestSchema>;
+export type AiCycleStartResponse = z.infer<typeof aiCycleStartResponseSchema>;
+export type AiCycleStatus = z.infer<typeof aiCycleStatusSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
 export type AiSearchStatus = z.infer<typeof aiSearchStatusSchema>;
