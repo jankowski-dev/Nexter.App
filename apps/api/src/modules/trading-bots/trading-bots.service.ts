@@ -53,6 +53,7 @@ import { MarketQuoteService } from '../market-data/market-quote.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { strategyByKey, strategyTemplates } from './strategies';
+import { isRecommendationExpired } from '../ai-trading/ai-recommendation';
 
 interface BotMeta {
   ip?: string;
@@ -1075,6 +1076,12 @@ export class TradingBotsService {
       throw new ConflictException({
         code: 'CONFLICT',
         message: 'AI recommendation is no longer available',
+      });
+    }
+    if (isRecommendationExpired(row.candidate.createdAt, row.candidate.metrics)) {
+      throw new ConflictException({
+        code: 'AI_RECOMMENDATION_EXPIRED',
+        message: 'AI recommendation has expired',
       });
     }
     return row.candidate;

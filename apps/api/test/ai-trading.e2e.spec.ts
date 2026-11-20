@@ -296,6 +296,40 @@ describe.runIf(canRun)('AI trading control center API', () => {
       })
       .expect(409);
 
+    const [expiredRecommendation] = await db
+      .insert(aiCandidates)
+      .values({
+        profileId: profile.body.id as string,
+        runId: searchId,
+        assetId,
+        timeframe: '1h',
+        strategyKey: 'momentum_breakout',
+        params: {
+          fastPeriod: 5,
+          slowPeriod: 20,
+          minChange24hPct: 1,
+          takeProfitPct: 5,
+          stopLossPct: 3,
+        },
+        metrics: { horizonDays: 5 },
+        policyScore: '1.0000',
+        status: 'recommended',
+        createdAt: new Date(Date.now() - 30 * 86_400_000),
+      })
+      .returning({ id: aiCandidates.id });
+    const expired = await agent
+      .post('/api/v1/trading-bots/bots')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        name: 'AI recommendation expired',
+        strategyKey: 'momentum_breakout',
+        tokenAssetIds: [assetId],
+        budgetUsd: '1000.00',
+        aiCandidateId: expiredRecommendation?.id,
+      })
+      .expect(409);
+    expect(expired.body.error.code).toBe('AI_RECOMMENDATION_EXPIRED');
+
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')
       .set('x-csrf-token', owner.csrf)

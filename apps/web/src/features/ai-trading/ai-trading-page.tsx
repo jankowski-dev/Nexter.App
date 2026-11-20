@@ -1355,6 +1355,7 @@ function SearchCandidateCard({
         />
         <LabFeature label="Policy" value={candidate.policyScore} />
         <LabFeature label="Фолды" value={`${candidate.positiveFolds} / 8`} />
+        <LabFeature label="Действует до" value={formatDateTime(candidate.expiresAt)} />
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         {Object.entries(candidate.params).map(([key, value]) => (
@@ -1366,6 +1367,8 @@ function SearchCandidateCard({
       <div className="mt-2 flex justify-end">
         {candidate.status === 'accepted' ? (
           <Badge tone="info">Черновик создан</Badge>
+        ) : candidate.expired ? (
+          <Badge tone="warning">Рекомендация истекла</Badge>
         ) : (
           <Button
             variant="secondary"

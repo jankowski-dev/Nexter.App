@@ -108,6 +108,15 @@ The AI confidence is not treated as a probability of profit. The recommendation 
 
 `Лаборатория` is replaced by `Поиск`. Manual paper bots remain in `Крипта → Роботы`.
 
+## Implementation status (2026-11-20)
+
+- Search: 5,000 seeded variants, 8 purged walk-forward folds, 30-day holdout, distribution/candidate/rejection statistics, async API and `ИИ-торговля → Поиск`.
+- Data: GeckoTerminal pagination and 180-day `1h`/`4h` lookbacks; per-token data load in the search tab.
+- Recommendation: candidate acceptance creates a prefilled `draft` bot with `ai_candidate_id` and `evaluation_timeframe`; the owner starts it manually. The candidate stores the linked bot id and becomes `accepted`.
+- Invalidation: `GET /ai-trading/bots/health` plus a five-minute monitor for drawdown, daily loss, stale ticks, horizon expiry, P&L below the worst OOS fold, bot errors and missing recommendations. It writes notifications/audit and never stops a bot.
+- History and TTL: `GET /ai-trading/search/runs` lists recent runs so results survive refresh; candidates expose `expiresAt`/`expired`, expire after `horizonDays` (default 7 days), and stale acceptance returns `AI_RECOMMENDATION_EXPIRED`.
+- Still next: dedicated `Рекомендации`/`Мои ИИ-роботы` screens, histograms and export.
+
 ## Consequences
 
 - Safer product: no autonomous trading, no runaway worker creation, no approvals machinery.

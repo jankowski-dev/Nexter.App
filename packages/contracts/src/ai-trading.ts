@@ -317,6 +317,8 @@ export const aiSearchCandidateSchema = z.object({
   id: z.uuid(),
   status: z.enum(['recommended', 'accepted', 'rejected']),
   linkedBotId: z.uuid().nullable(),
+  expiresAt: z.iso.datetime(),
+  expired: z.boolean(),
   strategyKey: z.string(),
   strategyName: z.string(),
   params: z.record(z.string(), z.unknown()),
