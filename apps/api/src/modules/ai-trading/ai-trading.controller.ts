@@ -34,6 +34,7 @@ import {
   type AiLabLatest,
   type AiBotHealthResponse,
   type AiLabQuery,
+  type AiRecommendationsResponse,
   type AiSearchRequest,
   type AiSearchResults,
   type AiSearchRunsResponse,
@@ -201,6 +202,11 @@ export class AiTradingController {
   @Get('bots/health')
   botHealth(@CurrentAuth() auth: AuthContext): Promise<AiBotHealthResponse> {
     return this.aiHealth.list(auth.user.id);
+  }
+
+  @Get('recommendations')
+  recommendations(@CurrentAuth() auth: AuthContext): Promise<AiRecommendationsResponse> {
+    return this.aiSearch.listRecommendations(auth.user.id);
   }
 
   @Get('dashboard')

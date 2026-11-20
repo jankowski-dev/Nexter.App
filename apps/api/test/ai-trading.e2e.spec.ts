@@ -330,6 +330,21 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .expect(409);
     expect(expired.body.error.code).toBe('AI_RECOMMENDATION_EXPIRED');
 
+    const recommendations = await agent.get('/api/v1/ai-trading/recommendations').expect(200);
+    const acceptedRecommendation = (
+      recommendations.body.data as Array<Record<string, unknown>>
+    ).find((item) => item.id === recommendationId);
+    expect(acceptedRecommendation?.status).toBe('accepted');
+    expect(acceptedRecommendation?.symbol).toBe('BASED');
+    expect(acceptedRecommendation?.timeframe).toBe('1h');
+    expect(acceptedRecommendation?.linkedBotId).toBe(draft.body.bot.id);
+    expect(acceptedRecommendation?.expired).toBe(false);
+
+    const expiredRecommendationRow = (
+      recommendations.body.data as Array<Record<string, unknown>>
+    ).find((item) => item.id === expiredRecommendation?.id);
+    expect(expiredRecommendationRow?.expired).toBe(true);
+
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')
       .set('x-csrf-token', owner.csrf)
