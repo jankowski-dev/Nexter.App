@@ -3,15 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
-import { TabGroup } from '@/components/ui/list-toolbar';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { StatCard } from '@/components/ui/stat-card';
 import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import {
-  analyzeAiToken,
-  backtestAiCandidate,
   cancelAiSearch,
   createTradingBot,
   fetchAiSearchResults,
@@ -22,28 +18,26 @@ import {
   fetchAiBotHealth,
   fetchAiRecommendations,
   fetchAiCoverage,
+  fetchAiCycle,
+  startAiCycle,
   fetchAiDashboard,
-  fetchAiLab,
-  fetchAiServices,
   fetchAiTokens,
   fetchWatchlist,
   refreshAiData,
   removeAiToken,
   updateAiProfile,
-  updateAiService,
   updateAiToken,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDateTime, formatPct, formatPrice, formatUsd, formatUsdCompact } from '@/lib/format';
+import { formatDateTime, formatPct } from '@/lib/format';
 import type {
   AiBotHealth,
   AiBotHealthResponse,
   AiCoverage,
   AiCoverageStatus,
   AiCoverageTimeframe,
-  AiLabAnalysis,
-  AiLabCandidate,
-  AiLabRegime,
+  AiCycleStatus,
+  AiCycleStep,
   AiProfile,
   AiRecommendation,
   AiProfileToken,
@@ -51,25 +45,12 @@ import type {
   AiSearchCandidate,
   AiSearchResults,
   AiSearchTimeframe,
-  AiServiceConfig,
-  AiServiceKey,
   AiTimeframe,
   BotCreateRequest,
   WatchlistEntry,
 } from '@nexter/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-
-type Section =
-  | 'panel'
-  | 'universe'
-  | 'data'
-  | 'lab'
-  | 'recommendations'
-  | 'search'
-  | 'ai-bots'
-  | 'services'
-  | 'settings';
 
 const coverageLabels: Record<AiCoverageStatus, string> = {
   ok: 'OK',
@@ -85,36 +66,6 @@ const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> 
   missing: 'danger',
 };
 
-const regimeLabels: Record<AiLabRegime, string> = {
-  trend_up: 'Восходящий тренд',
-  trend_down: 'Нисходящий тренд',
-  range: 'Боковик',
-  high_volatility: 'Высокая волатильность',
-  unclear: 'Неопределённый режим',
-};
-
-const labStatusTones: Record<string, 'neutral' | 'success' | 'warning' | 'danger'> = {
-  proposed: 'neutral',
-  backtested: 'success',
-  rejected: 'danger',
-};
-
-const serviceLabels: Record<AiServiceKey, string> = {
-  data: 'Data Service',
-  analyst: 'Analyst Service · ИИ',
-  backtest: 'Backtest Service',
-  risk: 'Risk Service',
-  reporter: 'Reporter Service',
-};
-
-const serviceDescriptions: Record<AiServiceKey, string> = {
-  data: 'Сбор OHLCV, качество данных, кэш и покрытие таймфреймов.',
-  analyst: 'Признаки, режим рынка, кандидаты стратегий и оценка ИИ.',
-  backtest: 'Walk-forward, OOS, метрики и ранжирование кандидатов.',
-  risk: 'Лимиты, корреляция, распределение виртуального капитала.',
-  reporter: 'Ежедневные и еженедельные отчёты, здоровье сервисов.',
-};
-
 // 5m remains supported for legacy data but is not offered for the short-swing AI universe.
 const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m'];
 
@@ -122,9 +73,7 @@ function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
   for (const key of [
     'ai-dashboard',
     'ai-tokens',
-    'ai-services',
     'ai-coverage',
-    'ai-lab',
     'ai-search-status',
     'ai-search-results',
     'ai-search-runs',
@@ -137,183 +86,298 @@ function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
 
 export function AiTradingPage() {
   const queryClient = useQueryClient();
-  const [section, setSection] = useState<Section>('panel');
+  const [drawer, setDrawer] = useState<'universe' | 'data' | 'settings' | 'search' | null>(null);
+  const [assetId, setAssetId] = useState('');
+  const [timeframe, setTimeframe] = useState<AiSearchTimeframe>('1h');
+  const [horizon, setHorizon] = useState('5');
+  const [variants, setVariants] = useState('5000');
+  const [maxDrafts, setMaxDrafts] = useState('3');
+  const [cycleId, setCycleId] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem('ai-cycle-id');
+    } catch {
+      return null;
+    }
+  });
+
   const dashboard = useQuery({
     queryKey: ['ai-dashboard'],
     queryFn: fetchAiDashboard,
     refetchInterval: 30_000,
   });
   const tokens = useQuery({ queryKey: ['ai-tokens'], queryFn: fetchAiTokens });
-  const services = useQuery({ queryKey: ['ai-services'], queryFn: fetchAiServices });
   const coverage = useQuery({
     queryKey: ['ai-coverage'],
     queryFn: fetchAiCoverage,
-    enabled: section === 'data' || section === 'lab' || section === 'search',
+    enabled: drawer === 'data' || drawer === 'search',
     refetchInterval: 60_000,
   });
   const botHealth = useQuery({
     queryKey: ['ai-bot-health'],
     queryFn: fetchAiBotHealth,
-    enabled: section === 'panel' || section === 'ai-bots',
     refetchInterval: 60_000,
   });
   const watchlist = useQuery({
     queryKey: ['ai-watchlist'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
   });
+  const cycle = useQuery({
+    queryKey: ['ai-cycle', cycleId],
+    queryFn: () => fetchAiCycle(cycleId as string),
+    enabled: Boolean(cycleId),
+    refetchInterval: (query) => {
+      const value = query.state.data?.status;
+      return value === 'queued' || value === 'running' ? 1000 : false;
+    },
+  });
 
-  if (dashboard.isPending || tokens.isPending || services.isPending) {
-    return <LoadingRows rows={8} />;
+  const tokenRows = tokens.data?.data ?? [];
+  const searchable = tokenRows.filter(
+    (token) => token.enabled && token.timeframes.some((item) => item === '1h' || item === '4h'),
+  );
+  const selected = searchable.find((token) => token.asset.id === assetId);
+  const timeframes = (selected?.timeframes ?? []).filter(
+    (item): item is AiSearchTimeframe => item === '1h' || item === '4h',
+  );
+
+  useEffect(() => {
+    if (!assetId && searchable[0]) setAssetId(searchable[0].asset.id);
+  }, [assetId, searchable]);
+
+  useEffect(() => {
+    if (selected && timeframes.length > 0 && !timeframes.includes(timeframe)) {
+      setTimeframe(timeframes[0] as AiSearchTimeframe);
+    }
+  }, [selected, timeframe, timeframes]);
+
+  const startCycle = useMutation({
+    mutationFn: () =>
+      startAiCycle({
+        assetId,
+        timeframe,
+        horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
+        variants: Number(variants),
+        maxDrafts: Number(maxDrafts),
+      }),
+    onSuccess: (result) => {
+      setCycleId(result.cycleId);
+      try {
+        window.sessionStorage.setItem('ai-cycle-id', result.cycleId);
+      } catch {
+        // Storage may be unavailable; the in-memory id still works.
+      }
+      invalidateAi(queryClient);
+    },
+  });
+
+  useEffect(() => {
+    const status = cycle.data?.status;
+    if (status === 'succeeded' || status === 'failed') {
+      invalidateAi(queryClient);
+    }
+  }, [cycle.data?.status, queryClient]);
+
+  if (dashboard.isPending || tokens.isPending) {
+    return <LoadingRows rows={6} />;
   }
-  if (dashboard.isError || tokens.isError || services.isError) {
+  if (dashboard.isError || tokens.isError) {
     return (
       <ErrorState
         message={toRussianError(
-          dashboard.error ?? tokens.error ?? services.error,
+          dashboard.error ?? tokens.error,
           'Не удалось загрузить ИИ-торговлю',
         )}
         onRetry={() => {
           void dashboard.refetch();
           void tokens.refetch();
-          void services.refetch();
         }}
       />
     );
   }
 
   const profile = dashboard.data.profile;
-  const tokenRows = tokens.data.data;
-  const serviceRows = services.data.data;
+  const activeCycle =
+    (Boolean(cycleId) && cycle.isPending) ||
+    cycle.data?.status === 'queued' ||
+    cycle.data?.status === 'running';
+  const canStart = Boolean(assetId) && !activeCycle && !startCycle.isPending;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={profile.enabled ? 'success' : 'neutral'}>
             {profile.enabled ? 'Профиль включён' : 'Профиль выключен'}
           </Badge>
           <span className="text-xs text-zinc-500">
-            Sandbox: реальные данные и математика, виртуальные деньги. Реальные ордера не создаются.
+            {profile.modelSettings.model} · {dashboard.data.activeWorkers} /{' '}
+            {dashboard.data.workersCount} ИИ-роботов
+          </span>
+          <span className="text-xs text-zinc-400">
+            {dashboard.data.lastRunAt
+              ? `Последний запуск: ${formatDateTime(dashboard.data.lastRunAt)}`
+              : 'Цикл ещё не запускался'}
           </span>
         </div>
-        <span className="text-xs text-zinc-400">
-          {dashboard.data.lastRunAt
-            ? `Последний запуск: ${formatDateTime(dashboard.data.lastRunAt)}`
-            : 'Пайплайн ещё не запускался'}
-        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setDrawer('universe')}
+          >
+            Вселенная
+          </Button>
+          <Button variant="ghost" className="h-8 px-2.5 text-xs" onClick={() => setDrawer('data')}>
+            Данные
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setDrawer('settings')}
+          >
+            Настройки
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setDrawer('search')}
+          >
+            Ручной поиск
+          </Button>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          title="Бюджет"
-          value={formatUsd(profile.budgetUsd)}
-          description={`Свободно ${formatUsd(profile.cashUsd)}`}
-          icon="wallet"
-          tone="emerald"
-        />
-        <StatCard
-          title="AI-токены"
-          value={String(dashboard.data.tokensCount)}
-          description="В отдельном списке ИИ"
-          icon="watchlist"
-          tone="sky"
-        />
-        <StatCard
-          title="ИИ-роботы"
-          value={`${dashboard.data.activeWorkers} / ${dashboard.data.workersCount}`}
-          description="Активные / всего"
-          icon="testing"
-          tone="violet"
-        />
-        <StatCard
-          title="Очередь"
-          value={String(dashboard.data.queueCount)}
-          description="Задач в ожидании"
-          icon="operations"
-          tone="amber"
-        />
-      </div>
+      <Card className="p-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs text-zinc-600">
+            Токен
+            <Select
+              className="mt-1 h-9 min-w-40"
+              value={assetId}
+              onChange={(event) => setAssetId(event.target.value)}
+              aria-label="Токен для цикла"
+            >
+              {searchable.map((token) => (
+                <option key={token.asset.id} value={token.asset.id}>
+                  {token.asset.symbol === token.asset.name
+                    ? token.asset.name
+                    : `${token.asset.symbol} · ${token.asset.name}`}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-xs text-zinc-600">
+            ТФ
+            <Select
+              className="mt-1 h-9 w-20"
+              value={timeframe}
+              onChange={(event) => setTimeframe(event.target.value as AiSearchTimeframe)}
+              aria-label="Таймфрейм цикла"
+            >
+              {timeframes.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-xs text-zinc-600">
+            Горизонт
+            <Select
+              className="mt-1 h-9 w-24"
+              value={horizon}
+              onChange={(event) => setHorizon(event.target.value)}
+              aria-label="Горизонт цикла"
+            >
+              <option value="1">1 день</option>
+              <option value="3">3 дня</option>
+              <option value="5">5 дней</option>
+              <option value="10">10 дней</option>
+            </Select>
+          </label>
+          <label className="text-xs text-zinc-600">
+            Вариантов
+            <Select
+              className="mt-1 h-9 w-24"
+              value={variants}
+              onChange={(event) => setVariants(event.target.value)}
+              aria-label="Количество вариантов"
+            >
+              <option value="500">500</option>
+              <option value="1000">1 000</option>
+              <option value="5000">5 000</option>
+            </Select>
+          </label>
+          <label className="text-xs text-zinc-600">
+            Черновиков
+            <Select
+              className="mt-1 h-9 w-20"
+              value={maxDrafts}
+              onChange={(event) => setMaxDrafts(event.target.value)}
+              aria-label="Сколько черновиков создать"
+            >
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+            </Select>
+          </label>
+          <Button disabled={!canStart} onClick={() => startCycle.mutate()}>
+            {startCycle.isPending
+              ? 'Запускаю…'
+              : activeCycle
+                ? 'Цикл выполняется…'
+                : 'Запустить цикл'}
+          </Button>
+        </div>
+        {startCycle.isError ? (
+          <p className="mt-2 text-sm text-red-700">
+            {toRussianError(startCycle.error, 'Не удалось запустить цикл')}
+          </p>
+        ) : null}
+        <p className="mt-2 text-[11px] text-zinc-400">
+          Один клик: данные → поиск → рекомендации → черновики. Роботы не запускаются автоматически.
+        </p>
+      </Card>
 
-      <TabGroup
-        value={section}
-        onChange={setSection}
-        ariaLabel="Раздел ИИ-торговли"
-        options={[
-          { value: 'panel', label: 'Панель' },
-          { value: 'universe', label: 'Вселенная' },
-          { value: 'data', label: 'Данные' },
-          { value: 'lab', label: 'Лаборатория' },
-          { value: 'recommendations', label: 'Рекомендации' },
-          { value: 'search', label: 'Поиск' },
-          { value: 'ai-bots', label: 'Мои ИИ-роботы' },
-          { value: 'services', label: 'Сервисы' },
-          { value: 'settings', label: 'Настройки' },
-        ]}
+      <AiCycleCard
+        cycle={cycle.data ?? null}
+        loading={cycle.isPending && Boolean(cycleId)}
+        onOpenBots={() => {
+          window.location.href = '/portfolio#robots';
+        }}
       />
 
-      {section === 'panel' ? (
-        <div className="space-y-4">
-          <Card className="tone-surface tone-surface-sky">
-            <CardTitle>Как это работает</CardTitle>
-            <CardDescription>
-              Data → Analyst → Search/Backtest → Risk → Recommendation. Рекомендация открывает
-              draft-робота, но не запускает его: старт остаётся за тобой.
-            </CardDescription>
-          </Card>
-          <Card>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <CardTitle>ИИ-роботы и здоровье</CardTitle>
-                <CardDescription>
-                  Наблюдение за роботами, созданными из рекомендаций. Система советует остановить
-                  или пересмотреть, но никогда не останавливает автоматически.
-                </CardDescription>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  className="text-xs text-emerald-700 underline"
-                  onClick={() => setSection('ai-bots')}
-                >
-                  Подробнее
-                </button>
-                <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
-                  Открыть роботов
-                </a>
-              </div>
-            </div>
-            {botHealth.isPending ? (
-              <div className="mt-3">
-                <LoadingRows rows={2} />
-              </div>
-            ) : botHealth.isError ? (
-              <p className="mt-3 text-sm text-red-700">
-                {toRussianError(botHealth.error, 'Не удалось загрузить здоровье ИИ-роботов')}
-              </p>
-            ) : (botHealth.data.data.length ?? 0) === 0 ? (
-              <p className="mt-3 text-sm text-zinc-500">
-                Пока нет роботов, созданных из рекомендаций. Создайте черновик во вкладке «Поиск».
-              </p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {botHealth.data.data.map((item) => (
-                  <AiBotHealthRow key={item.botId} item={item} />
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
-      ) : null}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+        <RecommendationsSection onChanged={() => invalidateAi(queryClient)} />
+        <AiBotsSection
+          health={botHealth.data}
+          loading={botHealth.isPending}
+          error={botHealth.isError}
+          onRetry={() => void botHealth.refetch()}
+          onOpenSearch={() => setDrawer('search')}
+        />
+      </div>
 
-      {section === 'universe' ? (
+      <Drawer
+        open={drawer === 'universe'}
+        onClose={() => setDrawer(null)}
+        title="Вселенная ИИ"
+        size="lg"
+      >
         <UniverseSection
           tokens={tokenRows}
           watchlistEntries={watchlist.data?.data ?? []}
           onChanged={() => invalidateAi(queryClient)}
         />
-      ) : null}
+      </Drawer>
 
-      {section === 'data' ? (
+      <Drawer
+        open={drawer === 'data'}
+        onClose={() => setDrawer(null)}
+        title="Данные и покрытие"
+        size="xl"
+      >
         <DataSection
           coverage={coverage.data}
           loading={coverage.isPending}
@@ -321,47 +385,132 @@ export function AiTradingPage() {
           onRetry={() => void coverage.refetch()}
           onChanged={() => invalidateAi(queryClient)}
         />
-      ) : null}
+      </Drawer>
 
-      {section === 'lab' ? (
-        <LabSection
-          tokens={tokenRows}
-          coverage={coverage.data}
-          onOpenData={() => setSection('data')}
-          onChanged={() => invalidateAi(queryClient)}
-        />
-      ) : null}
+      <Drawer
+        open={drawer === 'settings'}
+        onClose={() => setDrawer(null)}
+        title="Настройки ИИ"
+        size="xl"
+      >
+        <SettingsSection profile={profile} onSaved={() => invalidateAi(queryClient)} />
+      </Drawer>
 
-      {section === 'recommendations' ? (
-        <RecommendationsSection onChanged={() => invalidateAi(queryClient)} />
-      ) : null}
-
-      {section === 'search' ? (
+      <Drawer
+        open={drawer === 'search'}
+        onClose={() => setDrawer(null)}
+        title="Ручной поиск"
+        size="xl"
+      >
         <SearchSection
           tokens={tokenRows}
           coverage={coverage.data}
           onChanged={() => invalidateAi(queryClient)}
         />
-      ) : null}
-
-      {section === 'ai-bots' ? (
-        <AiBotsSection
-          health={botHealth.data}
-          loading={botHealth.isPending}
-          error={botHealth.isError}
-          onRetry={() => void botHealth.refetch()}
-          onOpenSearch={() => setSection('search')}
-        />
-      ) : null}
-
-      {section === 'services' ? (
-        <ServicesSection services={serviceRows} onChanged={() => invalidateAi(queryClient)} />
-      ) : null}
-
-      {section === 'settings' ? (
-        <SettingsSection profile={profile} onSaved={() => invalidateAi(queryClient)} />
-      ) : null}
+      </Drawer>
     </div>
+  );
+}
+
+const cycleStepLabels: Record<AiCycleStep['key'], string> = {
+  data: 'Данные',
+  search: 'Поиск',
+  recommendations: 'Рекомендации',
+  drafts: 'Черновики',
+};
+
+function cycleStepTone(
+  status: AiCycleStep['status'],
+): 'neutral' | 'info' | 'success' | 'danger' | 'warning' {
+  if (status === 'succeeded') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'running') return 'info';
+  if (status === 'skipped') return 'warning';
+  return 'neutral';
+}
+
+function AiCycleCard({
+  cycle,
+  loading,
+  onOpenBots,
+}: {
+  cycle: AiCycleStatus | null;
+  loading: boolean;
+  onOpenBots: () => void;
+}) {
+  if (loading) return <LoadingRows rows={2} />;
+  if (!cycle) {
+    return (
+      <Card className="p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle>Цикл ИИ</CardTitle>
+            <CardDescription>
+              Запусти один раз: данные, поиск, рекомендации и черновики. Старт роботов — вручную.
+            </CardDescription>
+          </div>
+          <Badge tone="neutral">Готов</Badge>
+        </div>
+      </Card>
+    );
+  }
+  const succeeded = cycle.steps.filter((step) => step.status === 'succeeded').length;
+  const tone =
+    cycle.status === 'succeeded'
+      ? 'success'
+      : cycle.status === 'failed'
+        ? 'danger'
+        : cycle.status === 'running'
+          ? 'info'
+          : 'neutral';
+  return (
+    <Card className="p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <CardTitle>Цикл ИИ</CardTitle>
+          <Badge tone={tone}>{cycle.status}</Badge>
+          <span className="text-xs text-zinc-500">
+            {succeeded} / {cycle.steps.length} шагов · {formatDateTime(cycle.createdAt)}
+          </span>
+        </div>
+        {cycle.status === 'succeeded' ? (
+          <button type="button" className="text-xs text-emerald-700 underline" onClick={onOpenBots}>
+            Открыть черновики
+          </button>
+        ) : null}
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
+        <div
+          className="h-full rounded-full bg-emerald-500 transition-all"
+          style={{ width: `${(succeeded / cycle.steps.length) * 100}%` }}
+        />
+      </div>
+      <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
+        {cycle.steps.map((step) => (
+          <div key={step.key} className="rounded-lg border border-zinc-200 px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <Badge tone={cycleStepTone(step.status)}>{step.status}</Badge>
+              <span className="text-xs font-medium text-zinc-800">{cycleStepLabels[step.key]}</span>
+            </div>
+            {step.message ? (
+              <div className="mt-1 text-[11px] text-zinc-500">{step.message}</div>
+            ) : null}
+            {step.error ? <div className="mt-1 text-[11px] text-red-700">{step.error}</div> : null}
+          </div>
+        ))}
+      </div>
+      {cycle.error ? (
+        <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
+          {cycle.error}
+        </p>
+      ) : null}
+      {cycle.status === 'succeeded' ? (
+        <p className="mt-2 text-xs text-zinc-500">
+          Рекомендаций: {cycle.recommended} · создано черновиков: {cycle.draftsCreated}. Старт
+          роботов остаётся за тобой.
+        </p>
+      ) : null}
+    </Card>
   );
 }
 
@@ -535,343 +684,6 @@ function LabFeature({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase tracking-wide text-zinc-400">{label}</div>
       <div className="mt-0.5 text-sm font-medium text-zinc-800">{value}</div>
     </div>
-  );
-}
-
-function LabSection({
-  tokens,
-  coverage,
-  onOpenData,
-  onChanged,
-}: {
-  tokens: AiProfileToken[];
-  coverage: AiCoverage | undefined;
-  onOpenData: () => void;
-  onChanged: () => void;
-}) {
-  const enabled = tokens.filter((token) => token.enabled);
-  const [assetId, setAssetId] = useState(enabled[0]?.asset.id ?? '');
-  const [timeframe, setTimeframe] = useState<AiTimeframe>(enabled[0]?.timeframes[0] ?? '1d');
-  const [error, setError] = useState<string | null>(null);
-  const [dataNotice, setDataNotice] = useState<string | null>(null);
-  const [dataError, setDataError] = useState<string | null>(null);
-  const selected = enabled.find((token) => token.asset.id === assetId);
-  const timeframeCoverage = coverage?.tokens
-    .find((token) => token.assetId === assetId)
-    ?.timeframes.find((item) => item.timeframe === timeframe);
-  const missingData =
-    timeframeCoverage?.status === 'missing' || timeframeCoverage?.status === 'stale';
-
-  const labQuery = useQuery({
-    queryKey: ['ai-lab', assetId, timeframe],
-    queryFn: () => fetchAiLab({ assetId, timeframe }),
-    enabled: Boolean(assetId),
-  });
-
-  const analyze = useMutation({
-    mutationFn: () => analyzeAiToken({ assetId, timeframe, lookbackDays: 180 }),
-    onSuccess: () => {
-      setError(null);
-      onChanged();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось выполнить анализ')),
-  });
-
-  const loadData = useMutation({
-    mutationFn: () => refreshAiData({ assetId, timeframes: [timeframe], days: 90 }),
-    onSuccess: (result) => {
-      setDataError(null);
-      setDataNotice(
-        `Загружено свечей: ${result.upserted}${
-          result.failed.length > 0 ? `, ошибок: ${result.failed.length}` : ''
-        }. Теперь нажмите «Анализировать».`,
-      );
-      onChanged();
-    },
-    onError: (err) => setDataError(toRussianError(err, 'Не удалось загрузить данные')),
-  });
-
-  const backtest = useMutation({
-    mutationFn: (candidateId: string) => backtestAiCandidate({ candidateId }),
-    onSuccess: () => {
-      setError(null);
-      onChanged();
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось выполнить бэктест')),
-  });
-
-  useEffect(() => {
-    if (enabled.length > 0 && !enabled.some((token) => token.asset.id === assetId)) {
-      setAssetId(enabled[0]?.asset.id ?? '');
-    }
-  }, [assetId, enabled]);
-
-  useEffect(() => {
-    if (selected && !selected.timeframes.includes(timeframe)) {
-      setTimeframe(selected.timeframes[0] ?? '1d');
-    }
-  }, [selected, timeframe]);
-
-  if (enabled.length === 0) {
-    return (
-      <Card>
-        <CardTitle>Лаборатория стратегий</CardTitle>
-        <CardDescription>
-          Сначала добавьте включённые токены на вкладке «Вселенная».
-        </CardDescription>
-      </Card>
-    );
-  }
-
-  const analysis: AiLabAnalysis | null = labQuery.data?.analysis ?? null;
-
-  return (
-    <div className="space-y-4">
-      <Card>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <CardTitle>Лаборатория стратегий</CardTitle>
-            <CardDescription>
-              ИИ анализирует режим рынка и предлагает стратегии из реестра. Бэктест проверяет
-              кандидата на train и OOS; реальные ордера не создаются.
-            </CardDescription>
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs text-zinc-600">
-              Токен
-              <Select
-                className="mt-1 h-9 min-w-44"
-                value={assetId}
-                onChange={(event) => setAssetId(event.target.value)}
-                aria-label="Токен для лаборатории"
-              >
-                {enabled.map((token) => (
-                  <option key={token.asset.id} value={token.asset.id}>
-                    {token.asset.symbol === token.asset.name
-                      ? token.asset.name
-                      : `${token.asset.symbol} · ${token.asset.name}`}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="text-xs text-zinc-600">
-              Таймфрейм
-              <Select
-                className="mt-1 h-9 w-24"
-                value={timeframe}
-                onChange={(event) => setTimeframe(event.target.value as AiTimeframe)}
-                aria-label="Таймфрейм анализа"
-              >
-                {selected?.timeframes.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <Button
-              disabled={!assetId || analyze.isPending || missingData}
-              onClick={() => analyze.mutate()}
-            >
-              {analyze.isPending ? 'Анализирую…' : 'Анализировать'}
-            </Button>
-          </div>
-        </div>
-        {missingData ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-2 text-xs text-amber-800">
-            <span>
-              {timeframeCoverage?.status === 'stale' ? 'Данные устарели' : 'Нет свечей'} для{' '}
-              {selected?.asset.symbol ?? 'токена'} {timeframe}. Загрузите историю перед анализом.
-            </span>
-            <Button
-              variant="secondary"
-              className="h-7 px-2 text-[11px]"
-              disabled={loadData.isPending}
-              onClick={() => loadData.mutate()}
-            >
-              {loadData.isPending ? 'Загружаю…' : 'Загрузить данные'}
-            </Button>
-            <button
-              type="button"
-              className="text-[11px] text-amber-800 underline"
-              onClick={onOpenData}
-            >
-              Открыть «Данные»
-            </button>
-          </div>
-        ) : null}
-        {dataNotice ? <p className="mt-2 text-xs text-emerald-700">{dataNotice}</p> : null}
-        {dataError ? <p className="mt-2 text-xs text-red-700">{dataError}</p> : null}
-        {error ? <p className="mt-2 text-sm text-red-700">{error}</p> : null}
-      </Card>
-
-      {labQuery.isPending ? <LoadingRows rows={4} /> : null}
-      {labQuery.isError ? (
-        <ErrorState
-          message={toRussianError(labQuery.error, 'Не удалось загрузить лабораторию')}
-          onRetry={() => void labQuery.refetch()}
-        />
-      ) : null}
-
-      {!labQuery.isPending && !labQuery.isError && !analysis ? (
-        <Card>
-          <CardDescription>
-            Для выбранного токена и таймфрейма анализ ещё не запускался. Нажмите «Анализировать» —
-            без ключа ИИ сработает детерминированный fallback.
-          </CardDescription>
-        </Card>
-      ) : null}
-
-      {analysis ? (
-        <>
-          <Card>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={analysis.source === 'ai' ? 'info' : 'warning'}>
-                {analysis.source === 'ai' ? 'ИИ' : 'Fallback'}
-              </Badge>
-              <Badge tone="neutral">{regimeLabels[analysis.regime]}</Badge>
-              <Badge tone="info">Уверенность {(analysis.confidence * 100).toFixed(0)}%</Badge>
-              {analysis.features.stale ? <Badge tone="danger">Данные устарели</Badge> : null}
-              <span className="text-xs text-zinc-400">{formatDateTime(analysis.generatedAt)}</span>
-            </div>
-            <p className="mt-3 text-sm text-zinc-700">{analysis.summary}</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <LabFeature label="Цена" value={formatPrice(analysis.features.lastPriceUsd)} />
-              <LabFeature label="24 часа" value={formatPct(analysis.features.change24hPct)} />
-              <LabFeature label="30 дней" value={formatPct(analysis.features.return30Pct)} />
-              <LabFeature label="90 дней" value={formatPct(analysis.features.return90Pct)} />
-              <LabFeature
-                label="Волатильность"
-                value={percentMagnitude(analysis.features.volatilityPct)}
-              />
-              <LabFeature
-                label="Макс. просадка"
-                value={percentMagnitude(analysis.features.maxDrawdownPct)}
-              />
-              <LabFeature label="Свечей" value={String(analysis.features.candles)} />
-              <LabFeature
-                label="Объём 24ч"
-                value={formatUsdCompact(analysis.features.volume24hUsd)}
-              />
-            </div>
-            {analysis.warnings.length > 0 ? (
-              <ul className="mt-3 space-y-1 text-xs text-amber-700">
-                {analysis.warnings.map((warning) => (
-                  <li key={warning}>• {warning}</li>
-                ))}
-              </ul>
-            ) : null}
-          </Card>
-
-          <div className="grid gap-3 xl:grid-cols-2">
-            {analysis.candidates.map((candidate) => (
-              <LabCandidateCard
-                key={candidate.id}
-                candidate={candidate}
-                pending={backtest.isPending && backtest.variables === candidate.id}
-                disabled={backtest.isPending}
-                onBacktest={() => backtest.mutate(candidate.id)}
-              />
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function LabCandidateCard({
-  candidate,
-  pending,
-  disabled,
-  onBacktest,
-}: {
-  candidate: AiLabCandidate;
-  pending: boolean;
-  disabled: boolean;
-  onBacktest: () => void;
-}) {
-  const statusLabels: Record<string, string> = {
-    proposed: 'Предложен',
-    backtested: 'Прошёл бэктест',
-    rejected: 'Отклонён',
-  };
-  const oos = candidate.metrics.oos;
-
-  return (
-    <Card>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="text-sm font-semibold text-zinc-900">{candidate.strategyName}</div>
-          <div className="text-[11px] text-zinc-500">{candidate.strategyKey}</div>
-        </div>
-        <div className="flex items-center gap-2">
-          {candidate.aiConfidence !== null ? (
-            <span className="text-xs text-zinc-500">
-              {(candidate.aiConfidence * 100).toFixed(0)}%
-            </span>
-          ) : null}
-          <Badge tone={labStatusTones[candidate.status] ?? 'neutral'}>
-            {statusLabels[candidate.status] ?? candidate.status}
-          </Badge>
-        </div>
-      </div>
-      {candidate.rationale ? (
-        <p className="mt-2 text-sm text-zinc-600">{candidate.rationale}</p>
-      ) : null}
-
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {Object.entries(candidate.params).map(([key, value]) => (
-          <span key={key} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-600">
-            {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-          </span>
-        ))}
-      </div>
-
-      {candidate.risks.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-[11px] text-amber-700">
-          {candidate.risks.map((risk) => (
-            <li key={risk}>• {risk}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {oos ? (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <LabFeature label="OOS доходность" value={formatPct(oos.returnPct)} />
-          <LabFeature label="OOS просадка" value={percentMagnitude(oos.maxDrawdownPct)} />
-          <LabFeature label="OOS сделки" value={String(oos.trades)} />
-          <LabFeature
-            label="OOS profit factor"
-            value={oos.profitFactor === null ? '—' : oos.profitFactor}
-          />
-        </div>
-      ) : null}
-
-      {candidate.metrics.reasons && candidate.metrics.reasons.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-[11px] text-red-700">
-          {candidate.metrics.reasons.map((reason) => (
-            <li key={reason}>• {reason}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-[11px] text-zinc-400">
-          {candidate.policyScore === null
-            ? 'Политика: —'
-            : `Политика: ${candidate.policyScore.toFixed(2)}`}
-        </span>
-        <Button
-          variant="secondary"
-          className="h-8 px-3 text-xs"
-          disabled={disabled}
-          onClick={onBacktest}
-        >
-          {pending ? 'Считаю…' : 'Бэктест'}
-        </Button>
-      </div>
-    </Card>
   );
 }
 
@@ -1985,131 +1797,6 @@ function CoverageChip({ item }: { item: AiCoverageTimeframe }) {
         {item.lastOpenTime ? formatDateTime(item.lastOpenTime) : 'Нет данных'}
       </div>
     </div>
-  );
-}
-
-function ServicesSection({
-  services,
-  onChanged,
-}: {
-  services: AiServiceConfig[];
-  onChanged: () => void;
-}) {
-  return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {services.map((service) => (
-        <ServiceCard key={service.service} service={service} onChanged={onChanged} />
-      ))}
-    </div>
-  );
-}
-
-function ServiceCard({ service, onChanged }: { service: AiServiceConfig; onChanged: () => void }) {
-  const queryClient = useQueryClient();
-  const [enabled, setEnabled] = useState(service.enabled);
-  const [concurrency, setConcurrency] = useState(String(service.concurrency));
-  const [config, setConfig] = useState<Record<string, string>>(() => {
-    const result: Record<string, string> = {};
-    for (const [key, value] of Object.entries(service.config)) {
-      result[key] = typeof value === 'string' ? value : JSON.stringify(value);
-    }
-    return result;
-  });
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setEnabled(service.enabled);
-    setConcurrency(String(service.concurrency));
-    const result: Record<string, string> = {};
-    for (const [key, value] of Object.entries(service.config)) {
-      result[key] = typeof value === 'string' ? value : JSON.stringify(value);
-    }
-    setConfig(result);
-  }, [service]);
-
-  const save = useMutation({
-    mutationFn: () => {
-      const nextConfig: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(config)) {
-        if (key === 'timeframes') {
-          try {
-            nextConfig[key] = JSON.parse(value);
-          } catch {
-            nextConfig[key] = value;
-          }
-        } else if (key === 'daily' || key === 'weekly') {
-          nextConfig[key] = value === 'true';
-        } else if (key === 'minLiquidityUsd') {
-          nextConfig[key] = value;
-        } else {
-          const parsed = Number(value);
-          nextConfig[key] = Number.isFinite(parsed) ? parsed : value;
-        }
-      }
-      return updateAiService(service.service, {
-        enabled,
-        concurrency: Number(concurrency),
-        config: nextConfig,
-      });
-    },
-    onSuccess: () => {
-      setError(null);
-      onChanged();
-      void queryClient.invalidateQueries({ queryKey: ['ai-services'] });
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось сохранить сервис')),
-  });
-
-  return (
-    <Card>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <CardTitle>{serviceLabels[service.service]}</CardTitle>
-          <CardDescription>{serviceDescriptions[service.service]}</CardDescription>
-        </div>
-        <Switch
-          checked={enabled}
-          onChange={setEnabled}
-          label={`Включить ${serviceLabels[service.service]}`}
-        />
-      </div>
-      <div className="mt-3 grid gap-2">
-        <label className="text-xs text-zinc-600">
-          Concurrency
-          <Input
-            className="mt-1 h-8 text-xs"
-            type="number"
-            min={1}
-            max={4}
-            value={concurrency}
-            onChange={(event) => setConcurrency(event.target.value)}
-          />
-        </label>
-        {Object.entries(config).map(([key, value]) => (
-          <label key={key} className="text-xs text-zinc-600">
-            {key}
-            <Input
-              className="mt-1 h-8 text-xs"
-              value={value}
-              onChange={(event) =>
-                setConfig((current) => ({ ...current, [key]: event.target.value }))
-              }
-            />
-          </label>
-        ))}
-      </div>
-      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
-      <div className="mt-3 flex justify-end">
-        <Button
-          variant="secondary"
-          className="h-8 px-3 text-xs"
-          disabled={save.isPending}
-          onClick={() => save.mutate()}
-        >
-          {save.isPending ? 'Сохраняю…' : 'Сохранить сервис'}
-        </Button>
-      </div>
-    </Card>
   );
 }
 

@@ -5,6 +5,8 @@ import {
   auditLogResponseSchema,
   aiBotHealthResponseSchema,
   aiCoverageSchema,
+  aiCycleStartResponseSchema,
+  aiCycleStatusSchema,
   aiDataRefreshResponseSchema,
   aiLabAnalysisSchema,
   aiLabBacktestResponseSchema,
@@ -104,6 +106,9 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AiCoverage,
+  type AiCycleRequest,
+  type AiCycleStartResponse,
+  type AiCycleStatus,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
   type AiLabAnalysis,
@@ -1371,4 +1376,12 @@ export async function fetchAiRecommendations(): Promise<AiRecommendationsRespons
 
 export async function improveNoteText(text: string): Promise<NoteImproveResponse> {
   return apiPost('/api/v1/notes/improve', { text }, noteImproveResponseSchema);
+}
+
+export async function startAiCycle(body: AiCycleRequest): Promise<AiCycleStartResponse> {
+  return apiPost('/api/v1/ai-trading/cycle', body, aiCycleStartResponseSchema);
+}
+
+export async function fetchAiCycle(cycleId: string): Promise<AiCycleStatus> {
+  return apiFetch(`/api/v1/ai-trading/cycle/${cycleId}`, {}, aiCycleStatusSchema);
 }

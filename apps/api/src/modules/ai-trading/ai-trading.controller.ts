@@ -15,6 +15,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import {
+  aiCycleRequestSchema,
   aiDataRefreshRequestSchema,
   aiLabAnalyzeRequestSchema,
   aiLabBacktestRequestSchema,
@@ -25,6 +26,9 @@ import {
   aiProfileUpdateRequestSchema,
   aiServiceConfigUpdateRequestSchema,
   type AiCoverage,
+  type AiCycleRequest,
+  type AiCycleStartResponse,
+  type AiCycleStatus,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
   type AiLabAnalysis,
@@ -51,6 +55,7 @@ import {
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { AiCycleService } from './ai-cycle.service';
 import { AiDataService } from './ai-data.service';
 import { AiHealthService } from './ai-health.service';
 import { AiLabService } from './ai-lab.service';
@@ -66,6 +71,7 @@ export class AiTradingController {
     private readonly aiLab: AiLabService,
     private readonly aiSearch: AiSearchService,
     private readonly aiHealth: AiHealthService,
+    private readonly aiCycle: AiCycleService,
   ) {}
 
   @Get('profile')
@@ -154,6 +160,27 @@ export class AiTradingController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Post('cycle')
+  @HttpCode(202)
+  startCycle(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(aiCycleRequestSchema)) body: AiCycleRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<AiCycleStartResponse> {
+    return this.aiCycle.start(auth.user.id, body, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
+  @Get('cycle/:cycleId')
+  cycleStatus(
+    @CurrentAuth() auth: AuthContext,
+    @Param('cycleId', new ParseUUIDPipe()) cycleId: string,
+  ): Promise<AiCycleStatus> {
+    return this.aiCycle.status(auth.user.id, cycleId);
   }
 
   @Post('search')

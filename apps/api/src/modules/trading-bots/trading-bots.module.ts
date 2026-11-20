@@ -22,5 +22,6 @@ import { TradingBotsService } from './trading-bots.service';
     BacktestReportService,
     HistoricalDataService,
   ],
+  exports: [TradingBotsService],
 })
 export class TradingBotsModule {}

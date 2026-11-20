@@ -382,6 +382,30 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(backtest.body.oos.returnPct).toBeDefined();
     expect(typeof backtest.body.policyScore).toBe('number');
 
+    const cycle = await agent
+      .post('/api/v1/ai-trading/cycle')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframe: '1h', horizonDays: 5, variants: 100, maxDrafts: 0 })
+      .expect(202);
+    const cycleId = cycle.body.cycleId as string;
+    let cycleStatus: { status: string; steps?: Array<{ key: string; status: string }> } = {
+      status: 'queued',
+    };
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      const response = await agent.get(`/api/v1/ai-trading/cycle/${cycleId}`).expect(200);
+      cycleStatus = response.body;
+      if (['succeeded', 'failed', 'cancelled'].includes(cycleStatus.status)) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(cycleStatus.status).toBe('succeeded');
+    expect(cycleStatus.steps?.map((step) => step.key)).toEqual([
+      'data',
+      'search',
+      'recommendations',
+      'drafts',
+    ]);
+    expect(cycleStatus.steps?.find((step) => step.key === 'drafts')?.status).toBe('skipped');
+
     await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
       .set('x-csrf-token', owner.csrf)
