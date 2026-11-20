@@ -81,6 +81,11 @@ function domToMarkdown(root: ParentNode): string {
     const inner = renderChildren(element, depth, skipLists);
     if (tag === 'strong' || tag === 'b') return `**${inner}**`;
     if (tag === 'em' || tag === 'i') return `*${inner}*`;
+    if (tag === 'span') {
+      const style = (element.getAttribute('style') ?? '').toLowerCase();
+      if (/font-weight:\s*(bold|[6-9]00)/.test(style)) return `**${inner}**`;
+      if (/font-style:\s*italic/.test(style)) return `*${inner}*`;
+    }
     if (tag === 'code') return `\`${element.textContent ?? ''}\``;
     if (tag === 'pre') return `\n\`\`\`\n${element.textContent ?? ''}\n\`\`\`\n`;
     if (tag === 'a') {

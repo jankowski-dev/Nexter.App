@@ -53,6 +53,21 @@ function inlineNodes(text: string): ReactNode[] {
   return nodes;
 }
 
+export function parseListLine(
+  line: string,
+): { ordered: boolean; marker: string; depth: number; text: string } | null {
+  const match = /^(\s*)(- |\d+\.\s)(.*)$/.exec(line);
+  if (!match) return null;
+  const indentation = match[1] ?? '';
+  const marker = match[2] ?? '';
+  return {
+    ordered: /^\d/.test(marker),
+    marker: marker.trim(),
+    depth: Math.floor(indentation.length / 2),
+    text: match[3] ?? '',
+  };
+}
+
 function lineNodes(line: string, index: number): ReactNode {
   if (line.startsWith('### ')) {
     return (
@@ -82,19 +97,18 @@ function lineNodes(line: string, index: number): ReactNode {
       </blockquote>
     );
   }
-  if (line.startsWith('- ')) {
+  const listLine = parseListLine(line);
+  if (listLine) {
     return (
-      <div key={index} className="flex gap-2 text-zinc-700">
-        <span className="text-emerald-600">•</span>
-        <span>{inlineNodes(line.slice(2))}</span>
-      </div>
-    );
-  }
-  if (/^\d+\.\s/.test(line)) {
-    return (
-      <div key={index} className="flex gap-2 text-zinc-700">
-        <span className="text-zinc-400">{line.match(/^\d+/)?.[0]}.</span>
-        <span>{inlineNodes(line.replace(/^\d+\.\s/, ''))}</span>
+      <div
+        key={index}
+        className="flex gap-2 text-zinc-700"
+        style={{ paddingLeft: `${listLine.depth * 16}px` }}
+      >
+        <span className={listLine.ordered ? 'text-zinc-400' : 'text-emerald-600'}>
+          {listLine.ordered ? listLine.marker : '•'}
+        </span>
+        <span>{inlineNodes(listLine.text)}</span>
       </div>
     );
   }
