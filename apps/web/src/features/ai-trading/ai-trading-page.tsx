@@ -15,6 +15,7 @@ import {
   cancelAiSearch,
   createTradingBot,
   fetchAiSearchResults,
+  fetchAiSearchRuns,
   fetchAiSearchStatus,
   startAiSearch,
   createAiToken,
@@ -114,6 +115,7 @@ function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
     'ai-lab',
     'ai-search-status',
     'ai-search-results',
+    'ai-search-runs',
   ]) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
@@ -897,6 +899,12 @@ function SearchSection({
     }
   }, [selected, timeframe, timeframes]);
 
+  const runs = useQuery({
+    queryKey: ['ai-search-runs'],
+    queryFn: fetchAiSearchRuns,
+    refetchInterval: 30_000,
+  });
+
   const start = useMutation({
     mutationFn: () =>
       startAiSearch({
@@ -1086,6 +1094,53 @@ function SearchSection({
           <p className="mt-2 text-sm text-red-700">{currentStatus.error}</p>
         ) : null}
       </Card>
+
+      {runs.data && runs.data.data.length > 0 ? (
+        <Card>
+          <CardTitle>Последние запуски</CardTitle>
+          <CardDescription>
+            История поисков сохраняется: откройте запуск, чтобы увидеть прогресс, статистику и
+            кандидатов после перезагрузки страницы.
+          </CardDescription>
+          <div className="mt-3 space-y-1.5">
+            {runs.data.data.map((run) => (
+              <button
+                key={run.runId}
+                type="button"
+                onClick={() => setRunId(run.runId)}
+                className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors hover:border-emerald-300 ${
+                  run.runId === runId
+                    ? 'border-emerald-300 bg-emerald-50/50'
+                    : 'border-zinc-200 bg-white'
+                }`}
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-zinc-900">
+                    {run.symbol} · {run.timeframe}
+                  </span>
+                  <Badge
+                    tone={
+                      run.status === 'succeeded'
+                        ? 'success'
+                        : run.status === 'failed'
+                          ? 'danger'
+                          : run.status === 'cancelled'
+                            ? 'warning'
+                            : 'info'
+                    }
+                  >
+                    {run.status}
+                  </Badge>
+                  <span className="text-zinc-500">
+                    {run.variants} вариантов · {run.recommended} рекомендаций
+                  </span>
+                </span>
+                <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       {currentStatus ? (
         <Card>

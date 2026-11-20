@@ -10,6 +10,7 @@ import {
   aiLabBacktestResponseSchema,
   aiLabLatestSchema,
   aiSearchResultsSchema,
+  aiSearchRunsResponseSchema,
   aiSearchStartResponseSchema,
   aiSearchStatusSchema,
   aiProfileSchema,
@@ -111,6 +112,7 @@ import {
   type AiLabQuery,
   type AiSearchRequest,
   type AiSearchResults,
+  type AiSearchRunsResponse,
   type AiSearchStatus,
   type AiProfile,
   type AiProfileToken,
@@ -1353,4 +1355,8 @@ export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
 
 export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
   return apiFetch('/api/v1/ai-trading/bots/health', {}, aiBotHealthResponseSchema);
+}
+
+export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
+  return apiFetch('/api/v1/ai-trading/search/runs', {}, aiSearchRunsResponseSchema);
 }

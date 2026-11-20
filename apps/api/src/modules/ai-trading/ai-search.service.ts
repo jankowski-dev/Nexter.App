@@ -5,11 +5,12 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   aiArtifacts,
   aiCandidates,
   aiPipelineRuns,
+  assets,
   marketCandles,
   type Database,
 } from '@nexter/db';
@@ -18,6 +19,7 @@ import type {
   AiSearchCandidate,
   AiSearchRequest,
   AiSearchResults,
+  AiSearchRunsResponse,
   AiSearchStats,
   AiSearchStatus,
   AiSearchTimeframe,
@@ -183,6 +185,61 @@ export class AiSearchService {
     });
 
     return { runId: run.id };
+  }
+
+  async listRuns(userId: string, limit = 20): Promise<AiSearchRunsResponse> {
+    const profile = await this.aiTrading.getProfile(userId);
+    const rows = await this.db
+      .select()
+      .from(aiPipelineRuns)
+      .where(
+        and(
+          eq(aiPipelineRuns.profileId, profile.id),
+          sql`${aiPipelineRuns.summary}->>'assetId' is not null`,
+        ),
+      )
+      .orderBy(desc(aiPipelineRuns.createdAt))
+      .limit(Math.min(50, Math.max(1, limit)));
+
+    const assetIds = [
+      ...new Set(
+        rows
+          .map((row) => (row.summary as Record<string, unknown>).assetId)
+          .filter((value): value is string => typeof value === 'string'),
+      ),
+    ];
+    const assetRows =
+      assetIds.length > 0
+        ? await this.db
+            .select({ id: assets.id, symbol: assets.symbol, name: assets.name })
+            .from(assets)
+            .where(inArray(assets.id, assetIds))
+        : [];
+    const assetsById = new Map(assetRows.map((asset) => [asset.id, asset]));
+
+    return {
+      data: rows.flatMap((row) => {
+        const summary = row.summary as Partial<SearchRunSummary> & Record<string, unknown>;
+        const assetId = typeof summary.assetId === 'string' ? summary.assetId : null;
+        const asset = assetId ? assetsById.get(assetId) : null;
+        if (!assetId || !asset) return [];
+        return [
+          {
+            runId: row.id,
+            assetId,
+            symbol: asset.symbol,
+            name: asset.name,
+            timeframe: typeof summary.timeframe === 'string' ? summary.timeframe : '1h',
+            status: row.status as AiSearchStatus['status'],
+            variants: summary.variants ?? summary.progress?.total ?? 0,
+            recommended: summary.stats?.recommended ?? 0,
+            createdAt: row.createdAt.toISOString(),
+            finishedAt: row.finishedAt?.toISOString() ?? null,
+            stats: summary.stats ?? null,
+          },
+        ];
+      }),
+    };
   }
 
   async status(userId: string, runId: string): Promise<AiSearchStatus> {
