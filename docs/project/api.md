@@ -235,20 +235,20 @@ Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankow
 
 Owner-only; CSRF and audit. The module is recommendation-only: it does not create or start bots.
 
-| Метод        | Путь                             | Назначение                                  |
-| ------------ | -------------------------------- | ------------------------------------------- |
-| GET          | `/ai-trading/profile`            | профиль: бюджет, лимиты, модель             |
-| PUT          | `/ai-trading/profile`            | обновить профиль                            |
-| GET/POST     | `/ai-trading/profile/tokens`     | AI-вселенная                                |
-| PATCH/DELETE | `/ai-trading/profile/tokens/:id` | изменить/мягко отключить токен              |
-| GET          | `/ai-trading/services`           | конфиги Data/Analyst/Backtest/Risk/Reporter |
-| PUT          | `/ai-trading/services/:service`  | изменить конфиг сервиса                     |
-| GET          | `/ai-trading/recommendations`    | рекомендации по всем запускам               |
-| GET          | `/ai-trading/dashboard`          | бюджет, токены, роботы, очередь             |
-| GET          | `/ai-trading/coverage`           | покрытие свечей по токенам/ТФ               |
-| POST         | `/ai-trading/data/refresh`       | загрузить OHLCV                             |
-| GET          | `/ai-trading/lab`                | последний анализ по токену/ТФ               |
-| POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                          |
-| POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                 |
+| Метод        | Путь                             | Назначение                                        |
+| ------------ | -------------------------------- | ------------------------------------------------- |
+| GET          | `/ai-trading/profile`            | профиль: бюджет, лимиты, модель                   |
+| PUT          | `/ai-trading/profile`            | обновить профиль                                  |
+| GET/POST     | `/ai-trading/profile/tokens`     | AI-вселенная                                      |
+| PATCH/DELETE | `/ai-trading/profile/tokens/:id` | изменить/мягко отключить токен                    |
+| GET          | `/ai-trading/services`           | конфиги Data/Analyst/Backtest/Risk/Reporter       |
+| PUT          | `/ai-trading/services/:service`  | изменить конфиг сервиса                           |
+| GET          | `/ai-trading/recommendations`    | рекомендации по всем запускам                     |
+| GET          | `/ai-trading/dashboard`          | бюджет, токены, роботы, очередь                   |
+| GET          | `/ai-trading/coverage`           | покрытие свечей по токенам/ТФ                     |
+| POST         | `/ai-trading/data/refresh`       | загрузить OHLCV (GeckoTerminal/CoinGecko/Binance) |
+| GET          | `/ai-trading/lab`                | последний анализ по токену/ТФ                     |
+| POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                                |
+| POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                       |
 
 Mass search is implemented: asynchronous `POST /ai-trading/search`, `GET /search/runs` (recent runs), `GET /search/:runId` (progress/stats), `GET /search/:runId/results` and `POST /search/:runId/cancel`. Search results expose candidate `expiresAt`/`expired` (horizon TTL, default 7 days). Accept a candidate by creating a draft bot through `POST /trading-bots/bots` with `aiCandidateId`; the bot is created as `draft` and never started automatically, and stale candidates return `AI_RECOMMENDATION_EXPIRED`. `GET /ai-trading/recommendations` lists candidates across runs with TTL/status. `GET /ai-trading/bots/health` returns invalidation health for AI-origin bots. No approvals endpoints.
