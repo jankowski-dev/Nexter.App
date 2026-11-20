@@ -49,6 +49,7 @@ interface CycleSummary {
   searchRunId: string | null;
   recommended: number;
   draftsCreated: number;
+  rejectionReasons: Record<string, number>;
   error?: string | null;
 }
 
@@ -188,6 +189,7 @@ export class AiCycleService implements OnModuleInit {
       searchRunId: null,
       recommended: 0,
       draftsCreated: 0,
+      rejectionReasons: {},
       error: null,
     };
 
@@ -261,6 +263,7 @@ export class AiCycleService implements OnModuleInit {
       searchRunId: summary.searchRunId,
       recommended: summary.recommended,
       draftsCreated: summary.draftsCreated,
+      rejectionReasons: summary.rejectionReasons ?? {},
       error: summary.error ?? null,
       createdAt: run.createdAt.toISOString(),
       finishedAt: run.finishedAt?.toISOString() ?? null,
@@ -403,6 +406,7 @@ export class AiCycleService implements OnModuleInit {
     const recommended = results.candidates.filter((item) => item.status === 'recommended');
     await this.updateSummary(cycleId, (summary) => {
       summary.recommended = recommended.length;
+      summary.rejectionReasons = results.rejectionReasons;
     });
     await this.setStep(cycleId, 'recommendations', 'succeeded', {
       message: `${recommended.length} рекомендаций`,

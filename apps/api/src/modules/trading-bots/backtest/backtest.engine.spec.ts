@@ -75,6 +75,25 @@ describe('runBacktest', () => {
     expect(result.stats.buyHoldReturnPct).toBe('-10.00');
   });
 
+  it('warms up indicators without trading before the scoring window', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const result = runBacktest(meanReversion, params, series([100, 100, 100, 97, 100]), {
+      warmupCandles: 3,
+      feeBps: 0,
+      slippageBps: 0,
+    });
+
+    expect(result.equityCurve).toHaveLength(2);
+    expect(result.trades[0]?.date).toBe('2026-01-04');
+    expect(result.stats.buyHoldReturnPct).toBe('3.09');
+  });
+
   it('reports buy-and-hold comparison and keeps money precise', () => {
     const params = meanReversion.parseParams({
       lookback: 3,

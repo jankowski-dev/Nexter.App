@@ -340,6 +340,7 @@ export const aiCycleStatusSchema = z.object({
   searchRunId: z.uuid().nullable(),
   recommended: z.number().int(),
   draftsCreated: z.number().int(),
+  rejectionReasons: z.record(z.string(), z.number().int()).default({}),
   error: z.string().nullable(),
   createdAt: z.iso.datetime(),
   finishedAt: z.iso.datetime().nullable(),

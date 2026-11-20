@@ -32,11 +32,12 @@ describe('AI search helpers', () => {
   it('builds eight non-overlapping OOS folds and a 30-day holdout', () => {
     const { folds, holdout } = buildSearchFolds(hourlyCandles(180), '1h');
     expect(folds).toHaveLength(8);
-    expect(folds[0]?.oos).toHaveLength(240);
+    expect(folds[0]?.warmupCandles).toBe(360);
+    expect(folds[0]?.candles).toHaveLength(600);
     expect(holdout).toHaveLength(720);
     const lastFold = folds.at(-1);
-    expect(lastFold?.oos.at(-1)?.date).not.toBe(holdout[0]?.date);
-    expect((lastFold?.oos.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);
+    expect(lastFold?.candles.at(-1)?.date).not.toBe(holdout[0]?.date);
+    expect((lastFold?.candles.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);
   });
 
   it('aggregates median, worst, drawdown, trades and stability', () => {

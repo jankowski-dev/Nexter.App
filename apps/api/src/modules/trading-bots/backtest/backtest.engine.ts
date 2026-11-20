@@ -20,6 +20,8 @@ export interface BacktestOptions {
   reinvestProfit?: boolean;
   /** Number of candles used for the "24h" change; defaults to the previous candle. */
   changeLookbackCandles?: number;
+  /** Candles used only to warm up indicators; scoring starts after them. */
+  warmupCandles?: number;
 }
 
 export interface BacktestResult {
@@ -152,7 +154,16 @@ export function runBacktest(
     return true;
   };
 
-  for (let index = 0; index < candles.length; index += 1) {
+  const warmup = Math.min(candles.length - 1, Math.max(0, Math.floor(options.warmupCandles ?? 0)));
+  for (let index = 0; index < warmup; index += 1) {
+    const candle = candles[index] as BotCandle;
+    samples.push({
+      priceUsd: candle.closeUsd,
+      capturedAt: new Date(`${candle.date}T12:00:00.000Z`),
+    });
+  }
+
+  for (let index = warmup; index < candles.length; index += 1) {
     const candle = candles[index] as BotCandle;
     const close = decimal(candle.closeUsd);
     const changeLookback = Math.max(1, Math.floor(options.changeLookbackCandles ?? 1));
@@ -277,7 +288,7 @@ export function runBacktest(
 
   const finalEquity = cash;
   const totalPnl = finalEquity.minus(initialCapital);
-  const firstClose = decimal((candles[0] as BotCandle).closeUsd);
+  const firstClose = decimal((candles[warmup] as BotCandle).closeUsd);
   const lastClose = decimal(last.closeUsd);
   const buyHoldReturnPct = lastClose.minus(firstClose).div(firstClose).mul(100);
   const tradeCount = trades.length;

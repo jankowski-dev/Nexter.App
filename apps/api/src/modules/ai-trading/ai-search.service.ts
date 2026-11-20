@@ -400,7 +400,10 @@ export class AiSearchService {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
     };
 
-    for (const variant of variants) {
+    for (const [index, variant] of variants.entries()) {
+      if (index > 0 && index % 25 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
       if (control.cancelled) {
         await this.db
           .update(aiPipelineRuns)
@@ -425,11 +428,12 @@ export class AiSearchService {
       let failed = false;
       for (const fold of folds.folds) {
         try {
-          const result = runBacktest(definition, variant.params, fold.oos, {
+          const result = runBacktest(definition, variant.params, fold.candles, {
             initialCapitalUsd: '1000',
             feeBps: FEE_BPS,
             slippageBps: SLIPPAGE_BPS,
             changeLookbackCandles: candlesPerDay(input.timeframe),
+            warmupCandles: fold.warmupCandles,
           });
           foldResults.push(result.stats);
         } catch {
@@ -492,10 +496,12 @@ export class AiSearchService {
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
         if (returnPct <= 0 || drawdown > MAX_DRAWDOWN_PCT) {
           candidate.policyScore = '0';
+          reject('negative holdout');
         }
       } catch {
         candidate.holdoutReturnPct = null;
         candidate.policyScore = '0';
+        reject('holdout failed');
       }
     }
 
@@ -518,6 +524,15 @@ export class AiSearchService {
       })),
       rejectionReasons,
     };
+
+    if (control.cancelled) {
+      await this.db
+        .update(aiPipelineRuns)
+        .set({ status: 'cancelled', finishedAt: new Date() })
+        .where(eq(aiPipelineRuns.id, runId));
+      this.active.delete(runId);
+      return;
+    }
 
     await this.db.transaction(async (tx) => {
       await tx.insert(aiArtifacts).values({
