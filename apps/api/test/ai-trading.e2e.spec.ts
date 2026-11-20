@@ -219,6 +219,9 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(listedRun?.symbol).toBe('BASED');
     expect(listedRun?.timeframe).toBe('1h');
     expect((listedRun?.stats as { total?: number } | undefined)?.total).toBeGreaterThan(0);
+    expect((runs.body.data as Array<{ variants: number }>).every((run) => run.variants > 0)).toBe(
+      true,
+    );
 
     const [recommendation] = await db
       .insert(aiCandidates)
@@ -343,6 +346,11 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(acceptedRecommendation?.timeframe).toBe('1h');
     expect(acceptedRecommendation?.linkedBotId).toBe(draft.body.bot.id);
     expect(acceptedRecommendation?.expired).toBe(false);
+    expect(
+      (recommendations.body.data as Array<{ status: string }>).every((item) =>
+        ['recommended', 'accepted'].includes(item.status),
+      ),
+    ).toBe(true);
 
     const expiredRecommendationRow = (
       recommendations.body.data as Array<Record<string, unknown>>
