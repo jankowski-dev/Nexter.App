@@ -36,6 +36,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatPrice, formatUsd, formatUsdCompact } from '@/lib/format';
 import type {
   AiBotHealth,
+  AiBotHealthResponse,
   AiCoverage,
   AiCoverageStatus,
   AiCoverageTimeframe,
@@ -57,7 +58,8 @@ import type {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
-type Section = 'panel' | 'universe' | 'data' | 'lab' | 'search' | 'services' | 'settings';
+type Section =
+  'panel' | 'universe' | 'data' | 'lab' | 'search' | 'ai-bots' | 'services' | 'settings';
 
 const coverageLabels: Record<AiCoverageStatus, string> = {
   ok: 'OK',
@@ -140,7 +142,7 @@ export function AiTradingPage() {
   const botHealth = useQuery({
     queryKey: ['ai-bot-health'],
     queryFn: fetchAiBotHealth,
-    enabled: section === 'panel',
+    enabled: section === 'panel' || section === 'ai-bots',
     refetchInterval: 60_000,
   });
   const watchlist = useQuery({
@@ -230,6 +232,7 @@ export function AiTradingPage() {
           { value: 'data', label: 'Данные' },
           { value: 'lab', label: 'Лаборатория' },
           { value: 'search', label: 'Поиск' },
+          { value: 'ai-bots', label: 'Мои ИИ-роботы' },
           { value: 'services', label: 'Сервисы' },
           { value: 'settings', label: 'Настройки' },
         ]}
@@ -253,9 +256,18 @@ export function AiTradingPage() {
                   или пересмотреть, но никогда не останавливает автоматически.
                 </CardDescription>
               </div>
-              <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
-                Открыть роботов
-              </a>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="text-xs text-emerald-700 underline"
+                  onClick={() => setSection('ai-bots')}
+                >
+                  Подробнее
+                </button>
+                <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
+                  Открыть роботов
+                </a>
+              </div>
             </div>
             {botHealth.isPending ? (
               <div className="mt-3">
@@ -312,6 +324,16 @@ export function AiTradingPage() {
           tokens={tokenRows}
           coverage={coverage.data}
           onChanged={() => invalidateAi(queryClient)}
+        />
+      ) : null}
+
+      {section === 'ai-bots' ? (
+        <AiBotsSection
+          health={botHealth.data}
+          loading={botHealth.isPending}
+          error={botHealth.isError}
+          onRetry={() => void botHealth.refetch()}
+          onOpenSearch={() => setSection('search')}
         />
       ) : null}
 
@@ -478,6 +500,16 @@ function percentMagnitude(value: string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
   return Number.isFinite(number) ? `${number.toFixed(2)}%` : '—';
+}
+
+function downloadJson(filename: string, value: unknown): void {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function LabFeature({ label, value }: { label: string; value: string }) {
@@ -821,6 +853,94 @@ function LabCandidateCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function AiBotsSection({
+  health,
+  loading,
+  error,
+  onRetry,
+  onOpenSearch,
+}: {
+  health: AiBotHealthResponse | undefined;
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+  onOpenSearch: () => void;
+}) {
+  const [filter, setFilter] = useState<'all' | 'attention'>('all');
+  const items = health?.data ?? [];
+  const attention = items.filter((item) => item.level !== 'ok');
+  const visible = filter === 'attention' ? attention : items;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle>Мои ИИ-роботы</CardTitle>
+            <CardDescription>
+              Роботы, созданные из рекомендаций. Health-монитор советует остановить или
+              пересмотреть, но никогда не останавливает автоматически.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              className="h-9 w-44"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as 'all' | 'attention')}
+              aria-label="Фильтр здоровья ИИ-роботов"
+            >
+              <option value="all">Все ({items.length})</option>
+              <option value="attention">Требуют внимания ({attention.length})</option>
+            </Select>
+            <Button variant="secondary" className="h-9 px-3 text-xs" onClick={onRetry}>
+              Обновить
+            </Button>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <LabFeature label="Всего" value={String(items.length)} />
+          <LabFeature
+            label="Пересмотр"
+            value={String(items.filter((item) => item.level === 'review').length)}
+          />
+          <LabFeature
+            label="Остановить"
+            value={String(items.filter((item) => item.level === 'stop').length)}
+          />
+        </div>
+      </Card>
+
+      {loading ? (
+        <LoadingRows rows={3} />
+      ) : error ? (
+        <Card>
+          <ErrorState message="Не удалось загрузить здоровье ИИ-роботов" onRetry={onRetry} />
+        </Card>
+      ) : items.length === 0 ? (
+        <Card>
+          <CardTitle>Пока нет ИИ-роботов</CardTitle>
+          <CardDescription>
+            Создайте черновик из рекомендации в разделе «Поиск» и запустите его вручную.
+          </CardDescription>
+          <Button className="mt-3" onClick={onOpenSearch}>
+            Перейти к поиску
+          </Button>
+        </Card>
+      ) : visible.length === 0 ? (
+        <Card>
+          <p className="text-sm text-zinc-500">Нет роботов, требующих внимания.</p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {visible.map((item) => (
+            <AiBotHealthRow key={item.botId} item={item} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1213,11 +1333,22 @@ function SearchSection({
 
       {currentResults ? (
         <Card>
-          <CardTitle>Кандидаты</CardTitle>
-          <CardDescription>
-            Показаны варианты, прошедшие OOS, стабильность и финальный holdout. Создайте черновик
-            робота и запустите его вручную в разделе «Роботы».
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle>Кандидаты</CardTitle>
+              <CardDescription>
+                Показаны варианты, прошедшие OOS, стабильность и финальный holdout. Создайте
+                черновик робота и запустите его вручную в разделе «Роботы».
+              </CardDescription>
+            </div>
+            <Button
+              variant="secondary"
+              className="h-8 px-3 text-xs"
+              onClick={() => downloadJson(`ai-search-${runId ?? 'run'}.json`, currentResults)}
+            >
+              Экспорт JSON
+            </Button>
+          </div>
           {currentResults.candidates.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-500">
               Ни один вариант не прошёл фильтры. Это нормальный результат: рынок не дал устойчивого
