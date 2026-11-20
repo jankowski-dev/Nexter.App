@@ -37,6 +37,7 @@ import { decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { MarketDataService } from '../market-data/market-data.service';
 import { PricingService, type PriceQuote } from '../accounting/pricing.service';
+import { SwapTokenRegistryService } from '../swap/swap-token-registry.service';
 
 interface WatchlistMeta {
   ip?: string;
@@ -67,6 +68,7 @@ export class WatchlistService {
     private readonly audit: AuditService,
     private readonly marketData: MarketDataService,
     private readonly pricing: PricingService,
+    private readonly swapTokens: SwapTokenRegistryService,
   ) {}
 
   async chart(userId: string, id: string, days: number): Promise<WatchlistChartResponse> {
@@ -630,6 +632,7 @@ export class WatchlistService {
       );
     });
 
+    await this.swapTokens.refresh();
     return this.requireEntry(userId, id);
   }
 
