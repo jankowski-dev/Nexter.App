@@ -419,6 +419,21 @@ const cycleStepLabels: Record<AiCycleStep['key'], string> = {
   drafts: 'Черновики',
 };
 
+const rejectionLabels: Record<string, string> = {
+  'too few trades': 'мало сделок',
+  'non-positive OOS median': 'медиана OOS ≤ 0',
+  'unstable folds': 'нестабильные фолды',
+  'drawdown too high': 'просадка выше лимита',
+  'worst fold too deep': 'худший фолд слишком глубокий',
+  'negative holdout': 'отрицательный holdout',
+  'holdout failed': 'ошибка holdout',
+  'backtest failed': 'ошибка бэктеста',
+};
+
+function rejectionLabel(reason: string): string {
+  return rejectionLabels[reason] ?? reason;
+}
+
 function cycleStepTone(
   status: AiCycleStep['status'],
 ): 'neutral' | 'info' | 'success' | 'danger' | 'warning' {
@@ -509,6 +524,15 @@ function AiCycleCard({
           Рекомендаций: {cycle.recommended} · создано черновиков: {cycle.draftsCreated}. Старт
           роботов остаётся за тобой.
         </p>
+      ) : null}
+      {cycle.recommended === 0 && Object.keys(cycle.rejectionReasons).length > 0 ? (
+        <div className="mt-2 rounded-lg bg-zinc-50 px-2 py-1.5 text-[11px] text-zinc-600">
+          <span className="font-medium text-zinc-700">Почему 0 рекомендаций:</span>{' '}
+          {Object.entries(cycle.rejectionReasons)
+            .sort((left, right) => right[1] - left[1])
+            .map(([reason, count]) => `${rejectionLabel(reason)} — ${count}`)
+            .join(' · ')}
+        </div>
       ) : null}
     </Card>
   );

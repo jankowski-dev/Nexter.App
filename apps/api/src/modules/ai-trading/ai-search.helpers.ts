@@ -9,7 +9,8 @@ export interface SearchVariant {
 }
 
 export interface SearchFold {
-  oos: BotCandle[];
+  candles: BotCandle[];
+  warmupCandles: number;
 }
 
 export interface SearchFoldSet {
@@ -126,7 +127,12 @@ export function buildSearchFolds(
     const oosStart = trainEnd + 2 * perDay;
     const oosEnd = oosStart + 10 * perDay;
     if (oosEnd > searchEnd) break;
-    folds.push({ oos: use.slice(oosStart, oosEnd) });
+    const warmupCandles = Math.max(15 * perDay, 240);
+    const warmupStart = Math.max(trainStart, oosStart - warmupCandles);
+    folds.push({
+      candles: use.slice(warmupStart, oosEnd),
+      warmupCandles: oosStart - warmupStart,
+    });
   }
   return {
     folds,
