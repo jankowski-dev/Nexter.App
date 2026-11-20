@@ -16,6 +16,8 @@ import type {
   NoteCreateRequest,
   NoteImage,
   NoteImageCreateRequest,
+  NoteImproveRequest,
+  NoteImproveResponse,
   NoteListQuery,
   NoteUpdateRequest,
   NotesResponse,
@@ -23,6 +25,7 @@ import type {
 import {
   noteCreateRequestSchema,
   noteImageCreateRequestSchema,
+  noteImproveRequestSchema,
   noteListQuerySchema,
   noteUpdateRequestSchema,
 } from '@nexter/contracts';
@@ -30,12 +33,16 @@ import type { FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { AiService } from '../ai/ai.service';
 import { NotesService } from './notes.service';
 
 @ApiTags('notes')
 @Controller('notes')
 export class NotesController {
-  constructor(private readonly notes: NotesService) {}
+  constructor(
+    private readonly notes: NotesService,
+    private readonly ai: AiService,
+  ) {}
 
   @Get()
   list(
@@ -76,6 +83,14 @@ export class NotesController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Post('improve')
+  improve(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(noteImproveRequestSchema)) body: NoteImproveRequest,
+  ): Promise<NoteImproveResponse> {
+    return this.ai.improveText(auth.user.id, body.text);
   }
 
   @Post(':id/images')

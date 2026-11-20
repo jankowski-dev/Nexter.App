@@ -4,7 +4,14 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
 import { FileIcon, NotebookIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
-import { addNoteImage, createNote, fetchNote, removeNoteImage, updateNote } from '@/lib/api';
+import {
+  addNoteImage,
+  createNote,
+  fetchNote,
+  improveNoteText,
+  removeNoteImage,
+  updateNote,
+} from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
@@ -147,6 +154,8 @@ export function NoteDrawer({
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  const [improving, setImproving] = useState(false);
+  const [improvedOriginal, setImprovedOriginal] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -155,6 +164,11 @@ export function NoteDrawer({
       setAudio(attachments.data.audio);
     }
   }, [attachments.data]);
+
+  useEffect(() => {
+    setImprovedOriginal(null);
+    setImproving(false);
+  }, [note?.id]);
 
   const noteIdRef = useRef<string | null>(note?.id ?? null);
   const savedSignatureRef = useRef<string | null>(
@@ -231,6 +245,28 @@ export function NoteDrawer({
     }, runtime.autosaveIntervalSeconds * 1000);
     return () => window.clearInterval(timer);
   }, [mode, runtime.autosaveIntervalSeconds]);
+
+  async function improveBody(): Promise<void> {
+    const current = draftRef.current.body;
+    if (!current.trim() || improving) return;
+    setImproving(true);
+    setError(null);
+    try {
+      const result = await improveNoteText(current);
+      setImprovedOriginal((previous) => previous ?? current);
+      setBody(result.text);
+    } catch (err) {
+      setError(toRussianError(err, 'Не удалось улучшить текст'));
+    } finally {
+      setImproving(false);
+    }
+  }
+
+  function revertImproved(): void {
+    if (improvedOriginal === null) return;
+    setBody(improvedOriginal);
+    setImprovedOriginal(null);
+  }
 
   async function attemptClose(): Promise<void> {
     if (mode === 'view') {
@@ -416,7 +452,14 @@ export function NoteDrawer({
           {mode === 'view' ? (
             <NoteMarkdown value={body} />
           ) : (
-            <NoteEditor value={body} onChange={setBody} />
+            <NoteEditor
+              value={body}
+              onChange={setBody}
+              onImprove={() => void improveBody()}
+              onRevert={revertImproved}
+              improving={improving}
+              canRevert={improvedOriginal !== null}
+            />
           )}
 
           <div>

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ClipboardEvent, type ReactNode } from 'react';
+import { htmlToMarkdown } from './note-format';
 
 const INLINE_PATTERN =
   /(\*\*[^*]+\*\*)|(\*[^*]+\*)|(`[^`]+`)|(\[[^\]]+\]\((?:https?:\/\/)[^)\s]+\))/g;
@@ -136,9 +137,17 @@ function wrapSelection(
 export function NoteEditor({
   value,
   onChange,
+  onImprove,
+  onRevert,
+  improving = false,
+  canRevert = false,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onImprove?: () => void;
+  onRevert?: () => void;
+  improving?: boolean;
+  canRevert?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -153,9 +162,27 @@ export function NoteEditor({
     });
   }
 
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>): void {
+    const html = event.clipboardData.getData('text/html');
+    if (!html.trim()) return;
+    const markdown = htmlToMarkdown(html);
+    if (!markdown) return;
+    const textarea = event.currentTarget;
+    event.preventDefault();
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const next = `${value.slice(0, start)}${markdown}${value.slice(end)}`;
+    onChange(next);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const position = start + markdown.length;
+      textarea.setSelectionRange(position, position);
+    });
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
         {[
           ['**', '**', 'жирный', 'B', 'font-semibold'],
           ['*', '*', 'курсив', 'I', 'italic'],
@@ -183,12 +210,34 @@ export function NoteEditor({
         >
           Ссылка
         </Button>
+        {onImprove ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="ml-auto h-7 px-2 text-xs"
+            disabled={improving || !value.trim()}
+            onClick={onImprove}
+          >
+            {improving ? 'Улучшаю…' : 'Улучшить текст'}
+          </Button>
+        ) : null}
+        {canRevert && onRevert ? (
+          <Button type="button" variant="ghost" className="h-7 px-2 text-xs" onClick={onRevert}>
+            Вернуть исходный
+          </Button>
+        ) : null}
       </div>
+      {canRevert ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 px-3 py-1.5 text-xs text-emerald-800">
+          ИИ отредактировал текст. Проверьте его и сохраните или верните исходный вариант.
+        </div>
+      ) : null}
       <Textarea
         ref={ref}
         className="min-h-[45vh] w-full border-0 bg-transparent font-sans text-[15px] leading-relaxed shadow-none focus:border-0 focus:ring-0"
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onPaste={handlePaste}
         placeholder="Пиши как в журнале: мысли, наблюдения, ссылки, списки…"
         aria-label="Текст заметки"
       />
