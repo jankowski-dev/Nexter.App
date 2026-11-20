@@ -328,7 +328,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
         aiCandidateId: expiredRecommendation?.id,
       })
       .expect(409);
-    expect(expired.body.code).toBe('AI_RECOMMENDATION_EXPIRED');
+    expect(expired.body.error.code).toBe('AI_RECOMMENDATION_EXPIRED');
 
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')
