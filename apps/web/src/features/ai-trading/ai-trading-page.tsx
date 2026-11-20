@@ -1262,7 +1262,11 @@ function RecommendationCard({ item, onAccept }: { item: AiRecommendation; onAcce
           : 'Активна'
         : item.status === 'rejected'
           ? 'Отклонена'
-          : item.status;
+          : item.status === 'proposed'
+            ? 'Предложена'
+            : item.status === 'backtested'
+              ? 'Бэктест'
+              : item.status;
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-2">
