@@ -13,6 +13,7 @@ import {
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { CoinGeckoClient } from '../market-data/coingecko.client';
+import { BinanceClient } from '../market-data/binance.client';
 import { GeckoTerminalClient } from '../market-data/geckoterminal.client';
 import type { RawCandle } from '../market-data/candle.types';
 import { AiTradingService } from './ai-trading.service';
@@ -73,6 +74,7 @@ export class AiDataService {
     private readonly aiTrading: AiTradingService,
     private readonly geckoterminal: GeckoTerminalClient,
     private readonly coingecko: CoinGeckoClient,
+    private readonly binance: BinanceClient,
     private readonly audit: AuditService,
   ) {}
 
@@ -203,24 +205,25 @@ export class AiDataService {
     days: number,
     contracts: Map<string, WatchlistContracts>,
   ): Promise<RawCandle[]> {
+    const limit = Math.min(
+      5000,
+      Math.max(1, Math.floor((days * 86_400_000) / TIMEFRAME_MS[timeframe])),
+    );
     const contract = this.contractFor(token, contracts);
+    let best: RawCandle[] = [];
+
     if (contract && (token.asset.chainCode === 'bsc' || token.asset.chainCode === 'ethereum')) {
-      const limit = Math.min(
-        5000,
-        Math.max(1, Math.floor((days * 86_400_000) / TIMEFRAME_MS[timeframe])),
-      );
-      const candles = await this.geckoterminal.getOhlcvCandles(
+      best = await this.geckoterminal.getOhlcvCandles(
         token.asset.chainCode,
         contract,
         timeframe,
         limit,
       );
-      if (candles.length > 0) return candles;
     }
 
     if (timeframe === '1d' && token.asset.coingeckoId) {
       const daily = await this.coingecko.getDailyCandles(token.asset.coingeckoId, days);
-      return daily.map((candle) => ({
+      const mapped: RawCandle[] = daily.map((candle) => ({
         openTime: new Date(`${candle.date}T00:00:00.000Z`),
         open: candle.openUsd,
         high: candle.highUsd,
@@ -230,13 +233,20 @@ export class AiDataService {
         source: 'coingecko',
         quality: 'synthetic',
       }));
+      if (mapped.length > best.length) best = mapped;
     }
 
     if (timeframe === '1h' && token.asset.coingeckoId) {
-      return this.coingecko.getHourlyCandles(token.asset.coingeckoId, days);
+      const hourly = await this.coingecko.getHourlyCandles(token.asset.coingeckoId, days);
+      if (hourly.length > best.length) best = hourly;
     }
 
-    return [];
+    if (best.length < limit) {
+      const binance = await this.binance.getCandles(token.asset.symbol, timeframe, days);
+      if (binance.length > best.length) best = binance;
+    }
+
+    return best.slice(-limit);
   }
 
   private contractFor(

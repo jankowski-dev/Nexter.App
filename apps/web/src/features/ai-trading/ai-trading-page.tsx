@@ -1890,8 +1890,8 @@ function DataSection({
         <div>
           <CardTitle>Покрытие данных</CardTitle>
           <CardDescription>
-            OHLCV из GeckoTerminal и CoinGecko. Свечи хранятся в market_candles; синтетические
-            дневные и часовые точки помечаются отдельно.
+            OHLCV из GeckoTerminal, CoinGecko и Binance. Свечи хранятся в market_candles;
+            синтетические дневные и часовые точки помечаются отдельно.
           </CardDescription>
         </div>
         <div className="flex items-end gap-2">
