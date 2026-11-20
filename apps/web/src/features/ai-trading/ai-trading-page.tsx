@@ -1566,50 +1566,56 @@ function SearchSection({
         ) : null}
       </Card>
 
-      {runs.data && runs.data.data.length > 0 ? (
+      {runs.data ? (
         <Card>
           <CardTitle>Последние запуски</CardTitle>
           <CardDescription>
             История поисков сохраняется: откройте запуск, чтобы увидеть прогресс, статистику и
-            кандидатов после перезагрузки страницы.
+            кандидатов после перезагрузки страницы. Анализы лаборатории в эту историю не входят.
           </CardDescription>
-          <div className="mt-3 space-y-1.5">
-            {runs.data.data.map((run) => (
-              <button
-                key={run.runId}
-                type="button"
-                onClick={() => setRunId(run.runId)}
-                className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors hover:border-emerald-300 ${
-                  run.runId === runId
-                    ? 'border-emerald-300 bg-emerald-50/50'
-                    : 'border-zinc-200 bg-white'
-                }`}
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-zinc-900">
-                    {run.symbol} · {run.timeframe}
+          {runs.data.data.length === 0 ? (
+            <p className="mt-3 text-sm text-zinc-500">
+              Пока нет запусков поиска. Запустите первый поиск после загрузки 180 дней истории.
+            </p>
+          ) : (
+            <div className="mt-3 space-y-1.5">
+              {runs.data.data.map((run) => (
+                <button
+                  key={run.runId}
+                  type="button"
+                  onClick={() => setRunId(run.runId)}
+                  className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors hover:border-emerald-300 ${
+                    run.runId === runId
+                      ? 'border-emerald-300 bg-emerald-50/50'
+                      : 'border-zinc-200 bg-white'
+                  }`}
+                >
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-zinc-900">
+                      {run.symbol} · {run.timeframe}
+                    </span>
+                    <Badge
+                      tone={
+                        run.status === 'succeeded'
+                          ? 'success'
+                          : run.status === 'failed'
+                            ? 'danger'
+                            : run.status === 'cancelled'
+                              ? 'warning'
+                              : 'info'
+                      }
+                    >
+                      {run.status}
+                    </Badge>
+                    <span className="text-zinc-500">
+                      {run.variants} вариантов · {run.recommended} рекомендаций
+                    </span>
                   </span>
-                  <Badge
-                    tone={
-                      run.status === 'succeeded'
-                        ? 'success'
-                        : run.status === 'failed'
-                          ? 'danger'
-                          : run.status === 'cancelled'
-                            ? 'warning'
-                            : 'info'
-                    }
-                  >
-                    {run.status}
-                  </Badge>
-                  <span className="text-zinc-500">
-                    {run.variants} вариантов · {run.recommended} рекомендаций
-                  </span>
-                </span>
-                <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>
-              </button>
-            ))}
-          </div>
+                  <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
       ) : null}
 
