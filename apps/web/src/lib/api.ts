@@ -62,6 +62,7 @@ import {
   importsResponseSchema,
   manualTransactionResponseSchema,
   noteImageSchema,
+  noteImproveResponseSchema,
   noteSchema,
   notificationsResponseSchema,
   pendingOrderSchema,
@@ -197,6 +198,7 @@ import {
   type NotificationsClearResponse,
   type NotificationsReadAllResponse,
   type NoteImageCreateRequest,
+  type NoteImproveResponse,
   type NoteListQuery,
   type NoteUpdateRequest,
   type NotesResponse,
@@ -1365,4 +1367,8 @@ export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
 
 export async function fetchAiRecommendations(): Promise<AiRecommendationsResponse> {
   return apiFetch('/api/v1/ai-trading/recommendations', {}, aiRecommendationsResponseSchema);
+}
+
+export async function improveNoteText(text: string): Promise<NoteImproveResponse> {
+  return apiPost('/api/v1/notes/improve', { text }, noteImproveResponseSchema);
 }

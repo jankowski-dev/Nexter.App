@@ -42,6 +42,13 @@ export const noteSchema = z.object({
   updatedAt: z.iso.datetime(),
 });
 
+export const noteImproveRequestSchema = z.object({
+  text: z.string().trim().min(1).max(50_000),
+});
+export const noteImproveResponseSchema = z.object({
+  text: z.string().trim().min(1).max(20_000),
+});
+
 export const noteListQuerySchema = z.object({
   search: z.string().max(100).optional(),
   includeArchived: z
@@ -107,4 +114,6 @@ export type Note = z.infer<typeof noteSchema>;
 export type NoteListQuery = z.infer<typeof noteListQuerySchema>;
 export type NoteCreateRequest = z.infer<typeof noteCreateRequestSchema>;
 export type NoteUpdateRequest = z.infer<typeof noteUpdateRequestSchema>;
+export type NoteImproveRequest = z.infer<typeof noteImproveRequestSchema>;
+export type NoteImproveResponse = z.infer<typeof noteImproveResponseSchema>;
 export type NotesResponse = z.infer<typeof notesResponseSchema>;
