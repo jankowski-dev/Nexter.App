@@ -10,7 +10,14 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
-import { aiJobs, aiPipelineRuns, tradingBots, type Database } from '@nexter/db';
+import {
+  aiJobs,
+  aiPipelineRuns,
+  tradingBots,
+  watchlist,
+  watchlistGroups,
+  type Database,
+} from '@nexter/db';
 import {
   aiCycleStepKeys,
   type AiCycleRequest,
@@ -125,6 +132,31 @@ export class AiCycleService implements OnModuleInit {
         code: 'AI_CYCLE_BUSY',
         message: 'AI cycle is already running',
       });
+    }
+
+    if (input.maxDrafts > 0) {
+      const [watched] = await this.db
+        .select({ id: watchlist.id })
+        .from(watchlist)
+        .innerJoin(
+          watchlistGroups,
+          and(eq(watchlistGroups.id, watchlist.groupId), eq(watchlistGroups.isDefault, true)),
+        )
+        .where(
+          and(
+            eq(watchlist.userId, userId),
+            eq(watchlist.assetId, input.assetId),
+            isNull(watchlist.archivedAt),
+          ),
+        )
+        .limit(1);
+      if (!watched) {
+        throw new ConflictException({
+          code: 'AI_CYCLE_TOKEN_NOT_WATCHLIST',
+          message:
+            'Чтобы создать черновик, токен должен быть активной записью группы «Основная». Добавьте его в watchlist или выберите «Черновиков: 0».',
+        });
+      }
     }
 
     const [daily] = await this.db
