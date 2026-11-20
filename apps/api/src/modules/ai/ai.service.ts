@@ -109,14 +109,17 @@ export class AiService {
   async improveText(userId: string, text: string): Promise<{ text: string }> {
     const { settings, apiKey } = await this.settings.requireKey(userId);
     const startedAt = Date.now();
-    const model = effectiveModel(settings);
+    // Proofreading is an editing task, not a reasoning task. Use the fast
+    // configured model so DeepSeek does not spend thousands of tokens
+    // "thinking" before returning the edited text.
+    const model = settings.model;
 
     try {
       const response = await this.provider.complete({
         apiKey,
         model,
         temperature: settings.temperature,
-        maxTokens: settings.maxTokens,
+        maxTokens: Math.min(settings.maxTokens, 4000),
         jsonMode: true,
         messages: [
           { role: 'system', content: IMPROVE_JSON_PROMPT },
@@ -219,7 +222,7 @@ ${text.slice(0, 50_000)}
         entityType: 'note',
         entityId: null,
         after: {
-          model: effectiveModel(settings),
+          model: settings.model,
           latencyMs: Date.now() - startedAt,
           code: error instanceof Error ? error.message.slice(0, 300) : 'unknown',
         },
