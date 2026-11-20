@@ -152,6 +152,7 @@
 | GET    | `/notes`                     | список (search/archive/offset/limit)               |
 | GET    | `/notes/:id`                 | детали + attachments                               |
 | POST   | `/notes`                     | создать                                            |
+| POST   | `/notes/improve`             | улучшить текст заметки через ИИ                    |
 | PATCH  | `/notes/:id`                 | изменить/архивировать/pin                          |
 | POST   | `/notes/:id/images`          | attachment (image/file)                            |
 | DELETE | `/notes/:id/images/:imageId` | удалить attachment                                 |
