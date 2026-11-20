@@ -205,6 +205,10 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .expect(200);
     expect(searchResults.body.stats.total).toBeGreaterThan(0);
     expect(searchResults.body.stats.evaluated).toBe(searchResults.body.stats.total);
+    const histogram = searchResults.body.stats.histogram as Array<{ count: number }>;
+    expect(histogram).toHaveLength(8);
+    const histogramTotal = histogram.reduce((sum, bucket) => sum + bucket.count, 0);
+    expect(histogramTotal).toBeLessThanOrEqual(searchResults.body.stats.evaluated);
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
 
     const runs = await agent.get('/api/v1/ai-trading/search/runs').expect(200);

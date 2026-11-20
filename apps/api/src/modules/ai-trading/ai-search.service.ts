@@ -358,6 +358,7 @@ export class AiSearchService {
         worstOosReturnPct: '0',
         stabilityPct: '0',
         holdoutReturnPct: null,
+        histogram: [],
       },
       candidates: rows.map((row) => this.toCandidate(row)),
       rejectionReasons: (payload.rejectionReasons as Record<string, number> | undefined) ?? {},
@@ -633,6 +634,16 @@ export class AiSearchService {
           : (sorted[Math.floor(sorted.length / 2)] as number);
     const best = sorted.at(-1) ?? 0;
     const worst = sorted[0] ?? 0;
+    const histogramRanges = [
+      { label: '< -20%', test: (value: number) => value < -20 },
+      { label: '-20…-10%', test: (value: number) => value >= -20 && value < -10 },
+      { label: '-10…-5%', test: (value: number) => value >= -10 && value < -5 },
+      { label: '-5…0%', test: (value: number) => value >= -5 && value < 0 },
+      { label: '0…5%', test: (value: number) => value >= 0 && value < 5 },
+      { label: '5…10%', test: (value: number) => value >= 5 && value < 10 },
+      { label: '10…20%', test: (value: number) => value >= 10 && value < 20 },
+      { label: '> 20%', test: (value: number) => value >= 20 },
+    ];
     return {
       total,
       evaluated,
@@ -655,6 +666,10 @@ export class AiSearchService {
             ).toFixed(2)
           : '0.00',
       holdoutReturnPct: recommended[0]?.holdoutReturnPct ?? null,
+      histogram: histogramRanges.map((range) => ({
+        label: range.label,
+        count: returns.filter(range.test).length,
+      })),
     };
   }
 

@@ -315,6 +315,11 @@ export const aiRecommendationsResponseSchema = z.object({
 
 export const aiSearchStartResponseSchema = z.object({ runId: z.uuid() });
 
+export const aiSearchHistogramBucketSchema = z.object({
+  label: z.string(),
+  count: z.number().int(),
+});
+
 export const aiSearchStatsSchema = z.object({
   total: z.number().int(),
   evaluated: z.number().int(),
@@ -331,6 +336,7 @@ export const aiSearchStatsSchema = z.object({
   worstOosReturnPct: z.string(),
   stabilityPct: z.string(),
   holdoutReturnPct: z.string().nullable(),
+  histogram: z.array(aiSearchHistogramBucketSchema).default([]),
 });
 
 export const aiSearchRunSummarySchema = z.object({
@@ -467,6 +473,7 @@ export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
 export type AiRecommendationStatus = z.infer<typeof aiRecommendationStatusSchema>;
 export type AiRecommendation = z.infer<typeof aiRecommendationSchema>;
 export type AiRecommendationsResponse = z.infer<typeof aiRecommendationsResponseSchema>;
+export type AiSearchHistogramBucket = z.infer<typeof aiSearchHistogramBucketSchema>;
 export type AiSearchRunSummary = z.infer<typeof aiSearchRunSummarySchema>;
 export type AiSearchRunsResponse = z.infer<typeof aiSearchRunsResponseSchema>;
 export type AiSearchStartResponse = z.infer<typeof aiSearchStartResponseSchema>;
