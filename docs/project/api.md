@@ -250,4 +250,4 @@ Owner-only; CSRF and audit. The module is recommendation-only: it does not creat
 | POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                          |
 | POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                 |
 
-Mass search is implemented: asynchronous `POST /ai-trading/search`, `GET /search/:runId` (progress/stats), `GET /search/:runId/results` and `POST /search/:runId/cancel`. The next phase adds `GET /recommendations` and accept/reject actions that open a prefilled draft bot. No approvals endpoints.
+Mass search is implemented: asynchronous `POST /ai-trading/search`, `GET /search/runs` (recent runs), `GET /search/:runId` (progress/stats), `GET /search/:runId/results` and `POST /search/:runId/cancel`. Accept a candidate by creating a draft bot through `POST /trading-bots/bots` with `aiCandidateId`; the bot is created as `draft` and never started automatically. `GET /ai-trading/bots/health` returns invalidation health for AI-origin bots. No approvals endpoints.

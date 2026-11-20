@@ -31,6 +31,7 @@ import { runBacktest } from '../trading-bots/backtest/backtest.engine';
 import { strategyByKey, strategyDefinitions } from '../trading-bots/strategies';
 import { AiTradingService } from './ai-trading.service';
 import { TIMEFRAME_MS } from './ai-features';
+import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
 import {
   aggregateVariant,
   buildSearchFolds,
@@ -599,10 +600,13 @@ export class AiSearchService {
     const metrics = row.metrics as Record<string, unknown>;
     const value = (key: string, fallback: string): string =>
       typeof metrics[key] === 'string' ? (metrics[key] as string) : fallback;
+    const expiresAt = recommendationExpiresAt(row.createdAt, metrics);
     return {
       id: row.id,
       status: row.status === 'accepted' || row.status === 'rejected' ? row.status : 'recommended',
       linkedBotId: typeof metrics.botId === 'string' ? metrics.botId : null,
+      expiresAt: expiresAt.toISOString(),
+      expired: isRecommendationExpired(row.createdAt, metrics),
       strategyKey: row.strategyKey,
       strategyName: strategyByKey.get(row.strategyKey)?.name ?? row.strategyKey,
       params: row.params,
