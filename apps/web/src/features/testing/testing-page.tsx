@@ -22,7 +22,7 @@ import {
   updateTradingBot,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDateTime, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
+import { formatDateTime, formatPrice, formatSignedUsd, formatUsd, pnlTone } from '@/lib/format';
 import { useConfirm } from '@/lib/confirm';
 import { useRuntimeSettings } from '../settings/use-settings';
 import { filterBySearch } from '@/lib/search';
@@ -121,6 +121,12 @@ function compareBots(a: BotSummary, b: BotSummary, sort: Sort): number {
   }
   const field = sort === 'pnl' ? 'totalPnlUsd' : 'equityUsd';
   return new Decimal(b.stats[field]).comparedTo(a.stats[field]);
+}
+
+function botPnlTone(bot: BotSummary): string {
+  const pnl = Number(bot.stats.totalPnlUsd);
+  if (!Number.isFinite(pnl) || pnl === 0) return '';
+  return pnl > 0 ? 'border-emerald-200 bg-emerald-50/40' : 'border-red-200 bg-red-50/40';
 }
 
 function BotStats({ bot }: { bot: BotSummary }) {
@@ -243,6 +249,41 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
     entry.chainCode,
   ]);
   const selectedTemplate = templates.find((template) => template.key === botForm.strategyKey);
+  const staticProjection = (() => {
+    if (selectedTemplate?.key !== 'static_limit') return null;
+    const buy = Number(botForm.strategyParams.buyPriceUsd);
+    const stop = Number(botForm.strategyParams.stopPriceUsd);
+    const take = Number(botForm.strategyParams.takeProfitPriceUsd);
+    const budget = Number(botForm.budgetUsd);
+    const sizePct = Number(botForm.positionSizePct);
+    if (
+      !Number.isFinite(buy) ||
+      !Number.isFinite(stop) ||
+      !Number.isFinite(take) ||
+      !Number.isFinite(budget) ||
+      !Number.isFinite(sizePct) ||
+      buy <= 0 ||
+      stop <= 0 ||
+      take <= 0 ||
+      budget <= 0 ||
+      sizePct <= 0 ||
+      stop >= buy ||
+      take <= buy
+    ) {
+      return null;
+    }
+    const allocation = (budget * sizePct) / 100;
+    const quantity = allocation / buy;
+    const loss = quantity * (buy - stop);
+    const profit = quantity * (take - buy);
+    return {
+      allocation,
+      loss,
+      profit,
+      lossPct: (loss / allocation) * 100,
+      profitPct: (profit / allocation) * 100,
+    };
+  })();
   const sortedBots = [...(bots.data?.data ?? [])].sort((a, b) => compareBots(a, b, sort));
 
   useEffect(() => {
@@ -592,7 +633,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                   role="button"
                   tabIndex={0}
                   aria-label={`Открыть робота ${bot.name}`}
-                  className="cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                  className={`cursor-pointer p-3 transition-colors hover:border-emerald-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${botPnlTone(bot)}`}
                   onClick={() => openBotDetail(bot.id)}
                   onKeyDown={(event) => {
                     if (event.target !== event.currentTarget) return;
@@ -903,6 +944,33 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                   }))
                 }
               />
+              {staticProjection ? (
+                <div className="mt-3 rounded-lg border border-zinc-200 bg-white px-3 py-2">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                    Расчёт одной позиции
+                  </div>
+                  <div className="mt-1 grid gap-1 text-xs sm:grid-cols-3">
+                    <div className="text-zinc-600">
+                      В позиции:{' '}
+                      <span className="font-medium text-zinc-900">
+                        {formatUsd(staticProjection.allocation.toFixed(2))}
+                      </span>
+                    </div>
+                    <div className="text-red-700">
+                      Стоп: −{formatUsd(staticProjection.loss.toFixed(2))} (−
+                      {staticProjection.lossPct.toFixed(2)}%)
+                    </div>
+                    <div className="text-emerald-700">
+                      Тейк: +{formatUsd(staticProjection.profit.toFixed(2))} (+
+                      {staticProjection.profitPct.toFixed(2)}%)
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-400">
+                    Без комиссии и проскальзывания. Цена покупки —{' '}
+                    {formatPrice(String(Number(botForm.strategyParams.buyPriceUsd)))}.
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
