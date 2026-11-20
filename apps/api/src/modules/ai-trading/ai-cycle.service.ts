@@ -448,6 +448,9 @@ export class AiCycleService implements OnModuleInit {
           meta,
         );
         created += 1;
+        await this.updateSummary(cycleId, (summary) => {
+          summary.draftsCreated = created;
+        });
       } catch (error) {
         throw new ServiceUnavailableException({
           code: 'AI_DRAFT_FAILED',

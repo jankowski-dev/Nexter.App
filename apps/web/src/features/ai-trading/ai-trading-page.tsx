@@ -344,7 +344,7 @@ export function AiTradingPage() {
         cycle={cycle.data ?? null}
         loading={cycle.isPending && Boolean(cycleId)}
         onOpenBots={() => {
-          window.location.hash = 'robots';
+          window.location.href = '/portfolio#robots';
         }}
       />
 
