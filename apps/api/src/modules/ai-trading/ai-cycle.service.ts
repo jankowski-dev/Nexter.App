@@ -52,7 +52,7 @@ const STEP_LABELS: Record<AiCycleStepKey, string> = {
   drafts: 'Черновики',
 };
 
-const MAX_CYCLE_MS = 5 * 60_000;
+const MAX_CYCLE_MS = 15 * 60_000;
 
 function emptyStep(key: AiCycleStepKey): AiCycleStep {
   return {
@@ -355,7 +355,7 @@ export class AiCycleService implements OnModuleInit {
     }
     throw new ServiceUnavailableException({
       code: 'AI_SEARCH_TIMEOUT',
-      message: 'Поиск не завершился за 5 минут',
+      message: 'Поиск не завершился за 15 минут',
     });
   }
 
@@ -609,7 +609,7 @@ export class AiCycleService implements OnModuleInit {
         and(
           inArray(aiPipelineRuns.status, ['queued', 'running']),
           sql`${aiPipelineRuns.summary}->>'kind' = 'cycle'`,
-          sql`${aiPipelineRuns.createdAt} < now() - interval '10 minutes'`,
+          sql`${aiPipelineRuns.createdAt} < now() - interval '20 minutes'`,
         ),
       )
       .limit(50);
