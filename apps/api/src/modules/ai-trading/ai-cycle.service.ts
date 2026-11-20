@@ -485,7 +485,6 @@ export class AiCycleService implements OnModuleInit {
         status,
         payload: { cycleId, step: key, label: STEP_LABELS[key], message: patch.message ?? null },
         error: patch.error ?? null,
-        attempts: status === 'running' ? sql`${aiJobs.attempts} + 1` : aiJobs.attempts,
         updatedAt: new Date(),
       })
       .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.stage, key)));
