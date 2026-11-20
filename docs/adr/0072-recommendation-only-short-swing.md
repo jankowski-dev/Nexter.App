@@ -115,8 +115,8 @@ The AI confidence is not treated as a probability of profit. The recommendation 
 - Recommendation: candidate acceptance creates a prefilled `draft` bot with `ai_candidate_id` and `evaluation_timeframe`; the owner starts it manually. The candidate stores the linked bot id and becomes `accepted`.
 - Invalidation: `GET /ai-trading/bots/health` plus a five-minute monitor for drawdown, daily loss, stale ticks, horizon expiry, P&L below the worst OOS fold, bot errors and missing recommendations. It writes notifications/audit and never stops a bot.
 - History and TTL: `GET /ai-trading/search/runs` lists recent runs so results survive refresh; candidates expose `expiresAt`/`expired`, expire after `horizonDays` (default 7 days), and stale acceptance returns `AI_RECOMMENDATION_EXPIRED`.
-- Screens: `Рекомендации` lists candidates across runs with active/accepted/expired filters and acceptance; `Мои ИИ-роботы` shows health totals, attention filter and reasons; search results export JSON.
-- Still next: histograms.
+- Screens: `Рекомендации` lists candidates across runs with active/accepted/expired filters and acceptance; `Мои ИИ-роботы` shows health totals, attention filter and reasons; search results export JSON and show an eight-bucket OOS histogram.
+- The recommendation-only short-swing loop is complete for this ADR's MVP scope. Next work is production use and refinement, not new autonomy.
 
 ## Consequences
 
