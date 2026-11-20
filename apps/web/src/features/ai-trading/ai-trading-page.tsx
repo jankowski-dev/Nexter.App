@@ -1623,6 +1623,30 @@ function SearchSection({
               />
             </div>
           ) : null}
+          {stats && stats.histogram.length > 0 ? (
+            <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+                Распределение OOS-медиан
+              </div>
+              <div className="mt-2 flex items-end gap-1">
+                {stats.histogram.map((bucket) => {
+                  const max = Math.max(...stats.histogram.map((item) => item.count), 1);
+                  return (
+                    <div key={bucket.label} className="flex flex-1 flex-col items-center gap-1">
+                      <div className="text-[10px] text-zinc-500">{bucket.count}</div>
+                      <div
+                        className="w-full rounded-t bg-emerald-400/70"
+                        style={{ height: `${Math.max(3, (bucket.count / max) * 64)}px` }}
+                      />
+                      <div className="whitespace-nowrap text-[9px] text-zinc-400">
+                        {bucket.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
         </Card>
       ) : null}
 
