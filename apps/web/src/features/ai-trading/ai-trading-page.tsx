@@ -92,7 +92,13 @@ export function AiTradingPage() {
   const [horizon, setHorizon] = useState('5');
   const [variants, setVariants] = useState('5000');
   const [maxDrafts, setMaxDrafts] = useState('3');
-  const [cycleId, setCycleId] = useState<string | null>(null);
+  const [cycleId, setCycleId] = useState<string | null>(() => {
+    try {
+      return window.sessionStorage.getItem('ai-cycle-id');
+    } catch {
+      return null;
+    }
+  });
 
   const dashboard = useQuery({
     queryKey: ['ai-dashboard'],
@@ -155,6 +161,11 @@ export function AiTradingPage() {
       }),
     onSuccess: (result) => {
       setCycleId(result.cycleId);
+      try {
+        window.sessionStorage.setItem('ai-cycle-id', result.cycleId);
+      } catch {
+        // Storage may be unavailable; the in-memory id still works.
+      }
       invalidateAi(queryClient);
     },
   });
@@ -185,7 +196,10 @@ export function AiTradingPage() {
   }
 
   const profile = dashboard.data.profile;
-  const activeCycle = cycle.data?.status === 'queued' || cycle.data?.status === 'running';
+  const activeCycle =
+    (Boolean(cycleId) && cycle.isPending) ||
+    cycle.data?.status === 'queued' ||
+    cycle.data?.status === 'running';
   const canStart = Boolean(assetId) && !activeCycle && !startCycle.isPending;
 
   return (
