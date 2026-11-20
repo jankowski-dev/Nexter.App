@@ -214,6 +214,15 @@ export function TokenTradeDrawer({
       : null;
   const assetAddress = swapTokenAddress(token, config.data);
   const onchainConfigured = Boolean(config.data?.enabled && assetAddress);
+  const onchainReason = !config.data?.enabled
+    ? 'Ончейн-свопы отключены на сервере'
+    : !chain
+      ? `Сеть ${token.chainCode} не поддерживается для ончейн-свопов`
+      : !token.contractAddress
+        ? 'У токена не указан контракт — ончейн-своп невозможен'
+        : !assetAddress
+          ? 'Токен ещё не в swap-allowlist. Проверьте группу «Основная», переключатель «Ончейн-свопы» и подождите до минуты.'
+          : null;
   const quoteOptions = chainCode ? quoteAssetOptions(config.data, chainCode) : [];
   const quoteAsset = quoteOptions.find((item) => item.symbol === quoteSymbol) ?? quoteOptions[0];
   const quoteAddress = quoteAsset?.address ?? null;
@@ -966,6 +975,7 @@ export function TokenTradeDrawer({
               onChange={setChannel}
               disabled={executing || pendingSubmit || manualPending}
               onchainConfigured={onchainConfigured}
+              onchainReason={onchainReason}
             />
           )}
 
@@ -1283,11 +1293,13 @@ function TradeChannelTabs({
   onChange,
   disabled,
   onchainConfigured,
+  onchainReason,
 }: {
   value: 'onchain' | 'manual';
   onChange: (value: 'onchain' | 'manual') => void;
   disabled: boolean;
   onchainConfigured: boolean;
+  onchainReason: string | null;
 }) {
   return (
     <div
@@ -1300,9 +1312,7 @@ function TradeChannelTabs({
         role="tab"
         aria-selected={value === 'onchain'}
         disabled={disabled}
-        title={
-          onchainConfigured ? undefined : 'On-chain исполнение недоступно для этого токена или сети'
-        }
+        title={onchainConfigured ? undefined : (onchainReason ?? 'On-chain исполнение недоступно')}
         onClick={() => onChange('onchain')}
         className={`flex-1 rounded-lg px-3 py-1.5 text-sm ${
           value === 'onchain'
