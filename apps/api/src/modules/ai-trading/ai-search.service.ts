@@ -400,7 +400,10 @@ export class AiSearchService {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
     };
 
-    for (const variant of variants) {
+    for (const [index, variant] of variants.entries()) {
+      if (index > 0 && index % 25 === 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
       if (control.cancelled) {
         await this.db
           .update(aiPipelineRuns)
@@ -518,6 +521,15 @@ export class AiSearchService {
       })),
       rejectionReasons,
     };
+
+    if (control.cancelled) {
+      await this.db
+        .update(aiPipelineRuns)
+        .set({ status: 'cancelled', finishedAt: new Date() })
+        .where(eq(aiPipelineRuns.id, runId));
+      this.active.delete(runId);
+      return;
+    }
 
     await this.db.transaction(async (tx) => {
       await tx.insert(aiArtifacts).values({
