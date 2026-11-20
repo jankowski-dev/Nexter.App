@@ -18,6 +18,7 @@ import type {
   AiProfileToken,
   AiSearchCandidate,
   AiSearchRequest,
+  AiRecommendationsResponse,
   AiSearchResults,
   AiSearchRunsResponse,
   AiSearchStats,
@@ -239,6 +240,67 @@ export class AiSearchService {
             stats: summary.stats ?? null,
           },
         ];
+      }),
+    };
+  }
+
+  async listRecommendations(userId: string): Promise<AiRecommendationsResponse> {
+    const profile = await this.aiTrading.getProfile(userId);
+    const rows = await this.db
+      .select({ candidate: aiCandidates, asset: assets })
+      .from(aiCandidates)
+      .innerJoin(assets, eq(assets.id, aiCandidates.assetId))
+      .where(
+        and(
+          eq(aiCandidates.profileId, profile.id),
+          inArray(aiCandidates.status, [
+            'proposed',
+            'backtested',
+            'recommended',
+            'accepted',
+            'rejected',
+          ]),
+        ),
+      )
+      .orderBy(desc(aiCandidates.createdAt))
+      .limit(100);
+
+    return {
+      data: rows.map(({ candidate, asset }) => {
+        const metrics = candidate.metrics as Record<string, unknown>;
+        const value = (key: string, fallback: string): string =>
+          typeof metrics[key] === 'string' ? (metrics[key] as string) : fallback;
+        const expiresAt = recommendationExpiresAt(candidate.createdAt, metrics);
+        const status = ['proposed', 'backtested', 'recommended', 'accepted', 'rejected'].includes(
+          candidate.status,
+        )
+          ? (candidate.status as AiRecommendationsResponse['data'][number]['status'])
+          : 'proposed';
+        return {
+          id: candidate.id,
+          assetId: asset.id,
+          symbol: asset.symbol,
+          name: asset.name,
+          timeframe: candidate.timeframe,
+          status,
+          strategyKey: candidate.strategyKey,
+          strategyName: strategyByKey.get(candidate.strategyKey)?.name ?? candidate.strategyKey,
+          params: candidate.params,
+          oosMedianReturnPct: value('oosMedianReturnPct', '0'),
+          oosMeanReturnPct: value('oosMeanReturnPct', '0'),
+          oosWorstReturnPct: value('oosWorstReturnPct', '0'),
+          maxDrawdownPct: value('maxDrawdownPct', '0'),
+          trades: typeof metrics.trades === 'number' ? metrics.trades : 0,
+          positiveFolds: typeof metrics.positiveFolds === 'number' ? metrics.positiveFolds : 0,
+          stabilityPct: value('stabilityPct', '0'),
+          holdoutReturnPct:
+            typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
+          policyScore: candidate.policyScore ?? '0',
+          linkedBotId: typeof metrics.botId === 'string' ? metrics.botId : null,
+          createdAt: candidate.createdAt.toISOString(),
+          expiresAt: expiresAt.toISOString(),
+          expired: isRecommendationExpired(candidate.createdAt, metrics),
+        };
       }),
     };
   }

@@ -278,6 +278,41 @@ export const aiSearchRequestSchema = z.object({
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
 });
 
+export const aiRecommendationStatusSchema = z.enum([
+  'proposed',
+  'backtested',
+  'recommended',
+  'accepted',
+  'rejected',
+]);
+export const aiRecommendationSchema = z.object({
+  id: z.uuid(),
+  assetId: z.uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  timeframe: z.string(),
+  status: aiRecommendationStatusSchema,
+  strategyKey: z.string(),
+  strategyName: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  oosMedianReturnPct: z.string(),
+  oosMeanReturnPct: z.string(),
+  oosWorstReturnPct: z.string(),
+  maxDrawdownPct: z.string(),
+  trades: z.number().int(),
+  positiveFolds: z.number().int(),
+  stabilityPct: z.string(),
+  holdoutReturnPct: z.string().nullable(),
+  policyScore: z.string(),
+  linkedBotId: z.uuid().nullable(),
+  createdAt: z.iso.datetime(),
+  expiresAt: z.iso.datetime(),
+  expired: z.boolean(),
+});
+export const aiRecommendationsResponseSchema = z.object({
+  data: z.array(aiRecommendationSchema),
+});
+
 export const aiSearchStartResponseSchema = z.object({ runId: z.uuid() });
 
 export const aiSearchStatsSchema = z.object({
@@ -429,6 +464,9 @@ export type AiLabBacktestRequest = z.infer<typeof aiLabBacktestRequestSchema>;
 export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
 export type AiSearchTimeframe = z.infer<typeof aiSearchTimeframeSchema>;
 export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
+export type AiRecommendationStatus = z.infer<typeof aiRecommendationStatusSchema>;
+export type AiRecommendation = z.infer<typeof aiRecommendationSchema>;
+export type AiRecommendationsResponse = z.infer<typeof aiRecommendationsResponseSchema>;
 export type AiSearchRunSummary = z.infer<typeof aiSearchRunSummarySchema>;
 export type AiSearchRunsResponse = z.infer<typeof aiSearchRunsResponseSchema>;
 export type AiSearchStartResponse = z.infer<typeof aiSearchStartResponseSchema>;

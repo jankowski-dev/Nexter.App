@@ -14,6 +14,7 @@ import {
   aiSearchStartResponseSchema,
   aiSearchStatusSchema,
   aiProfileSchema,
+  aiRecommendationsResponseSchema,
   aiProfileTokenSchema,
   aiProfileTokensResponseSchema,
   aiServiceConfigSchema,
@@ -115,6 +116,7 @@ import {
   type AiSearchRunsResponse,
   type AiSearchStatus,
   type AiProfile,
+  type AiRecommendationsResponse,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
   type AiProfileTokenUpdateRequest,
@@ -1359,4 +1361,8 @@ export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
 
 export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
   return apiFetch('/api/v1/ai-trading/search/runs', {}, aiSearchRunsResponseSchema);
+}
+
+export async function fetchAiRecommendations(): Promise<AiRecommendationsResponse> {
+  return apiFetch('/api/v1/ai-trading/recommendations', {}, aiRecommendationsResponseSchema);
 }

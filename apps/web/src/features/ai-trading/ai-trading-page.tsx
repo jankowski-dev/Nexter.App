@@ -20,6 +20,7 @@ import {
   startAiSearch,
   createAiToken,
   fetchAiBotHealth,
+  fetchAiRecommendations,
   fetchAiCoverage,
   fetchAiDashboard,
   fetchAiLab,
@@ -44,6 +45,7 @@ import type {
   AiLabCandidate,
   AiLabRegime,
   AiProfile,
+  AiRecommendation,
   AiProfileToken,
   AiProfileUpdateRequest,
   AiSearchCandidate,
@@ -59,7 +61,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 
 type Section =
-  'panel' | 'universe' | 'data' | 'lab' | 'search' | 'ai-bots' | 'services' | 'settings';
+  | 'panel'
+  | 'universe'
+  | 'data'
+  | 'lab'
+  | 'recommendations'
+  | 'search'
+  | 'ai-bots'
+  | 'services'
+  | 'settings';
 
 const coverageLabels: Record<AiCoverageStatus, string> = {
   ok: 'OK',
@@ -118,6 +128,8 @@ function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
     'ai-search-status',
     'ai-search-results',
     'ai-search-runs',
+    'ai-bot-health',
+    'ai-recommendations',
   ]) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
@@ -231,6 +243,7 @@ export function AiTradingPage() {
           { value: 'universe', label: 'Вселенная' },
           { value: 'data', label: 'Данные' },
           { value: 'lab', label: 'Лаборатория' },
+          { value: 'recommendations', label: 'Рекомендации' },
           { value: 'search', label: 'Поиск' },
           { value: 'ai-bots', label: 'Мои ИИ-роботы' },
           { value: 'services', label: 'Сервисы' },
@@ -317,6 +330,10 @@ export function AiTradingPage() {
           onOpenData={() => setSection('data')}
           onChanged={() => invalidateAi(queryClient)}
         />
+      ) : null}
+
+      {section === 'recommendations' ? (
+        <RecommendationsSection onChanged={() => invalidateAi(queryClient)} />
       ) : null}
 
       {section === 'search' ? (
@@ -978,6 +995,321 @@ function AiBotHealthRow({ item }: { item: AiBotHealth }) {
   );
 }
 
+interface RecommendationTarget {
+  id: string;
+  strategyKey: string;
+  strategyName: string;
+  params: Record<string, unknown>;
+  oosMedianReturnPct: string;
+  stabilityPct: string;
+  maxDrawdownPct: string;
+  holdoutReturnPct: string | null;
+  assetId: string;
+  symbol: string;
+  timeframe: string;
+}
+
+function RecommendationAcceptDrawer({
+  target,
+  onClose,
+  onCreated,
+}: {
+  target: RecommendationTarget | null;
+  onClose: () => void;
+  onCreated: (bot: { id: string; name: string }) => void;
+}) {
+  const [name, setName] = useState('');
+  const [budget, setBudget] = useState('1000');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!target) return;
+    setName(`${target.symbol} · ${target.strategyName}`);
+    setBudget('1000');
+    setError(null);
+  }, [target]);
+
+  const accept = useMutation({
+    mutationFn: () => {
+      if (!target) throw new Error('No recommendation selected');
+      return createTradingBot({
+        name: name.trim(),
+        description: `Рекомендация ИИ: ${target.strategyName}, OOS ${target.oosMedianReturnPct}%, стабильность ${target.stabilityPct}%.`,
+        strategyKey: target.strategyKey as BotCreateRequest['strategyKey'],
+        strategyParams: target.params,
+        tokenAssetIds: [target.assetId],
+        budgetUsd: budget,
+        maxPositions: 5,
+        positionSizePct: 20,
+        feeBps: 25,
+        slippageBps: 10,
+        maxDailyLossPct: 10,
+        cooldownMinutes: 15,
+        aiCandidateId: target.id,
+      });
+    },
+    onSuccess: (result) => {
+      onCreated({ id: result.bot.id, name: result.bot.name });
+      onClose();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось создать черновик')),
+  });
+
+  return (
+    <Drawer
+      open={Boolean(target)}
+      onClose={() => {
+        if (!accept.isPending) onClose();
+      }}
+      title="Создать черновик робота"
+      description="Рекомендация предзаполнит стратегию, параметры и токен. Робот останется черновиком, пока вы не запустите его вручную."
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" disabled={accept.isPending} onClick={onClose}>
+            Отмена
+          </Button>
+          <Button
+            disabled={accept.isPending || name.trim().length === 0}
+            onClick={() => accept.mutate()}
+          >
+            {accept.isPending ? 'Создаю…' : 'Создать черновик'}
+          </Button>
+        </div>
+      }
+    >
+      {target ? (
+        <div className="space-y-3">
+          <label className="block text-xs text-zinc-600">
+            Название
+            <Input
+              className="mt-1"
+              value={name}
+              maxLength={120}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <label className="block text-xs text-zinc-600">
+            Бюджет, USD
+            <Input
+              className="mt-1"
+              inputMode="decimal"
+              value={budget}
+              onChange={(event) => setBudget(event.target.value)}
+            />
+          </label>
+          <div className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
+            <div>
+              Стратегия: <span className="text-zinc-900">{target.strategyName}</span>
+            </div>
+            <div>Токен: {target.symbol}</div>
+            <div>Таймфрейм: {target.timeframe}</div>
+            <div>
+              OOS: {formatPct(target.oosMedianReturnPct)} · DD{' '}
+              {percentMagnitude(target.maxDrawdownPct)} · Holdout{' '}
+              {target.holdoutReturnPct === null ? '—' : formatPct(target.holdoutReturnPct)}
+            </div>
+          </div>
+          <p className="text-xs text-zinc-500">
+            Минимальный бюджет — 100 USD. После создания робот появится в разделе «Роботы» в статусе
+            «Черновик».
+          </p>
+          {error ? <p className="text-sm text-red-700">{error}</p> : null}
+        </div>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
+  const query = useQuery({
+    queryKey: ['ai-recommendations'],
+    queryFn: fetchAiRecommendations,
+    refetchInterval: 60_000,
+  });
+  const [filter, setFilter] = useState<'active' | 'accepted' | 'expired' | 'all'>('active');
+  const [target, setTarget] = useState<RecommendationTarget | null>(null);
+  const [createdBot, setCreatedBot] = useState<{ id: string; name: string } | null>(null);
+
+  const items = query.data?.data ?? [];
+  const active = items.filter((item) => item.status === 'recommended' && !item.expired);
+  const accepted = items.filter((item) => item.status === 'accepted');
+  const expired = items.filter((item) => item.status === 'recommended' && item.expired);
+  const visible =
+    filter === 'active'
+      ? active
+      : filter === 'accepted'
+        ? accepted
+        : filter === 'expired'
+          ? expired
+          : items;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle>Рекомендации</CardTitle>
+            <CardDescription>
+              Все кандидаты поиска и лаборатории: активные, принятые и истёкшие. Принятие создаёт
+              черновик робота и не запускает его.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              className="h-9 w-44"
+              value={filter}
+              onChange={(event) =>
+                setFilter(event.target.value as 'active' | 'accepted' | 'expired' | 'all')
+              }
+              aria-label="Фильтр рекомендаций"
+            >
+              <option value="active">Активные ({active.length})</option>
+              <option value="accepted">Принятые ({accepted.length})</option>
+              <option value="expired">Истёкшие ({expired.length})</option>
+              <option value="all">Все ({items.length})</option>
+            </Select>
+            <Button
+              variant="secondary"
+              className="h-9 px-3 text-xs"
+              onClick={() => void query.refetch()}
+            >
+              Обновить
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {createdBot ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-800">
+          Черновик «{createdBot.name}» создан и не запущен.{' '}
+          <a className="underline" href="/portfolio#robots">
+            Открыть роботов
+          </a>{' '}
+          и запустить вручную.
+        </div>
+      ) : null}
+
+      {query.isPending ? (
+        <LoadingRows rows={3} />
+      ) : query.isError ? (
+        <Card>
+          <ErrorState
+            message={toRussianError(query.error, 'Не удалось загрузить рекомендации')}
+            onRetry={() => void query.refetch()}
+          />
+        </Card>
+      ) : visible.length === 0 ? (
+        <Card>
+          <p className="text-sm text-zinc-500">
+            {filter === 'active'
+              ? 'Нет активных рекомендаций. Запустите поиск или дождитесь нового анализа.'
+              : 'В этом фильтре пока нет рекомендаций.'}
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-2">
+          {visible.map((item) => (
+            <RecommendationCard
+              key={item.id}
+              item={item}
+              onAccept={() =>
+                setTarget({
+                  id: item.id,
+                  strategyKey: item.strategyKey,
+                  strategyName: item.strategyName,
+                  params: item.params,
+                  oosMedianReturnPct: item.oosMedianReturnPct,
+                  stabilityPct: item.stabilityPct,
+                  maxDrawdownPct: item.maxDrawdownPct,
+                  holdoutReturnPct: item.holdoutReturnPct,
+                  assetId: item.assetId,
+                  symbol: item.symbol,
+                  timeframe: item.timeframe,
+                })
+              }
+            />
+          ))}
+        </div>
+      )}
+
+      <RecommendationAcceptDrawer
+        target={target}
+        onClose={() => setTarget(null)}
+        onCreated={(bot) => {
+          setCreatedBot(bot);
+          onChanged();
+        }}
+      />
+    </div>
+  );
+}
+
+function RecommendationCard({ item, onAccept }: { item: AiRecommendation; onAccept: () => void }) {
+  const tone =
+    item.status === 'accepted'
+      ? 'info'
+      : item.status === 'recommended' && !item.expired
+        ? 'success'
+        : item.status === 'rejected'
+          ? 'danger'
+          : 'warning';
+  const label =
+    item.status === 'accepted'
+      ? 'Принята'
+      : item.status === 'recommended'
+        ? item.expired
+          ? 'Истекла'
+          : 'Активна'
+        : item.status === 'rejected'
+          ? 'Отклонена'
+          : item.status;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-zinc-900">
+              {item.symbol} · {item.name}
+            </span>
+            <Badge tone={tone}>{label}</Badge>
+            <span className="text-xs text-zinc-500">
+              {item.timeframe} · {item.strategyName}
+            </span>
+          </div>
+          <div className="mt-0.5 text-[11px] text-zinc-500">
+            Создана {formatDateTime(item.createdAt)} · действует до {formatDateTime(item.expiresAt)}
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {item.linkedBotId ? (
+            <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
+              Открыть робота
+            </a>
+          ) : null}
+          {item.status === 'recommended' && !item.expired ? (
+            <Button variant="secondary" className="h-8 px-3 text-xs" onClick={onAccept}>
+              Создать черновик
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <LabFeature label="OOS медиана" value={formatPct(item.oosMedianReturnPct)} />
+        <LabFeature label="Средний OOS" value={formatPct(item.oosMeanReturnPct)} />
+        <LabFeature label="Худший OOS" value={formatPct(item.oosWorstReturnPct)} />
+        <LabFeature label="Макс. DD" value={percentMagnitude(item.maxDrawdownPct)} />
+        <LabFeature label="Сделок" value={String(item.trades)} />
+        <LabFeature label="Стабильность" value={percentMagnitude(item.stabilityPct)} />
+        <LabFeature
+          label="Holdout"
+          value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+        />
+        <LabFeature label="Policy" value={item.policyScore} />
+      </div>
+    </Card>
+  );
+}
+
 function SearchSection({
   tokens,
   coverage,
@@ -1003,10 +1335,7 @@ function SearchSection({
   const [runId, setRunId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dataNotice, setDataNotice] = useState<string | null>(null);
-  const [acceptCandidate, setAcceptCandidate] = useState<AiSearchCandidate | null>(null);
-  const [acceptName, setAcceptName] = useState('');
-  const [acceptBudget, setAcceptBudget] = useState('1000');
-  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [acceptTarget, setAcceptTarget] = useState<RecommendationTarget | null>(null);
   const [createdBot, setCreatedBot] = useState<{ id: string; name: string } | null>(null);
   const timeframeCoverage = coverage?.tokens
     .find((token) => token.assetId === assetId)
@@ -1071,34 +1400,6 @@ function SearchSection({
       onChanged();
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось загрузить 180 дней')),
-  });
-
-  const accept = useMutation({
-    mutationFn: () => {
-      if (!acceptCandidate) throw new Error('No candidate selected');
-      return createTradingBot({
-        name: acceptName.trim(),
-        description: `Рекомендация ИИ: ${acceptCandidate.strategyName}, OOS ${acceptCandidate.oosMedianReturnPct}%, стабильность ${acceptCandidate.stabilityPct}%.`,
-        strategyKey: acceptCandidate.strategyKey as BotCreateRequest['strategyKey'],
-        strategyParams: acceptCandidate.params,
-        tokenAssetIds: [assetId],
-        budgetUsd: acceptBudget,
-        maxPositions: 5,
-        positionSizePct: 20,
-        feeBps: 25,
-        slippageBps: 10,
-        maxDailyLossPct: 10,
-        cooldownMinutes: 15,
-        aiCandidateId: acceptCandidate.id,
-      });
-    },
-    onSuccess: (result) => {
-      setCreatedBot({ id: result.bot.id, name: result.bot.name });
-      setAcceptCandidate(null);
-      setAcceptError(null);
-      onChanged();
-    },
-    onError: (err) => setAcceptError(toRussianError(err, 'Не удалось создать черновик')),
   });
 
   if (searchable.length === 0) {
@@ -1360,12 +1661,21 @@ function SearchSection({
                 <SearchCandidateCard
                   key={candidate.id}
                   candidate={candidate}
-                  onAccept={(item) => {
-                    setAcceptCandidate(item);
-                    setAcceptName(`${selected?.asset.symbol ?? 'AI'} · ${item.strategyName}`);
-                    setAcceptBudget('1000');
-                    setAcceptError(null);
-                  }}
+                  onAccept={(item) =>
+                    setAcceptTarget({
+                      id: item.id,
+                      strategyKey: item.strategyKey,
+                      strategyName: item.strategyName,
+                      params: item.params,
+                      oosMedianReturnPct: item.oosMedianReturnPct,
+                      stabilityPct: item.stabilityPct,
+                      maxDrawdownPct: item.maxDrawdownPct,
+                      holdoutReturnPct: item.holdoutReturnPct,
+                      assetId,
+                      symbol: selected?.asset.symbol ?? 'AI',
+                      timeframe,
+                    })
+                  }
                 />
               ))}
             </div>
@@ -1387,73 +1697,14 @@ function SearchSection({
         </Card>
       ) : null}
 
-      <Drawer
-        open={Boolean(acceptCandidate)}
-        onClose={() => {
-          if (!accept.isPending) setAcceptCandidate(null);
+      <RecommendationAcceptDrawer
+        target={acceptTarget}
+        onClose={() => setAcceptTarget(null)}
+        onCreated={(bot) => {
+          setCreatedBot(bot);
+          onChanged();
         }}
-        title="Создать черновик робота"
-        description="Рекомендация предзаполнит стратегию, параметры и токен. Робот останется черновиком, пока вы не запустите его вручную."
-        footer={
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              disabled={accept.isPending}
-              onClick={() => setAcceptCandidate(null)}
-            >
-              Отмена
-            </Button>
-            <Button
-              disabled={accept.isPending || acceptName.trim().length === 0}
-              onClick={() => accept.mutate()}
-            >
-              {accept.isPending ? 'Создаю…' : 'Создать черновик'}
-            </Button>
-          </div>
-        }
-      >
-        {acceptCandidate ? (
-          <div className="space-y-3">
-            <label className="block text-xs text-zinc-600">
-              Название
-              <Input
-                className="mt-1"
-                value={acceptName}
-                maxLength={120}
-                onChange={(event) => setAcceptName(event.target.value)}
-              />
-            </label>
-            <label className="block text-xs text-zinc-600">
-              Бюджет, USD
-              <Input
-                className="mt-1"
-                inputMode="decimal"
-                value={acceptBudget}
-                onChange={(event) => setAcceptBudget(event.target.value)}
-              />
-            </label>
-            <div className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600">
-              <div>
-                Стратегия: <span className="text-zinc-900">{acceptCandidate.strategyName}</span>
-              </div>
-              <div>Токен: {selected?.asset.symbol ?? '—'}</div>
-              <div>Таймфрейм: {timeframe}</div>
-              <div>
-                OOS: {formatPct(acceptCandidate.oosMedianReturnPct)} · DD{' '}
-                {percentMagnitude(acceptCandidate.maxDrawdownPct)} · Holdout{' '}
-                {acceptCandidate.holdoutReturnPct === null
-                  ? '—'
-                  : formatPct(acceptCandidate.holdoutReturnPct)}
-              </div>
-            </div>
-            <p className="text-xs text-zinc-500">
-              Минимальный бюджет — 100 USD. После создания робот появится в разделе «Роботы» в
-              статусе «Черновик».
-            </p>
-            {acceptError ? <p className="text-sm text-red-700">{acceptError}</p> : null}
-          </div>
-        ) : null}
-      </Drawer>
+      />
     </div>
   );
 }
