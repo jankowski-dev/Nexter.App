@@ -298,6 +298,21 @@ export const aiSearchStatsSchema = z.object({
   holdoutReturnPct: z.string().nullable(),
 });
 
+export const aiSearchRunSummarySchema = z.object({
+  runId: z.uuid(),
+  assetId: z.uuid(),
+  symbol: z.string(),
+  name: z.string(),
+  timeframe: z.string(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  variants: z.number().int(),
+  recommended: z.number().int(),
+  createdAt: z.iso.datetime(),
+  finishedAt: z.iso.datetime().nullable(),
+  stats: aiSearchStatsSchema.nullable(),
+});
+export const aiSearchRunsResponseSchema = z.object({ data: z.array(aiSearchRunSummarySchema) });
+
 export const aiSearchCandidateSchema = z.object({
   id: z.uuid(),
   status: z.enum(['recommended', 'accepted', 'rejected']),
@@ -412,6 +427,8 @@ export type AiLabBacktestRequest = z.infer<typeof aiLabBacktestRequestSchema>;
 export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
 export type AiSearchTimeframe = z.infer<typeof aiSearchTimeframeSchema>;
 export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
+export type AiSearchRunSummary = z.infer<typeof aiSearchRunSummarySchema>;
+export type AiSearchRunsResponse = z.infer<typeof aiSearchRunsResponseSchema>;
 export type AiSearchStartResponse = z.infer<typeof aiSearchStartResponseSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;

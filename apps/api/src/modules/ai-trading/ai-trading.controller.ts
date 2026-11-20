@@ -36,6 +36,7 @@ import {
   type AiLabQuery,
   type AiSearchRequest,
   type AiSearchResults,
+  type AiSearchRunsResponse,
   type AiSearchStatus,
   type AiProfile,
   type AiProfileToken,
@@ -165,6 +166,11 @@ export class AiTradingController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Get('search/runs')
+  searchRuns(@CurrentAuth() auth: AuthContext): Promise<AiSearchRunsResponse> {
+    return this.aiSearch.listRuns(auth.user.id);
   }
 
   @Get('search/:runId')

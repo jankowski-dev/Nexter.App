@@ -207,6 +207,15 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(searchResults.body.stats.evaluated).toBe(searchResults.body.stats.total);
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
 
+    const runs = await agent.get('/api/v1/ai-trading/search/runs').expect(200);
+    const listedRun = (runs.body.data as Array<Record<string, unknown>>).find(
+      (run) => run.runId === searchId,
+    );
+    expect(listedRun?.status).toBe('succeeded');
+    expect(listedRun?.symbol).toBe('BASED');
+    expect(listedRun?.timeframe).toBe('1h');
+    expect((listedRun?.stats as { total?: number } | undefined)?.total).toBeGreaterThan(0);
+
     const [recommendation] = await db
       .insert(aiCandidates)
       .values({
