@@ -49,6 +49,23 @@ function stripOuterCodeFence(value: string): string {
   return match?.[1] ?? value.trim();
 }
 
+function extractImprovedText(content: string): string {
+  const trimmed = stripOuterCodeFence(content);
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { text?: unknown }).text === 'string'
+    ) {
+      return (parsed as { text: string }).text.trim();
+    }
+  } catch {
+    // Plain text is the normal path.
+  }
+  return trimmed;
+}
+
 function effectiveModel(settings: { model: string; reasoning: string }): string {
   if (settings.reasoning === 'reasoning') return 'deepseek-v4-pro';
   return settings.model;
@@ -133,7 +150,7 @@ ${text.slice(0, 50_000)}
           },
         ],
       });
-      const improved = stripOuterCodeFence(response.content).slice(0, 20_000);
+      const improved = extractImprovedText(response.content).slice(0, 20_000);
       if (!improved) {
         throw new ServiceUnavailableException({
           code: 'AI_INVALID_RESPONSE',
