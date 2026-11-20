@@ -18,6 +18,7 @@ import {
   fetchAiSearchStatus,
   startAiSearch,
   createAiToken,
+  fetchAiBotHealth,
   fetchAiCoverage,
   fetchAiDashboard,
   fetchAiLab,
@@ -33,6 +34,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatPrice, formatUsd, formatUsdCompact } from '@/lib/format';
 import type {
+  AiBotHealth,
   AiCoverage,
   AiCoverageStatus,
   AiCoverageTimeframe,
@@ -133,6 +135,12 @@ export function AiTradingPage() {
     enabled: section === 'data' || section === 'lab' || section === 'search',
     refetchInterval: 60_000,
   });
+  const botHealth = useQuery({
+    queryKey: ['ai-bot-health'],
+    queryFn: fetchAiBotHealth,
+    enabled: section === 'panel',
+    refetchInterval: 60_000,
+  });
   const watchlist = useQuery({
     queryKey: ['ai-watchlist'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
@@ -226,14 +234,48 @@ export function AiTradingPage() {
       />
 
       {section === 'panel' ? (
-        <Card className="tone-surface tone-surface-sky">
-          <CardTitle>Следующий этап</CardTitle>
-          <CardDescription>
-            Настройки, AI-вселенная, данные и лаборатория готовы. Следующий этап — поиск и
-            рекомендации: Data → Analyst → Search/Backtest → Risk → Recommendation. Рекомендация
-            открывает draft-робота, но не запускает его: старт остаётся за тобой.
-          </CardDescription>
-        </Card>
+        <div className="space-y-4">
+          <Card className="tone-surface tone-surface-sky">
+            <CardTitle>Как это работает</CardTitle>
+            <CardDescription>
+              Data → Analyst → Search/Backtest → Risk → Recommendation. Рекомендация открывает
+              draft-робота, но не запускает его: старт остаётся за тобой.
+            </CardDescription>
+          </Card>
+          <Card>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle>ИИ-роботы и здоровье</CardTitle>
+                <CardDescription>
+                  Наблюдение за роботами, созданными из рекомендаций. Система советует остановить
+                  или пересмотреть, но никогда не останавливает автоматически.
+                </CardDescription>
+              </div>
+              <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
+                Открыть роботов
+              </a>
+            </div>
+            {botHealth.isPending ? (
+              <div className="mt-3">
+                <LoadingRows rows={2} />
+              </div>
+            ) : botHealth.isError ? (
+              <p className="mt-3 text-sm text-red-700">
+                {toRussianError(botHealth.error, 'Не удалось загрузить здоровье ИИ-роботов')}
+              </p>
+            ) : (botHealth.data.data.length ?? 0) === 0 ? (
+              <p className="mt-3 text-sm text-zinc-500">
+                Пока нет роботов, созданных из рекомендаций. Создайте черновик во вкладке «Поиск».
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {botHealth.data.data.map((item) => (
+                  <AiBotHealthRow key={item.botId} item={item} />
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       ) : null}
 
       {section === 'universe' ? (
@@ -777,6 +819,40 @@ function LabCandidateCard({
         </Button>
       </div>
     </Card>
+  );
+}
+
+function AiBotHealthRow({ item }: { item: AiBotHealth }) {
+  const tone = item.level === 'stop' ? 'danger' : item.level === 'review' ? 'warning' : 'success';
+  const label =
+    item.level === 'stop' ? 'Остановить' : item.level === 'review' ? 'Пересмотр' : 'Норма';
+  return (
+    <div className="rounded-xl border border-zinc-200 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-zinc-900">{item.name}</span>
+          <Badge tone={tone}>{label}</Badge>
+          <span className="text-xs text-zinc-500">
+            {item.status} · P&L {formatPct(item.totalPnlPct)}
+            {item.horizonDays === null ? '' : ` · горизонт ${item.horizonDays} дн.`}
+          </span>
+        </div>
+        <a className="text-xs text-emerald-700 underline" href="/portfolio#robots">
+          Открыть
+        </a>
+      </div>
+      {item.reasons.length === 0 ? (
+        <p className="mt-1 text-xs text-zinc-500">Инвалидации не обнаружены.</p>
+      ) : (
+        <ul className="mt-1 space-y-0.5 text-xs text-zinc-600">
+          {item.reasons.map((reason) => (
+            <li key={reason.code}>
+              <span className="font-medium text-zinc-700">{reason.label}:</span> {reason.detail}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

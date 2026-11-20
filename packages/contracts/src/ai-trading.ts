@@ -336,6 +336,40 @@ export const aiSearchResultsSchema = z.object({
   rejectionReasons: z.record(z.string(), z.number().int()),
 });
 
+export const aiBotHealthLevelSchema = z.enum(['ok', 'review', 'stop']);
+export const aiBotHealthReasonSchema = z.object({
+  code: z.enum([
+    'DRAWDOWN',
+    'DAILY_LOSS',
+    'STALE_DATA',
+    'HORIZON_EXPIRED',
+    'NEGATIVE_PNL',
+    'BOT_ERROR',
+    'RECOMMENDATION_MISSING',
+  ]),
+  severity: z.enum(['review', 'stop']),
+  label: z.string(),
+  detail: z.string(),
+});
+export const aiBotHealthSchema = z.object({
+  botId: z.uuid(),
+  name: z.string(),
+  status: z.enum(['draft', 'running', 'stopped']),
+  level: aiBotHealthLevelSchema,
+  reasons: z.array(aiBotHealthReasonSchema),
+  candidateId: z.uuid().nullable(),
+  candidateStatus: z.string().nullable(),
+  horizonDays: z.number().int().nullable(),
+  startedAt: z.iso.datetime().nullable(),
+  lastTickAt: z.iso.datetime().nullable(),
+  equityUsd: z.string(),
+  totalPnlPct: z.string(),
+});
+export const aiBotHealthResponseSchema = z.object({
+  data: z.array(aiBotHealthSchema),
+  generatedAt: z.iso.datetime(),
+});
+
 export const aiTradingDashboardSchema = z.object({
   profile: aiProfileSchema,
   tokensCount: z.number().int(),
@@ -383,5 +417,10 @@ export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
 export type AiSearchStatus = z.infer<typeof aiSearchStatusSchema>;
 export type AiSearchResults = z.infer<typeof aiSearchResultsSchema>;
+
+export type AiBotHealthLevel = z.infer<typeof aiBotHealthLevelSchema>;
+export type AiBotHealthReason = z.infer<typeof aiBotHealthReasonSchema>;
+export type AiBotHealth = z.infer<typeof aiBotHealthSchema>;
+export type AiBotHealthResponse = z.infer<typeof aiBotHealthResponseSchema>;
 
 export type AiTradingDashboard = z.infer<typeof aiTradingDashboardSchema>;
