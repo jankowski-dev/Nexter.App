@@ -25,6 +25,7 @@ import { readIdleLockMinutes, subscribeUiPreference } from './ui-preferences';
 
 const PIN_KEY = 'nexter-lock-pin-v1';
 const LOCKED_KEY = 'nexter-app-locked-v1';
+const LAST_ACTIVITY_KEY = 'nexter-last-activity-v1';
 
 interface AppLockContextValue {
   locked: boolean;
@@ -72,6 +73,23 @@ function readLocked(): boolean {
     return localStorage.getItem(LOCKED_KEY) === '1';
   } catch {
     return false;
+  }
+}
+
+function readLastActivity(): number {
+  try {
+    const value = Number(localStorage.getItem(LAST_ACTIVITY_KEY));
+    return Number.isFinite(value) && value > 0 ? value : Date.now();
+  } catch {
+    return Date.now();
+  }
+}
+
+function writeLastActivity(value: number): void {
+  try {
+    localStorage.setItem(LAST_ACTIVITY_KEY, String(value));
+  } catch {
+    // Storage may be unavailable; the current tab still tracks activity.
   }
 }
 
@@ -415,9 +433,15 @@ export function LockProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hasPin || locked || setupOpen || idleMinutes <= 0) return;
 
-    let lastActivity = Date.now();
+    let lastActivity = readLastActivity();
+    let lastPersistedAt = 0;
     const markActive = () => {
-      lastActivity = Date.now();
+      const now = Date.now();
+      lastActivity = now;
+      if (now - lastPersistedAt >= 1000) {
+        lastPersistedAt = now;
+        writeLastActivity(now);
+      }
     };
     const events: Array<keyof WindowEventMap> = [
       'mousemove',
@@ -426,12 +450,26 @@ export function LockProvider({ children }: { children: ReactNode }) {
       'touchstart',
       'scroll',
       'wheel',
+      'focus',
     ];
     for (const event of events) {
       window.addEventListener(event, markActive, { passive: true });
     }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') markActive();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    function onActivityStorage(event: StorageEvent) {
+      if (event.key !== LAST_ACTIVITY_KEY) return;
+      const value = Number(event.newValue);
+      if (Number.isFinite(value) && value > 0) lastActivity = Math.max(lastActivity, value);
+    }
+    window.addEventListener('storage', onActivityStorage);
 
     const timer = window.setInterval(() => {
+      const shared = readLastActivity();
+      if (shared > lastActivity) lastActivity = shared;
       if (Date.now() - lastActivity >= idleMinutes * 60_000) lock();
     }, 15_000);
 
@@ -439,6 +477,8 @@ export function LockProvider({ children }: { children: ReactNode }) {
       for (const event of events) {
         window.removeEventListener(event, markActive);
       }
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('storage', onActivityStorage);
       window.clearInterval(timer);
     };
   }, [hasPin, idleMinutes, lock, locked, setupOpen]);
@@ -446,7 +486,9 @@ export function LockProvider({ children }: { children: ReactNode }) {
   const unlock = useCallback(async (pin: string) => {
     const stored = readStoredPin();
     if (!stored) return false;
-    return verifyLockPin(pin, stored);
+    const valid = await verifyLockPin(pin, stored);
+    if (valid) writeLastActivity(Date.now());
+    return valid;
   }, []);
 
   const savePin = useCallback(async (pin: string) => {
