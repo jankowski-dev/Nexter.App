@@ -42,13 +42,21 @@ export interface AiHealthResult {
 
 const DAY_MS = 86_400_000;
 const STALE_TICK_MS = 10 * 60_000;
-const QUOTE_STALE_MS = 15 * 60_000;
+const QUOTE_STALE_MS = 5 * 60_000;
 const MIN_DRAWDOWN_STOP_PCT = 15;
 const MIN_NEGATIVE_PNL_PCT = -5;
 
 function numberMetric(metrics: Record<string, unknown>, key: string): number | null {
   const value = metrics[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function firstPositive(params: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numberMetric(params, key);
+    if (value !== null && value > 0) return value;
+  }
+  return null;
 }
 
 function pct(value: number): string {
@@ -172,10 +180,13 @@ export function evaluateAiBotHealth(input: AiHealthInput): AiHealthResult {
         input.positions
           .filter((position) => {
             const quote = input.quotes[position.assetId];
+            if (!quote || !(quote.fetchedAt instanceof Date)) return true;
+            const price = Number(quote.priceUsd);
             return (
-              !quote ||
               !Number.isFinite(quote.fetchedAt.getTime()) ||
-              input.now.getTime() - quote.fetchedAt.getTime() > QUOTE_STALE_MS
+              input.now.getTime() - quote.fetchedAt.getTime() > QUOTE_STALE_MS ||
+              !Number.isFinite(price) ||
+              price <= 0
             );
           })
           .map((position) => position.symbol),
@@ -186,12 +197,16 @@ export function evaluateAiBotHealth(input: AiHealthInput): AiHealthResult {
         code: 'QUOTE_STALE',
         severity: 'stop',
         label: 'Нет свежих котировок',
-        detail: `Котировка отсутствует или старше 15 минут: ${staleSymbols.join(', ')}. Робот не может управлять позицией.`,
+        detail: `Котировка отсутствует или старше 5 минут: ${staleSymbols.join(', ')}. Робот не может управлять позицией.`,
       });
     }
 
-    const stopLossPct = numberMetric(input.strategyParams, 'stopLossPct');
-    const takeProfitPct = numberMetric(input.strategyParams, 'takeProfitPct');
+    const stopLossPct = firstPositive(input.strategyParams, [
+      'stopLossPct',
+      'hardStopPct',
+      'closeLossThresholdPct',
+    ]);
+    const takeProfitPct = firstPositive(input.strategyParams, ['takeProfitPct']);
     for (const position of input.positions) {
       const quote = input.quotes[position.assetId];
       if (!quote) continue;

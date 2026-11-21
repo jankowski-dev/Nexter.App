@@ -190,3 +190,68 @@ describe('AI bot health', () => {
     expect(codes).not.toContain('TAKE_HIT');
   });
 });
+
+describe('AI bot hard invalidation edge cases', () => {
+  const position = {
+    assetId: '66666666-6666-4666-8666-666666666666',
+    symbol: 'LINK',
+    avgCostUsd: '100.00',
+  };
+  const fetchedAt = new Date('2026-11-20T11:59:00.000Z');
+  const quote = (priceUsd: string, at: Date = fetchedAt) => ({
+    [position.assetId]: { priceUsd, fetchedAt: at },
+  });
+
+  it('staleness follows the 5-minute stale-quote limit', () => {
+    const result = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: quote('100.00', new Date('2026-11-20T11:54:00.000Z')),
+      }),
+    );
+    expect(result.reasons.map((reason) => reason.code)).toContain('QUOTE_STALE');
+  });
+
+  it('uses strategy-specific hard stop parameters', () => {
+    const trailing = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: quote('90.00'),
+        strategyParams: { hardStopPct: 5 },
+      }),
+    );
+    expect(trailing.reasons.map((reason) => reason.code)).toContain('STOP_HIT');
+
+    const crashGrid = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: quote('88.00'),
+        strategyParams: { closeLossThresholdPct: 10 },
+      }),
+    );
+    expect(crashGrid.reasons.map((reason) => reason.code)).toContain('STOP_HIT');
+  });
+
+  it('treats malformed quote timestamps and non-positive prices as stale', () => {
+    const malformed = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: {
+          [position.assetId]: {
+            priceUsd: '100.00',
+            fetchedAt: 'not-a-date' as unknown as Date,
+          },
+        },
+      }),
+    );
+    expect(malformed.reasons.map((reason) => reason.code)).toContain('QUOTE_STALE');
+
+    const zero = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: quote('0'),
+      }),
+    );
+    expect(zero.reasons.map((reason) => reason.code)).toContain('QUOTE_STALE');
+  });
+});
