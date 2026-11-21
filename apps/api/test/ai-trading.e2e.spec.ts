@@ -246,7 +246,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
           slowPeriod: 20,
           minChange24hPct: 1,
           takeProfitPct: 5,
-          stopLossPct: 3,
+          stopLossPct: 15,
         },
         metrics: { horizonDays: 5 },
         policyScore: '1.5000',
@@ -301,6 +301,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(draftHealth?.candidateId).toBe(recommendationId);
     expect(draftHealth?.candidateStatus).toBe('accepted');
 
+    const originalParams = draft.body.bot.strategyParams;
     await db
       .update(tradingBots)
       .set({
@@ -346,8 +347,9 @@ describe.runIf(canRun)('AI trading control center API', () => {
 
     await db
       .update(tradingBots)
-      .set({ status: 'draft', startedAt: null })
+      .set({ status: 'draft', startedAt: null, strategyParams: originalParams })
       .where(eq(tradingBots.id, draft.body.bot.id));
+    await db.delete(botPositions).where(eq(botPositions.botId, draft.body.bot.id));
 
     await agent
       .post('/api/v1/trading-bots/bots')
