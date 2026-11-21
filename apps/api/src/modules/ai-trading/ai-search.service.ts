@@ -47,6 +47,7 @@ import {
   candlesPerDay,
   generateSearchVariants,
   historyDaysFor,
+  holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
   searchWorkerCount,
@@ -539,6 +540,7 @@ export class AiSearchService {
       variant: SearchVariant,
       reasons: string[],
       holdoutReturnPct: string | null = null,
+      holdoutDrawdownPct: string | null = null,
     ) => {
       if (aggregate.trades <= 0 || Number(aggregate.oosMedianReturnPct) <= 0) return;
       nearMisses.push({
@@ -553,6 +555,7 @@ export class AiSearchService {
         positiveFolds: aggregate.positiveFolds,
         stabilityPct: aggregate.stabilityPct,
         holdoutReturnPct,
+        holdoutDrawdownPct,
         policyScore: aggregate.policyScore,
         reasons,
       });
@@ -672,9 +675,10 @@ export class AiSearchService {
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
-        if (returnPct <= 0 || drawdown > MAX_DRAWDOWN_PCT) {
+        const rejection = holdoutRejection(returnPct, drawdown, MAX_DRAWDOWN_PCT);
+        if (rejection !== null) {
           candidate.policyScore = '0';
-          reject('negative holdout');
+          reject(rejection);
           rememberNearMiss(
             {
               oosMedianReturnPct: candidate.oosMedianReturnPct,
@@ -687,8 +691,9 @@ export class AiSearchService {
               policyScore: '0',
             },
             candidate.variant,
-            ['negative holdout'],
+            [rejection],
             candidate.holdoutReturnPct,
+            result.stats.maxDrawdownPct,
           );
         }
       } catch {
@@ -709,6 +714,7 @@ export class AiSearchService {
           candidate.variant,
           ['holdout failed'],
           null,
+          null,
         );
       }
     }
@@ -721,7 +727,9 @@ export class AiSearchService {
     );
     const stats = this.buildStats(variants.length, evaluated, allMetrics, recommended);
     const holdoutFailed = (item: AiSearchNearMiss) =>
-      item.reasons.includes('negative holdout') || item.reasons.includes('holdout failed');
+      item.reasons.includes('negative holdout') ||
+      item.reasons.includes('holdout drawdown too high') ||
+      item.reasons.includes('holdout failed');
     const nearMissesTop = nearMisses
       .sort((left, right) => {
         const priority = Number(holdoutFailed(right)) - Number(holdoutFailed(left));

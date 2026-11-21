@@ -366,6 +366,7 @@ export const aiSearchNearMissSchema = z.object({
   positiveFolds: z.number().int(),
   stabilityPct: z.string(),
   holdoutReturnPct: z.string().nullable(),
+  holdoutDrawdownPct: z.string().nullable().default(null),
   policyScore: z.string(),
   reasons: z.array(z.string()),
 });
