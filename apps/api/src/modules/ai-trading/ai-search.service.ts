@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -254,13 +255,7 @@ export class AiSearchService {
       .where(
         and(
           eq(aiCandidates.profileId, profile.id),
-          inArray(aiCandidates.status, [
-            'proposed',
-            'backtested',
-            'recommended',
-            'accepted',
-            'rejected',
-          ]),
+          inArray(aiCandidates.status, ['recommended', 'accepted']),
         ),
       )
       .orderBy(desc(aiCandidates.createdAt))
@@ -272,11 +267,55 @@ export class AiSearchService {
         const value = (key: string, fallback: string): string =>
           typeof metrics[key] === 'string' ? (metrics[key] as string) : fallback;
         const expiresAt = recommendationExpiresAt(candidate.createdAt, metrics);
-        const status = ['proposed', 'backtested', 'recommended', 'accepted', 'rejected'].includes(
-          candidate.status,
-        )
-          ? (candidate.status as AiRecommendationsResponse['data'][number]['status'])
-          : 'proposed';
+        const status = candidate.status === 'accepted' ? 'accepted' : 'recommended';
+        const horizonDays =
+          typeof metrics.horizonDays === 'number' ? Math.floor(metrics.horizonDays) : 7;
+        const candidateDrawdown = Number(value('maxDrawdownPct', '20'));
+        const worstOos = Number(value('oosWorstReturnPct', '-15'));
+        const pnlThreshold = Math.min(-5, Number.isFinite(worstOos) ? worstOos : -5).toFixed(2);
+        const drawdownThreshold = Math.max(15, candidateDrawdown * 1.5).toFixed(2);
+        const allocation = Math.max(
+          100,
+          (Number(profile.budgetUsd) * profile.maxWorkerAllocationPct) / 100,
+        ).toFixed(2);
+        const invalidationRules = [
+          {
+            code: 'DRAWDOWN' as const,
+            label: 'Просадка',
+            severity: 'stop' as const,
+            detail: `Остановить при просадке выше ${drawdownThreshold}%`,
+          },
+          {
+            code: 'DAILY_LOSS' as const,
+            label: 'Дневной убыток',
+            severity: 'stop' as const,
+            detail: `Остановить при дневном убытке выше ${profile.dailyLossLimitPct}%`,
+          },
+          {
+            code: 'STALE_DATA' as const,
+            label: 'Свежие данные',
+            severity: 'review' as const,
+            detail: 'Пересмотреть, если нет тиков более 10 минут',
+          },
+          {
+            code: 'HORIZON_EXPIRED' as const,
+            label: 'Горизонт',
+            severity: 'review' as const,
+            detail: `Пересмотреть после ${horizonDays} дн. с запуска`,
+          },
+          {
+            code: 'NEGATIVE_PNL' as const,
+            label: 'P&L',
+            severity: 'review' as const,
+            detail: `Пересмотреть при P&L ниже ${pnlThreshold}%`,
+          },
+          {
+            code: 'RECOMMENDATION_EXPIRED' as const,
+            label: 'TTL',
+            severity: 'review' as const,
+            detail: `Действует до ${expiresAt.toISOString().slice(0, 10)}`,
+          },
+        ];
         return {
           id: candidate.id,
           assetId: asset.id,
@@ -297,6 +336,8 @@ export class AiSearchService {
           holdoutReturnPct:
             typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
           policyScore: candidate.policyScore ?? '0',
+          suggestedAllocationUsd: allocation,
+          invalidationRules,
           linkedBotId: typeof metrics.botId === 'string' ? metrics.botId : null,
           createdAt: candidate.createdAt.toISOString(),
           expiresAt: expiresAt.toISOString(),
@@ -304,6 +345,55 @@ export class AiSearchService {
         };
       }),
     };
+  }
+
+  async recommendation(
+    userId: string,
+    id: string,
+  ): Promise<AiRecommendationsResponse['data'][number]> {
+    const list = await this.listRecommendations(userId);
+    const found = list.data.find((item) => item.id === id);
+    if (!found) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Recommendation not found' });
+    }
+    return found;
+  }
+
+  async reject(
+    userId: string,
+    id: string,
+    meta: SearchMeta,
+  ): Promise<{ id: string; status: 'rejected' }> {
+    const profile = await this.aiTrading.getProfile(userId);
+    const [candidate] = await this.db
+      .select()
+      .from(aiCandidates)
+      .where(and(eq(aiCandidates.id, id), eq(aiCandidates.profileId, profile.id)))
+      .limit(1);
+    if (!candidate) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Recommendation not found' });
+    }
+    if (candidate.status !== 'recommended') {
+      throw new ConflictException({
+        code: 'AI_RECOMMENDATION_NOT_ACTIONABLE',
+        message: 'Recommendation is no longer actionable',
+      });
+    }
+    await this.db
+      .update(aiCandidates)
+      .set({ status: 'rejected', updatedAt: new Date() })
+      .where(eq(aiCandidates.id, id));
+    await this.audit.log({
+      userId,
+      action: 'ai_trading.recommendation_rejected',
+      entityType: 'ai_candidate',
+      entityId: id,
+      before: { status: candidate.status },
+      after: { status: 'rejected' },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    return { id, status: 'rejected' };
   }
 
   async status(userId: string, runId: string): Promise<AiSearchStatus> {

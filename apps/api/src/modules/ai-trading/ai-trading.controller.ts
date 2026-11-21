@@ -38,6 +38,8 @@ import {
   type AiLabLatest,
   type AiBotHealthResponse,
   type AiLabQuery,
+  type AiRecommendation,
+  type AiRecommendationActionResponse,
   type AiRecommendationsResponse,
   type AiSearchRequest,
   type AiSearchResults,
@@ -234,6 +236,27 @@ export class AiTradingController {
   @Get('recommendations')
   recommendations(@CurrentAuth() auth: AuthContext): Promise<AiRecommendationsResponse> {
     return this.aiSearch.listRecommendations(auth.user.id);
+  }
+
+  @Get('recommendations/:id')
+  recommendation(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<AiRecommendation> {
+    return this.aiSearch.recommendation(auth.user.id, id);
+  }
+
+  @Post('recommendations/:id/reject')
+  @HttpCode(200)
+  rejectRecommendation(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<AiRecommendationActionResponse> {
+    return this.aiSearch.reject(auth.user.id, id, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
   }
 
   @Get('dashboard')

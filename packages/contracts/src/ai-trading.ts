@@ -285,6 +285,20 @@ export const aiRecommendationStatusSchema = z.enum([
   'accepted',
   'rejected',
 ]);
+export const aiRecommendationInvalidationRuleSchema = z.object({
+  code: z.enum([
+    'DRAWDOWN',
+    'DAILY_LOSS',
+    'STALE_DATA',
+    'HORIZON_EXPIRED',
+    'NEGATIVE_PNL',
+    'RECOMMENDATION_EXPIRED',
+  ]),
+  label: z.string(),
+  severity: z.enum(['review', 'stop']),
+  detail: z.string(),
+});
+
 export const aiRecommendationSchema = z.object({
   id: z.uuid(),
   assetId: z.uuid(),
@@ -304,10 +318,16 @@ export const aiRecommendationSchema = z.object({
   stabilityPct: z.string(),
   holdoutReturnPct: z.string().nullable(),
   policyScore: z.string(),
+  suggestedAllocationUsd: z.string(),
+  invalidationRules: z.array(aiRecommendationInvalidationRuleSchema),
   linkedBotId: z.uuid().nullable(),
   createdAt: z.iso.datetime(),
   expiresAt: z.iso.datetime(),
   expired: z.boolean(),
+});
+export const aiRecommendationActionResponseSchema = z.object({
+  id: z.uuid(),
+  status: z.literal('rejected'),
 });
 export const aiRecommendationsResponseSchema = z.object({
   data: z.array(aiRecommendationSchema),
@@ -520,7 +540,11 @@ export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
 export type AiSearchTimeframe = z.infer<typeof aiSearchTimeframeSchema>;
 export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
 export type AiRecommendationStatus = z.infer<typeof aiRecommendationStatusSchema>;
+export type AiRecommendationInvalidationRule = z.infer<
+  typeof aiRecommendationInvalidationRuleSchema
+>;
 export type AiRecommendation = z.infer<typeof aiRecommendationSchema>;
+export type AiRecommendationActionResponse = z.infer<typeof aiRecommendationActionResponseSchema>;
 export type AiRecommendationsResponse = z.infer<typeof aiRecommendationsResponseSchema>;
 export type AiSearchHistogramBucket = z.infer<typeof aiSearchHistogramBucketSchema>;
 export type AiSearchRunSummary = z.infer<typeof aiSearchRunSummarySchema>;
