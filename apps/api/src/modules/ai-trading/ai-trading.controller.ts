@@ -188,6 +188,19 @@ export class AiTradingController {
     return this.aiCycle.list(auth.user.id, query.limit);
   }
 
+  @Post('cycle/:cycleId/cancel')
+  @HttpCode(200)
+  cancelCycle(
+    @CurrentAuth() auth: AuthContext,
+    @Param('cycleId', new ParseUUIDPipe()) cycleId: string,
+    @Req() request: FastifyRequest,
+  ): Promise<AiCycleStatus> {
+    return this.aiCycle.cancel(auth.user.id, cycleId, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
   @Get('cycle/:cycleId')
   cycleStatus(
     @CurrentAuth() auth: AuthContext,

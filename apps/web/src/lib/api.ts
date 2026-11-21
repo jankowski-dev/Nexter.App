@@ -1378,6 +1378,10 @@ export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
   return apiPost(`/api/v1/ai-trading/search/${runId}/cancel`, {}, aiSearchStatusSchema);
 }
 
+export async function cancelAiCycle(cycleId: string): Promise<AiCycleStatus> {
+  return apiPost(`/api/v1/ai-trading/cycle/${cycleId}/cancel`, {}, aiCycleStatusSchema);
+}
+
 export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
   return apiFetch(
     '/api/v1/ai-trading/bots/health',
