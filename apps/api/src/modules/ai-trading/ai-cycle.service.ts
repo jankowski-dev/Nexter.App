@@ -44,6 +44,7 @@ import {
   withDbRetry,
 } from './ai-error.helpers';
 import { normalizeCycle, searchPollTimeout, SEARCH_HARD_TIMEOUT_MS } from './ai-cycle.helpers';
+import { candlesPerDay, MIN_SEARCH_DAYS } from './ai-search.helpers';
 import { selectDraftCandidates } from './ai-risk.helpers';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
@@ -512,7 +513,13 @@ export class AiCycleService implements OnModuleInit {
       meta,
     );
     const after = await this.coverageFor(userId, input.assetId, input.timeframe);
-    if (!after || after.status !== 'ok') {
+    const afterDays = after ? Math.floor(after.candles / candlesPerDay(input.timeframe)) : 0;
+    if (
+      !after ||
+      after.status === 'missing' ||
+      after.status === 'stale' ||
+      afterDays < MIN_SEARCH_DAYS
+    ) {
       const reason =
         refreshed.failed.length > 0
           ? ` Источник: ${refreshed.failed
@@ -521,11 +528,11 @@ export class AiCycleService implements OnModuleInit {
           : '';
       throw new ServiceUnavailableException({
         code: 'AI_DATA_INSUFFICIENT',
-        message: `Недостаточно истории: ${after?.candles ?? 0} из ${after?.expected ?? 0} свечей.${reason}`,
+        message: `Доступно ${after?.candles ?? 0} свечей (${afterDays} дн.), для поиска нужно минимум ${MIN_SEARCH_DAYS} дн.${reason}`,
       });
     }
     await this.setStep(cycleId, 'data', 'succeeded', {
-      message: `Загружено ${refreshed.upserted} свечей, покрытие ${after.candles} / ${after.expected}`,
+      message: `Загружено ${refreshed.upserted} свечей, покрытие ${after.candles} / ${after.expected}, поиск на ${Math.min(180, afterDays)} дн.`,
       progressPct: 100,
     });
   }

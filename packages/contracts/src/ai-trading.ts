@@ -89,7 +89,7 @@ export const aiProfileTokensResponseSchema = z.object({
 
 export const aiProfileTokenCreateRequestSchema = z.object({
   assetId: z.uuid(),
-  timeframes: z.array(aiTimeframeSchema).min(1).max(5).default(['1h', '1d']),
+  timeframes: z.array(aiTimeframeSchema).min(1).max(5).default(['1h', '4h']),
   priority: z.number().int().min(0).max(100).default(0),
   maxAllocationPct: decimal.nullable().optional(),
   enabled: z.boolean().default(true),
