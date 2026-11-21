@@ -38,3 +38,7 @@ Search folds now include warmup candles before each OOS window so indicators hav
 ## Rollback
 
 Redeploy the previous API/web images. Cycle rows in `ai_pipeline_runs`/`ai_jobs` are telemetry and may remain.
+
+## Addendum (2026-11-21) — timeouts and database resilience
+
+Production 5,000-variant searches take 17–18 minutes. The original 15-minute cap aborted healthy cycles while the background search continued and succeeded later, so the cap is now 30 minutes and stale recovery is 45 minutes. The search yields to the event loop after every variant instead of every 25, keeping the API responsive. Cycle status polling retries transient Postgres errors, sanitizes raw SQL from user-visible errors, and stale recovery marks only the active step failed while queued steps become `skipped`. Production release: PR #264 merged as `31a20ed`, deployment `e2d63f7e-a1ff-4161-adc3-1b23a051df90`, bundle `assets/index-1vd34DYk.js`, `/health` and `/ready` 200. No migration.
