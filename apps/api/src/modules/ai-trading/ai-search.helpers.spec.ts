@@ -5,6 +5,7 @@ import {
   buildSearchFolds,
   generateSearchVariants,
   historyDaysFor,
+  holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
 } from './ai-search.helpers';
@@ -81,5 +82,20 @@ describe('partial history windows', () => {
     expect(minPositiveFoldsFor(8)).toBe(5);
     expect(minTradesFor(5)).toBe(5);
     expect(minTradesFor(8)).toBe(8);
+  });
+});
+
+describe('holdoutRejection', () => {
+  it('accepts a positive holdout below the drawdown limit', () => {
+    expect(holdoutRejection(5, 10, 20)).toBeNull();
+  });
+
+  it('labels a non-positive return as a negative holdout', () => {
+    expect(holdoutRejection(0, 10, 20)).toBe('negative holdout');
+    expect(holdoutRejection(-1, 10, 20)).toBe('negative holdout');
+  });
+
+  it('labels a positive return with a high drawdown separately', () => {
+    expect(holdoutRejection(108.78, 21, 20)).toBe('holdout drawdown too high');
   });
 });

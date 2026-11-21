@@ -228,3 +228,17 @@ export function searchWorkerCount(
   if (value <= 0) return 1;
   return Math.max(1, Math.min(maxWorkers, Math.floor(value)));
 }
+
+export type HoldoutRejection = 'negative holdout' | 'holdout drawdown too high' | null;
+
+export function holdoutRejection(
+  returnPct: number,
+  drawdownPct: number,
+  maxDrawdownPct = 20,
+): HoldoutRejection {
+  if (!Number.isFinite(returnPct) || returnPct <= 0) return 'negative holdout';
+  if (Number.isFinite(drawdownPct) && drawdownPct > maxDrawdownPct) {
+    return 'holdout drawdown too high';
+  }
+  return null;
+}

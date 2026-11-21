@@ -555,6 +555,7 @@ const rejectionLabels: Record<string, string> = {
   'drawdown too high': 'просадка выше лимита',
   'worst fold too deep': 'худший фолд слишком глубокий',
   'negative holdout': 'отрицательный holdout',
+  'holdout drawdown too high': 'просадка на holdout выше лимита',
   'holdout failed': 'ошибка holdout',
   'backtest failed': 'ошибка бэктеста',
 };
@@ -787,8 +788,11 @@ function AiCycleCard({
             {(cycle.nearMisses ?? []).slice(0, 3).map((item, index) => (
               <span key={`${item.strategyKey}-${index}`}>
                 {item.strategyName}: OOS {formatPct(item.oosMedianReturnPct)} · holdout{' '}
-                {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)} ·{' '}
-                {item.reasons.map(rejectionLabel).join(', ')}
+                {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+                {item.holdoutDrawdownPct === null
+                  ? ''
+                  : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}{' '}
+                · {item.reasons.map(rejectionLabel).join(', ')}
               </span>
             ))}
           </div>
@@ -2037,6 +2041,9 @@ function SearchSection({
                   <span>
                     Holdout:{' '}
                     {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+                    {item.holdoutDrawdownPct === null
+                      ? ''
+                      : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}
                   </span>
                 </div>
                 <div className="mt-1 text-[11px] text-amber-800">
