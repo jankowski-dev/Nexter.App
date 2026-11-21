@@ -82,6 +82,7 @@ function emptyStep(key: AiCycleStepKey): AiCycleStep {
     status: 'queued',
     message: null,
     error: null,
+    progressPct: null,
     startedAt: null,
     finishedAt: null,
   };
@@ -492,11 +493,15 @@ export class AiCycleService implements OnModuleInit {
     input: AiCycleRequest,
     meta: CycleMeta,
   ): Promise<void> {
-    await this.setStep(cycleId, 'data', 'running', { message: 'Проверяю покрытие' });
+    await this.setStep(cycleId, 'data', 'running', {
+      message: 'Проверяю покрытие',
+      progressPct: 0,
+    });
     const before = await this.coverageFor(userId, input.assetId, input.timeframe);
     if (before?.status === 'ok') {
       await this.setStep(cycleId, 'data', 'succeeded', {
         message: `${before.candles} / ${before.expected} свечей`,
+        progressPct: 100,
       });
       return;
     }
@@ -521,6 +526,7 @@ export class AiCycleService implements OnModuleInit {
     }
     await this.setStep(cycleId, 'data', 'succeeded', {
       message: `Загружено ${refreshed.upserted} свечей, покрытие ${after.candles} / ${after.expected}`,
+      progressPct: 100,
     });
   }
 
@@ -537,7 +543,7 @@ export class AiCycleService implements OnModuleInit {
     input: AiCycleRequest,
     meta: CycleMeta,
   ): Promise<string> {
-    await this.setStep(cycleId, 'search', 'running', { message: 'Запускаю поиск' });
+    await this.setStep(cycleId, 'search', 'running', { message: 'Запускаю поиск', progressPct: 0 });
     const { runId } = await this.aiSearch.start(
       userId,
       {
@@ -595,6 +601,7 @@ export class AiCycleService implements OnModuleInit {
       if (status.status === 'succeeded') {
         await this.setStep(cycleId, 'search', 'succeeded', {
           message: `${status.evaluated} / ${status.total} вариантов`,
+          progressPct: 100,
         });
         return runId;
       }
@@ -622,7 +629,7 @@ export class AiCycleService implements OnModuleInit {
       const message = `Поиск: ${status.evaluated} / ${status.total}`;
       if (message !== lastMessage) {
         lastMessage = message;
-        await this.setStep(cycleId, 'search', 'running', { message });
+        await this.setStep(cycleId, 'search', 'running', { message, progressPct: status.percent });
       }
       await sleep(1_000);
     }
@@ -639,6 +646,7 @@ export class AiCycleService implements OnModuleInit {
   ): Promise<AiSearchCandidate[]> {
     await this.setStep(cycleId, 'recommendations', 'running', {
       message: 'Собираю рекомендации',
+      progressPct: 0,
     });
     const results = await this.aiSearch.results(userId, searchRunId);
     const recommended = results.candidates.filter((item) => item.status === 'recommended');
@@ -649,6 +657,7 @@ export class AiCycleService implements OnModuleInit {
     });
     await this.setStep(cycleId, 'recommendations', 'succeeded', {
       message: `${recommended.length} рекомендаций`,
+      progressPct: 100,
     });
     return recommended;
   }
@@ -664,17 +673,22 @@ export class AiCycleService implements OnModuleInit {
     if (maxDrafts <= 0) {
       await this.setStep(cycleId, 'drafts', 'skipped', {
         message: 'Создание черновиков выключено',
+        progressPct: 0,
       });
       return;
     }
     if (candidates.length === 0) {
       await this.setStep(cycleId, 'drafts', 'skipped', {
         message: 'Нет рекомендаций для черновиков',
+        progressPct: 0,
       });
       return;
     }
 
-    await this.setStep(cycleId, 'drafts', 'running', { message: 'Проверяю лимиты и бюджет' });
+    await this.setStep(cycleId, 'drafts', 'running', {
+      message: 'Проверяю лимиты и бюджет',
+      progressPct: 0,
+    });
     const capacity = await this.risk.draftCapacity(userId);
     const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
     const selection = selectDraftCandidates(
@@ -692,6 +706,7 @@ export class AiCycleService implements OnModuleInit {
     if (selection.selected.length === 0) {
       await this.setStep(cycleId, 'drafts', 'skipped', {
         message: `Нет доступного бюджета или лимитов${skippedText ? `: ${skippedText}` : ''}`,
+        progressPct: 0,
       });
       return;
     }
@@ -737,6 +752,7 @@ export class AiCycleService implements OnModuleInit {
     });
     await this.setStep(cycleId, 'drafts', 'succeeded', {
       message: `Создано черновиков: ${created}${skippedText ? `; пропущено: ${skippedText}` : ''}`,
+      progressPct: 100,
     });
   }
 
@@ -744,7 +760,7 @@ export class AiCycleService implements OnModuleInit {
     cycleId: string,
     key: AiCycleStepKey,
     status: AiCycleStepStatus,
-    patch: { message?: string; error?: string | null } = {},
+    patch: { message?: string; error?: string | null; progressPct?: number | null } = {},
   ): Promise<void> {
     const now = new Date().toISOString();
     await this.updateSummary(cycleId, (summary) => {
@@ -753,6 +769,7 @@ export class AiCycleService implements OnModuleInit {
       step.status = status;
       if (patch.message !== undefined) step.message = patch.message;
       if (patch.error !== undefined) step.error = patch.error;
+      if (patch.progressPct !== undefined) step.progressPct = patch.progressPct;
       if (status === 'running' && !step.startedAt) step.startedAt = now;
       if (['succeeded', 'failed', 'skipped'].includes(status)) step.finishedAt = now;
     });

@@ -388,22 +388,26 @@ export function AiTradingPage() {
         </p>
       </Card>
 
-      <AiCycleCard
-        cycle={cycle.data ?? null}
-        loading={cycle.isPending && Boolean(cycleId)}
-        errorText={
-          cycle.isError ? toRussianError(cycle.error, 'Не удалось получить статус цикла ИИ') : null
-        }
-        onRetry={() => void cycle.refetch()}
-        onClear={() => selectCycle(null)}
-        onCancel={() => {
-          setCancelError(null);
-          if (cycle.data) setCancelTarget(cycle.data);
-        }}
-        onOpenBots={() => {
-          window.location.href = '/portfolio#robots';
-        }}
-      />
+      {cycleId ? (
+        <AiCycleCard
+          cycle={cycle.data ?? null}
+          loading={cycle.isPending && Boolean(cycleId)}
+          errorText={
+            cycle.isError
+              ? toRussianError(cycle.error, 'Не удалось получить статус цикла ИИ')
+              : null
+          }
+          onRetry={() => void cycle.refetch()}
+          onClear={() => selectCycle(null)}
+          onCancel={() => {
+            setCancelError(null);
+            if (cycle.data) setCancelTarget(cycle.data);
+          }}
+          onOpenBots={() => {
+            window.location.href = '/portfolio#robots';
+          }}
+        />
+      ) : null}
       <ConfirmDialog
         open={Boolean(cancelTarget)}
         title="Отменить цикл ИИ?"
@@ -422,16 +426,18 @@ export function AiTradingPage() {
         }}
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <RecommendationsSection onChanged={() => invalidateAi(queryClient)} />
-        <AiBotsSection
-          health={botHealth.data}
-          loading={botHealth.isPending}
-          error={botHealth.isError}
-          onRetry={() => void botHealth.refetch()}
-          onOpenSearch={() => setDrawer('search')}
-        />
-      </div>
+      {cycle.data?.status === 'succeeded' && cycle.data.recommended > 0 ? (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <RecommendationsSection onChanged={() => invalidateAi(queryClient)} />
+          <AiBotsSection
+            health={botHealth.data}
+            loading={botHealth.isPending}
+            error={botHealth.isError}
+            onRetry={() => void botHealth.refetch()}
+            onOpenSearch={() => setDrawer('search')}
+          />
+        </div>
+      ) : null}
 
       <Drawer
         open={drawer === 'universe'}
@@ -550,6 +556,14 @@ const cycleStatusLabels: Record<AiCycleStatus['status'], string> = {
   cancelled: 'отменён',
 };
 
+function stepProgressPct(step: AiCycleStep): number | null {
+  if (step.status === 'skipped') return null;
+  if (typeof step.progressPct === 'number') return step.progressPct;
+  if (step.status === 'succeeded') return 100;
+  if (step.status === 'running') return 0;
+  return null;
+}
+
 function cycleStatusTone(
   status: AiCycleStatus['status'],
 ): 'neutral' | 'info' | 'success' | 'danger' {
@@ -628,7 +642,6 @@ function AiCycleCard({
     );
   }
   const succeeded = cycle.steps.filter((step) => step.status === 'succeeded').length;
-  const totalSteps = Math.max(1, cycle.steps.length);
   const tone = cycleStatusTone(cycle.status);
   return (
     <Card className="p-3">
@@ -662,12 +675,6 @@ function AiCycleCard({
           ) : null}
         </div>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-        <div
-          className="h-full rounded-full bg-emerald-500 transition-all"
-          style={{ width: `${(succeeded / totalSteps) * 100}%` }}
-        />
-      </div>
       {errorText ? (
         <p className="mt-2 text-[11px] text-amber-700">
           Статус не обновился: {errorText}{' '}
@@ -676,21 +683,59 @@ function AiCycleCard({
           </button>
         </p>
       ) : null}
-      <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
-        {cycle.steps.map((step) => (
-          <div key={step.key} className="rounded-lg border border-zinc-200 px-2 py-1.5">
-            <div className="flex items-center gap-1.5">
-              <Badge tone={cycleStepTone(step.status)}>{cycleStepStatusLabels[step.status]}</Badge>
-              <span className="text-xs font-medium text-zinc-800">{cycleStepLabels[step.key]}</span>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {cycle.steps.map((step) => {
+          const progress = stepProgressPct(step);
+          const active = step.status === 'running';
+          const failed = step.status === 'failed';
+          return (
+            <div
+              key={step.key}
+              className={`rounded-lg border px-2.5 py-2 ${
+                active ? 'border-emerald-300 bg-emerald-50/40' : 'border-zinc-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                <Badge tone={cycleStepTone(step.status)}>
+                  {cycleStepStatusLabels[step.status]}
+                </Badge>
+                <span className="text-xs font-medium text-zinc-800">
+                  {cycleStepLabels[step.key]}
+                </span>
+              </div>
+              {step.message ? (
+                <div className="mt-1 text-[11px] text-zinc-500">{step.message}</div>
+              ) : null}
+              {step.error ? (
+                <div className="mt-1 text-[11px] text-red-700">{cycleErrorText(step.error)}</div>
+              ) : null}
+              {progress !== null ? (
+                <div className="mt-2">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-zinc-400">
+                      Прогресс
+                    </span>
+                    <span
+                      className={`text-lg font-semibold ${
+                        failed ? 'text-red-700' : 'text-emerald-700'
+                      }`}
+                    >
+                      {progress}%
+                    </span>
+                  </div>
+                  <div className="mt-1 h-1 overflow-hidden rounded-full bg-zinc-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        failed ? 'bg-red-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
-            {step.message ? (
-              <div className="mt-1 text-[11px] text-zinc-500">{step.message}</div>
-            ) : null}
-            {step.error ? (
-              <div className="mt-1 text-[11px] text-red-700">{cycleErrorText(step.error)}</div>
-            ) : null}
-          </div>
-        ))}
+          );
+        })}
       </div>
       {cycle.error ? (
         <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
