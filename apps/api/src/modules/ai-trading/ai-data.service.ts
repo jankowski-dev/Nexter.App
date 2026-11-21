@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { marketCandles, watchlist, type Database, type DbExecutor } from '@nexter/db';
 import {
   aiTimeframes,
@@ -87,9 +87,8 @@ export class AiDataService {
       .select({
         assetId: marketCandles.assetId,
         timeframe: marketCandles.timeframe,
-        candles: sql<number>`count(*)::int`,
-        firstOpenTime: sql<string | Date | null>`min(${marketCandles.openTime})`,
-        lastOpenTime: sql<string | Date | null>`max(${marketCandles.openTime})`,
+        openTime: marketCandles.openTime,
+        quality: marketCandles.quality,
       })
       .from(marketCandles)
       .where(
@@ -98,9 +97,45 @@ export class AiDataService {
           tokens.map((token) => token.asset.id),
         ),
       )
-      .groupBy(marketCandles.assetId, marketCandles.timeframe);
+      .orderBy(
+        asc(marketCandles.assetId),
+        asc(marketCandles.timeframe),
+        asc(marketCandles.openTime),
+      );
 
-    const byPair = new Map(rows.map((row) => [`${row.assetId}:${row.timeframe}`, row]));
+    const byPair = new Map<
+      string,
+      {
+        candles: number;
+        firstOpenTime: Date;
+        lastOpenTime: Date;
+        syntheticCandles: number;
+        maxGapCandles: number;
+      }
+    >();
+    for (const row of rows) {
+      const key = `${row.assetId}:${row.timeframe}`;
+      const step = TIMEFRAME_MS[row.timeframe as AiTimeframe] ?? 1;
+      const current = byPair.get(key);
+      if (!current) {
+        byPair.set(key, {
+          candles: 1,
+          firstOpenTime: row.openTime,
+          lastOpenTime: row.openTime,
+          syntheticCandles: row.quality === 'synthetic' ? 1 : 0,
+          maxGapCandles: 0,
+        });
+        continue;
+      }
+      const gap = Math.max(
+        0,
+        Math.round((row.openTime.getTime() - current.lastOpenTime.getTime()) / step) - 1,
+      );
+      current.candles += 1;
+      current.lastOpenTime = row.openTime;
+      current.syntheticCandles += row.quality === 'synthetic' ? 1 : 0;
+      current.maxGapCandles = Math.max(current.maxGapCandles, gap);
+    }
 
     return {
       generatedAt,
@@ -318,6 +353,8 @@ export function toCoverage(
         candles: number;
         firstOpenTime: string | Date | null;
         lastOpenTime: string | Date | null;
+        syntheticCandles?: number;
+        maxGapCandles?: number;
       }
     | undefined,
 ): AiCoverageTimeframe {
@@ -337,6 +374,8 @@ export function toCoverage(
     firstOpenTime: toIso(row?.firstOpenTime),
     lastOpenTime,
     stale,
+    syntheticCandles: Number(row?.syntheticCandles ?? 0),
+    maxGapCandles: Number(row?.maxGapCandles ?? 0),
     status,
   };
 }

@@ -10,6 +10,18 @@ describe('AI data coverage', () => {
     expect(coverage.lastOpenTime).toBeNull();
   });
 
+  it('reports synthetic candles and the largest gap', () => {
+    const coverage = toCoverage('1h', {
+      candles: 100,
+      firstOpenTime: new Date(),
+      lastOpenTime: new Date(),
+      syntheticCandles: 12,
+      maxGapCandles: 3,
+    });
+    expect(coverage.syntheticCandles).toBe(12);
+    expect(coverage.maxGapCandles).toBe(3);
+  });
+
   it('reports partial, stale and healthy coverage', () => {
     const expected = expectedCandles('1d');
     const now = new Date();
