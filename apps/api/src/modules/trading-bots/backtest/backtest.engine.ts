@@ -179,19 +179,21 @@ export function runBacktest(
       capturedAt: candleTimestamp(candle.date, '12:00:00.000'),
     });
 
-    const decision = definition.evaluate({
-      now: candleTimestamp(candle.date, '23:59:59.999'),
-      params,
-      priceUsd: candle.closeUsd,
-      change24hPct,
-      history: samples,
-      position: null,
-      buyCount: 0,
-      stopLossEnabled: options.useStopLoss !== false,
-      takeProfitEnabled: options.useTakeProfit !== false,
-      state: strategyState,
-    });
-    strategyState = decision.nextState ?? strategyState;
+    if (definition.stateful === true) {
+      const decision = definition.evaluate({
+        now: candleTimestamp(candle.date, '23:59:59.999'),
+        params,
+        priceUsd: candle.closeUsd,
+        change24hPct,
+        history: samples,
+        position: null,
+        buyCount: 0,
+        stopLossEnabled: options.useStopLoss !== false,
+        takeProfitEnabled: options.useTakeProfit !== false,
+        state: strategyState,
+      });
+      strategyState = decision.nextState ?? strategyState;
+    }
   }
 
   for (let index = warmup; index < candles.length; index += 1) {

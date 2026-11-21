@@ -57,6 +57,8 @@ export interface StrategyDefinition {
   kind: 'system' | 'custom';
   /** Manual-only strategies set this to false so the AI Analyst never proposes them. */
   aiEligible?: boolean;
+  /** State needs a warmup pass before OOS scoring. */
+  stateful?: boolean;
   defaultParams: Record<string, unknown>;
   paramFields: StrategyParamField[];
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;

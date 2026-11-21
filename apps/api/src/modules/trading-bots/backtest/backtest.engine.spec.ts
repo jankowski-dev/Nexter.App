@@ -99,6 +99,7 @@ describe('runBacktest', () => {
     const states: Array<Record<string, unknown>> = [];
     const definition: StrategyDefinition = {
       ...meanReversion,
+      stateful: true,
       evaluate: (ctx) => {
         states.push(ctx.state ?? {});
         return {
