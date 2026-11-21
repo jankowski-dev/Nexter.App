@@ -666,12 +666,18 @@ export class AiSearchService {
       const definition = strategyByKey.get(candidate.variant.strategyKey);
       if (!definition) continue;
       try {
-        const result = runBacktest(definition, candidate.variant.params, folds.holdout, {
-          initialCapitalUsd: '1000',
-          feeBps: FEE_BPS,
-          slippageBps: SLIPPAGE_BPS,
-          changeLookbackCandles: candlesPerDay(input.timeframe),
-        });
+        const result = runBacktest(
+          definition,
+          candidate.variant.params,
+          [...folds.holdoutWarmup, ...folds.holdout],
+          {
+            initialCapitalUsd: '1000',
+            feeBps: FEE_BPS,
+            slippageBps: SLIPPAGE_BPS,
+            changeLookbackCandles: candlesPerDay(input.timeframe),
+            warmupCandles: folds.holdoutWarmupCandles,
+          },
+        );
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
