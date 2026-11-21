@@ -9,6 +9,7 @@ import { AiHealthService } from './ai-health.service';
 import { AiLabService } from './ai-lab.service';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
+import { AiSearchWorkerService } from './ai-search-worker.service';
 import { AiTradingController } from './ai-trading.controller';
 import { AiTradingService } from './ai-trading.service';
 
@@ -20,6 +21,7 @@ import { AiTradingService } from './ai-trading.service';
     AiDataService,
     AiLabService,
     AiSearchService,
+    AiSearchWorkerService,
     AiHealthService,
     AiRiskService,
     AiCycleService,

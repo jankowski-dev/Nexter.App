@@ -11,13 +11,13 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   aiArtifacts,
   aiCandidates,
+  aiJobs,
   aiPipelineRuns,
   assets,
   marketCandles,
   type Database,
 } from '@nexter/db';
 import type {
-  AiProfileToken,
   AiSearchCandidate,
   AiSearchRequest,
   AiRecommendationsResponse,
@@ -159,71 +159,229 @@ export class AiSearchService {
       });
     }
 
-    const [run] = await this.db
-      .insert(aiPipelineRuns)
-      .values({
-        profileId: profile.id,
-        trigger: 'manual',
-        status: 'running',
-        startedAt: new Date(),
-        summary: {
-          assetId: input.assetId,
-          timeframe: input.timeframe,
-          variants: variants.length,
-          lookbackDays,
-          progress: { evaluated: 0, total: variants.length },
-        } satisfies SearchRunSummary,
-      })
-      .returning({ id: aiPipelineRuns.id });
-    if (!run) throw new Error('Failed to create search run');
+    if (this.shouldRunInline()) {
+      const [run] = await this.db
+        .insert(aiPipelineRuns)
+        .values({
+          profileId: profile.id,
+          trigger: 'manual',
+          status: 'running',
+          startedAt: new Date(),
+          summary: {
+            assetId: input.assetId,
+            timeframe: input.timeframe,
+            variants: variants.length,
+            lookbackDays,
+            progress: { evaluated: 0, total: variants.length },
+          } satisfies SearchRunSummary,
+        })
+        .returning({ id: aiPipelineRuns.id });
+      if (!run) throw new Error('Failed to create search run');
 
-    const control = { cancelled: false };
-    this.active.set(run.id, control);
-    void this.execute(
-      userId,
-      run.id,
-      profile.id,
-      token,
-      input,
-      candles,
-      variants,
-      lookbackDays,
-      control,
-      meta,
-    ).catch(async (error: unknown) => {
-      this.active.delete(run.id);
-      const message =
-        sanitizeStoredError(error instanceof Error ? error.message : String(error)) ??
-        'Поиск завершился с ошибкой';
-      try {
-        await withDbRetry(
-          () =>
-            this.db
-              .update(aiPipelineRuns)
-              .set({
-                status: 'failed',
-                finishedAt: new Date(),
-                summary: {
-                  assetId: input.assetId,
-                  timeframe: input.timeframe,
-                  variants: variants.length,
-                  progress: { evaluated: 0, total: variants.length },
-                  error: message,
-                } satisfies SearchRunSummary,
-              })
-              .where(eq(aiPipelineRuns.id, run.id)),
-          { attempts: 5, delayMs: 500 },
-        );
-      } catch (dbError) {
-        this.logger.error(
-          `Could not persist failure for AI search ${run.id}: ${
-            isTransientDbError(dbError) ? DB_UNAVAILABLE_MESSAGE : String(dbError)
-          }`,
-        );
-      }
+      const control = { cancelled: false };
+      this.active.set(run.id, control);
+      void this.execute(
+        userId,
+        run.id,
+        profile.id,
+        input,
+        candles,
+        variants,
+        lookbackDays,
+        control,
+        meta,
+      ).catch(async (error: unknown) => {
+        this.active.delete(run.id);
+        await this.failRun(userId, run.id, input, variants.length, error);
+      });
+
+      return { runId: run.id };
+    }
+
+    const created = await this.db.transaction(async (tx) => {
+      const [run] = await tx
+        .insert(aiPipelineRuns)
+        .values({
+          profileId: profile.id,
+          trigger: 'manual',
+          status: 'queued',
+          summary: {
+            assetId: input.assetId,
+            timeframe: input.timeframe,
+            variants: variants.length,
+            lookbackDays,
+            progress: { evaluated: 0, total: variants.length },
+          } satisfies SearchRunSummary,
+        })
+        .returning({ id: aiPipelineRuns.id });
+      if (!run) throw new Error('Failed to create search run');
+      await tx.insert(aiJobs).values({
+        profileId: profile.id,
+        runId: run.id,
+        service: 'ai_search',
+        stage: 'search',
+        assetId: input.assetId,
+        timeframe: input.timeframe,
+        status: 'queued',
+        payload: { userId, input, meta },
+        idempotencyKey: `search:${run.id}`,
+      });
+      return run;
     });
 
-    return { runId: run.id };
+    return { runId: created.id };
+  }
+
+  private shouldRunInline(): boolean {
+    return process.env.NODE_ENV === 'test' || process.env.AI_SEARCH_INLINE === '1';
+  }
+
+  private async failRun(
+    userId: string,
+    runId: string,
+    input: AiSearchRequest,
+    variantCount: number,
+    error: unknown,
+  ): Promise<void> {
+    const message =
+      sanitizeStoredError(error instanceof Error ? error.message : String(error)) ??
+      'Поиск завершился с ошибкой';
+    try {
+      await withDbRetry(
+        () =>
+          this.db
+            .update(aiPipelineRuns)
+            .set({
+              status: 'failed',
+              finishedAt: new Date(),
+              summary: {
+                assetId: input.assetId,
+                timeframe: input.timeframe,
+                variants: variantCount,
+                progress: { evaluated: 0, total: variantCount },
+                error: message,
+              } satisfies SearchRunSummary,
+            })
+            .where(eq(aiPipelineRuns.id, runId)),
+        { attempts: 5, delayMs: 500 },
+      );
+    } catch (dbError) {
+      this.logger.error(
+        `Could not persist failure for AI search ${runId}: ${
+          isTransientDbError(dbError) ? DB_UNAVAILABLE_MESSAGE : String(dbError)
+        }`,
+      );
+    }
+  }
+
+  async runQueuedJob(job: {
+    id: string;
+    runId: string;
+    profileId: string;
+    payload: Record<string, unknown>;
+  }): Promise<void> {
+    const userPayload = job.payload as {
+      userId?: unknown;
+      input?: unknown;
+      meta?: unknown;
+    };
+    const input = userPayload.input as AiSearchRequest | undefined;
+    const userId = typeof userPayload.userId === 'string' ? userPayload.userId : null;
+    if (!input || !userId) {
+      await this.setJobStatus(job.id, 'failed', 'AI_SEARCH_JOB_INVALID');
+      return;
+    }
+    const meta = (userPayload.meta ?? {}) as SearchMeta;
+
+    const [run] = await this.db
+      .select({ status: aiPipelineRuns.status, startedAt: aiPipelineRuns.startedAt })
+      .from(aiPipelineRuns)
+      .where(eq(aiPipelineRuns.id, job.runId))
+      .limit(1);
+    if (!run) {
+      await this.setJobStatus(job.id, 'failed', 'AI_SEARCH_RUN_MISSING');
+      return;
+    }
+    if (run.status === 'succeeded') {
+      await this.setJobStatus(job.id, 'succeeded');
+      return;
+    }
+    if (run.status === 'cancelled') {
+      await this.setJobStatus(job.id, 'cancelled', 'Отменено владельцем');
+      return;
+    }
+    if (run.status === 'failed') {
+      await this.setJobStatus(job.id, 'failed', 'AI_SEARCH_RUN_FAILED');
+      return;
+    }
+
+    const candles = await this.loadCandles(input.assetId, input.timeframe);
+    const availableDays = historyDaysFor(candles, input.timeframe);
+    if (availableDays < MIN_SEARCH_DAYS) {
+      const message = `Недостаточно истории для поиска: ${availableDays} дн.`;
+      await this.setJobStatus(job.id, 'failed', message);
+      await this.failRun(userId, job.runId, input, 0, new Error(message));
+      return;
+    }
+    const variants = generateSearchVariants(strategyDefinitions, input.variants, input.seed ?? 7);
+    const lookbackDays = Math.min(180, availableDays);
+    const control = { cancelled: false };
+    this.active.set(job.runId, control);
+    await this.db
+      .update(aiPipelineRuns)
+      .set({ status: 'running', startedAt: run.startedAt ?? new Date() })
+      .where(eq(aiPipelineRuns.id, job.runId));
+
+    try {
+      await this.execute(
+        userId,
+        job.runId,
+        job.profileId,
+        input,
+        candles,
+        variants,
+        lookbackDays,
+        control,
+        meta,
+      );
+      const [after] = await this.db
+        .select({ status: aiPipelineRuns.status })
+        .from(aiPipelineRuns)
+        .where(eq(aiPipelineRuns.id, job.runId))
+        .limit(1);
+      await this.setJobStatus(
+        job.id,
+        after?.status === 'cancelled' ? 'cancelled' : 'succeeded',
+        after?.status === 'cancelled' ? 'Отменено владельцем' : null,
+      );
+    } catch (error) {
+      await this.failRun(userId, job.runId, input, variants.length, error);
+      await this.setJobStatus(
+        job.id,
+        'failed',
+        error instanceof Error ? error.message.slice(0, 500) : 'AI_SEARCH_FAILED',
+      );
+    } finally {
+      this.active.delete(job.runId);
+    }
+  }
+
+  private async setJobStatus(
+    jobId: string,
+    status: string,
+    error: string | null = null,
+  ): Promise<void> {
+    await this.db
+      .update(aiJobs)
+      .set({
+        status,
+        error,
+        updatedAt: new Date(),
+        lockedBy: null,
+        lockedAt: null,
+        heartbeatAt: new Date(),
+      })
+      .where(eq(aiJobs.id, jobId));
   }
 
   async listRuns(userId: string, limit = 20): Promise<AiSearchRunsResponse> {
@@ -508,6 +666,16 @@ export class AiSearchService {
         .update(aiPipelineRuns)
         .set({ status: 'cancelled', finishedAt: new Date() })
         .where(eq(aiPipelineRuns.id, runId));
+      await this.db
+        .update(aiJobs)
+        .set({ status: 'cancelled', error: 'Отменено владельцем', updatedAt: new Date() })
+        .where(
+          and(
+            eq(aiJobs.runId, runId),
+            eq(aiJobs.service, 'ai_search'),
+            inArray(aiJobs.status, ['queued', 'running']),
+          ),
+        );
     }
     return this.status(userId, runId);
   }
@@ -516,7 +684,6 @@ export class AiSearchService {
     userId: string,
     runId: string,
     profileId: string,
-    token: AiProfileToken,
     input: AiSearchRequest,
     candles: BotCandle[],
     variants: SearchVariant[],
@@ -813,7 +980,7 @@ export class AiSearchService {
           recommended.map((candidate) => ({
             profileId,
             runId,
-            assetId: token.asset.id,
+            assetId: input.assetId,
             timeframe: input.timeframe,
             strategyKey: candidate.variant.strategyKey,
             params: candidate.variant.params,
