@@ -27,6 +27,7 @@ import {
   type AiCycleStepStatus,
   type AiProfileToken,
   type AiSearchCandidate,
+  type AiSearchNearMiss,
   type BotCreateRequest,
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
@@ -50,6 +51,7 @@ interface CycleSummary {
   recommended: number;
   draftsCreated: number;
   rejectionReasons: Record<string, number>;
+  nearMisses: AiSearchNearMiss[];
   error?: string | null;
 }
 
@@ -190,6 +192,7 @@ export class AiCycleService implements OnModuleInit {
       recommended: 0,
       draftsCreated: 0,
       rejectionReasons: {},
+      nearMisses: [],
       error: null,
     };
 
@@ -264,6 +267,7 @@ export class AiCycleService implements OnModuleInit {
       recommended: summary.recommended,
       draftsCreated: summary.draftsCreated,
       rejectionReasons: summary.rejectionReasons ?? {},
+      nearMisses: summary.nearMisses ?? [],
       error: summary.error ?? null,
       createdAt: run.createdAt.toISOString(),
       finishedAt: run.finishedAt?.toISOString() ?? null,
@@ -407,6 +411,7 @@ export class AiCycleService implements OnModuleInit {
     await this.updateSummary(cycleId, (summary) => {
       summary.recommended = recommended.length;
       summary.rejectionReasons = results.rejectionReasons;
+      summary.nearMisses = results.nearMisses.slice(0, 5);
     });
     await this.setStep(cycleId, 'recommendations', 'succeeded', {
       message: `${recommended.length} рекомендаций`,

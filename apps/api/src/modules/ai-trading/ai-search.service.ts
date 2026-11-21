@@ -19,6 +19,7 @@ import type {
   AiSearchCandidate,
   AiSearchRequest,
   AiRecommendationsResponse,
+  AiSearchNearMiss,
   AiSearchResults,
   AiSearchRunsResponse,
   AiSearchStats,
@@ -361,6 +362,7 @@ export class AiSearchService {
         histogram: [],
       },
       candidates: rows.map((row) => this.toCandidate(row)),
+      nearMisses: (payload.nearMisses as AiSearchNearMiss[] | undefined) ?? [],
       rejectionReasons: (payload.rejectionReasons as Record<string, number> | undefined) ?? {},
     };
   }
@@ -394,10 +396,35 @@ export class AiSearchService {
     const metrics: Array<SearchCandidate> = [];
     const allMetrics: Array<{ returnPct: number; drawdown: number; positiveFolds: number }> = [];
     const rejectionReasons: Record<string, number> = {};
+    const nearMisses: AiSearchNearMiss[] = [];
     let evaluated = 0;
 
     const reject = (reason: string) => {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
+    };
+
+    const rememberNearMiss = (
+      aggregate: VariantMetrics,
+      variant: SearchVariant,
+      reasons: string[],
+      holdoutReturnPct: string | null = null,
+    ) => {
+      if (aggregate.trades <= 0 || Number(aggregate.oosMedianReturnPct) <= 0) return;
+      nearMisses.push({
+        strategyKey: variant.strategyKey,
+        strategyName: strategyByKey.get(variant.strategyKey)?.name ?? variant.strategyKey,
+        params: variant.params,
+        oosMedianReturnPct: aggregate.oosMedianReturnPct,
+        oosMeanReturnPct: aggregate.oosMeanReturnPct,
+        oosWorstReturnPct: aggregate.oosWorstReturnPct,
+        maxDrawdownPct: aggregate.maxDrawdownPct,
+        trades: aggregate.trades,
+        positiveFolds: aggregate.positiveFolds,
+        stabilityPct: aggregate.stabilityPct,
+        holdoutReturnPct,
+        policyScore: aggregate.policyScore,
+        reasons,
+      });
     };
 
     for (const [index, variant] of variants.entries()) {
@@ -454,6 +481,7 @@ export class AiSearchService {
       });
       if (aggregate.trades < MIN_TRADES) {
         reject('too few trades');
+        rememberNearMiss(aggregate, variant, ['too few trades']);
         continue;
       }
       if (Number(aggregate.oosMedianReturnPct) <= 0) {
@@ -462,14 +490,17 @@ export class AiSearchService {
       }
       if (aggregate.positiveFolds < MIN_POSITIVE_FOLDS) {
         reject('unstable folds');
+        rememberNearMiss(aggregate, variant, ['unstable folds']);
         continue;
       }
       if (Number(aggregate.maxDrawdownPct) > MAX_DRAWDOWN_PCT) {
         reject('drawdown too high');
+        rememberNearMiss(aggregate, variant, ['drawdown too high']);
         continue;
       }
       if (Number(aggregate.oosWorstReturnPct) < MIN_WORST_RETURN) {
         reject('worst fold too deep');
+        rememberNearMiss(aggregate, variant, ['worst fold too deep']);
         continue;
       }
 
@@ -497,11 +528,41 @@ export class AiSearchService {
         if (returnPct <= 0 || drawdown > MAX_DRAWDOWN_PCT) {
           candidate.policyScore = '0';
           reject('negative holdout');
+          rememberNearMiss(
+            {
+              oosMedianReturnPct: candidate.oosMedianReturnPct,
+              oosMeanReturnPct: candidate.oosMeanReturnPct,
+              oosWorstReturnPct: candidate.oosWorstReturnPct,
+              maxDrawdownPct: candidate.maxDrawdownPct,
+              trades: candidate.trades,
+              positiveFolds: candidate.positiveFolds,
+              stabilityPct: candidate.stabilityPct,
+              policyScore: '0',
+            },
+            candidate.variant,
+            ['negative holdout'],
+            candidate.holdoutReturnPct,
+          );
         }
       } catch {
         candidate.holdoutReturnPct = null;
         candidate.policyScore = '0';
         reject('holdout failed');
+        rememberNearMiss(
+          {
+            oosMedianReturnPct: candidate.oosMedianReturnPct,
+            oosMeanReturnPct: candidate.oosMeanReturnPct,
+            oosWorstReturnPct: candidate.oosWorstReturnPct,
+            maxDrawdownPct: candidate.maxDrawdownPct,
+            trades: candidate.trades,
+            positiveFolds: candidate.positiveFolds,
+            stabilityPct: candidate.stabilityPct,
+            policyScore: '0',
+          },
+          candidate.variant,
+          ['holdout failed'],
+          null,
+        );
       }
     }
 
@@ -512,6 +573,18 @@ export class AiSearchService {
         Number(candidate.policyScore) > 0,
     );
     const stats = this.buildStats(variants.length, evaluated, allMetrics, recommended);
+    const holdoutFailed = (item: AiSearchNearMiss) =>
+      item.reasons.includes('negative holdout') || item.reasons.includes('holdout failed');
+    const nearMissesTop = nearMisses
+      .sort((left, right) => {
+        const priority = Number(holdoutFailed(right)) - Number(holdoutFailed(left));
+        return (
+          priority ||
+          Number(right.policyScore) - Number(left.policyScore) ||
+          Number(right.oosMedianReturnPct) - Number(left.oosMedianReturnPct)
+        );
+      })
+      .slice(0, 10);
     const payload = {
       assetId: input.assetId,
       timeframe: input.timeframe,
@@ -522,6 +595,7 @@ export class AiSearchService {
         params: candidate.variant.params,
         ...candidate,
       })),
+      nearMisses: nearMissesTop,
       rejectionReasons,
     };
 

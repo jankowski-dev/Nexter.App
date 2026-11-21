@@ -534,6 +534,20 @@ function AiCycleCard({
             .join(' · ')}
         </div>
       ) : null}
+      {(cycle.nearMisses ?? []).length > 0 ? (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/50 px-2 py-1.5 text-[11px] text-amber-900">
+          <div className="font-medium">Почти прошли, но не рекомендации</div>
+          <div className="mt-1 flex flex-col gap-0.5">
+            {(cycle.nearMisses ?? []).slice(0, 3).map((item, index) => (
+              <span key={`${item.strategyKey}-${index}`}>
+                {item.strategyName}: OOS {formatPct(item.oosMedianReturnPct)} · holdout{' '}
+                {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)} ·{' '}
+                {item.reasons.map(rejectionLabel).join(', ')}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </Card>
   );
 }
@@ -1604,12 +1618,48 @@ function SearchSection({
                   .sort((left, right) => right[1] - left[1])
                   .map(([reason, count]) => (
                     <span key={reason} className="rounded bg-white px-2 py-1">
-                      {reason}: {count}
+                      {rejectionLabel(reason)}: {count}
                     </span>
                   ))}
               </div>
             </div>
           ) : null}
+        </Card>
+      ) : null}
+
+      {currentResults && (currentResults.nearMisses ?? []).length > 0 ? (
+        <Card>
+          <CardTitle>Почти прошли</CardTitle>
+          <CardDescription>
+            Прошли OOS, но не финальный holdout или другой фильтр. Это не рекомендации и не
+            черновики роботов.
+          </CardDescription>
+          <div className="mt-3 space-y-2">
+            {(currentResults.nearMisses ?? []).map((item, index) => (
+              <div
+                key={`${item.strategyKey}-${index}`}
+                className="rounded-xl border border-amber-200 bg-amber-50/40 px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-zinc-900">{item.strategyName}</span>
+                  <Badge tone="warning">не прошло</Badge>
+                  <span className="text-[11px] text-zinc-500">{item.strategyKey}</span>
+                </div>
+                <div className="mt-1 grid gap-1 text-[11px] text-zinc-600 sm:grid-cols-4">
+                  <span>OOS: {formatPct(item.oosMedianReturnPct)}</span>
+                  <span>DD: {percentMagnitude(item.maxDrawdownPct)}</span>
+                  <span>Сделок: {item.trades}</span>
+                  <span>
+                    Holdout:{' '}
+                    {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+                  </span>
+                </div>
+                <div className="mt-1 text-[11px] text-amber-800">
+                  {item.reasons.map(rejectionLabel).join(' · ')}
+                </div>
+              </div>
+            ))}
+          </div>
         </Card>
       ) : null}
 

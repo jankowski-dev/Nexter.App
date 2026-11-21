@@ -210,6 +210,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
     const histogramTotal = histogram.reduce((sum, bucket) => sum + bucket.count, 0);
     expect(histogramTotal).toBeLessThanOrEqual(searchResults.body.stats.evaluated);
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
+    expect(Array.isArray(searchResults.body.nearMisses)).toBe(true);
 
     const runs = await agent.get('/api/v1/ai-trading/search/runs').expect(200);
     const listedRun = (runs.body.data as Array<Record<string, unknown>>).find(
