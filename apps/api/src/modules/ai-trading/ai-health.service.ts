@@ -8,8 +8,11 @@ import {
 import { and, asc, eq, gte, ilike, inArray, isNull, sql } from 'drizzle-orm';
 import {
   aiCandidates,
+  assets,
   botEquitySnapshots,
   botEvents,
+  botPositions,
+  marketQuotes,
   notifications,
   tradingBots,
   type Database,
@@ -117,7 +120,7 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
     dayStart.setUTCHours(0, 0, 0, 0);
     const snapshotWindowStart = new Date(now.getTime() - 48 * 60 * 60_000);
 
-    const [snapshots, errorEvents] = await Promise.all([
+    const [snapshots, errorEvents, positionRows] = await Promise.all([
       this.db
         .select()
         .from(botEquitySnapshots)
@@ -138,7 +141,49 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
             ilike(botEvents.type, '%error%'),
           ),
         ),
+      this.db
+        .select({
+          botId: botPositions.botId,
+          assetId: botPositions.assetId,
+          avgCostUsd: botPositions.avgCostUsd,
+          symbol: assets.symbol,
+        })
+        .from(botPositions)
+        .innerJoin(assets, eq(assets.id, botPositions.assetId))
+        .where(inArray(botPositions.botId, ids)),
     ]);
+
+    const positionAssetIds = [...new Set(positionRows.map((position) => position.assetId))];
+    const quoteRows =
+      positionAssetIds.length > 0
+        ? await this.db
+            .select({
+              assetId: marketQuotes.assetId,
+              priceUsd: marketQuotes.priceUsd,
+              fetchedAt: marketQuotes.fetchedAt,
+            })
+            .from(marketQuotes)
+            .where(inArray(marketQuotes.assetId, positionAssetIds))
+        : [];
+    const quotesByAsset = Object.fromEntries(
+      quoteRows.map((quote) => [
+        quote.assetId,
+        { priceUsd: quote.priceUsd, fetchedAt: quote.fetchedAt },
+      ]),
+    );
+    const positionsByBot = new Map<
+      string,
+      Array<{ assetId: string; symbol: string; avgCostUsd: string }>
+    >();
+    for (const position of positionRows) {
+      const list = positionsByBot.get(position.botId) ?? [];
+      list.push({
+        assetId: position.assetId,
+        symbol: position.symbol,
+        avgCostUsd: position.avgCostUsd,
+      });
+      positionsByBot.set(position.botId, list);
+    }
 
     const snapshotsByBot = new Map<string, typeof snapshots>();
     for (const snapshot of snapshots) {
@@ -168,6 +213,9 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
         candidate: candidate
           ? ({ status: candidate.status, metrics: candidate.metrics } satisfies AiHealthCandidate)
           : null,
+        strategyParams: bot.strategyParams as Record<string, unknown>,
+        positions: positionsByBot.get(bot.id) ?? [],
+        quotes: quotesByAsset,
         recentError: errorBots.has(bot.id),
         now,
       });
