@@ -461,6 +461,27 @@ function rejectionLabel(reason: string): string {
   return rejectionLabels[reason] ?? reason;
 }
 
+const cycleStepStatusLabels: Record<AiCycleStep['status'], string> = {
+  queued: 'ожидает',
+  running: 'идёт',
+  succeeded: 'готово',
+  failed: 'ошибка',
+  skipped: 'пропущен',
+};
+
+function cycleErrorText(error: string): string {
+  if (error === 'AI_CYCLE_STALE') {
+    return 'Цикл прерван: превышено время ожидания. Запустите новый цикл.';
+  }
+  if (error === 'AI_CYCLE_DB_UNAVAILABLE') {
+    return 'База данных временно недоступна. Подождите минуту и запустите цикл ещё раз.';
+  }
+  if (/^Failed query/i.test(error) || /^params:/i.test(error)) {
+    return 'Временная ошибка базы данных. Запустите цикл ещё раз.';
+  }
+  return error;
+}
+
 function cycleStepTone(
   status: AiCycleStep['status'],
 ): 'neutral' | 'info' | 'success' | 'danger' | 'warning' {
@@ -531,19 +552,21 @@ function AiCycleCard({
         {cycle.steps.map((step) => (
           <div key={step.key} className="rounded-lg border border-zinc-200 px-2 py-1.5">
             <div className="flex items-center gap-1.5">
-              <Badge tone={cycleStepTone(step.status)}>{step.status}</Badge>
+              <Badge tone={cycleStepTone(step.status)}>{cycleStepStatusLabels[step.status]}</Badge>
               <span className="text-xs font-medium text-zinc-800">{cycleStepLabels[step.key]}</span>
             </div>
             {step.message ? (
               <div className="mt-1 text-[11px] text-zinc-500">{step.message}</div>
             ) : null}
-            {step.error ? <div className="mt-1 text-[11px] text-red-700">{step.error}</div> : null}
+            {step.error ? (
+              <div className="mt-1 text-[11px] text-red-700">{cycleErrorText(step.error)}</div>
+            ) : null}
           </div>
         ))}
       </div>
       {cycle.error ? (
         <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-700">
-          {cycle.error}
+          {cycleErrorText(cycle.error)}
         </p>
       ) : null}
       {cycle.status === 'succeeded' ? (

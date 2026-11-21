@@ -3,6 +3,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -33,6 +34,12 @@ import { DB } from '../../shared/db/db.module';
 import { runBacktest } from '../trading-bots/backtest/backtest.engine';
 import { strategyByKey, strategyDefinitions } from '../trading-bots/strategies';
 import { AiTradingService } from './ai-trading.service';
+import {
+  DB_UNAVAILABLE_MESSAGE,
+  isTransientDbError,
+  sanitizeStoredError,
+  withDbRetry,
+} from './ai-error.helpers';
 import { TIMEFRAME_MS } from './ai-features';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
 import {
@@ -97,6 +104,7 @@ function toBotCandles(
 
 @Injectable()
 export class AiSearchService {
+  private readonly logger = new Logger(AiSearchService.name);
   private readonly active = new Map<string, { cancelled: boolean }>();
 
   constructor(
@@ -172,20 +180,35 @@ export class AiSearchService {
       meta,
     ).catch(async (error: unknown) => {
       this.active.delete(run.id);
-      await this.db
-        .update(aiPipelineRuns)
-        .set({
-          status: 'failed',
-          finishedAt: new Date(),
-          summary: {
-            assetId: input.assetId,
-            timeframe: input.timeframe,
-            variants: variants.length,
-            progress: { evaluated: 0, total: variants.length },
-            error: error instanceof Error ? error.message.slice(0, 300) : 'search failed',
-          } satisfies SearchRunSummary,
-        })
-        .where(eq(aiPipelineRuns.id, run.id));
+      const message =
+        sanitizeStoredError(error instanceof Error ? error.message : String(error)) ??
+        'Поиск завершился с ошибкой';
+      try {
+        await withDbRetry(
+          () =>
+            this.db
+              .update(aiPipelineRuns)
+              .set({
+                status: 'failed',
+                finishedAt: new Date(),
+                summary: {
+                  assetId: input.assetId,
+                  timeframe: input.timeframe,
+                  variants: variants.length,
+                  progress: { evaluated: 0, total: variants.length },
+                  error: message,
+                } satisfies SearchRunSummary,
+              })
+              .where(eq(aiPipelineRuns.id, run.id)),
+          { attempts: 5, delayMs: 500 },
+        );
+      } catch (dbError) {
+        this.logger.error(
+          `Could not persist failure for AI search ${run.id}: ${
+            isTransientDbError(dbError) ? DB_UNAVAILABLE_MESSAGE : String(dbError)
+          }`,
+        );
+      }
     });
 
     return { runId: run.id };
@@ -398,7 +421,11 @@ export class AiSearchService {
 
   async status(userId: string, runId: string): Promise<AiSearchStatus> {
     const profile = await this.aiTrading.getProfile(userId);
-    const run = await this.requireRun(profile.id, runId);
+    return this.statusForProfile(profile.id, runId);
+  }
+
+  async statusForProfile(profileId: string, runId: string): Promise<AiSearchStatus> {
+    const run = await this.requireRun(profileId, runId);
     const summary = run.summary as unknown as Partial<SearchRunSummary>;
     const evaluated = summary.progress?.evaluated ?? 0;
     const total = summary.progress?.total ?? summary.variants ?? 0;
@@ -780,17 +807,24 @@ export class AiSearchService {
     total: number,
     evaluated: number,
   ): Promise<void> {
-    await this.db
-      .update(aiPipelineRuns)
-      .set({
-        summary: {
-          assetId: input.assetId,
-          timeframe: input.timeframe,
-          variants: total,
-          progress: { evaluated, total },
-        } satisfies SearchRunSummary,
-      })
-      .where(eq(aiPipelineRuns.id, runId));
+    try {
+      await withDbRetry(() =>
+        this.db
+          .update(aiPipelineRuns)
+          .set({
+            summary: {
+              assetId: input.assetId,
+              timeframe: input.timeframe,
+              variants: total,
+              progress: { evaluated, total },
+            } satisfies SearchRunSummary,
+          })
+          .where(eq(aiPipelineRuns.id, runId)),
+      );
+    } catch (error) {
+      if (!isTransientDbError(error)) throw error;
+      this.logger.warn(`AI search ${runId}: progress update skipped (${DB_UNAVAILABLE_MESSAGE})`);
+    }
   }
 
   private buildStats(

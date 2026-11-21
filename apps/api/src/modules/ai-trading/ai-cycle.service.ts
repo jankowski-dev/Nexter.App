@@ -27,6 +27,14 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { TradingBotsService } from '../trading-bots/trading-bots.service';
 import { AiDataService } from './ai-data.service';
+import {
+  DB_UNAVAILABLE_MESSAGE,
+  STALE_CYCLE_MESSAGE,
+  humanizeCycleError,
+  isTransientDbError,
+  sleep,
+  withDbRetry,
+} from './ai-error.helpers';
 import { selectDraftCandidates } from './ai-risk.helpers';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
@@ -57,7 +65,8 @@ const STEP_LABELS: Record<AiCycleStepKey, string> = {
   drafts: 'Черновики',
 };
 
-const MAX_CYCLE_MS = 15 * 60_000;
+const MAX_CYCLE_MS = 30 * 60_000;
+const MAX_DB_POLL_FAILURES = 5;
 
 function emptyStep(key: AiCycleStepKey): AiCycleStep {
   return {
@@ -74,6 +83,14 @@ function readSummary(value: unknown): CycleSummary {
   return value as CycleSummary;
 }
 
+function sanitizeSearchError(message: string | null): string | null {
+  if (!message) return null;
+  if (/failed query/i.test(message) || /connection terminated|connection timeout/i.test(message)) {
+    return DB_UNAVAILABLE_MESSAGE;
+  }
+  return message.slice(0, 300);
+}
+
 const RISK_LABELS: Record<string, string> = {
   'duplicate strategy': 'дубли стратегии',
   'no worker slots': 'нет свободных слотов',
@@ -85,10 +102,6 @@ const RISK_LABELS: Record<string, string> = {
 
 function riskLabel(reason: string): string {
   return RISK_LABELS[reason] ?? reason;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message.slice(0, 500) : 'Неизвестная ошибка';
 }
 
 @Injectable()
@@ -107,7 +120,11 @@ export class AiCycleService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     if (process.env.NODE_ENV === 'test') return;
-    await this.recoverStaleCycles();
+    try {
+      await this.recoverStaleCycles();
+    } catch (error) {
+      this.logger.warn(`Could not recover stale AI cycles: ${humanizeCycleError(error)}`);
+    }
   }
 
   async start(
@@ -248,7 +265,7 @@ export class AiCycleService implements OnModuleInit {
     });
 
     void this.execute(userId, cycle.id, token, input, meta).catch((error) => {
-      this.logger.error(`AI cycle ${cycle.id} failed: ${errorMessage(error)}`);
+      this.logger.error(`AI cycle ${cycle.id} failed: ${humanizeCycleError(error)}`);
     });
 
     return { cycleId: cycle.id };
@@ -297,8 +314,14 @@ export class AiCycleService implements OnModuleInit {
       await this.runDraftsStep(userId, cycleId, token, candidates, input.maxDrafts, meta);
       await this.finish(userId, cycleId, 'succeeded');
     } catch (error) {
-      const message = errorMessage(error);
-      await this.fail(userId, cycleId, message, meta);
+      const message = humanizeCycleError(error);
+      try {
+        await this.fail(userId, cycleId, message, meta);
+      } catch (failError) {
+        this.logger.error(
+          `Could not persist failure for AI cycle ${cycleId}: ${humanizeCycleError(failError)}`,
+        );
+      }
     }
   }
 
@@ -370,9 +393,35 @@ export class AiCycleService implements OnModuleInit {
     });
 
     const deadline = Date.now() + MAX_CYCLE_MS;
+    const profile = await withDbRetry(() => this.aiTrading.getProfile(userId), {
+      attempts: 3,
+      delayMs: 500,
+    });
     let lastMessage = '';
+    let dbFailures = 0;
     while (Date.now() < deadline) {
-      const status = await this.aiSearch.status(userId, runId);
+      let status: Awaited<ReturnType<AiSearchService['status']>>;
+      try {
+        status = await withDbRetry(() => this.aiSearch.statusForProfile(profile.id, runId), {
+          attempts: 3,
+          delayMs: 500,
+        });
+        dbFailures = 0;
+      } catch (error) {
+        if (!isTransientDbError(error)) throw error;
+        dbFailures += 1;
+        this.logger.warn(
+          `AI cycle ${cycleId}: search status unavailable (${dbFailures}/${MAX_DB_POLL_FAILURES})`,
+        );
+        if (dbFailures >= MAX_DB_POLL_FAILURES) {
+          throw new ServiceUnavailableException({
+            code: 'AI_CYCLE_DB_UNAVAILABLE',
+            message: DB_UNAVAILABLE_MESSAGE,
+          });
+        }
+        await sleep(2_000);
+        continue;
+      }
       if (status.status === 'succeeded') {
         await this.setStep(cycleId, 'search', 'succeeded', {
           message: `${status.evaluated} / ${status.total} вариантов`,
@@ -382,7 +431,8 @@ export class AiCycleService implements OnModuleInit {
       if (status.status === 'failed' || status.status === 'cancelled') {
         throw new ServiceUnavailableException({
           code: 'AI_SEARCH_FAILED',
-          message: status.error ?? `Поиск завершился статусом ${status.status}`,
+          message:
+            sanitizeSearchError(status.error) ?? `Поиск завершился статусом ${status.status}`,
         });
       }
       const message = `Поиск: ${status.evaluated} / ${status.total}`;
@@ -390,11 +440,11 @@ export class AiCycleService implements OnModuleInit {
         lastMessage = message;
         await this.setStep(cycleId, 'search', 'running', { message });
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await sleep(1_000);
     }
     throw new ServiceUnavailableException({
       code: 'AI_SEARCH_TIMEOUT',
-      message: 'Поиск не завершился за 15 минут',
+      message: 'Поиск не завершился за 30 минут',
     });
   }
 
@@ -494,7 +544,7 @@ export class AiCycleService implements OnModuleInit {
       } catch (error) {
         throw new ServiceUnavailableException({
           code: 'AI_DRAFT_FAILED',
-          message: `Не удалось создать черновик ${token.asset.symbol}: ${errorMessage(error)}`,
+          message: `Не удалось создать черновик ${token.asset.symbol}: ${humanizeCycleError(error)}`,
         });
       }
     }
@@ -522,33 +572,54 @@ export class AiCycleService implements OnModuleInit {
       if (status === 'running' && !step.startedAt) step.startedAt = now;
       if (['succeeded', 'failed', 'skipped'].includes(status)) step.finishedAt = now;
     });
-    await this.db
-      .update(aiJobs)
-      .set({
-        status,
-        payload: { cycleId, step: key, label: STEP_LABELS[key], message: patch.message ?? null },
-        error: patch.error ?? null,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.stage, key)));
+    try {
+      await withDbRetry(() =>
+        this.db
+          .update(aiJobs)
+          .set({
+            status,
+            payload: {
+              cycleId,
+              step: key,
+              label: STEP_LABELS[key],
+              message: patch.message ?? null,
+            },
+            error: patch.error ?? null,
+            updatedAt: new Date(),
+          })
+          .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.stage, key))),
+      );
+    } catch (error) {
+      if (!isTransientDbError(error)) throw error;
+      this.logger.warn(`AI cycle ${cycleId}: job update skipped (${humanizeCycleError(error)})`);
+    }
   }
 
   private async updateSummary(
     cycleId: string,
     mutate: (summary: CycleSummary) => void,
   ): Promise<void> {
-    const [run] = await this.db
-      .select({ summary: aiPipelineRuns.summary })
-      .from(aiPipelineRuns)
-      .where(eq(aiPipelineRuns.id, cycleId))
-      .limit(1);
-    if (!run) return;
-    const summary = readSummary(run.summary);
-    mutate(summary);
-    await this.db
-      .update(aiPipelineRuns)
-      .set({ summary: summary as unknown as Record<string, unknown> })
-      .where(eq(aiPipelineRuns.id, cycleId));
+    try {
+      await withDbRetry(async () => {
+        const [run] = await this.db
+          .select({ summary: aiPipelineRuns.summary })
+          .from(aiPipelineRuns)
+          .where(eq(aiPipelineRuns.id, cycleId))
+          .limit(1);
+        if (!run) return;
+        const summary = readSummary(run.summary);
+        mutate(summary);
+        await this.db
+          .update(aiPipelineRuns)
+          .set({ summary: summary as unknown as Record<string, unknown> })
+          .where(eq(aiPipelineRuns.id, cycleId));
+      });
+    } catch (error) {
+      if (!isTransientDbError(error)) throw error;
+      this.logger.warn(
+        `AI cycle ${cycleId}: summary update skipped (${humanizeCycleError(error)})`,
+      );
+    }
   }
 
   private async finish(
@@ -564,14 +635,18 @@ export class AiCycleService implements OnModuleInit {
     if (!run) return;
     const summary = readSummary(run.summary);
     summary.error = status === 'failed' ? (summary.error ?? 'Цикл завершился с ошибкой') : null;
-    await this.db
-      .update(aiPipelineRuns)
-      .set({
-        status,
-        finishedAt: new Date(),
-        summary: summary as unknown as Record<string, unknown>,
-      })
-      .where(eq(aiPipelineRuns.id, cycleId));
+    await withDbRetry(
+      () =>
+        this.db
+          .update(aiPipelineRuns)
+          .set({
+            status,
+            finishedAt: new Date(),
+            summary: summary as unknown as Record<string, unknown>,
+          })
+          .where(eq(aiPipelineRuns.id, cycleId)),
+      { attempts: 5, delayMs: 500 },
+    );
     await this.audit.log({
       userId,
       action: status === 'succeeded' ? 'ai_trading.cycle_completed' : 'ai_trading.cycle_failed',
@@ -592,11 +667,17 @@ export class AiCycleService implements OnModuleInit {
     message: string,
     meta: CycleMeta,
   ): Promise<void> {
-    const [run] = await this.db
-      .select({ summary: aiPipelineRuns.summary })
-      .from(aiPipelineRuns)
-      .where(eq(aiPipelineRuns.id, cycleId))
-      .limit(1);
+    const run = await withDbRetry(
+      async () => {
+        const [row] = await this.db
+          .select({ summary: aiPipelineRuns.summary })
+          .from(aiPipelineRuns)
+          .where(eq(aiPipelineRuns.id, cycleId))
+          .limit(1);
+        return row;
+      },
+      { attempts: 5, delayMs: 500 },
+    );
     if (!run) return;
     const summary = readSummary(run.summary);
     const active = summary.steps.find((step) => step.status === 'running');
@@ -604,10 +685,14 @@ export class AiCycleService implements OnModuleInit {
       active.status = 'failed';
       active.error = message;
       active.finishedAt = new Date().toISOString();
-      await this.db
-        .update(aiJobs)
-        .set({ status: 'failed', error: message, updatedAt: new Date() })
-        .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.stage, active.key)));
+      await withDbRetry(
+        () =>
+          this.db
+            .update(aiJobs)
+            .set({ status: 'failed', error: message, updatedAt: new Date() })
+            .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.stage, active.key))),
+        { attempts: 5, delayMs: 500 },
+      );
     }
     for (const step of summary.steps) {
       if (step.status === 'queued') {
@@ -617,18 +702,26 @@ export class AiCycleService implements OnModuleInit {
       }
     }
     summary.error = message;
-    await this.db
-      .update(aiPipelineRuns)
-      .set({
-        status: 'failed',
-        finishedAt: new Date(),
-        summary: summary as unknown as Record<string, unknown>,
-      })
-      .where(eq(aiPipelineRuns.id, cycleId));
-    await this.db
-      .update(aiJobs)
-      .set({ status: 'skipped', error: 'Цикл остановлен', updatedAt: new Date() })
-      .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.status, 'queued')));
+    await withDbRetry(
+      () =>
+        this.db
+          .update(aiPipelineRuns)
+          .set({
+            status: 'failed',
+            finishedAt: new Date(),
+            summary: summary as unknown as Record<string, unknown>,
+          })
+          .where(eq(aiPipelineRuns.id, cycleId)),
+      { attempts: 5, delayMs: 500 },
+    );
+    await withDbRetry(
+      () =>
+        this.db
+          .update(aiJobs)
+          .set({ status: 'skipped', error: 'Цикл остановлен', updatedAt: new Date() })
+          .where(and(eq(aiJobs.runId, cycleId), eq(aiJobs.status, 'queued'))),
+      { attempts: 3, delayMs: 500 },
+    );
     await this.audit.log({
       userId,
       action: 'ai_trading.cycle_failed',
@@ -649,20 +742,26 @@ export class AiCycleService implements OnModuleInit {
         and(
           inArray(aiPipelineRuns.status, ['queued', 'running']),
           sql`${aiPipelineRuns.summary}->>'kind' = 'cycle'`,
-          sql`${aiPipelineRuns.createdAt} < now() - interval '20 minutes'`,
+          sql`${aiPipelineRuns.createdAt} < now() - interval '45 minutes'`,
         ),
       )
       .limit(50);
     for (const run of staleRows) {
       const summary = readSummary(run.summary);
+      const failed = summary.steps.find((step) => step.status === 'running');
+      if (failed) {
+        failed.status = 'failed';
+        failed.error = STALE_CYCLE_MESSAGE;
+        failed.finishedAt = new Date().toISOString();
+      }
       for (const step of summary.steps) {
-        if (step.status === 'running' || step.status === 'queued') {
-          step.status = 'failed';
-          step.error = 'AI_CYCLE_STALE';
+        if (step.status === 'queued') {
+          step.status = 'skipped';
+          step.message = 'Цикл остановлен';
           step.finishedAt = new Date().toISOString();
         }
       }
-      summary.error = 'AI_CYCLE_STALE';
+      summary.error = STALE_CYCLE_MESSAGE;
       await this.db
         .update(aiPipelineRuns)
         .set({
@@ -671,10 +770,16 @@ export class AiCycleService implements OnModuleInit {
           summary: summary as unknown as Record<string, unknown>,
         })
         .where(eq(aiPipelineRuns.id, run.id));
+      if (failed) {
+        await this.db
+          .update(aiJobs)
+          .set({ status: 'failed', error: STALE_CYCLE_MESSAGE, updatedAt: new Date() })
+          .where(and(eq(aiJobs.runId, run.id), eq(aiJobs.stage, failed.key)));
+      }
       await this.db
         .update(aiJobs)
-        .set({ status: 'failed', error: 'AI_CYCLE_STALE', updatedAt: new Date() })
-        .where(and(eq(aiJobs.runId, run.id), inArray(aiJobs.status, ['queued', 'running'])));
+        .set({ status: 'skipped', error: 'Цикл остановлен', updatedAt: new Date() })
+        .where(and(eq(aiJobs.runId, run.id), eq(aiJobs.status, 'queued')));
       this.logger.warn(`Marked stale AI cycle ${run.id} as failed`);
     }
   }
