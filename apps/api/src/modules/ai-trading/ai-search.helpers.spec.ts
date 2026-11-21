@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { strategyDefinitions } from '../trading-bots/strategies';
-import { aggregateVariant, buildSearchFolds, generateSearchVariants } from './ai-search.helpers';
+import {
+  aggregateVariant,
+  buildSearchFolds,
+  generateSearchVariants,
+  historyDaysFor,
+  minPositiveFoldsFor,
+  minTradesFor,
+} from './ai-search.helpers';
 import type { BotCandle } from '@nexter/contracts';
 
 function hourlyCandles(days: number): BotCandle[] {
@@ -52,5 +59,27 @@ describe('AI search helpers', () => {
     expect(metrics.trades).toBe(7);
     expect(metrics.positiveFolds).toBe(2);
     expect(metrics.stabilityPct).toBe('66.67');
+  });
+});
+
+describe('partial history windows', () => {
+  it('counts available days and fits fewer folds into a 146-day window', () => {
+    const candles = hourlyCandles(146);
+    expect(historyDaysFor(candles, '1h')).toBe(146);
+    const { folds, holdout } = buildSearchFolds(candles, '1h', 146);
+    expect(folds).toHaveLength(5);
+    expect(holdout).toHaveLength(720);
+    expect(folds.at(-1)?.candles.at(-1)?.date).not.toBe(holdout[0]?.date);
+  });
+
+  it('rejects windows below the minimum search history', () => {
+    expect(() => buildSearchFolds(hourlyCandles(139), '1h', 139)).toThrow();
+  });
+
+  it('scales the multi-fold filters to the available fold count', () => {
+    expect(minPositiveFoldsFor(5)).toBe(4);
+    expect(minPositiveFoldsFor(8)).toBe(5);
+    expect(minTradesFor(5)).toBe(5);
+    expect(minTradesFor(8)).toBe(8);
   });
 });

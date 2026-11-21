@@ -190,6 +190,14 @@ export function AiTradingPage() {
     },
   });
 
+  const add4h = useMutation({
+    mutationFn: (token: AiProfileToken) => {
+      const timeframes: AiTimeframe[] = [...token.timeframes, '4h'];
+      return updateAiToken(token.id, { timeframes });
+    },
+    onSuccess: () => invalidateAi(queryClient),
+  });
+
   const cancelCycle = useMutation({
     mutationFn: (id: string) => cancelAiCycle(id),
     onSuccess: () => {
@@ -385,6 +393,21 @@ export function AiTradingPage() {
         ) : null}
         <p className="mt-2 text-[11px] text-zinc-400">
           Один клик: данные → поиск → рекомендации → черновики. Роботы не запускаются автоматически.
+          Для поиска доступны ТФ 1h и 4h; 4h включается в «Вселенной».
+          {selected && !selected.timeframes.includes('4h') ? (
+            <>
+              {' '}
+              У этого токена сейчас только 1h.{' '}
+              <button
+                type="button"
+                className="underline"
+                disabled={add4h.isPending}
+                onClick={() => add4h.mutate(selected)}
+              >
+                {add4h.isPending ? 'Добавляю…' : 'Добавить 4h'}
+              </button>
+            </>
+          ) : null}
         </p>
       </Card>
 
@@ -865,7 +888,7 @@ function UniverseSection({
   onChanged: () => void;
 }) {
   const [assetId, setAssetId] = useState('');
-  const [timeframes, setTimeframes] = useState<AiTimeframe[]>(['1h', '1d']);
+  const [timeframes, setTimeframes] = useState<AiTimeframe[]>(['1h', '4h']);
   const [priority, setPriority] = useState('0');
   const [error, setError] = useState<string | null>(null);
   const existingIds = new Set(tokens.map((token) => token.asset.id));
@@ -881,7 +904,7 @@ function UniverseSection({
       }),
     onSuccess: () => {
       setAssetId('');
-      setTimeframes(['1h', '1d']);
+      setTimeframes(['1h', '4h']);
       setPriority('0');
       setError(null);
       onChanged();

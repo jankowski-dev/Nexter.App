@@ -40,13 +40,17 @@ import {
   sanitizeStoredError,
   withDbRetry,
 } from './ai-error.helpers';
-import { TIMEFRAME_MS } from './ai-features';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
 import { evaluateVariantFolds } from './ai-search.evaluate';
 import {
   buildSearchFolds,
+  candlesPerDay,
   generateSearchVariants,
+  historyDaysFor,
+  minPositiveFoldsFor,
+  minTradesFor,
   searchWorkerCount,
+  MIN_SEARCH_DAYS,
   type SearchVariant,
   type VariantMetrics,
 } from './ai-search.helpers';
@@ -66,6 +70,7 @@ interface SearchRunSummary {
   assetId: string;
   timeframe: AiSearchTimeframe;
   variants: number;
+  lookbackDays?: number;
   progress: { evaluated: number; total: number };
   stats?: AiSearchStats;
   error?: string;
@@ -78,14 +83,8 @@ interface SearchCandidate extends VariantMetrics {
 
 const FEE_BPS = 25;
 const SLIPPAGE_BPS = 10;
-const MIN_TRADES = 8;
 const MAX_DRAWDOWN_PCT = 20;
-const MIN_POSITIVE_FOLDS = 5;
 const MIN_WORST_RETURN = -15;
-
-function candlesPerDay(timeframe: AiSearchTimeframe): number {
-  return Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
-}
 
 function toBotCandles(
   rows: Array<{
@@ -139,14 +138,16 @@ export class AiSearchService {
     }
 
     const candles = await this.loadCandles(input.assetId, input.timeframe);
-    const required = 180 * candlesPerDay(input.timeframe);
-    if (candles.length < required) {
+    const availableDays = historyDaysFor(candles, input.timeframe);
+    if (availableDays < MIN_SEARCH_DAYS) {
+      const required = MIN_SEARCH_DAYS * candlesPerDay(input.timeframe);
       throw new UnprocessableEntityException({
         code: 'AI_DATA_INSUFFICIENT',
-        message: `Недостаточно свечей для поиска: ${candles.length}, нужно ${required}.`,
-        details: { found: candles.length, required },
+        message: `Недостаточно истории для поиска: ${availableDays} дн. (${candles.length} свечей), нужно минимум ${MIN_SEARCH_DAYS} дн.`,
+        details: { found: candles.length, required, availableDays, minDays: MIN_SEARCH_DAYS },
       });
     }
+    const lookbackDays = Math.min(180, availableDays);
 
     const variants = generateSearchVariants(strategyDefinitions, input.variants, input.seed ?? 7);
     if (variants.length === 0) {
@@ -167,6 +168,7 @@ export class AiSearchService {
           assetId: input.assetId,
           timeframe: input.timeframe,
           variants: variants.length,
+          lookbackDays,
           progress: { evaluated: 0, total: variants.length },
         } satisfies SearchRunSummary,
       })
@@ -183,6 +185,7 @@ export class AiSearchService {
       input,
       candles,
       variants,
+      lookbackDays,
       control,
       meta,
     ).catch(async (error: unknown) => {
@@ -513,10 +516,14 @@ export class AiSearchService {
     input: AiSearchRequest,
     candles: BotCandle[],
     variants: SearchVariant[],
+    lookbackDays: number,
     control: { cancelled: boolean },
     meta: SearchMeta,
   ): Promise<void> {
-    const folds = buildSearchFolds(candles, input.timeframe);
+    const folds = buildSearchFolds(candles, input.timeframe, lookbackDays);
+    const foldCount = folds.folds.length;
+    const minTrades = minTradesFor(foldCount);
+    const minPositiveFolds = minPositiveFoldsFor(foldCount);
     const metrics: Array<SearchCandidate> = [];
     const allMetrics: Array<{ returnPct: number; drawdown: number; positiveFolds: number }> = [];
     const rejectionReasons: Record<string, number> = {};
@@ -578,7 +585,7 @@ export class AiSearchService {
         drawdown: Number(aggregate.maxDrawdownPct),
         positiveFolds: aggregate.positiveFolds,
       });
-      if (aggregate.trades < MIN_TRADES) {
+      if (aggregate.trades < minTrades) {
         reject('too few trades');
         rememberNearMiss(aggregate, variant, ['too few trades']);
         return;
@@ -587,7 +594,7 @@ export class AiSearchService {
         reject('non-positive OOS median');
         return;
       }
-      if (aggregate.positiveFolds < MIN_POSITIVE_FOLDS) {
+      if (aggregate.positiveFolds < minPositiveFolds) {
         reject('unstable folds');
         rememberNearMiss(aggregate, variant, ['unstable folds']);
         return;
@@ -794,6 +801,7 @@ export class AiSearchService {
             assetId: input.assetId,
             timeframe: input.timeframe,
             variants: variants.length,
+            lookbackDays,
             progress: { evaluated, total: variants.length },
             stats,
           } satisfies SearchRunSummary,

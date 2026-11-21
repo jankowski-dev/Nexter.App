@@ -110,13 +110,37 @@ export function generateSearchVariants(
   return variants.slice(0, capped);
 }
 
+export const MIN_SEARCH_DAYS = 140;
+export const HOLD_OUT_DAYS = 30;
+
+export function candlesPerDay(timeframe: AiSearchTimeframe): number {
+  return Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
+}
+
+export function historyDaysFor(candles: BotCandle[], timeframe: AiSearchTimeframe): number {
+  return Math.floor(candles.length / candlesPerDay(timeframe));
+}
+
+export function minPositiveFoldsFor(foldCount: number): number {
+  return Math.max(2, Math.ceil(foldCount * 0.625));
+}
+
+export function minTradesFor(foldCount: number): number {
+  return Math.max(5, Math.floor(foldCount));
+}
+
 export function buildSearchFolds(
   candles: BotCandle[],
   timeframe: AiSearchTimeframe,
+  lookbackDays = 180,
 ): SearchFoldSet {
-  const perDay = Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
-  const total = 180 * perDay;
-  const searchEnd = 150 * perDay;
+  const perDay = candlesPerDay(timeframe);
+  const totalDays = Math.max(
+    MIN_SEARCH_DAYS,
+    Math.min(180, Math.floor(Number.isFinite(lookbackDays) ? lookbackDays : 180)),
+  );
+  const total = totalDays * perDay;
+  const searchEnd = (totalDays - HOLD_OUT_DAYS) * perDay;
   if (candles.length < total) {
     throw new Error(`Need at least ${total} candles, got ${candles.length}`);
   }
