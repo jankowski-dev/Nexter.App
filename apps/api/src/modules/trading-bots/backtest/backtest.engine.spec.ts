@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BotCandle } from '@nexter/contracts';
 import { runBacktest } from './backtest.engine';
 import { crashProtectedGrid, meanReversion } from '../strategies';
+import type { StrategyDefinition } from '../strategies/types';
 
 function candle(date: string, close: number): BotCandle {
   const value = close.toFixed(8);
@@ -92,6 +93,68 @@ describe('runBacktest', () => {
     expect(result.equityCurve).toHaveLength(2);
     expect(result.trades[0]?.date).toBe('2026-01-04');
     expect(result.stats.buyHoldReturnPct).toBe('3.09');
+  });
+
+  it('warms up strategy state without trading before the scoring window', () => {
+    const states: Array<Record<string, unknown>> = [];
+    const definition: StrategyDefinition = {
+      ...meanReversion,
+      evaluate: (ctx) => {
+        states.push(ctx.state ?? {});
+        return {
+          action: 'hold',
+          reason: 'state probe',
+          nextState: { seen: Number(ctx.state?.seen ?? 0) + 1 },
+        };
+      },
+    };
+    const result = runBacktest(definition, {}, series([100, 101, 102, 103, 104]), {
+      warmupCandles: 2,
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    expect(states).toHaveLength(5);
+    expect(states[2]).toEqual({ seen: 2 });
+    expect(result.trades).toHaveLength(0);
+    expect(result.equityCurve).toHaveLength(3);
+  });
+
+  it('accepts full ISO candle dates without Invalid Date', () => {
+    const nowValues: Date[] = [];
+    const capturedValues: Date[] = [];
+    const definition: StrategyDefinition = {
+      ...meanReversion,
+      evaluate: (ctx) => {
+        nowValues.push(ctx.now);
+        const capturedAt = ctx.history[0]?.capturedAt;
+        if (capturedAt) capturedValues.push(capturedAt);
+        return { action: 'hold', reason: 'date probe' };
+      },
+    };
+    const candles = series([100, 101, 102]).map((item) => ({
+      ...item,
+      date: `${item.date}T00:00:00.000Z`,
+    }));
+    runBacktest(definition, {}, candles, { feeBps: 0, slippageBps: 0 });
+    expect(nowValues.every((value) => !Number.isNaN(value.getTime()))).toBe(true);
+    expect(capturedValues.every((value) => !Number.isNaN(value.getTime()))).toBe(true);
+  });
+
+  it('reports buy slippage as a positive cost', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const result = runBacktest(meanReversion, params, series([100, 100, 100, 97, 100]), {
+      feeBps: 0,
+      slippageBps: 100,
+    });
+    const buy = result.trades.find((trade) => trade.side === 'buy');
+    expect(buy).toBeDefined();
+    expect(Number(buy?.slippageUsd)).toBeGreaterThan(0);
   });
 
   it('reports buy-and-hold comparison and keeps money precise', () => {

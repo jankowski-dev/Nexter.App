@@ -417,6 +417,8 @@ export const aiSearchStatsSchema = z.object({
   total: z.number().int(),
   evaluated: z.number().int(),
   valid: z.number().int(),
+  oosPassed: z.number().int().default(0),
+  holdoutTested: z.number().int().default(0),
   recommended: z.number().int(),
   bestReturnPct: z.string(),
   averageReturnPct: z.string(),

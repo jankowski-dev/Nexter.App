@@ -131,6 +131,10 @@ export function minTradesFor(foldCount: number): number {
   return Math.max(5, Math.floor(foldCount));
 }
 
+export function stabilityPctFor(positiveFolds: number, foldCount: number): string {
+  return ((positiveFolds / Math.max(1, foldCount)) * 100).toFixed(2);
+}
+
 export function buildSearchFolds(
   candles: BotCandle[],
   timeframe: AiSearchTimeframe,
@@ -200,7 +204,7 @@ export function aggregateVariant(
     maxDrawdownPct: maxDrawdown.toFixed(2),
     trades,
     positiveFolds,
-    stabilityPct: ((positiveFolds / Math.max(1, returns.length)) * 100).toFixed(2),
+    stabilityPct: stabilityPctFor(positiveFolds, returns.length),
     policyScore: policyScore.toFixed(4),
   };
 }
