@@ -559,6 +559,9 @@ export class AiSearchService {
       }
 
       evaluated += 1;
+      if (evaluated % 50 === 0) {
+        await this.updateProgress(runId, input, variants.length, evaluated);
+      }
       const definition = strategyByKey.get(variant.strategyKey);
       if (!definition) {
         reject('unknown strategy');
@@ -623,9 +626,6 @@ export class AiSearchService {
       }
 
       metrics.push({ ...aggregate, variant, holdoutReturnPct: null });
-      if (evaluated % 50 === 0) {
-        await this.updateProgress(runId, input, variants.length, evaluated);
-      }
     }
 
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
