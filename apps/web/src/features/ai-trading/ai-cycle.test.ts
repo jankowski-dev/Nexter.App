@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { aiCycleRequestSchema, aiCycleStatusSchema, aiCycleStepKeys } from '@nexter/contracts';
+import {
+  aiCycleRequestSchema,
+  aiCycleStatusSchema,
+  aiCycleStepKeys,
+  aiCyclesQuerySchema,
+  aiCyclesResponseSchema,
+} from '@nexter/contracts';
 
 describe('AI cycle contracts', () => {
   it('applies defaults and validates limits', () => {
@@ -55,5 +61,45 @@ describe('AI cycle contracts', () => {
         steps: [{ ...status.steps[0], key: 'unknown' }],
       }),
     ).toThrow();
+  });
+
+  it('parses a cycle history response and validates the limit', () => {
+    const history = aiCyclesResponseSchema.parse({
+      data: [
+        {
+          cycleId: '11111111-1111-4111-8111-111111111111',
+          status: 'succeeded',
+          assetId: '22222222-2222-4222-8222-222222222222',
+          symbol: 'BASED',
+          timeframe: '1h',
+          steps: aiCycleStepKeys.map((key) => ({
+            key,
+            status: 'succeeded',
+            message: null,
+            error: null,
+            startedAt: '2026-11-21T00:00:00.000Z',
+            finishedAt: '2026-11-21T00:01:00.000Z',
+          })),
+          searchRunId: '33333333-3333-4333-8333-333333333333',
+          recommended: 2,
+          draftsCreated: 1,
+          error: null,
+          createdAt: '2026-11-21T00:00:00.000Z',
+          finishedAt: '2026-11-21T00:05:00.000Z',
+        },
+      ],
+    });
+    expect(history.data[0]?.symbol).toBe('BASED');
+    expect(history.data[0]?.steps.map((step) => step.key)).toEqual([
+      'data',
+      'search',
+      'recommendations',
+      'drafts',
+    ]);
+
+    expect(aiCyclesQuerySchema.parse({}).limit).toBe(20);
+    expect(aiCyclesQuerySchema.parse({ limit: '5' }).limit).toBe(5);
+    expect(() => aiCyclesQuerySchema.parse({ limit: 0 })).toThrow();
+    expect(() => aiCyclesQuerySchema.parse({ limit: 51 })).toThrow();
   });
 });
