@@ -359,6 +359,10 @@ export function AiTradingPage() {
       <AiCycleCard
         cycle={cycle.data ?? null}
         loading={cycle.isPending && Boolean(cycleId)}
+        errorText={
+          cycle.isError ? toRussianError(cycle.error, 'Не удалось получить статус цикла ИИ') : null
+        }
+        onRetry={() => void cycle.refetch()}
         onOpenBots={() => {
           window.location.href = '/portfolio#robots';
         }}
@@ -503,10 +507,14 @@ function cycleStepTone(
 function AiCycleCard({
   cycle,
   loading,
+  errorText,
+  onRetry,
   onOpenBots,
 }: {
   cycle: AiCycleStatus | null;
   loading: boolean;
+  errorText: string | null;
+  onRetry: () => void;
   onOpenBots: () => void;
 }) {
   if (loading) return <LoadingRows rows={2} />;
@@ -520,8 +528,15 @@ function AiCycleCard({
               Запусти один раз: данные, поиск, рекомендации и черновики. Старт роботов — вручную.
             </CardDescription>
           </div>
-          <Badge tone="neutral">Готов</Badge>
+          {errorText ? (
+            <button type="button" className="text-xs text-red-700 underline" onClick={onRetry}>
+              Статус цикла не загрузился · Повторить
+            </button>
+          ) : (
+            <Badge tone="neutral">Готов</Badge>
+          )}
         </div>
+        {errorText ? <p className="mt-2 text-xs text-red-700">{errorText}</p> : null}
       </Card>
     );
   }
@@ -556,6 +571,14 @@ function AiCycleCard({
           style={{ width: `${(succeeded / cycle.steps.length) * 100}%` }}
         />
       </div>
+      {errorText ? (
+        <p className="mt-2 text-[11px] text-amber-700">
+          Статус не обновился: {errorText}{' '}
+          <button type="button" className="underline" onClick={onRetry}>
+            Повторить
+          </button>
+        </p>
+      ) : null}
       <div className="mt-2 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-4">
         {cycle.steps.map((step) => (
           <div key={step.key} className="rounded-lg border border-zinc-200 px-2 py-1.5">
