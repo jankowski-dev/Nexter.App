@@ -115,3 +115,13 @@ This is more valuable than simply increasing the random budget: it explores the 
 ## 8. Relation to the current plan
 
 This is **Phase 9** after the durable `ai_jobs` worker. It replaces the flat 5,000-only search but keeps the same recommendation/risk/holdout boundaries. The final engineering PDF must include the funnel and the hard-vs-soft marker distinction.
+
+## Pilot 2026-11-22
+
+A 5,000-variant pilot on the local 4-core AMD machine:
+
+- hard parameter/data screen rejected **0/5,000** (the generator already produces valid, in-range variants);
+- one-fold trade probe kept **1,578/5,000 (31.56%)** with at least one trade;
+- one-fold evaluation took **191 s** for 5,000 variants on 4 workers.
+
+Extrapolation: 50,000 one-fold probes ≈ 32 min locally; 1,000,000 ≈ 10+ hours. This confirms that the hard screen alone is not the 99% filter. The next implementation must be a **signal-only evaluator with precomputed indicators**, not a full `runBacktest` on one fold. The 31.56% survivor rate is a useful baseline for the signal screen's recall.
