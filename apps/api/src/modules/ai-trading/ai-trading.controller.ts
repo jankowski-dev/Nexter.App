@@ -16,6 +16,7 @@ import { ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 import {
   aiCycleRequestSchema,
+  aiCyclesQuerySchema,
   aiDataRefreshRequestSchema,
   aiLabAnalyzeRequestSchema,
   aiLabBacktestRequestSchema,
@@ -29,6 +30,8 @@ import {
   type AiCycleRequest,
   type AiCycleStartResponse,
   type AiCycleStatus,
+  type AiCyclesQuery,
+  type AiCyclesResponse,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
   type AiLabAnalysis,
@@ -175,6 +178,14 @@ export class AiTradingController {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
     });
+  }
+
+  @Get('cycles')
+  cycles(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(aiCyclesQuerySchema)) query: AiCyclesQuery,
+  ): Promise<AiCyclesResponse> {
+    return this.aiCycle.list(auth.user.id, query.limit);
   }
 
   @Get('cycle/:cycleId')

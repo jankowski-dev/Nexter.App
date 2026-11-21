@@ -446,6 +446,27 @@ describe.runIf(canRun)('AI trading control center API', () => {
     ]);
     expect(cycleStatus.steps?.find((step) => step.key === 'drafts')?.status).toBe('skipped');
 
+    const history = await agent.get('/api/v1/ai-trading/cycles').expect(200);
+    const historyRow = (history.body.data as Array<Record<string, unknown>>).find(
+      (item) => item.cycleId === cycleId,
+    );
+    expect(historyRow).toBeDefined();
+    expect(historyRow).toMatchObject({
+      status: 'succeeded',
+      symbol: 'BASED',
+      timeframe: '1h',
+      draftsCreated: 0,
+      error: null,
+    });
+    expect(typeof historyRow?.recommended).toBe('number');
+    expect((historyRow?.steps as Array<{ key: string }>).map((step) => step.key)).toEqual([
+      'data',
+      'search',
+      'recommendations',
+      'drafts',
+    ]);
+    await agent.get('/api/v1/ai-trading/cycles?limit=0').expect(400);
+
     await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
       .set('x-csrf-token', owner.csrf)

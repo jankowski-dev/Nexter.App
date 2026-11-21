@@ -7,6 +7,7 @@ import {
   aiCoverageSchema,
   aiCycleStartResponseSchema,
   aiCycleStatusSchema,
+  aiCyclesResponseSchema,
   aiDataRefreshResponseSchema,
   aiLabAnalysisSchema,
   aiLabBacktestResponseSchema,
@@ -110,6 +111,7 @@ import {
   type AiCycleRequest,
   type AiCycleStartResponse,
   type AiCycleStatus,
+  type AiCyclesResponse,
   type AiDataRefreshRequest,
   type AiDataRefreshResponse,
   type AiLabAnalysis,
@@ -1409,6 +1411,14 @@ export async function fetchAiCycle(cycleId: string): Promise<AiCycleStatus> {
     `/api/v1/ai-trading/cycle/${cycleId}`,
     { signal: AbortSignal.timeout(20_000) },
     aiCycleStatusSchema,
+  );
+}
+
+export async function fetchAiCycles(): Promise<AiCyclesResponse> {
+  return apiFetch(
+    '/api/v1/ai-trading/cycles',
+    { signal: AbortSignal.timeout(20_000) },
+    aiCyclesResponseSchema,
   );
 }
 

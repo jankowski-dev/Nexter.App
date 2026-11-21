@@ -383,6 +383,29 @@ export const aiCycleStatusSchema = z.object({
   finishedAt: z.iso.datetime().nullable(),
 });
 
+export const aiCycleSummarySchema = z.object({
+  cycleId: z.uuid(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  assetId: z.uuid(),
+  symbol: z.string(),
+  timeframe: z.string(),
+  steps: z.array(aiCycleStepSchema),
+  searchRunId: z.uuid().nullable(),
+  recommended: z.number().int(),
+  draftsCreated: z.number().int(),
+  error: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  finishedAt: z.iso.datetime().nullable(),
+});
+
+export const aiCyclesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const aiCyclesResponseSchema = z.object({
+  data: z.array(aiCycleSummarySchema),
+});
+
 export const aiSearchHistogramBucketSchema = z.object({
   label: z.string(),
   count: z.number().int(),
@@ -556,6 +579,9 @@ export type AiCycleStep = z.infer<typeof aiCycleStepSchema>;
 export type AiCycleRequest = z.infer<typeof aiCycleRequestSchema>;
 export type AiCycleStartResponse = z.infer<typeof aiCycleStartResponseSchema>;
 export type AiCycleStatus = z.infer<typeof aiCycleStatusSchema>;
+export type AiCycleSummary = z.infer<typeof aiCycleSummarySchema>;
+export type AiCyclesQuery = z.infer<typeof aiCyclesQuerySchema>;
+export type AiCyclesResponse = z.infer<typeof aiCyclesResponseSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
 export type AiSearchNearMiss = z.infer<typeof aiSearchNearMissSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
