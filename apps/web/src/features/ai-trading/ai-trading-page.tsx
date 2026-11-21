@@ -2258,6 +2258,8 @@ function CoverageChip({ item }: { item: AiCoverageTimeframe }) {
       <div className="mt-1 text-[11px] text-zinc-500">
         {item.candles} свечей
         {item.candles < item.expected ? ` · нужно ${item.expected}` : ''}
+        {item.syntheticCandles > 0 ? ` · синт. ${item.syntheticCandles}` : ''}
+        {item.maxGapCandles > 0 ? ` · макс. пропуск ${item.maxGapCandles}` : ''}
       </div>
       <div className="text-[11px] text-zinc-500">
         {item.lastOpenTime ? formatDateTime(item.lastOpenTime) : 'Нет данных'}

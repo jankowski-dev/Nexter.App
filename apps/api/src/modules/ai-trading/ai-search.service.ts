@@ -529,7 +529,14 @@ export class AiSearchService {
     const minTrades = minTradesFor(foldCount);
     const minPositiveFolds = minPositiveFoldsFor(foldCount);
     const metrics: Array<SearchCandidate> = [];
-    const allMetrics: Array<{ returnPct: number; drawdown: number; positiveFolds: number }> = [];
+    const allMetrics: Array<{
+      returnPct: number;
+      drawdown: number;
+      positiveFolds: number;
+      trades: number;
+      policyScore: string;
+      variant: SearchVariant;
+    }> = [];
     const rejectionReasons: Record<string, number> = {};
     const nearMisses: AiSearchNearMiss[] = [];
     let evaluated = 0;
@@ -590,6 +597,9 @@ export class AiSearchService {
         returnPct: Number(aggregate.oosMedianReturnPct),
         drawdown: Number(aggregate.maxDrawdownPct),
         positiveFolds: aggregate.positiveFolds,
+        trades: aggregate.trades,
+        policyScore: aggregate.policyScore,
+        variant,
       });
       if (aggregate.trades < minTrades) {
         reject('too few trades');
@@ -769,6 +779,15 @@ export class AiSearchService {
       })),
       nearMisses: nearMissesTop,
       rejectionReasons,
+      variantMetrics: allMetrics.map((item) => ({
+        strategyKey: item.variant.strategyKey,
+        params: item.variant.params,
+        trades: item.trades,
+        oosMedianReturnPct: item.returnPct.toFixed(2),
+        positiveFolds: item.positiveFolds,
+        maxDrawdownPct: item.drawdown.toFixed(2),
+        policyScore: item.policyScore,
+      })),
     };
 
     if (control.cancelled) {

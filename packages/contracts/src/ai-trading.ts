@@ -133,6 +133,8 @@ export const aiCoverageTimeframeSchema = z.object({
   firstOpenTime: z.iso.datetime().nullable(),
   lastOpenTime: z.iso.datetime().nullable(),
   stale: z.boolean(),
+  syntheticCandles: z.number().int().default(0),
+  maxGapCandles: z.number().int().default(0),
   status: aiCoverageStatusSchema,
 });
 
