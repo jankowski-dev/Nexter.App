@@ -24,6 +24,19 @@ into a staged funnel:
 
 The first stages must be **recall-oriented**: they may reject only candidates that cannot possibly pass, or mark candidates as low priority while keeping a random control sample. They must never use the final holdout.
 
+## 0. Plain-language model (owner analogy)
+
+Think of a marriage search:
+
+- **1 000 000 анкет** — parameter sets. Looking at every profile through a full 8-fold backtest is like living with every candidate for years.
+- **Фото и анкета** — cheap screening: obvious incompatibilities, invalid parameters, no entry signals, lookback longer than the data, thresholds that cannot trigger.
+- **«Не нравятся носы/полные»** — probabilistic preferences: volatility-adjusted stop/take, cost vs target, strategy-regime mismatch. These are priors, not proof; keep a small control group of filtered-out candidates to measure false negatives.
+- **Первое свидание** — one or two OOS folds on survivors.
+- **Совместная жизнь** — full 8-fold search.
+- **Брак** — the untouched 30-day holdout; after this there is no more selection.
+
+The point is not to reject 99% by a single trait. The point is to reject only what **cannot** work, rank the rest by cheap evidence, and keep a control sample so the filter does not throw away the one good candidate.
+
 ## 1. Fast screening: hard necessary conditions
 
 These are safe rejections. If one fails, the candidate cannot become a recommendation.
@@ -49,14 +62,14 @@ These are **ranking/pruning features**, not proof. Use them to order the funnel 
 
 A practical funnel for 1,000,000 proposals:
 
-| Stage | What runs | Typical survivors | Cost |
-|---|---|---:|---|
-| 0 | Validation, priors, dedupe | 300,000–500,000 | seconds |
-| 1 | Signal-count screen on 1 fold | 30,000–50,000 | minutes |
-| 2 | Coarse backtest on 2 folds | 5,000–10,000 | tens of minutes? benchmark |
-| 3 | Full 8 folds / 5 folds on reduced history | 2,000–5,000 | ~5–20 minutes with worker pool |
-| 4 | Holdout top-10 | 10 | negligible |
-| 5 | Local refinement around top neighborhoods | 5,000–20,000 new variants | 5–20 minutes |
+| Stage | What runs                                 |         Typical survivors | Cost                           |
+| ----- | ----------------------------------------- | ------------------------: | ------------------------------ |
+| 0     | Validation, priors, dedupe                |           300,000–500,000 | seconds                        |
+| 1     | Signal-count screen on 1 fold             |             30,000–50,000 | minutes                        |
+| 2     | Coarse backtest on 2 folds                |              5,000–10,000 | tens of minutes? benchmark     |
+| 3     | Full 8 folds / 5 folds on reduced history |               2,000–5,000 | ~5–20 minutes with worker pool |
+| 4     | Holdout top-10                            |                        10 | negligible                     |
+| 5     | Local refinement around top neighborhoods | 5,000–20,000 new variants | 5–20 minutes                   |
 
 Exact survivor counts must be measured, not assumed. The funnel must report stage counts, rejection reasons and recall against a control sample.
 
