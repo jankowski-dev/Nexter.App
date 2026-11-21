@@ -304,7 +304,9 @@ export class AiCycleService implements OnModuleInit {
       .map((row) => ({ row, summary: readSummary(row.summary) }))
       .filter(
         ({ summary }) =>
-          typeof summary.assetId === 'string' && typeof summary.timeframe === 'string',
+          Boolean(summary) &&
+          typeof summary?.assetId === 'string' &&
+          typeof summary?.timeframe === 'string',
       );
     const assetIds = [...new Set(summaries.map(({ summary }) => summary.assetId))];
     const assetRows =
