@@ -1,4 +1,5 @@
 import type { BotCandle } from '@nexter/contracts';
+import { availableParallelism } from 'node:os';
 import type { StrategyDefinition } from '../trading-bots/strategies/types';
 import { TIMEFRAME_MS } from './ai-features';
 import type { AiSearchTimeframe } from '@nexter/contracts';
@@ -173,4 +174,33 @@ export function aggregateVariant(
     stabilityPct: ((positiveFolds / Math.max(1, returns.length)) * 100).toFixed(2),
     policyScore: policyScore.toFixed(4),
   };
+}
+
+export function splitVariants(variants: SearchVariant[], parts: number): SearchVariant[][] {
+  if (variants.length === 0) return [];
+  const count = Math.max(1, Math.min(variants.length, Math.floor(parts)));
+  const base = Math.floor(variants.length / count);
+  const extra = variants.length % count;
+  const chunks: SearchVariant[][] = [];
+  let offset = 0;
+  for (let index = 0; index < count; index += 1) {
+    const size = base + (index < extra ? 1 : 0);
+    chunks.push(variants.slice(offset, offset + size));
+    offset += size;
+  }
+  return chunks;
+}
+
+export function searchWorkerCount(
+  env: Record<string, string | undefined> = process.env,
+  cpus = availableParallelism(),
+): number {
+  const maxWorkers = Math.max(1, Math.min(8, cpus - 1 || 1));
+  const fallback = Math.max(1, Math.min(4, maxWorkers));
+  const raw = env.AI_SEARCH_WORKERS;
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  if (value <= 0) return 1;
+  return Math.max(1, Math.min(maxWorkers, Math.floor(value)));
 }
