@@ -1289,7 +1289,11 @@ export async function updateAiProfile(body: AiProfileUpdateRequest): Promise<AiP
 }
 
 export async function fetchAiTokens(): Promise<{ data: AiProfileToken[] }> {
-  return apiFetch('/api/v1/ai-trading/profile/tokens', {}, aiProfileTokensResponseSchema);
+  return apiFetch(
+    '/api/v1/ai-trading/profile/tokens',
+    { signal: AbortSignal.timeout(20_000) },
+    aiProfileTokensResponseSchema,
+  );
 }
 
 export async function createAiToken(body: AiProfileTokenCreateRequest): Promise<AiProfileToken> {
@@ -1319,11 +1323,19 @@ export async function updateAiService(
 }
 
 export async function fetchAiDashboard(): Promise<AiTradingDashboard> {
-  return apiFetch('/api/v1/ai-trading/dashboard', {}, aiTradingDashboardSchema);
+  return apiFetch(
+    '/api/v1/ai-trading/dashboard',
+    { signal: AbortSignal.timeout(20_000) },
+    aiTradingDashboardSchema,
+  );
 }
 
 export async function fetchAiCoverage(): Promise<AiCoverage> {
-  return apiFetch('/api/v1/ai-trading/coverage', {}, aiCoverageSchema);
+  return apiFetch(
+    '/api/v1/ai-trading/coverage',
+    { signal: AbortSignal.timeout(20_000) },
+    aiCoverageSchema,
+  );
 }
 
 export async function refreshAiData(body: AiDataRefreshRequest): Promise<AiDataRefreshResponse> {
@@ -1365,7 +1377,11 @@ export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
 }
 
 export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
-  return apiFetch('/api/v1/ai-trading/bots/health', {}, aiBotHealthResponseSchema);
+  return apiFetch(
+    '/api/v1/ai-trading/bots/health',
+    { signal: AbortSignal.timeout(20_000) },
+    aiBotHealthResponseSchema,
+  );
 }
 
 export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
@@ -1373,7 +1389,11 @@ export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
 }
 
 export async function fetchAiRecommendations(): Promise<AiRecommendationsResponse> {
-  return apiFetch('/api/v1/ai-trading/recommendations', {}, aiRecommendationsResponseSchema);
+  return apiFetch(
+    '/api/v1/ai-trading/recommendations',
+    { signal: AbortSignal.timeout(20_000) },
+    aiRecommendationsResponseSchema,
+  );
 }
 
 export async function improveNoteText(text: string): Promise<NoteImproveResponse> {
@@ -1385,7 +1405,11 @@ export async function startAiCycle(body: AiCycleRequest): Promise<AiCycleStartRe
 }
 
 export async function fetchAiCycle(cycleId: string): Promise<AiCycleStatus> {
-  return apiFetch(`/api/v1/ai-trading/cycle/${cycleId}`, {}, aiCycleStatusSchema);
+  return apiFetch(
+    `/api/v1/ai-trading/cycle/${cycleId}`,
+    { signal: AbortSignal.timeout(20_000) },
+    aiCycleStatusSchema,
+  );
 }
 
 export async function rejectAiRecommendation(id: string): Promise<AiRecommendationActionResponse> {

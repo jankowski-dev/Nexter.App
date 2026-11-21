@@ -15,6 +15,8 @@ export class DbService implements OnApplicationShutdown {
 
   constructor() {
     const created = createDb(env.DATABASE_URL, {
+      maxConnections: 20,
+      connectionTimeoutMillis: 10_000,
       onPoolError: (error) => {
         const safe = safeErrorForTelemetry(error);
         this.logger.error(`Postgres pool error: ${safe.message}`, safe.stack);

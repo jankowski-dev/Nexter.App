@@ -106,8 +106,9 @@ export function AiTradingPage() {
     queryKey: ['ai-dashboard'],
     queryFn: fetchAiDashboard,
     refetchInterval: 30_000,
+    retry: 1,
   });
-  const tokens = useQuery({ queryKey: ['ai-tokens'], queryFn: fetchAiTokens });
+  const tokens = useQuery({ queryKey: ['ai-tokens'], queryFn: fetchAiTokens, retry: 1 });
   const coverage = useQuery({
     queryKey: ['ai-coverage'],
     queryFn: fetchAiCoverage,
@@ -118,10 +119,13 @@ export function AiTradingPage() {
     queryKey: ['ai-bot-health'],
     queryFn: fetchAiBotHealth,
     refetchInterval: 60_000,
+    retry: 1,
   });
   const watchlist = useQuery({
     queryKey: ['ai-watchlist'],
     queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
+    enabled: drawer === 'universe',
+    retry: 1,
   });
   const cycle = useQuery({
     queryKey: ['ai-cycle', cycleId],
@@ -179,25 +183,7 @@ export function AiTradingPage() {
     }
   }, [cycle.data?.status, queryClient]);
 
-  if (dashboard.isPending || tokens.isPending) {
-    return <LoadingRows rows={6} />;
-  }
-  if (dashboard.isError || tokens.isError) {
-    return (
-      <ErrorState
-        message={toRussianError(
-          dashboard.error ?? tokens.error,
-          'Не удалось загрузить ИИ-торговлю',
-        )}
-        onRetry={() => {
-          void dashboard.refetch();
-          void tokens.refetch();
-        }}
-      />
-    );
-  }
-
-  const profile = dashboard.data.profile;
+  const profile = dashboard.data?.profile;
   const activeCycle =
     (Boolean(cycleId) && cycle.isPending) ||
     cycle.data?.status === 'queued' ||
@@ -208,18 +194,33 @@ export function AiTradingPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={profile.enabled ? 'success' : 'neutral'}>
-            {profile.enabled ? 'Профиль включён' : 'Профиль выключен'}
-          </Badge>
+          {profile ? (
+            <Badge tone={profile.enabled ? 'success' : 'neutral'}>
+              {profile.enabled ? 'Профиль включён' : 'Профиль выключен'}
+            </Badge>
+          ) : (
+            <Badge tone="warning">Профиль недоступен</Badge>
+          )}
           <span className="text-xs text-zinc-500">
-            {profile.modelSettings.model} · {dashboard.data.activeWorkers} /{' '}
-            {dashboard.data.workersCount} ИИ-роботов
+            {profile?.modelSettings.model ?? '—'} · {dashboard.data?.activeWorkers ?? '—'} /{' '}
+            {dashboard.data?.workersCount ?? '—'} ИИ-роботов
           </span>
           <span className="text-xs text-zinc-400">
-            {dashboard.data.lastRunAt
+            {dashboard.data?.lastRunAt
               ? `Последний запуск: ${formatDateTime(dashboard.data.lastRunAt)}`
-              : 'Цикл ещё не запускался'}
+              : dashboard.isPending
+                ? 'Загрузка профиля…'
+                : 'Цикл ещё не запускался'}
           </span>
+          {dashboard.isError ? (
+            <button
+              type="button"
+              className="text-xs text-red-700 underline"
+              onClick={() => void dashboard.refetch()}
+            >
+              Профиль не загрузился · Повторить
+            </button>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Button
@@ -250,6 +251,19 @@ export function AiTradingPage() {
       </div>
 
       <Card className="p-3">
+        {tokens.isError ? (
+          <p className="mb-2 text-xs text-red-700">
+            Не удалось загрузить токены ИИ.{' '}
+            <button type="button" className="underline" onClick={() => void tokens.refetch()}>
+              Повторить
+            </button>
+          </p>
+        ) : null}
+        {!tokens.isPending && !tokens.isError && searchable.length === 0 ? (
+          <p className="mb-2 text-xs text-amber-700">
+            Нет включённых токенов с 1h/4h. Добавьте токен в «Вселенной».
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs text-zinc-600">
             Токен
@@ -395,7 +409,18 @@ export function AiTradingPage() {
         title="Настройки ИИ"
         size="xl"
       >
-        <SettingsSection profile={profile} onSaved={() => invalidateAi(queryClient)} />
+        {profile ? (
+          <SettingsSection profile={profile} onSaved={() => invalidateAi(queryClient)} />
+        ) : (
+          <ErrorState
+            message={
+              dashboard.isError
+                ? toRussianError(dashboard.error, 'Не удалось загрузить профиль')
+                : 'Профиль ещё загружается'
+            }
+            onRetry={() => void dashboard.refetch()}
+          />
+        )}
       </Drawer>
 
       <Drawer
@@ -979,6 +1004,7 @@ function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
     queryKey: ['ai-recommendations'],
     queryFn: fetchAiRecommendations,
     refetchInterval: 60_000,
+    retry: 1,
   });
   const [filter, setFilter] = useState<'active' | 'accepted' | 'expired' | 'all'>('active');
   const [target, setTarget] = useState<RecommendationTarget | null>(null);
