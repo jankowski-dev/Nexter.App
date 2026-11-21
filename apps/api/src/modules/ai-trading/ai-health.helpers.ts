@@ -5,6 +5,17 @@ export interface AiHealthCandidate {
   metrics: Record<string, unknown>;
 }
 
+export interface AiHealthPosition {
+  assetId: string;
+  symbol: string;
+  avgCostUsd: string;
+}
+
+export interface AiHealthQuote {
+  priceUsd: string;
+  fetchedAt: Date;
+}
+
 export interface AiHealthInput {
   status: 'draft' | 'running' | 'stopped';
   startedAt: Date | null;
@@ -15,6 +26,9 @@ export interface AiHealthInput {
   equityUsd: string;
   dailyOpenEquityUsd: string | null;
   candidate: AiHealthCandidate | null;
+  strategyParams: Record<string, unknown>;
+  positions: AiHealthPosition[];
+  quotes: Record<string, AiHealthQuote>;
   recentError: boolean;
   now: Date;
 }
@@ -28,6 +42,7 @@ export interface AiHealthResult {
 
 const DAY_MS = 86_400_000;
 const STALE_TICK_MS = 10 * 60_000;
+const QUOTE_STALE_MS = 15 * 60_000;
 const MIN_DRAWDOWN_STOP_PCT = 15;
 const MIN_NEGATIVE_PNL_PCT = -5;
 
@@ -142,6 +157,66 @@ export function evaluateAiBotHealth(input: AiHealthInput): AiHealthResult {
         label: 'Ошибки в журнале робота',
         detail: 'За последние 24 часа в журнале робота есть ошибки — проверьте события.',
       });
+    }
+  }
+
+  if (input.status === 'running' && input.positions.length > 0) {
+    const seen = new Set(reasons.map((reason) => reason.code));
+    const addOnce = (reason: AiBotHealthReason) => {
+      if (seen.has(reason.code)) return;
+      seen.add(reason.code);
+      reasons.push(reason);
+    };
+    const staleSymbols = [
+      ...new Set(
+        input.positions
+          .filter((position) => {
+            const quote = input.quotes[position.assetId];
+            return (
+              !quote ||
+              !Number.isFinite(quote.fetchedAt.getTime()) ||
+              input.now.getTime() - quote.fetchedAt.getTime() > QUOTE_STALE_MS
+            );
+          })
+          .map((position) => position.symbol),
+      ),
+    ];
+    if (staleSymbols.length > 0) {
+      addOnce({
+        code: 'QUOTE_STALE',
+        severity: 'stop',
+        label: 'Нет свежих котировок',
+        detail: `Котировка отсутствует или старше 15 минут: ${staleSymbols.join(', ')}. Робот не может управлять позицией.`,
+      });
+    }
+
+    const stopLossPct = numberMetric(input.strategyParams, 'stopLossPct');
+    const takeProfitPct = numberMetric(input.strategyParams, 'takeProfitPct');
+    for (const position of input.positions) {
+      const quote = input.quotes[position.assetId];
+      if (!quote) continue;
+      const avgCost = Number(position.avgCostUsd);
+      const price = Number(quote.priceUsd);
+      if (!Number.isFinite(avgCost) || avgCost <= 0 || !Number.isFinite(price) || price <= 0) {
+        continue;
+      }
+      const changePct = ((price - avgCost) / avgCost) * 100;
+      if (stopLossPct !== null && stopLossPct > 0 && changePct <= -stopLossPct) {
+        addOnce({
+          code: 'STOP_HIT',
+          severity: 'stop',
+          label: 'Стоп-лосс достигнут',
+          detail: `${position.symbol}: цена ${changePct.toFixed(2)}% к средней при стоп-лоссе ${stopLossPct}%. Робот должен был закрыть позицию.`,
+        });
+      }
+      if (takeProfitPct !== null && takeProfitPct > 0 && changePct >= takeProfitPct) {
+        addOnce({
+          code: 'TAKE_HIT',
+          severity: 'stop',
+          label: 'Тейк-профит достигнут',
+          detail: `${position.symbol}: цена +${changePct.toFixed(2)}% к средней при тейк-профите ${takeProfitPct}%. Проверьте, что робот закрыл позицию.`,
+        });
+      }
     }
   }
 

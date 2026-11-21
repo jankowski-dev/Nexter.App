@@ -4,7 +4,16 @@ import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { aiCandidates, aiPipelineRuns, createDb, marketCandles, type Database } from '@nexter/db';
+import {
+  aiCandidates,
+  aiPipelineRuns,
+  botPositions,
+  createDb,
+  marketCandles,
+  marketQuotes,
+  tradingBots,
+  type Database,
+} from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -291,6 +300,54 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(draftHealth?.level).toBe('ok');
     expect(draftHealth?.candidateId).toBe(recommendationId);
     expect(draftHealth?.candidateStatus).toBe('accepted');
+
+    await db
+      .update(tradingBots)
+      .set({
+        status: 'running',
+        startedAt: new Date(),
+        strategyParams: { stopLossPct: 5, takeProfitPct: 10 },
+      })
+      .where(eq(tradingBots.id, draft.body.bot.id));
+    await db.insert(botPositions).values({
+      botId: draft.body.bot.id,
+      assetId,
+      amount: '1.000000000000000000',
+      avgCostUsd: '100.00000000',
+      costBasisUsd: '100.00000000',
+    });
+    await db
+      .insert(marketQuotes)
+      .values({
+        assetId,
+        priceUsd: '90.000000000000000000',
+        source: 'test',
+        fetchedAt: new Date(),
+        changedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: marketQuotes.assetId,
+        set: {
+          priceUsd: '90.000000000000000000',
+          source: 'test',
+          fetchedAt: new Date(),
+          changedAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+    const positionedHealth = await agent.get('/api/v1/ai-trading/bots/health').expect(200);
+    const positioned = (positionedHealth.body.data as Array<Record<string, unknown>>).find(
+      (item) => item.botId === draft.body.bot.id,
+    );
+    expect(positioned?.level).toBe('stop');
+    expect((positioned?.reasons as Array<{ code: string }>).map((reason) => reason.code)).toContain(
+      'STOP_HIT',
+    );
+
+    await db
+      .update(tradingBots)
+      .set({ status: 'draft', startedAt: null })
+      .where(eq(tradingBots.id, draft.body.bot.id));
 
     await agent
       .post('/api/v1/trading-bots/bots')
