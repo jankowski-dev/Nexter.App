@@ -21,6 +21,7 @@ import {
   fetchAiRecommendations,
   fetchAiCoverage,
   fetchAiCycle,
+  fetchAiCycles,
   startAiCycle,
   fetchAiDashboard,
   fetchAiTokens,
@@ -40,6 +41,7 @@ import type {
   AiCoverageTimeframe,
   AiCycleStatus,
   AiCycleStep,
+  AiCycleSummary,
   AiProfile,
   AiRecommendation,
   AiProfileToken,
@@ -88,7 +90,9 @@ function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
 
 export function AiTradingPage() {
   const queryClient = useQueryClient();
-  const [drawer, setDrawer] = useState<'universe' | 'data' | 'settings' | 'search' | null>(null);
+  const [drawer, setDrawer] = useState<
+    'universe' | 'data' | 'settings' | 'search' | 'history' | null
+  >(null);
   const [assetId, setAssetId] = useState('');
   const [timeframe, setTimeframe] = useState<AiSearchTimeframe>('1h');
   const [horizon, setHorizon] = useState('5');
@@ -101,6 +105,16 @@ export function AiTradingPage() {
       return null;
     }
   });
+
+  function selectCycle(id: string | null) {
+    setCycleId(id);
+    try {
+      if (id) window.sessionStorage.setItem('ai-cycle-id', id);
+      else window.sessionStorage.removeItem('ai-cycle-id');
+    } catch {
+      // Storage may be unavailable; the in-memory id still works.
+    }
+  }
 
   const dashboard = useQuery({
     queryKey: ['ai-dashboard'],
@@ -166,12 +180,7 @@ export function AiTradingPage() {
         maxDrafts: Number(maxDrafts),
       }),
     onSuccess: (result) => {
-      setCycleId(result.cycleId);
-      try {
-        window.sessionStorage.setItem('ai-cycle-id', result.cycleId);
-      } catch {
-        // Storage may be unavailable; the in-memory id still works.
-      }
+      selectCycle(result.cycleId);
       invalidateAi(queryClient);
     },
   });
@@ -239,6 +248,13 @@ export function AiTradingPage() {
             onClick={() => setDrawer('settings')}
           >
             Настройки
+          </Button>
+          <Button
+            variant="ghost"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => setDrawer('history')}
+          >
+            История
           </Button>
           <Button
             variant="ghost"
@@ -363,6 +379,7 @@ export function AiTradingPage() {
           cycle.isError ? toRussianError(cycle.error, 'Не удалось получить статус цикла ИИ') : null
         }
         onRetry={() => void cycle.refetch()}
+        onClear={() => selectCycle(null)}
         onOpenBots={() => {
           window.location.href = '/portfolio#robots';
         }}
@@ -439,6 +456,20 @@ export function AiTradingPage() {
           onChanged={() => invalidateAi(queryClient)}
         />
       </Drawer>
+
+      <Drawer
+        open={drawer === 'history'}
+        onClose={() => setDrawer(null)}
+        title="История циклов"
+        size="lg"
+      >
+        <AiCycleHistory
+          onSelect={(id) => {
+            selectCycle(id);
+            setDrawer(null);
+          }}
+        />
+      </Drawer>
     </div>
   );
 }
@@ -481,6 +512,15 @@ const cycleStatusLabels: Record<AiCycleStatus['status'], string> = {
   cancelled: 'отменён',
 };
 
+function cycleStatusTone(
+  status: AiCycleStatus['status'],
+): 'neutral' | 'info' | 'success' | 'danger' {
+  if (status === 'succeeded') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'running') return 'info';
+  return 'neutral';
+}
+
 function cycleErrorText(error: string): string {
   if (error === 'AI_CYCLE_STALE') {
     return 'Цикл прерван: превышено время ожидания. Запустите новый цикл.';
@@ -509,12 +549,14 @@ function AiCycleCard({
   loading,
   errorText,
   onRetry,
+  onClear,
   onOpenBots,
 }: {
   cycle: AiCycleStatus | null;
   loading: boolean;
   errorText: string | null;
   onRetry: () => void;
+  onClear: () => void;
   onOpenBots: () => void;
 }) {
   if (loading) return <LoadingRows rows={2} />;
@@ -529,9 +571,14 @@ function AiCycleCard({
             </CardDescription>
           </div>
           {errorText ? (
-            <button type="button" className="text-xs text-red-700 underline" onClick={onRetry}>
-              Статус цикла не загрузился · Повторить
-            </button>
+            <div className="flex items-center gap-3">
+              <button type="button" className="text-xs text-red-700 underline" onClick={onRetry}>
+                Статус цикла не загрузился · Повторить
+              </button>
+              <button type="button" className="text-xs text-zinc-500 underline" onClick={onClear}>
+                Сбросить
+              </button>
+            </div>
           ) : (
             <Badge tone="neutral">Готов</Badge>
           )}
@@ -541,14 +588,7 @@ function AiCycleCard({
     );
   }
   const succeeded = cycle.steps.filter((step) => step.status === 'succeeded').length;
-  const tone =
-    cycle.status === 'succeeded'
-      ? 'success'
-      : cycle.status === 'failed'
-        ? 'danger'
-        : cycle.status === 'running'
-          ? 'info'
-          : 'neutral';
+  const tone = cycleStatusTone(cycle.status);
   return (
     <Card className="p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -559,11 +599,22 @@ function AiCycleCard({
             {succeeded} / {cycle.steps.length} шагов · {formatDateTime(cycle.createdAt)}
           </span>
         </div>
-        {cycle.status === 'succeeded' ? (
-          <button type="button" className="text-xs text-emerald-700 underline" onClick={onOpenBots}>
-            Открыть черновики
-          </button>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {cycle.status === 'succeeded' ? (
+            <button
+              type="button"
+              className="text-xs text-emerald-700 underline"
+              onClick={onOpenBots}
+            >
+              Открыть черновики
+            </button>
+          ) : null}
+          {cycle.status !== 'queued' && cycle.status !== 'running' ? (
+            <button type="button" className="text-xs text-zinc-500 underline" onClick={onClear}>
+              Сбросить
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
         <div
@@ -630,6 +681,79 @@ function AiCycleCard({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+function AiCycleHistory({ onSelect }: { onSelect: (id: string) => void }) {
+  const query = useQuery({
+    queryKey: ['ai-cycles'],
+    queryFn: fetchAiCycles,
+    retry: 1,
+    refetchInterval: 60_000,
+  });
+  const items = query.data?.data ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-zinc-500">
+          Последние циклы. Выбери запуск, чтобы открыть его шаги и ошибку.
+        </p>
+        <Button variant="ghost" className="h-8 px-2.5 text-xs" onClick={() => void query.refetch()}>
+          Обновить
+        </Button>
+      </div>
+      {query.isPending ? <LoadingRows rows={5} /> : null}
+      {query.isError ? (
+        <ErrorState
+          message={toRussianError(query.error, 'Не удалось загрузить историю циклов')}
+          onRetry={() => void query.refetch()}
+        />
+      ) : null}
+      {!query.isPending && !query.isError && items.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          Циклов пока нет. Запусти первый цикл на странице ИИ-торговли.
+        </p>
+      ) : null}
+      <div className="space-y-2">
+        {items.map((item) => (
+          <CycleHistoryRow key={item.cycleId} item={item} onSelect={onSelect} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CycleHistoryRow({
+  item,
+  onSelect,
+}: {
+  item: AiCycleSummary;
+  onSelect: (id: string) => void;
+}) {
+  const succeeded = item.steps.filter((step) => step.status === 'succeeded').length;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(item.cycleId)}
+      className="w-full rounded-xl border border-zinc-200 px-3 py-2 text-left transition hover:border-emerald-300"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge tone={cycleStatusTone(item.status)}>{cycleStatusLabels[item.status]}</Badge>
+        <span className="text-sm font-medium text-zinc-800">
+          {item.symbol} · {item.timeframe}
+        </span>
+        <span className="text-[11px] text-zinc-500">{formatDateTime(item.createdAt)}</span>
+      </div>
+      <div className="mt-1 text-[11px] text-zinc-500">
+        Шагов: {succeeded} / {item.steps.length} · рекомендаций: {item.recommended} · черновиков:{' '}
+        {item.draftsCreated}
+      </div>
+      {item.error ? (
+        <div className="mt-1 text-[11px] text-red-700">{cycleErrorText(item.error)}</div>
+      ) : null}
+    </button>
   );
 }
 
