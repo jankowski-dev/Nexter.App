@@ -43,7 +43,7 @@ import {
   sleep,
   withDbRetry,
 } from './ai-error.helpers';
-import { normalizeCycle } from './ai-cycle.helpers';
+import { normalizeCycle, searchPollTimeout, SEARCH_HARD_TIMEOUT_MS } from './ai-cycle.helpers';
 import { selectDraftCandidates } from './ai-risk.helpers';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
@@ -74,7 +74,6 @@ const STEP_LABELS: Record<AiCycleStepKey, string> = {
   drafts: 'Черновики',
 };
 
-const MAX_CYCLE_MS = 30 * 60_000;
 const MAX_DB_POLL_FAILURES = 5;
 
 function emptyStep(key: AiCycleStepKey): AiCycleStep {
@@ -459,12 +458,14 @@ export class AiCycleService implements OnModuleInit {
       summary.searchRunId = runId;
     });
 
-    const deadline = Date.now() + MAX_CYCLE_MS;
+    const deadline = Date.now() + SEARCH_HARD_TIMEOUT_MS;
     const profile = await withDbRetry(() => this.aiTrading.getProfile(userId), {
       attempts: 3,
       delayMs: 500,
     });
     let lastMessage = '';
+    let lastEvaluated = -1;
+    let lastProgressAt = Date.now();
     let dbFailures = 0;
     while (Date.now() < deadline) {
       let status: Awaited<ReturnType<AiSearchService['status']>>;
@@ -502,6 +503,20 @@ export class AiCycleService implements OnModuleInit {
             sanitizeSearchError(status.error) ?? `Поиск завершился статусом ${status.status}`,
         });
       }
+      if (status.evaluated > lastEvaluated) {
+        lastEvaluated = status.evaluated;
+        lastProgressAt = Date.now();
+      }
+      const timeout = searchPollTimeout(Date.now(), lastProgressAt, deadline);
+      if (timeout !== null) {
+        throw new ServiceUnavailableException({
+          code: 'AI_SEARCH_TIMEOUT',
+          message:
+            timeout === 'idle'
+              ? 'Поиск не продвигался более 10 минут'
+              : 'Поиск не завершился за 90 минут',
+        });
+      }
       const message = `Поиск: ${status.evaluated} / ${status.total}`;
       if (message !== lastMessage) {
         lastMessage = message;
@@ -511,7 +526,7 @@ export class AiCycleService implements OnModuleInit {
     }
     throw new ServiceUnavailableException({
       code: 'AI_SEARCH_TIMEOUT',
-      message: 'Поиск не завершился за 30 минут',
+      message: 'Поиск не завершился за 90 минут',
     });
   }
 

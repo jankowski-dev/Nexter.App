@@ -35,6 +35,19 @@ export interface NormalizedCycle {
 const cycleStatuses = ['queued', 'running', 'succeeded', 'failed', 'cancelled'] as const;
 const uuid = z.uuid();
 
+export const SEARCH_IDLE_TIMEOUT_MS = 10 * 60_000;
+export const SEARCH_HARD_TIMEOUT_MS = 90 * 60_000;
+
+export function searchPollTimeout(
+  now: number,
+  lastProgressAt: number,
+  deadline: number,
+): 'idle' | 'hard' | null {
+  if (now >= deadline) return 'hard';
+  if (now - lastProgressAt >= SEARCH_IDLE_TIMEOUT_MS) return 'idle';
+  return null;
+}
+
 function text(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }

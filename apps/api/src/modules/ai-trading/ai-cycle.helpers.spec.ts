@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeCycle } from './ai-cycle.helpers';
+import {
+  normalizeCycle,
+  searchPollTimeout,
+  SEARCH_HARD_TIMEOUT_MS,
+  SEARCH_IDLE_TIMEOUT_MS,
+} from './ai-cycle.helpers';
 
 const run = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -95,5 +100,28 @@ describe('normalizeCycle', () => {
     expect(cycle.rejectionReasons).toEqual({ 'too few trades': 7 });
     expect(cycle.nearMisses).toHaveLength(1);
     expect(cycle.nearMisses[0]?.strategyKey).toBe('grid_range');
+  });
+});
+
+describe('searchPollTimeout', () => {
+  const now = Date.parse('2026-11-21T17:40:00.000Z');
+  const deadline = now + SEARCH_HARD_TIMEOUT_MS;
+
+  it('keeps polling while progress is fresh', () => {
+    expect(searchPollTimeout(now, now - 60_000, deadline)).toBeNull();
+  });
+
+  it('stops after the idle window without progress', () => {
+    expect(searchPollTimeout(now, now - SEARCH_IDLE_TIMEOUT_MS - 1, deadline)).toBe('idle');
+  });
+
+  it('stops at the hard deadline even with recent progress', () => {
+    expect(searchPollTimeout(deadline, now, deadline)).toBe('hard');
+  });
+
+  it('prefers the hard deadline when both apply', () => {
+    expect(searchPollTimeout(deadline, deadline - SEARCH_IDLE_TIMEOUT_MS - 1, deadline)).toBe(
+      'hard',
+    );
   });
 });
