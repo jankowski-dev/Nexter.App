@@ -8,6 +8,7 @@ import {
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  stabilityPctFor,
 } from './ai-search.helpers';
 import type { BotCandle } from '@nexter/contracts';
 
@@ -103,5 +104,13 @@ describe('holdoutRejection', () => {
 
   it('labels a positive return with a high drawdown separately', () => {
     expect(holdoutRejection(108.78, 21, 20)).toBe('holdout drawdown too high');
+  });
+});
+
+describe('stabilityPctFor', () => {
+  it('uses the actual fold count as the denominator', () => {
+    expect(stabilityPctFor(5, 8)).toBe('62.50');
+    expect(stabilityPctFor(5, 10)).toBe('50.00');
+    expect(stabilityPctFor(3, 6)).toBe('50.00');
   });
 });

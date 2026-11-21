@@ -7,6 +7,14 @@ import type {
 import { Decimal, amountString, decimal, usdString } from '../../../shared/money/decimal';
 import type { StrategyDefinition, StrategySample } from '../strategies/types';
 
+function candleTimestamp(date: string, time: string): Date {
+  if (date.includes('T')) {
+    const parsed = new Date(date);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date(`${date}T${time}Z`);
+}
+
 const DEFAULT_CAPITAL = '1000';
 const DEFAULT_FEE_BPS = 25;
 const DEFAULT_SLIPPAGE_BPS = 10;
@@ -90,7 +98,7 @@ export function runBacktest(
     if (debit.gt(cash)) return false;
 
     const amount = usd.div(fillPrice);
-    const slippage = amount.mul(close).minus(usd);
+    const slippage = usd.minus(amount.mul(close));
     position = position
       ? {
           amount: position.amount.plus(amount),
@@ -157,10 +165,35 @@ export function runBacktest(
   const warmup = Math.min(candles.length - 1, Math.max(0, Math.floor(options.warmupCandles ?? 0)));
   for (let index = 0; index < warmup; index += 1) {
     const candle = candles[index] as BotCandle;
+    const close = decimal(candle.closeUsd);
+    const changeLookback = Math.max(1, Math.floor(options.changeLookbackCandles ?? 1));
+    const previousIndex = index - changeLookback;
+    const previous = previousIndex >= 0 ? candles[previousIndex] : null;
+    const previousClose = previous ? decimal(previous.closeUsd) : null;
+    const change24hPct = previousClose
+      ? close.minus(previousClose).div(previousClose).mul(100).toFixed(4)
+      : null;
+
     samples.push({
       priceUsd: candle.closeUsd,
-      capturedAt: new Date(`${candle.date}T12:00:00.000Z`),
+      capturedAt: candleTimestamp(candle.date, '12:00:00.000'),
     });
+
+    if (definition.stateful === true) {
+      const decision = definition.evaluate({
+        now: candleTimestamp(candle.date, '23:59:59.999'),
+        params,
+        priceUsd: candle.closeUsd,
+        change24hPct,
+        history: samples,
+        position: null,
+        buyCount: 0,
+        stopLossEnabled: options.useStopLoss !== false,
+        takeProfitEnabled: options.useTakeProfit !== false,
+        state: strategyState,
+      });
+      strategyState = decision.nextState ?? strategyState;
+    }
   }
 
   for (let index = warmup; index < candles.length; index += 1) {
@@ -176,7 +209,7 @@ export function runBacktest(
 
     samples.push({
       priceUsd: candle.closeUsd,
-      capturedAt: new Date(`${candle.date}T12:00:00.000Z`),
+      capturedAt: candleTimestamp(candle.date, '12:00:00.000'),
     });
 
     const openPosition = position as OpenPosition | null;
@@ -238,7 +271,7 @@ export function runBacktest(
 
     const postExitPosition = position as OpenPosition | null;
     const decision = definition.evaluate({
-      now: new Date(`${candle.date}T23:59:59.999Z`),
+      now: candleTimestamp(candle.date, '23:59:59.999'),
       params,
       priceUsd: candle.closeUsd,
       change24hPct,

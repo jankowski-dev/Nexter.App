@@ -342,6 +342,7 @@ function readTrailingPeak(value: Record<string, unknown> | undefined, fallback: 
 }
 
 export const trailingStop: StrategyDefinition = {
+  stateful: true,
   key: 'trailing_stop',
   version: 1,
   icon: 'trend',
@@ -469,6 +470,7 @@ function crashGridState(
 }
 
 export const crashProtectedGrid: StrategyDefinition = {
+  stateful: true,
   key: 'crash_protected_grid',
   version: 1,
   icon: 'shield',
@@ -788,6 +790,7 @@ function readBreakdownLevel(state: Record<string, unknown> | undefined): Decimal
 }
 
 export const failedBreakout: StrategyDefinition = {
+  stateful: true,
   key: 'failed_breakout',
   version: 1,
   icon: 'reversal',
@@ -874,6 +877,7 @@ function readStaticLimitPhase(state: Record<string, unknown> | undefined): 'arme
 }
 
 export const staticLimit: StrategyDefinition = {
+  stateful: true,
   key: 'static_limit',
   version: 1,
   icon: 'limit',

@@ -50,6 +50,7 @@ import {
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  stabilityPctFor,
   searchWorkerCount,
   MIN_SEARCH_DAYS,
   type SearchVariant,
@@ -475,6 +476,8 @@ export class AiSearchService {
         total: 0,
         evaluated: 0,
         valid: 0,
+        oosPassed: 0,
+        holdoutTested: 0,
         recommended: 0,
         bestReturnPct: '0',
         averageReturnPct: '0',
@@ -731,7 +734,15 @@ export class AiSearchService {
         Number(candidate.holdoutReturnPct) > 0 &&
         Number(candidate.policyScore) > 0,
     );
-    const stats = this.buildStats(variants.length, evaluated, allMetrics, recommended);
+    const stats = this.buildStats(
+      variants.length,
+      evaluated,
+      allMetrics,
+      recommended,
+      folds.folds.length,
+      allMetrics.length,
+      top.length,
+    );
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
       item.reasons.includes('holdout drawdown too high') ||
@@ -877,6 +888,9 @@ export class AiSearchService {
     evaluated: number,
     metrics: Array<{ returnPct: number; drawdown: number; positiveFolds: number }>,
     recommended: SearchCandidate[],
+    foldCount: number,
+    oosPassed: number,
+    holdoutTested: number,
   ): AiSearchStats {
     const returns = metrics.map((item) => item.returnPct);
     const drawdowns = metrics.map((item) => item.drawdown);
@@ -906,6 +920,8 @@ export class AiSearchService {
       total,
       evaluated,
       valid: metrics.length,
+      oosPassed,
+      holdoutTested,
       recommended: recommended.length,
       bestReturnPct: best.toFixed(2),
       averageReturnPct: avg(returns).toFixed(2),
@@ -918,10 +934,10 @@ export class AiSearchService {
       worstOosReturnPct: worst.toFixed(2),
       stabilityPct:
         metrics.length > 0
-          ? (
-              (metrics.reduce((sum, item) => sum + item.positiveFolds, 0) / (metrics.length * 8)) *
-              100
-            ).toFixed(2)
+          ? stabilityPctFor(
+              metrics.reduce((sum, item) => sum + item.positiveFolds, 0) / metrics.length,
+              foldCount,
+            )
           : '0.00',
       holdoutReturnPct: recommended[0]?.holdoutReturnPct ?? null,
       histogram: histogramRanges.map((range) => ({
