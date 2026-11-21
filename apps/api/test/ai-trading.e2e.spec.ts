@@ -572,6 +572,94 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(legacyRow).toMatchObject({ status: 'failed', recommended: 0, draftsCreated: 0 });
     expect(legacyRow?.error).toContain('База данных временно недоступна');
 
+    const [cancelSearch] = await db
+      .insert(aiPipelineRuns)
+      .values({
+        profileId: profile.body.id as string,
+        trigger: 'manual',
+        status: 'running',
+        summary: {
+          assetId,
+          timeframe: '1h',
+          variants: 100,
+          progress: { evaluated: 10, total: 100 },
+        },
+      })
+      .returning({ id: aiPipelineRuns.id });
+    const [cancelCycle] = await db
+      .insert(aiPipelineRuns)
+      .values({
+        profileId: profile.body.id as string,
+        trigger: 'manual',
+        status: 'running',
+        summary: {
+          kind: 'cycle',
+          assetId,
+          timeframe: '1h',
+          steps: [
+            {
+              key: 'data',
+              status: 'succeeded',
+              message: 'ok',
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+            },
+            {
+              key: 'search',
+              status: 'running',
+              message: 'Поиск: 10 / 100',
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+            },
+            {
+              key: 'recommendations',
+              status: 'queued',
+              message: null,
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+            },
+            {
+              key: 'drafts',
+              status: 'queued',
+              message: null,
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+            },
+          ],
+          searchRunId: cancelSearch?.id,
+          recommended: 0,
+          draftsCreated: 0,
+        },
+      })
+      .returning({ id: aiPipelineRuns.id });
+    const cancelCycleId = cancelCycle?.id as string;
+    const cancelled = await agent
+      .post(`/api/v1/ai-trading/cycle/${cancelCycleId}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(cancelled.body.status).toBe('cancelled');
+    const cancelledSteps = cancelled.body.steps as Array<{ key: string; status: string }>;
+    expect(cancelledSteps.find((step) => step.key === 'search')?.status).toBe('skipped');
+    expect(cancelledSteps.find((step) => step.key === 'recommendations')?.status).toBe('skipped');
+    expect(cancelledSteps.find((step) => step.key === 'drafts')?.status).toBe('skipped');
+    const cancelledSearch = await agent
+      .get(`/api/v1/ai-trading/search/${cancelSearch?.id as string}`)
+      .expect(200);
+    expect(cancelledSearch.body.status).toBe('cancelled');
+
+    await agent
+      .post(`/api/v1/ai-trading/cycle/${cancelCycleId}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    await agent
+      .post(`/api/v1/ai-trading/cycle/${cycleId}/cancel`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+
     await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)
       .set('x-csrf-token', owner.csrf)

@@ -9,6 +9,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { Switch } from '@/components/ui/switch';
 import { TokenIcon } from '@/components/token-icon';
 import {
+  cancelAiCycle,
   cancelAiSearch,
   createTradingBot,
   fetchAiSearchResults,
@@ -76,6 +77,8 @@ const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m'];
 function invalidateAi(queryClient: ReturnType<typeof useQueryClient>): void {
   for (const key of [
     'ai-dashboard',
+    'ai-cycle',
+    'ai-cycles',
     'ai-tokens',
     'ai-coverage',
     'ai-search-status',
@@ -115,6 +118,8 @@ export function AiTradingPage() {
       // Storage may be unavailable; the in-memory id still works.
     }
   }
+  const [cancelTarget, setCancelTarget] = useState<AiCycleStatus | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const dashboard = useQuery({
     queryKey: ['ai-dashboard'],
@@ -183,6 +188,17 @@ export function AiTradingPage() {
       selectCycle(result.cycleId);
       invalidateAi(queryClient);
     },
+  });
+
+  const cancelCycle = useMutation({
+    mutationFn: (id: string) => cancelAiCycle(id),
+    onSuccess: () => {
+      setCancelTarget(null);
+      setCancelError(null);
+      selectCycle(null);
+      invalidateAi(queryClient);
+    },
+    onError: (error) => setCancelError(toRussianError(error, 'Не удалось отменить цикл')),
   });
 
   useEffect(() => {
@@ -380,8 +396,29 @@ export function AiTradingPage() {
         }
         onRetry={() => void cycle.refetch()}
         onClear={() => selectCycle(null)}
+        onCancel={() => {
+          setCancelError(null);
+          if (cycle.data) setCancelTarget(cycle.data);
+        }}
         onOpenBots={() => {
           window.location.href = '/portfolio#robots';
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Отменить цикл ИИ?"
+        description="Цикл остановится, незавершённые шаги будут пропущены. После этого можно запустить новый цикл."
+        confirmLabel="Отменить цикл"
+        busy={cancelCycle.isPending}
+        error={cancelError}
+        onConfirm={() => {
+          if (cancelTarget) cancelCycle.mutate(cancelTarget.cycleId);
+        }}
+        onCancel={() => {
+          if (!cancelCycle.isPending) {
+            setCancelTarget(null);
+            setCancelError(null);
+          }
         }}
       />
 
@@ -551,6 +588,7 @@ function AiCycleCard({
   errorText,
   onRetry,
   onClear,
+  onCancel,
   onOpenBots,
 }: {
   cycle: AiCycleStatus | null;
@@ -558,6 +596,7 @@ function AiCycleCard({
   errorText: string | null;
   onRetry: () => void;
   onClear: () => void;
+  onCancel: () => void;
   onOpenBots: () => void;
 }) {
   if (loading) return <LoadingRows rows={2} />;
@@ -602,6 +641,11 @@ function AiCycleCard({
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {cycle.status === 'queued' || cycle.status === 'running' ? (
+            <button type="button" className="text-xs text-red-700 underline" onClick={onCancel}>
+              Отменить
+            </button>
+          ) : null}
           {cycle.status === 'succeeded' ? (
             <button
               type="button"

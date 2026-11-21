@@ -29,6 +29,7 @@ const messages: Record<string, string> = {
   AI_RECOMMENDATION_NOT_ACTIONABLE:
     'Эту рекомендацию уже нельзя отклонить: она принята или устарела.',
   AI_CYCLE_BUSY: 'Цикл ИИ уже выполняется. Дождитесь завершения.',
+  AI_CYCLE_NOT_CANCELLABLE: 'Цикл уже завершён, отменять нечего.',
   AI_CYCLE_LIMIT: 'Дневной лимит циклов ИИ исчерпан (20 за 24 часа).',
   AI_CYCLE_STALE: 'Цикл прерван: превышено время ожидания. Запустите новый цикл.',
   AI_CYCLE_DB_UNAVAILABLE:

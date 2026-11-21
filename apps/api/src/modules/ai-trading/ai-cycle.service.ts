@@ -9,7 +9,7 @@ import {
   ServiceUnavailableException,
   type OnModuleInit,
 } from '@nestjs/common';
-import { and, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, ne, sql } from 'drizzle-orm';
 import {
   aiJobs,
   aiPipelineRuns,
@@ -336,6 +336,90 @@ export class AiCycleService implements OnModuleInit {
     };
   }
 
+  async cancel(userId: string, cycleId: string, meta: CycleMeta): Promise<AiCycleStatus> {
+    const profile = await this.aiTrading.getProfile(userId);
+    const [run] = await this.db
+      .select()
+      .from(aiPipelineRuns)
+      .where(and(eq(aiPipelineRuns.id, cycleId), eq(aiPipelineRuns.profileId, profile.id)))
+      .limit(1);
+    if (!run) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI cycle not found' });
+    }
+    const summary = readSummary(run.summary);
+    if (summary.kind !== 'cycle') {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI cycle not found' });
+    }
+    if (run.status === 'cancelled') {
+      return this.status(userId, cycleId);
+    }
+    if (run.status !== 'queued' && run.status !== 'running') {
+      throw new ConflictException({
+        code: 'AI_CYCLE_NOT_CANCELLABLE',
+        message: 'AI cycle is already finished',
+      });
+    }
+
+    if (summary.searchRunId) {
+      try {
+        await this.aiSearch.cancel(userId, summary.searchRunId);
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) throw error;
+      }
+    }
+
+    const now = new Date().toISOString();
+    for (const step of summary.steps) {
+      if (step.status === 'queued' || step.status === 'running') {
+        step.status = 'skipped';
+        step.message = 'Отменено владельцем';
+        step.error = null;
+        step.finishedAt = now;
+      }
+    }
+    summary.error = 'Цикл отменён владельцем';
+
+    await withDbRetry(
+      () =>
+        this.db
+          .update(aiPipelineRuns)
+          .set({
+            status: 'cancelled',
+            finishedAt: new Date(),
+            summary: summary as unknown as Record<string, unknown>,
+          })
+          .where(eq(aiPipelineRuns.id, cycleId)),
+      { attempts: 5, delayMs: 500 },
+    );
+    await withDbRetry(
+      () =>
+        this.db
+          .update(aiJobs)
+          .set({ status: 'skipped', error: 'Отменено владельцем', updatedAt: new Date() })
+          .where(and(eq(aiJobs.runId, cycleId), inArray(aiJobs.status, ['queued', 'running']))),
+      { attempts: 3, delayMs: 500 },
+    );
+    await this.audit.log({
+      userId,
+      action: 'ai_trading.cycle_cancelled',
+      entityType: 'ai_pipeline_run',
+      entityId: cycleId,
+      after: { status: 'cancelled', steps: summary.steps },
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+    return this.status(userId, cycleId);
+  }
+
+  private async isCancelled(cycleId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ status: aiPipelineRuns.status })
+      .from(aiPipelineRuns)
+      .where(eq(aiPipelineRuns.id, cycleId))
+      .limit(1);
+    return row?.status === 'cancelled';
+  }
+
   async status(userId: string, cycleId: string): Promise<AiCycleStatus> {
     const profile = await this.aiTrading.getProfile(userId);
     const [run] = await this.db
@@ -375,8 +459,18 @@ export class AiCycleService implements OnModuleInit {
   ): Promise<void> {
     try {
       await this.runDataStep(userId, cycleId, token, input, meta);
+      if (await this.isCancelled(cycleId)) return;
       const searchRunId = await this.runSearchStep(userId, cycleId, input, meta);
+      if (await this.isCancelled(cycleId)) {
+        try {
+          await this.aiSearch.cancel(userId, searchRunId);
+        } catch {
+          // The search may already be finished; the cycle is still cancelled.
+        }
+        return;
+      }
       const candidates = await this.runRecommendationsStep(userId, cycleId, searchRunId);
+      if (await this.isCancelled(cycleId)) return;
       await this.runDraftsStep(userId, cycleId, token, candidates, input.maxDrafts, meta);
       await this.finish(userId, cycleId, 'succeeded');
     } catch (error) {
@@ -468,6 +562,14 @@ export class AiCycleService implements OnModuleInit {
     let lastProgressAt = Date.now();
     let dbFailures = 0;
     while (Date.now() < deadline) {
+      if (await this.isCancelled(cycleId)) {
+        try {
+          await this.aiSearch.cancel(userId, runId);
+        } catch {
+          // The search may already be finished; the cycle is still cancelled.
+        }
+        return runId;
+      }
       let status: Awaited<ReturnType<AiSearchService['status']>>;
       try {
         status = await withDbRetry(() => this.aiSearch.statusForProfile(profile.id, runId), {
@@ -710,11 +812,12 @@ export class AiCycleService implements OnModuleInit {
     status: 'succeeded' | 'failed',
   ): Promise<void> {
     const [run] = await this.db
-      .select()
+      .select({ status: aiPipelineRuns.status, summary: aiPipelineRuns.summary })
       .from(aiPipelineRuns)
       .where(eq(aiPipelineRuns.id, cycleId))
       .limit(1);
     if (!run) return;
+    if (run.status === 'cancelled') return;
     const summary = readSummary(run.summary);
     summary.error = status === 'failed' ? (summary.error ?? 'Цикл завершился с ошибкой') : null;
     await withDbRetry(
@@ -726,7 +829,7 @@ export class AiCycleService implements OnModuleInit {
             finishedAt: new Date(),
             summary: summary as unknown as Record<string, unknown>,
           })
-          .where(eq(aiPipelineRuns.id, cycleId)),
+          .where(and(eq(aiPipelineRuns.id, cycleId), ne(aiPipelineRuns.status, 'cancelled'))),
       { attempts: 5, delayMs: 500 },
     );
     await this.audit.log({
@@ -752,7 +855,7 @@ export class AiCycleService implements OnModuleInit {
     const run = await withDbRetry(
       async () => {
         const [row] = await this.db
-          .select({ summary: aiPipelineRuns.summary })
+          .select({ status: aiPipelineRuns.status, summary: aiPipelineRuns.summary })
           .from(aiPipelineRuns)
           .where(eq(aiPipelineRuns.id, cycleId))
           .limit(1);
@@ -761,6 +864,7 @@ export class AiCycleService implements OnModuleInit {
       { attempts: 5, delayMs: 500 },
     );
     if (!run) return;
+    if (run.status === 'cancelled') return;
     const summary = readSummary(run.summary);
     const active = summary.steps.find((step) => step.status === 'running');
     if (active) {
@@ -793,7 +897,7 @@ export class AiCycleService implements OnModuleInit {
             finishedAt: new Date(),
             summary: summary as unknown as Record<string, unknown>,
           })
-          .where(eq(aiPipelineRuns.id, cycleId)),
+          .where(and(eq(aiPipelineRuns.id, cycleId), ne(aiPipelineRuns.status, 'cancelled'))),
       { attempts: 5, delayMs: 500 },
     );
     await withDbRetry(
