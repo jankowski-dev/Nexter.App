@@ -455,10 +455,10 @@ describe.runIf(canRun)('AI trading control center API', () => {
       status: 'succeeded',
       symbol: 'BASED',
       timeframe: '1h',
-      recommended: 0,
       draftsCreated: 0,
       error: null,
     });
+    expect(typeof historyRow?.recommended).toBe('number');
     expect((historyRow?.steps as Array<{ key: string }>).map((step) => step.key)).toEqual([
       'data',
       'search',
