@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -15,6 +16,7 @@ import {
   fetchAiSearchStatus,
   startAiSearch,
   createAiToken,
+  rejectAiRecommendation,
   fetchAiBotHealth,
   fetchAiRecommendations,
   fetchAiCoverage,
@@ -29,7 +31,7 @@ import {
   updateAiToken,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDateTime, formatPct } from '@/lib/format';
+import { formatDateTime, formatPct, formatUsd } from '@/lib/format';
 import type {
   AiBotHealth,
   AiBotHealthResponse,
@@ -981,6 +983,17 @@ function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
   const [filter, setFilter] = useState<'active' | 'accepted' | 'expired' | 'all'>('active');
   const [target, setTarget] = useState<RecommendationTarget | null>(null);
   const [createdBot, setCreatedBot] = useState<{ id: string; name: string } | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<AiRecommendation | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const reject = useMutation({
+    mutationFn: (id: string) => rejectAiRecommendation(id),
+    onSuccess: () => {
+      setRejectTarget(null);
+      setError(null);
+      onChanged();
+    },
+    onError: (err) => setError(toRussianError(err, 'Не удалось отклонить рекомендацию')),
+  });
 
   const items = query.data?.data ?? [];
   const active = items.filter((item) => item.status === 'recommended' && !item.expired);
@@ -1002,8 +1015,7 @@ function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
           <div>
             <CardTitle>Рекомендации</CardTitle>
             <CardDescription>
-              Все кандидаты поиска и лаборатории: активные, принятые и истёкшие. Принятие создаёт
-              черновик робота и не запускает его.
+              Активные и принятые рекомендации. Принятие создаёт черновик робота и не запускает его.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1079,6 +1091,10 @@ function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
                   timeframe: item.timeframe,
                 })
               }
+              onReject={() => {
+                setError(null);
+                setRejectTarget(item);
+              }}
             />
           ))}
         </div>
@@ -1092,11 +1108,35 @@ function RecommendationsSection({ onChanged }: { onChanged: () => void }) {
           onChanged();
         }}
       />
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="Отклонить рекомендацию?"
+        description={
+          rejectTarget
+            ? `${rejectTarget.symbol} · ${rejectTarget.strategyName}. Она исчезнет из активных, создать робота из неё будет нельзя.`
+            : ''
+        }
+        confirmLabel="Отклонить"
+        busy={reject.isPending}
+        error={error}
+        onConfirm={() => {
+          if (rejectTarget) reject.mutate(rejectTarget.id);
+        }}
+        onCancel={() => setRejectTarget(null)}
+      />
     </div>
   );
 }
 
-function RecommendationCard({ item, onAccept }: { item: AiRecommendation; onAccept: () => void }) {
+function RecommendationCard({
+  item,
+  onAccept,
+  onReject,
+}: {
+  item: AiRecommendation;
+  onAccept: () => void;
+  onReject: () => void;
+}) {
   const tone =
     item.status === 'accepted'
       ? 'info'
@@ -1143,9 +1183,14 @@ function RecommendationCard({ item, onAccept }: { item: AiRecommendation; onAcce
             </a>
           ) : null}
           {item.status === 'recommended' && !item.expired ? (
-            <Button variant="secondary" className="h-8 px-3 text-xs" onClick={onAccept}>
-              Создать черновик
-            </Button>
+            <>
+              <Button variant="secondary" className="h-8 px-3 text-xs" onClick={onAccept}>
+                Создать черновик
+              </Button>
+              <Button variant="ghost" className="h-8 px-2 text-xs" onClick={onReject}>
+                Отклонить
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -1161,7 +1206,22 @@ function RecommendationCard({ item, onAccept }: { item: AiRecommendation; onAcce
           value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
         />
         <LabFeature label="Policy" value={item.policyScore} />
+        <LabFeature label="Аллокация" value={formatUsd(item.suggestedAllocationUsd)} />
       </div>
+      <details className="mt-2 text-xs text-zinc-600">
+        <summary className="cursor-pointer text-zinc-500">Правила инвалидации</summary>
+        <ul className="mt-1 space-y-1">
+          {item.invalidationRules.map((rule) => (
+            <li key={rule.code} className="flex flex-wrap gap-1.5">
+              <Badge tone={rule.severity === 'stop' ? 'danger' : 'warning'}>
+                {rule.severity === 'stop' ? 'стоп' : 'review'}
+              </Badge>
+              <span className="font-medium text-zinc-700">{rule.label}:</span>
+              <span>{rule.detail}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
     </Card>
   );
 }

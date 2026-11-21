@@ -16,6 +16,7 @@ import {
   aiSearchStartResponseSchema,
   aiSearchStatusSchema,
   aiProfileSchema,
+  aiRecommendationActionResponseSchema,
   aiRecommendationsResponseSchema,
   aiProfileTokenSchema,
   aiProfileTokensResponseSchema,
@@ -122,6 +123,7 @@ import {
   type AiSearchRunsResponse,
   type AiSearchStatus,
   type AiProfile,
+  type AiRecommendationActionResponse,
   type AiRecommendationsResponse,
   type AiProfileToken,
   type AiProfileTokenCreateRequest,
@@ -1384,4 +1386,12 @@ export async function startAiCycle(body: AiCycleRequest): Promise<AiCycleStartRe
 
 export async function fetchAiCycle(cycleId: string): Promise<AiCycleStatus> {
   return apiFetch(`/api/v1/ai-trading/cycle/${cycleId}`, {}, aiCycleStatusSchema);
+}
+
+export async function rejectAiRecommendation(id: string): Promise<AiRecommendationActionResponse> {
+  return apiPost(
+    `/api/v1/ai-trading/recommendations/${id}/reject`,
+    {},
+    aiRecommendationActionResponseSchema,
+  );
 }

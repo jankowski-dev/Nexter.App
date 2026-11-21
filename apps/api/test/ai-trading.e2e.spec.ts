@@ -358,6 +358,45 @@ describe.runIf(canRun)('AI trading control center API', () => {
     ).find((item) => item.id === expiredRecommendation?.id);
     expect(expiredRecommendationRow?.expired).toBe(true);
 
+    const [rejectable] = await db
+      .insert(aiCandidates)
+      .values({
+        profileId: profile.body.id as string,
+        runId: searchId,
+        assetId,
+        timeframe: '1h',
+        strategyKey: 'momentum_breakout',
+        params: {
+          fastPeriod: 5,
+          slowPeriod: 20,
+          minChange24hPct: 1,
+          takeProfitPct: 5,
+          stopLossPct: 3,
+        },
+        metrics: { horizonDays: 5 },
+        policyScore: '1.0000',
+        status: 'recommended',
+      })
+      .returning({ id: aiCandidates.id });
+    const rejectableId = rejectable?.id as string;
+    const recommendationCard = await agent
+      .get(`/api/v1/ai-trading/recommendations/${rejectableId}`)
+      .expect(200);
+    expect(recommendationCard.body.status).toBe('recommended');
+    expect(recommendationCard.body.suggestedAllocationUsd).toBe('6250.00');
+    expect(recommendationCard.body.invalidationRules.length).toBeGreaterThan(0);
+
+    const rejected = await agent
+      .post(`/api/v1/ai-trading/recommendations/${rejectableId}/reject`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+    expect(rejected.body).toMatchObject({ id: rejectableId, status: 'rejected' });
+    await agent.get(`/api/v1/ai-trading/recommendations/${rejectableId}`).expect(404);
+    await agent
+      .post(`/api/v1/ai-trading/recommendations/${rejectableId}/reject`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+
     const analysis = await agent
       .post('/api/v1/ai-trading/lab/analyze')
       .set('x-csrf-token', owner.csrf)
