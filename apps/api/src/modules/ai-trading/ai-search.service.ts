@@ -545,7 +545,8 @@ export class AiSearchService {
     };
 
     for (const [index, variant] of variants.entries()) {
-      if (index > 0 && index % 25 === 0) {
+      // Yield after every variant: a 5 000-variant search must not block the API event loop.
+      if (index > 0) {
         await new Promise((resolve) => setImmediate(resolve));
       }
       if (control.cancelled) {
