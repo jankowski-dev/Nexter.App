@@ -254,3 +254,6 @@ UI робота показывает рекомендацию, горизонт,
 - Владелец вручную создаёт и запускает робота.
 - Все действия — audit log.
 - Real-mode — только через внешний signer/HSM/AA, approvals и TOTP, отдельным проектом.
+
+**Phase 9** — Adaptive multi-stage search: fast screening of large proposal sets (necessary conditions + probabilistic markers), successive halving, local refinement around top candidates, and a held-out final evaluation. See `docs/plans/ai-adaptive-search-2026-11.md`.
+
