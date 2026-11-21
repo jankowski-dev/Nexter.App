@@ -464,6 +464,7 @@ export function AiTradingPage() {
         size="lg"
       >
         <AiCycleHistory
+          enabled={drawer === 'history'}
           onSelect={(id) => {
             selectCycle(id);
             setDrawer(null);
@@ -588,6 +589,7 @@ function AiCycleCard({
     );
   }
   const succeeded = cycle.steps.filter((step) => step.status === 'succeeded').length;
+  const totalSteps = Math.max(1, cycle.steps.length);
   const tone = cycleStatusTone(cycle.status);
   return (
     <Card className="p-3">
@@ -619,7 +621,7 @@ function AiCycleCard({
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-100">
         <div
           className="h-full rounded-full bg-emerald-500 transition-all"
-          style={{ width: `${(succeeded / cycle.steps.length) * 100}%` }}
+          style={{ width: `${(succeeded / totalSteps) * 100}%` }}
         />
       </div>
       {errorText ? (
@@ -684,10 +686,17 @@ function AiCycleCard({
   );
 }
 
-function AiCycleHistory({ onSelect }: { onSelect: (id: string) => void }) {
+function AiCycleHistory({
+  enabled,
+  onSelect,
+}: {
+  enabled: boolean;
+  onSelect: (id: string) => void;
+}) {
   const query = useQuery({
     queryKey: ['ai-cycles'],
     queryFn: fetchAiCycles,
+    enabled,
     retry: 1,
     refetchInterval: 60_000,
   });
