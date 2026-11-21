@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { aiCandidates, createDb, marketCandles, type Database } from '@nexter/db';
+import { aiCandidates, aiPipelineRuns, createDb, marketCandles, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
@@ -428,7 +428,11 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .send({ assetId, timeframe: '1h', horizonDays: 5, variants: 100, maxDrafts: 0 })
       .expect(202);
     const cycleId = cycle.body.cycleId as string;
-    let cycleStatus: { status: string; steps?: Array<{ key: string; status: string }> } = {
+    let cycleStatus: {
+      status: string;
+      steps?: Array<{ key: string; status: string }>;
+      recommended?: number;
+    } = {
       status: 'queued',
     };
     for (let attempt = 0; attempt < 300; attempt += 1) {
@@ -459,6 +463,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
       error: null,
     });
     expect(typeof historyRow?.recommended).toBe('number');
+    expect(historyRow?.recommended).toBe(cycleStatus.recommended);
     expect((historyRow?.steps as Array<{ key: string }>).map((step) => step.key)).toEqual([
       'data',
       'search',
@@ -466,6 +471,47 @@ describe.runIf(canRun)('AI trading control center API', () => {
       'drafts',
     ]);
     await agent.get('/api/v1/ai-trading/cycles?limit=0').expect(400);
+    await agent.get('/api/v1/ai-trading/cycles?limit=51').expect(400);
+    await agent.get('/api/v1/ai-trading/cycles?limit=abc').expect(400);
+
+    const [legacy] = await db
+      .insert(aiPipelineRuns)
+      .values({
+        profileId: profile.body.id as string,
+        trigger: 'manual',
+        status: 'failed',
+        summary: {
+          kind: 'cycle',
+          assetId,
+          timeframe: '1h',
+          steps: [
+            {
+              key: 'search',
+              status: 'failed',
+              message: null,
+              error: 'Failed query: select 1',
+              startedAt: null,
+              finishedAt: null,
+            },
+          ],
+          error: 'Failed query: select 1',
+        },
+      })
+      .returning({ id: aiPipelineRuns.id });
+    const legacyId = legacy?.id as string;
+    const legacyStatus = await agent.get(`/api/v1/ai-trading/cycle/${legacyId}`).expect(200);
+    expect(legacyStatus.body.recommended).toBe(0);
+    expect(legacyStatus.body.draftsCreated).toBe(0);
+    expect(legacyStatus.body.searchRunId).toBeNull();
+    expect(legacyStatus.body.error).toContain('База данных временно недоступна');
+    expect(legacyStatus.body.steps[0].error).toContain('База данных временно недоступна');
+
+    const legacyHistory = await agent.get('/api/v1/ai-trading/cycles').expect(200);
+    const legacyRow = (legacyHistory.body.data as Array<Record<string, unknown>>).find(
+      (item) => item.cycleId === legacyId,
+    );
+    expect(legacyRow).toMatchObject({ status: 'failed', recommended: 0, draftsCreated: 0 });
+    expect(legacyRow?.error).toContain('База данных временно недоступна');
 
     await agent
       .delete(`/api/v1/ai-trading/profile/tokens/${token.body.id}`)

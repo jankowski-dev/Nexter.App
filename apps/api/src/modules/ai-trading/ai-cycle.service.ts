@@ -40,10 +40,10 @@ import {
   STALE_CYCLE_MESSAGE,
   humanizeCycleError,
   isTransientDbError,
-  sanitizeStoredError,
   sleep,
   withDbRetry,
 } from './ai-error.helpers';
+import { normalizeCycle } from './ai-cycle.helpers';
 import { selectDraftCandidates } from './ai-risk.helpers';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
@@ -301,14 +301,15 @@ export class AiCycleService implements OnModuleInit {
       .limit(Math.min(50, Math.max(1, limit)));
 
     const summaries = rows
-      .map((row) => ({ row, summary: readSummary(row.summary) }))
-      .filter(
-        ({ summary }) =>
-          Boolean(summary) &&
-          typeof summary?.assetId === 'string' &&
-          typeof summary?.timeframe === 'string',
-      );
-    const assetIds = [...new Set(summaries.map(({ summary }) => summary.assetId))];
+      .map((row) => ({ row, cycle: normalizeCycle(row, row.summary) }))
+      .filter(({ cycle }) => Boolean(cycle.assetId && cycle.timeframe));
+    const assetIds = [
+      ...new Set(
+        summaries
+          .map(({ cycle }) => cycle.assetId)
+          .filter((assetId): assetId is string => Boolean(assetId)),
+      ),
+    ];
     const assetRows =
       assetIds.length > 0
         ? await this.db
@@ -319,22 +320,19 @@ export class AiCycleService implements OnModuleInit {
     const symbols = new Map(assetRows.map((asset) => [asset.id, asset.symbol]));
 
     return {
-      data: summaries.map(({ row, summary }) => ({
-        cycleId: row.id,
-        status: row.status as AiCycleStatus['status'],
-        assetId: summary.assetId,
-        symbol: symbols.get(summary.assetId) ?? '—',
-        timeframe: summary.timeframe,
-        steps: (Array.isArray(summary.steps) ? summary.steps : []).map((step) => ({
-          ...step,
-          error: sanitizeStoredError(step.error),
-        })),
-        searchRunId: summary.searchRunId ?? null,
-        recommended: Number.isFinite(summary.recommended) ? summary.recommended : 0,
-        draftsCreated: Number.isFinite(summary.draftsCreated) ? summary.draftsCreated : 0,
-        error: sanitizeStoredError(summary.error),
-        createdAt: row.createdAt.toISOString(),
-        finishedAt: row.finishedAt?.toISOString() ?? null,
+      data: summaries.map(({ cycle }) => ({
+        cycleId: cycle.cycleId,
+        status: cycle.status,
+        assetId: cycle.assetId ?? '',
+        symbol: cycle.assetId ? (symbols.get(cycle.assetId) ?? '—') : '—',
+        timeframe: cycle.timeframe ?? '',
+        steps: cycle.steps,
+        searchRunId: cycle.searchRunId,
+        recommended: cycle.recommended,
+        draftsCreated: cycle.draftsCreated,
+        error: cycle.error,
+        createdAt: cycle.createdAt,
+        finishedAt: cycle.finishedAt,
       })),
     };
   }
@@ -353,18 +351,19 @@ export class AiCycleService implements OnModuleInit {
     if (summary.kind !== 'cycle') {
       throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI cycle not found' });
     }
+    const cycle = normalizeCycle(run, run.summary);
     return {
-      cycleId: run.id,
-      status: run.status as AiCycleStatus['status'],
-      steps: summary.steps,
-      searchRunId: summary.searchRunId,
-      recommended: summary.recommended,
-      draftsCreated: summary.draftsCreated,
-      rejectionReasons: summary.rejectionReasons ?? {},
-      nearMisses: summary.nearMisses ?? [],
-      error: summary.error ?? null,
-      createdAt: run.createdAt.toISOString(),
-      finishedAt: run.finishedAt?.toISOString() ?? null,
+      cycleId: cycle.cycleId,
+      status: cycle.status,
+      steps: cycle.steps,
+      searchRunId: cycle.searchRunId,
+      recommended: cycle.recommended,
+      draftsCreated: cycle.draftsCreated,
+      rejectionReasons: cycle.rejectionReasons,
+      nearMisses: cycle.nearMisses,
+      error: cycle.error,
+      createdAt: cycle.createdAt,
+      finishedAt: cycle.finishedAt,
     };
   }
 
