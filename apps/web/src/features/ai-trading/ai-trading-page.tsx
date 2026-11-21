@@ -469,6 +469,14 @@ const cycleStepStatusLabels: Record<AiCycleStep['status'], string> = {
   skipped: 'пропущен',
 };
 
+const cycleStatusLabels: Record<AiCycleStatus['status'], string> = {
+  queued: 'в очереди',
+  running: 'выполняется',
+  succeeded: 'готово',
+  failed: 'ошибка',
+  cancelled: 'отменён',
+};
+
 function cycleErrorText(error: string): string {
   if (error === 'AI_CYCLE_STALE') {
     return 'Цикл прерван: превышено время ожидания. Запустите новый цикл.';
@@ -531,7 +539,7 @@ function AiCycleCard({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle>Цикл ИИ</CardTitle>
-          <Badge tone={tone}>{cycle.status}</Badge>
+          <Badge tone={tone}>{cycleStatusLabels[cycle.status]}</Badge>
           <span className="text-xs text-zinc-500">
             {succeeded} / {cycle.steps.length} шагов · {formatDateTime(cycle.createdAt)}
           </span>
