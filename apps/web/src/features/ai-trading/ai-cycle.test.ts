@@ -55,6 +55,12 @@ describe('AI cycle contracts', () => {
       'recommendations',
       'drafts',
     ]);
+    expect(status.steps[0]?.progressPct).toBeNull();
+    const withProgress = aiCycleStatusSchema.parse({
+      ...status,
+      steps: status.steps.map((step, index) => ({ ...step, progressPct: index === 0 ? 42 : null })),
+    });
+    expect(withProgress.steps[0]?.progressPct).toBe(42);
     expect(() =>
       aiCycleStatusSchema.parse({
         ...status,

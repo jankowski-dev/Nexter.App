@@ -66,6 +66,7 @@ function normalizeStep(value: unknown): AiCycleStep | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
   if (!aiCycleStepKeys.includes(raw.key as (typeof aiCycleStepKeys)[number])) return null;
+  const progress = raw.progressPct;
   const parsed = aiCycleStepSchema.safeParse({
     key: raw.key,
     status: aiCycleStepStatuses.includes(raw.status as (typeof aiCycleStepStatuses)[number])
@@ -73,6 +74,10 @@ function normalizeStep(value: unknown): AiCycleStep | null {
       : 'queued',
     message: text(raw.message),
     error: sanitizeStoredError(text(raw.error)),
+    progressPct:
+      typeof progress === 'number' && Number.isFinite(progress)
+        ? Math.min(100, Math.max(0, Math.floor(progress)))
+        : null,
     startedAt: text(raw.startedAt),
     finishedAt: text(raw.finishedAt),
   });

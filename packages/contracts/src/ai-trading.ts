@@ -349,6 +349,7 @@ export const aiCycleStepSchema = z.object({
   status: z.enum(aiCycleStepStatuses),
   message: z.string().nullable(),
   error: z.string().nullable(),
+  progressPct: z.number().int().min(0).max(100).nullable().default(null),
   startedAt: z.iso.datetime().nullable(),
   finishedAt: z.iso.datetime().nullable(),
 });
