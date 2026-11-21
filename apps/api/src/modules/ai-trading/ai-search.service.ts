@@ -573,12 +573,17 @@ export class AiSearchService {
         Number(candidate.policyScore) > 0,
     );
     const stats = this.buildStats(variants.length, evaluated, allMetrics, recommended);
+    const holdoutFailed = (item: AiSearchNearMiss) =>
+      item.reasons.includes('negative holdout') || item.reasons.includes('holdout failed');
     const nearMissesTop = nearMisses
-      .sort(
-        (left, right) =>
+      .sort((left, right) => {
+        const priority = Number(holdoutFailed(right)) - Number(holdoutFailed(left));
+        return (
+          priority ||
           Number(right.policyScore) - Number(left.policyScore) ||
-          Number(right.oosMedianReturnPct) - Number(left.oosMedianReturnPct),
-      )
+          Number(right.oosMedianReturnPct) - Number(left.oosMedianReturnPct)
+        );
+      })
       .slice(0, 10);
     const payload = {
       assetId: input.assetId,
