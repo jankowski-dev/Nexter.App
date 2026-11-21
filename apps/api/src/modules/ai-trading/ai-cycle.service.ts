@@ -10,14 +10,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
-import {
-  aiJobs,
-  aiPipelineRuns,
-  tradingBots,
-  watchlist,
-  watchlistGroups,
-  type Database,
-} from '@nexter/db';
+import { aiJobs, aiPipelineRuns, watchlist, watchlistGroups, type Database } from '@nexter/db';
 import {
   aiCycleStepKeys,
   type AiCycleRequest,
@@ -34,6 +27,8 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { TradingBotsService } from '../trading-bots/trading-bots.service';
 import { AiDataService } from './ai-data.service';
+import { selectDraftCandidates } from './ai-risk.helpers';
+import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
 import { AiTradingService } from './ai-trading.service';
 
@@ -79,6 +74,19 @@ function readSummary(value: unknown): CycleSummary {
   return value as CycleSummary;
 }
 
+const RISK_LABELS: Record<string, string> = {
+  'duplicate strategy': 'дубли стратегии',
+  'no worker slots': 'нет свободных слотов',
+  'budget too small': 'бюджет меньше 100 USD',
+  'max invested limit': 'лимит вложений',
+  'no free budget': 'свободный бюджет',
+  'token exposure limit': 'лимит на токен',
+};
+
+function riskLabel(reason: string): string {
+  return RISK_LABELS[reason] ?? reason;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 500) : 'Неизвестная ошибка';
 }
@@ -93,6 +101,7 @@ export class AiCycleService implements OnModuleInit {
     private readonly aiData: AiDataService,
     private readonly aiSearch: AiSearchService,
     private readonly bots: TradingBotsService,
+    private readonly risk: AiRiskService,
     private readonly audit: AuditService,
   ) {}
 
@@ -238,7 +247,7 @@ export class AiCycleService implements OnModuleInit {
       userAgent: meta.userAgent,
     });
 
-    void this.execute(userId, profile.id, cycle.id, token, input, meta).catch((error) => {
+    void this.execute(userId, cycle.id, token, input, meta).catch((error) => {
       this.logger.error(`AI cycle ${cycle.id} failed: ${errorMessage(error)}`);
     });
 
@@ -276,7 +285,6 @@ export class AiCycleService implements OnModuleInit {
 
   private async execute(
     userId: string,
-    profileId: string,
     cycleId: string,
     token: AiProfileToken,
     input: AiCycleRequest,
@@ -286,15 +294,7 @@ export class AiCycleService implements OnModuleInit {
       await this.runDataStep(userId, cycleId, token, input, meta);
       const searchRunId = await this.runSearchStep(userId, cycleId, input, meta);
       const candidates = await this.runRecommendationsStep(userId, cycleId, searchRunId);
-      await this.runDraftsStep(
-        userId,
-        profileId,
-        cycleId,
-        token,
-        candidates,
-        input.maxDrafts,
-        meta,
-      );
+      await this.runDraftsStep(userId, cycleId, token, candidates, input.maxDrafts, meta);
       await this.finish(userId, cycleId, 'succeeded');
     } catch (error) {
       const message = errorMessage(error);
@@ -421,7 +421,6 @@ export class AiCycleService implements OnModuleInit {
 
   private async runDraftsStep(
     userId: string,
-    profileId: string,
     cycleId: string,
     token: AiProfileToken,
     candidates: AiSearchCandidate[],
@@ -441,33 +440,33 @@ export class AiCycleService implements OnModuleInit {
       return;
     }
 
-    await this.setStep(cycleId, 'drafts', 'running', { message: 'Создаю черновики' });
-    const profile = await this.aiTrading.getProfile(userId);
-    const [existing] = await this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(tradingBots)
-      .where(
-        and(
-          eq(tradingBots.userId, userId),
-          eq(tradingBots.origin, 'ai'),
-          isNull(tradingBots.archivedAt),
-        ),
-      );
-    const slots = Math.max(0, profile.maxWorkers - Number(existing?.count ?? 0));
-    const target = Math.min(maxDrafts, slots, candidates.length);
-    if (target <= 0) {
+    await this.setStep(cycleId, 'drafts', 'running', { message: 'Проверяю лимиты и бюджет' });
+    const capacity = await this.risk.draftCapacity(userId);
+    const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const selection = selectDraftCandidates(
+      candidates.map((candidate) => ({
+        id: candidate.id,
+        assetId: token.asset.id,
+        strategyKey: candidate.strategyKey,
+      })),
+      capacity,
+      maxDrafts,
+    );
+    const skippedText = Object.entries(selection.skipped)
+      .map(([reason, count]) => `${riskLabel(reason)} — ${count}`)
+      .join('; ');
+    if (selection.selected.length === 0) {
       await this.setStep(cycleId, 'drafts', 'skipped', {
-        message: `Нет свободных слотов ИИ-роботов (${profile.maxWorkers})`,
+        message: `Нет доступного бюджета или лимитов${skippedText ? `: ${skippedText}` : ''}`,
       });
       return;
     }
 
-    const budget = Math.max(
-      100,
-      (Number(profile.budgetUsd) * profile.maxWorkerAllocationPct) / 100,
-    ).toFixed(2);
+    const budget = capacity.perBotBudgetUsd;
     let created = 0;
-    for (const candidate of candidates.slice(0, target)) {
+    for (const selected of selection.selected) {
+      const candidate = byId.get(selected.id);
+      if (!candidate) continue;
       try {
         await this.bots.createBot(
           userId,
@@ -503,7 +502,7 @@ export class AiCycleService implements OnModuleInit {
       summary.draftsCreated = created;
     });
     await this.setStep(cycleId, 'drafts', 'succeeded', {
-      message: `Создано черновиков: ${created}`,
+      message: `Создано черновиков: ${created}${skippedText ? `; пропущено: ${skippedText}` : ''}`,
     });
   }
 

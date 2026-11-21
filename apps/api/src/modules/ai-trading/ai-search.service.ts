@@ -274,10 +274,10 @@ export class AiSearchService {
         const worstOos = Number(value('oosWorstReturnPct', '-15'));
         const pnlThreshold = Math.min(-5, Number.isFinite(worstOos) ? worstOos : -5).toFixed(2);
         const drawdownThreshold = Math.max(15, candidateDrawdown * 1.5).toFixed(2);
-        const allocation = Math.max(
-          100,
-          (Number(profile.budgetUsd) * profile.maxWorkerAllocationPct) / 100,
-        ).toFixed(2);
+        const allocationPct = Math.min(profile.maxWorkerAllocationPct, profile.maxTokenExposurePct);
+        const allocation = Math.max(100, (Number(profile.budgetUsd) * allocationPct) / 100).toFixed(
+          2,
+        );
         const invalidationRules = [
           {
             code: 'DRAWDOWN' as const,

@@ -383,7 +383,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .get(`/api/v1/ai-trading/recommendations/${rejectableId}`)
       .expect(200);
     expect(recommendationCard.body.status).toBe('recommended');
-    expect(recommendationCard.body.suggestedAllocationUsd).toBe('6250.00');
+    expect(recommendationCard.body.suggestedAllocationUsd).toBe('5000.00');
     expect(recommendationCard.body.invalidationRules.length).toBeGreaterThan(0);
 
     const rejected = await agent
