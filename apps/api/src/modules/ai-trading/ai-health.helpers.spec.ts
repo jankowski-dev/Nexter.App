@@ -17,6 +17,9 @@ function input(overrides: Partial<AiHealthInput> = {}): AiHealthInput {
       status: 'accepted',
       metrics: { horizonDays: 5, maxDrawdownPct: 12, oosWorstReturnPct: -8 },
     },
+    strategyParams: {},
+    positions: [],
+    quotes: {},
     recentError: false,
     now,
     ...overrides,
@@ -80,5 +83,110 @@ describe('AI bot health', () => {
     );
     expect(result.level).toBe('ok');
     expect(result.reasons).toHaveLength(0);
+  });
+
+  const position = {
+    assetId: '44444444-4444-4444-8444-444444444444',
+    symbol: 'BASED',
+    avgCostUsd: '100.00',
+  };
+  const freshQuote = {
+    priceUsd: '94.00',
+    fetchedAt: new Date('2026-11-20T11:59:00.000Z'),
+  };
+
+  it('stops when the current price crosses the strategy stop-loss', () => {
+    const result = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: { [position.assetId]: freshQuote },
+        strategyParams: { stopLossPct: 5, takeProfitPct: 10 },
+      }),
+    );
+    expect(result.level).toBe('stop');
+    expect(result.reasons.map((reason) => reason.code)).toContain('STOP_HIT');
+  });
+
+  it('stops when the current price crosses the strategy take-profit', () => {
+    const result = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: {
+          [position.assetId]: { priceUsd: '106.00', fetchedAt: freshQuote.fetchedAt },
+        },
+        strategyParams: { stopLossPct: 5, takeProfitPct: 5 },
+      }),
+    );
+    expect(result.level).toBe('stop');
+    expect(result.reasons.map((reason) => reason.code)).toContain('TAKE_HIT');
+  });
+
+  it('reports stale and missing quotes for open positions', () => {
+    const stale = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: {
+          [position.assetId]: {
+            priceUsd: '100.00',
+            fetchedAt: new Date('2026-11-20T11:40:00.000Z'),
+          },
+        },
+      }),
+    );
+    expect(stale.level).toBe('stop');
+    expect(stale.reasons.map((reason) => reason.code)).toContain('QUOTE_STALE');
+
+    const missing = evaluateAiBotHealth(input({ positions: [position], quotes: {} }));
+    expect(missing.level).toBe('stop');
+    expect(missing.reasons.map((reason) => reason.code)).toContain('QUOTE_STALE');
+  });
+
+  it('does not apply position signals to stopped bots', () => {
+    const result = evaluateAiBotHealth(
+      input({
+        status: 'stopped',
+        positions: [position],
+        quotes: {
+          [position.assetId]: { priceUsd: '50.00', fetchedAt: freshQuote.fetchedAt },
+        },
+        strategyParams: { stopLossPct: 5, takeProfitPct: 5 },
+      }),
+    );
+    const codes = result.reasons.map((reason) => reason.code);
+    expect(codes).not.toContain('STOP_HIT');
+    expect(codes).not.toContain('TAKE_HIT');
+    expect(codes).not.toContain('QUOTE_STALE');
+  });
+
+  it('deduplicates the same signal across multiple positions', () => {
+    const second = {
+      assetId: '55555555-5555-4555-8555-555555555555',
+      symbol: 'XRP',
+      avgCostUsd: '100.00',
+    };
+    const result = evaluateAiBotHealth(
+      input({
+        positions: [position, second],
+        quotes: {
+          [position.assetId]: freshQuote,
+          [second.assetId]: { priceUsd: '90.00', fetchedAt: freshQuote.fetchedAt },
+        },
+        strategyParams: { stopLossPct: 5 },
+      }),
+    );
+    expect(result.reasons.filter((reason) => reason.code === 'STOP_HIT')).toHaveLength(1);
+  });
+
+  it('does not invent stop/take thresholds without percentage params', () => {
+    const result = evaluateAiBotHealth(
+      input({
+        positions: [position],
+        quotes: { [position.assetId]: freshQuote },
+        strategyParams: {},
+      }),
+    );
+    const codes = result.reasons.map((reason) => reason.code);
+    expect(codes).not.toContain('STOP_HIT');
+    expect(codes).not.toContain('TAKE_HIT');
   });
 });
