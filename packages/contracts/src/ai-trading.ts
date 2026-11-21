@@ -333,6 +333,22 @@ export const aiCycleStepSchema = z.object({
   finishedAt: z.iso.datetime().nullable(),
 });
 export const aiCycleStartResponseSchema = z.object({ cycleId: z.uuid() });
+export const aiSearchNearMissSchema = z.object({
+  strategyKey: z.string(),
+  strategyName: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  oosMedianReturnPct: z.string(),
+  oosMeanReturnPct: z.string(),
+  oosWorstReturnPct: z.string(),
+  maxDrawdownPct: z.string(),
+  trades: z.number().int(),
+  positiveFolds: z.number().int(),
+  stabilityPct: z.string(),
+  holdoutReturnPct: z.string().nullable(),
+  policyScore: z.string(),
+  reasons: z.array(z.string()),
+});
+
 export const aiCycleStatusSchema = z.object({
   cycleId: z.uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
@@ -341,6 +357,7 @@ export const aiCycleStatusSchema = z.object({
   recommended: z.number().int(),
   draftsCreated: z.number().int(),
   rejectionReasons: z.record(z.string(), z.number().int()).default({}),
+  nearMisses: z.array(aiSearchNearMissSchema).default([]),
   error: z.string().nullable(),
   createdAt: z.iso.datetime(),
   finishedAt: z.iso.datetime().nullable(),
@@ -422,6 +439,7 @@ export const aiSearchResultsSchema = z.object({
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   stats: aiSearchStatsSchema,
   candidates: z.array(aiSearchCandidateSchema),
+  nearMisses: z.array(aiSearchNearMissSchema).default([]),
   rejectionReasons: z.record(z.string(), z.number().int()),
 });
 
@@ -515,6 +533,7 @@ export type AiCycleRequest = z.infer<typeof aiCycleRequestSchema>;
 export type AiCycleStartResponse = z.infer<typeof aiCycleStartResponseSchema>;
 export type AiCycleStatus = z.infer<typeof aiCycleStatusSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
+export type AiSearchNearMiss = z.infer<typeof aiSearchNearMissSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
 export type AiSearchStatus = z.infer<typeof aiSearchStatusSchema>;
 export type AiSearchResults = z.infer<typeof aiSearchResultsSchema>;
