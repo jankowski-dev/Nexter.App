@@ -37,12 +37,18 @@ describe('AI search helpers', () => {
     }
   });
 
-  it('builds eight non-overlapping OOS folds and a 30-day holdout', () => {
-    const { folds, holdout } = buildSearchFolds(hourlyCandles(180), '1h');
+  it('builds eight non-overlapping OOS folds and a warmup-prefixed 30-day holdout', () => {
+    const { folds, holdout, holdoutWarmup, holdoutWarmupCandles } = buildSearchFolds(
+      hourlyCandles(180),
+      '1h',
+    );
     expect(folds).toHaveLength(8);
     expect(folds[0]?.warmupCandles).toBe(360);
     expect(folds[0]?.candles).toHaveLength(600);
     expect(holdout).toHaveLength(720);
+    expect(holdoutWarmup).toHaveLength(360);
+    expect(holdoutWarmupCandles).toBe(360);
+    expect((holdoutWarmup.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);
     const lastFold = folds.at(-1);
     expect(lastFold?.candles.at(-1)?.date).not.toBe(holdout[0]?.date);
     expect((lastFold?.candles.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);

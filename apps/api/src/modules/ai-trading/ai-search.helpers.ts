@@ -17,6 +17,8 @@ export interface SearchFold {
 export interface SearchFoldSet {
   folds: SearchFold[];
   holdout: BotCandle[];
+  holdoutWarmup: BotCandle[];
+  holdoutWarmupCandles: number;
 }
 
 export interface VariantMetrics {
@@ -159,9 +161,12 @@ export function buildSearchFolds(
       warmupCandles: oosStart - warmupStart,
     });
   }
+  const holdoutWarmupCandles = Math.min(searchEnd, Math.max(15 * perDay, 240));
   return {
     folds,
     holdout: use.slice(searchEnd, total),
+    holdoutWarmup: use.slice(searchEnd - holdoutWarmupCandles, searchEnd),
+    holdoutWarmupCandles,
   };
 }
 
