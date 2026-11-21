@@ -42,13 +42,20 @@ import {
 } from './ai-error.helpers';
 import { TIMEFRAME_MS } from './ai-features';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
+import { evaluateVariantFolds } from './ai-search.evaluate';
 import {
-  aggregateVariant,
   buildSearchFolds,
   generateSearchVariants,
+  searchWorkerCount,
   type SearchVariant,
   type VariantMetrics,
 } from './ai-search.helpers';
+import {
+  defaultWorkerPath,
+  runWorkerPool,
+  shouldUseWorkers,
+  workerFileExists,
+} from './ai-search.pool';
 
 interface SearchMeta {
   ip?: string;
@@ -544,57 +551,28 @@ export class AiSearchService {
       });
     };
 
-    for (const [index, variant] of variants.entries()) {
-      // Yield after every variant: a 5 000-variant search must not block the API event loop.
-      if (index > 0) {
-        await new Promise((resolve) => setImmediate(resolve));
+    const cancelRun = async () => {
+      await this.db
+        .update(aiPipelineRuns)
+        .set({ status: 'cancelled', finishedAt: new Date() })
+        .where(eq(aiPipelineRuns.id, runId));
+      this.active.delete(runId);
+    };
+
+    const processEvaluation = (
+      variant: SearchVariant,
+      evaluation: ReturnType<typeof evaluateVariantFolds>,
+    ) => {
+      if (evaluation.unknownStrategy) {
+        reject('unknown strategy');
+        return;
       }
-      if (control.cancelled) {
-        await this.db
-          .update(aiPipelineRuns)
-          .set({ status: 'cancelled', finishedAt: new Date() })
-          .where(eq(aiPipelineRuns.id, runId));
-        this.active.delete(runId);
+      const aggregate = evaluation.aggregate;
+      if (!aggregate) {
+        reject('backtest failed');
         return;
       }
 
-      evaluated += 1;
-      if (evaluated % 50 === 0) {
-        await this.updateProgress(runId, input, variants.length, evaluated);
-      }
-      const definition = strategyByKey.get(variant.strategyKey);
-      if (!definition) {
-        reject('unknown strategy');
-        continue;
-      }
-
-      const foldResults: Array<{
-        totalReturnPct: string;
-        maxDrawdownPct: string;
-        tradesCount: number;
-      }> = [];
-      let failed = false;
-      for (const fold of folds.folds) {
-        try {
-          const result = runBacktest(definition, variant.params, fold.candles, {
-            initialCapitalUsd: '1000',
-            feeBps: FEE_BPS,
-            slippageBps: SLIPPAGE_BPS,
-            changeLookbackCandles: candlesPerDay(input.timeframe),
-            warmupCandles: fold.warmupCandles,
-          });
-          foldResults.push(result.stats);
-        } catch {
-          failed = true;
-          break;
-        }
-      }
-      if (failed || foldResults.length === 0) {
-        reject('backtest failed');
-        continue;
-      }
-
-      const aggregate = aggregateVariant(foldResults);
       allMetrics.push({
         returnPct: Number(aggregate.oosMedianReturnPct),
         drawdown: Number(aggregate.maxDrawdownPct),
@@ -603,29 +581,73 @@ export class AiSearchService {
       if (aggregate.trades < MIN_TRADES) {
         reject('too few trades');
         rememberNearMiss(aggregate, variant, ['too few trades']);
-        continue;
+        return;
       }
       if (Number(aggregate.oosMedianReturnPct) <= 0) {
         reject('non-positive OOS median');
-        continue;
+        return;
       }
       if (aggregate.positiveFolds < MIN_POSITIVE_FOLDS) {
         reject('unstable folds');
         rememberNearMiss(aggregate, variant, ['unstable folds']);
-        continue;
+        return;
       }
       if (Number(aggregate.maxDrawdownPct) > MAX_DRAWDOWN_PCT) {
         reject('drawdown too high');
         rememberNearMiss(aggregate, variant, ['drawdown too high']);
-        continue;
+        return;
       }
       if (Number(aggregate.oosWorstReturnPct) < MIN_WORST_RETURN) {
         reject('worst fold too deep');
         rememberNearMiss(aggregate, variant, ['worst fold too deep']);
-        continue;
+        return;
       }
 
       metrics.push({ ...aggregate, variant, holdoutReturnPct: null });
+    };
+
+    const workerCount = searchWorkerCount();
+    if (shouldUseWorkers(process.env, workerCount, workerFileExists())) {
+      let lastWritten = 0;
+      const pool = await runWorkerPool(variants, folds.folds, input.timeframe, {
+        workerCount,
+        workerPath: defaultWorkerPath(),
+        control,
+        onProgress: (value) => {
+          evaluated = value;
+          if (value - lastWritten >= 50 || value === variants.length) {
+            lastWritten = value;
+            void this.updateProgress(runId, input, variants.length, value).catch(() => undefined);
+          }
+        },
+      });
+      if (pool.cancelled || control.cancelled) {
+        await cancelRun();
+        return;
+      }
+      evaluated = variants.length;
+      pool.results.forEach((result, index) => {
+        const variant = variants[index];
+        if (variant) processEvaluation(variant, result);
+      });
+      await this.updateProgress(runId, input, variants.length, evaluated);
+    } else {
+      for (const [index, variant] of variants.entries()) {
+        // Yield after every variant: a 5 000-variant search must not block the API event loop.
+        if (index > 0) {
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        if (control.cancelled) {
+          await cancelRun();
+          return;
+        }
+
+        evaluated += 1;
+        if (evaluated % 50 === 0) {
+          await this.updateProgress(runId, input, variants.length, evaluated);
+        }
+        processEvaluation(variant, evaluateVariantFolds(variant, folds.folds, input.timeframe));
+      }
     }
 
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
