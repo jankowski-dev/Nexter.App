@@ -1,6 +1,6 @@
 # Adaptive multi-stage AI search plan
 
-Status: planned. Supersedes the flat “5,000 random variants” search after Phase 8 hardening. The goal is to explore far more parameter space without paying the full 8-fold backtest cost for every candidate.
+Status: implemented 2026-11-22. Supersedes the flat “5,000 random variants” search after Phase 8 hardening. The goal is to explore far more parameter space without paying the full 8-fold backtest cost for every candidate.
 
 ## Goal
 
