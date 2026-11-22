@@ -1,4 +1,5 @@
 import { Input } from '@/components/ui/input';
+import { Select } from '@/components/ui/select';
 import type { BotStrategyTemplate } from '@nexter/contracts';
 
 export function StrategyParamInputs({
@@ -16,14 +17,25 @@ export function StrategyParamInputs({
         <label key={field.key} className="block text-sm text-zinc-600">
           {field.label}
           <div className="mt-1 flex items-center gap-2">
-            <Input
-              type="number"
-              min={field.min}
-              max={field.max}
-              step={field.step ?? (field.integer ? 1 : 'any')}
-              value={values[field.key] ?? ''}
-              onChange={(event) => onChange(field.key, event.target.value)}
-            />
+            {field.type === 'boolean' ? (
+              <Select
+                className="min-w-0 flex-1"
+                value={values[field.key] ?? 'false'}
+                onChange={(event) => onChange(field.key, event.target.value)}
+              >
+                <option value="false">Нет</option>
+                <option value="true">Да</option>
+              </Select>
+            ) : (
+              <Input
+                type="number"
+                min={field.min}
+                max={field.max}
+                step={field.step ?? (field.integer ? 1 : 'any')}
+                value={values[field.key] ?? ''}
+                onChange={(event) => onChange(field.key, event.target.value)}
+              />
+            )}
             {field.unit ? <span className="text-xs text-zinc-500">{field.unit}</span> : null}
           </div>
           {field.hint ? (

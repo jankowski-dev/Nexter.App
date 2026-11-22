@@ -44,7 +44,7 @@ import { BotIcon } from './bot-icon';
 import { BotUptimeText } from './bot-uptime';
 import { StrategyIcon } from './strategy-icon';
 import { StrategyParamInputs } from './strategy-param-inputs';
-import { formToParams, paramsToForm } from './strategy-params';
+import { formatStrategyParamValue, formToParams, paramsToForm } from './strategy-params';
 
 export type TestingMode = 'bots' | 'strategies';
 type Sort = 'pnl' | 'equity' | 'profitFactor';
@@ -1200,8 +1200,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                         ) : null}
                       </div>
                       <div className="shrink-0 font-mono text-sm text-zinc-900">
-                        {value === undefined ? '—' : String(value)}
-                        {field.unit ? ` ${field.unit}` : ''}
+                        {formatStrategyParamValue(field, value)}
                       </div>
                     </div>
                   );

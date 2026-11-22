@@ -76,3 +76,108 @@ export function bollingerBands(
 export function percent(value: Decimal | null): Decimal | null {
   return value === null ? null : value.mul(100);
 }
+
+export interface DailyPriceStats {
+  /** UTC calendar day in `YYYY-MM-DD` form. */
+  day: string;
+  low: Decimal;
+  high: Decimal;
+  mean: Decimal;
+  median: Decimal;
+}
+
+export interface DailyAverageLevels {
+  /** Number of complete days used for the levels. */
+  days: number;
+  /** Selected entry level: mean or median of the daily lows. */
+  low: Decimal;
+  /** Selected exit level: mean or median of the daily highs. */
+  high: Decimal;
+  averageLow: Decimal;
+  averageHigh: Decimal;
+  medianLow: Decimal;
+  medianHigh: Decimal;
+}
+
+function utcDayKey(value: Date): string | null {
+  if (Number.isNaN(value.getTime())) return null;
+  return value.toISOString().slice(0, 10);
+}
+
+function median(values: Decimal[]): Decimal {
+  const sorted = [...values].sort((left, right) => left.comparedTo(right));
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[middle - 1] as Decimal).plus(sorted[middle] as Decimal).div(2);
+  }
+  return sorted[middle] as Decimal;
+}
+
+function summarizeDay(day: string, prices: Decimal[]): DailyPriceStats {
+  let low = prices[0] as Decimal;
+  let high = prices[0] as Decimal;
+  let sum = new Decimal(0);
+  for (const price of prices) {
+    if (price.lt(low)) low = price;
+    if (price.gt(high)) high = price;
+    sum = sum.plus(price);
+  }
+  return { day, low, high, mean: sum.div(prices.length), median: median(prices) };
+}
+
+/**
+ * Computes the average or median daily low/high over the most recent complete
+ * UTC days. The current UTC day is ignored because it is still forming;
+ * future samples are ignored as well. Returns null until at least
+ * `lookbackDays` complete days exist.
+ */
+export function dailyAverageLevels(
+  samples: StrategySample[],
+  now: Date,
+  lookbackDays: number,
+  useMedian: boolean,
+): DailyAverageLevels | null {
+  if (lookbackDays <= 0) return null;
+  const today = utcDayKey(now);
+  if (!today) return null;
+
+  // Walk backwards and stop once the most recent `lookbackDays` complete days
+  // are collected. This keeps per-tick cost independent of older history.
+  const buckets = new Map<string, Decimal[]>();
+  for (let index = samples.length - 1; index >= 0; index -= 1) {
+    const sample = samples[index] as StrategySample;
+    const day = utcDayKey(sample.capturedAt);
+    if (!day || day >= today) continue;
+    let prices = buckets.get(day);
+    if (!prices) {
+      if (buckets.size >= lookbackDays) break;
+      prices = [];
+      buckets.set(day, prices);
+    }
+    prices.push(decimal(sample.priceUsd));
+  }
+  if (buckets.size < lookbackDays) return null;
+
+  const window = [...buckets.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([day, prices]) => summarizeDay(day, prices));
+  const lows = window.map((day) => day.low);
+  const highs = window.map((day) => day.high);
+  const averageLow = lows
+    .reduce((total, value) => total.plus(value), new Decimal(0))
+    .div(window.length);
+  const averageHigh = highs
+    .reduce((total, value) => total.plus(value), new Decimal(0))
+    .div(window.length);
+  const medianLow = median(lows);
+  const medianHigh = median(highs);
+  return {
+    days: window.length,
+    low: useMedian ? medianLow : averageLow,
+    high: useMedian ? medianHigh : averageHigh,
+    averageLow,
+    averageHigh,
+    medianLow,
+    medianHigh,
+  };
+}

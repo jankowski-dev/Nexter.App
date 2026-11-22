@@ -13,6 +13,7 @@ export const botStrategyKeys = [
   'bollinger_reversion',
   'squeeze_breakout',
   'failed_breakout',
+  'daily_average',
   'static_limit',
 ] as const;
 
@@ -44,6 +45,7 @@ export const botStrategyParamFieldSchema = z.object({
   step: z.number().optional(),
   unit: z.string().optional(),
   integer: z.boolean().optional(),
+  type: z.enum(['number', 'boolean']).optional(),
 });
 
 export const botStrategyTemplateSchema = z.object({

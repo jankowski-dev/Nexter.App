@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { Decimal } from 'decimal.js';
 import {
   bollingerBands,
+  dailyAverageLevels,
   rollingHigh,
   rollingHighBefore,
   rollingLow,
@@ -847,6 +848,96 @@ export const failedBreakout: StrategyDefinition = {
   },
 };
 
+const dailyAverageParamsSchema = z.object({
+  lookbackDays: z.number().int().min(5).max(60).default(20),
+  entryBufferPct: z.number().min(0).max(10).default(0.5),
+  exitBufferPct: z.number().min(0).max(10).default(0.5),
+  takeProfitPct: z.number().min(0.1).max(100).default(5),
+  stopLossPct: z.number().min(0.1).max(50).default(8),
+  useMedian: z.boolean().default(false),
+});
+
+export const dailyAverage: StrategyDefinition = {
+  key: 'daily_average',
+  version: 1,
+  icon: 'bands',
+  kind: 'system',
+  historySampling: 'hourly',
+  name: 'Дневная средняя',
+  description: 'Покупает у средней или медианной дневной низкой цены и продаёт у дневной высокой.',
+  guide:
+    'Стратегия собирает историю сделок в полные календарные дни UTC. День считается полным, когда его дата меньше текущей даты UTC; сегодняшние и будущие сэмплы игнорируются, поэтому незакрытый день не влияет на уровни. Для каждого полного дня считаются low, high, среднее и медиана по ценам сэмплов (закрытиям свечей или котировкам), а затем берутся последние `lookbackDays` полных дней. По ним считаются среднее арифметическое и медиана дневных low и high. При выключенном `useMedian` вход и выход используют средние значения, при включённом — медианы; медиана устойчивее к отдельным выбросам. Вход: цена не выше выбранного дневного low минус `entryBufferPct` (по умолчанию 0,5%). Выход: цена не ниже выбранного дневного high плюс `exitBufferPct`, либо тейк-профит/стоп-лосс от средней цены позиции; защитные выходы проверяются первыми. Если полных дней меньше `lookbackDays`, стратегия держит и не входит. Дневные low/high считаются по ценам сэмплов, а не по фитилям свечей, поэтому на 1h/4h истории это внутридневные закрытия, а на дневных свечах — одно значение в день. В живом роботе берётся по одному сэмплу котировки на час в пределах срока хранения истории (`BOT_SAMPLE_RETENTION_DAYS`, по умолчанию 30 дней); для `lookbackDays` больше доступного срока робот будет держать.',
+  bestFor:
+    'Боковик и регулярные откаты к дневным минимумам, ликвидные токены с выраженными дневными диапазонами и достаточной историей.',
+  risks:
+    'В затяжном падении цена может оставаться ниже среднего дневного low намного дольше, а «средний» уровень будет опускаться вместе с рынком. На тонких токенах дневной диапазон искажается отдельными сделками. Нужны полные дни истории: при нехватке данных робот не торгует. Стоп-лосс ограничивает убыток, но не исключает гэп ниже него.',
+  paramFields: [
+    {
+      key: 'lookbackDays',
+      label: 'Полных дней',
+      hint: 'Сколько последних завершённых дней UTC усреднять',
+      min: 5,
+      max: 60,
+      step: 1,
+      integer: true,
+    },
+    {
+      key: 'entryBufferPct',
+      label: 'Буфер входа ниже low',
+      hint: 'Насколько цена должна быть ниже выбранного дневного low',
+      min: 0,
+      max: 10,
+      step: 0.1,
+      unit: '%',
+    },
+    {
+      key: 'exitBufferPct',
+      label: 'Буфер выхода выше high',
+      hint: 'Насколько цена должна быть выше выбранного дневного high',
+      min: 0,
+      max: 10,
+      step: 0.1,
+      unit: '%',
+    },
+    { key: 'takeProfitPct', label: 'Тейк-профит', min: 0.1, max: 100, step: 0.1, unit: '%' },
+    { key: 'stopLossPct', label: 'Стоп-лосс', min: 0.1, max: 50, step: 0.1, unit: '%' },
+    {
+      key: 'useMedian',
+      label: 'Медиана вместо среднего',
+      hint: 'Выключено — среднее арифметическое дневных low/high; включено — медиана',
+      type: 'boolean',
+    },
+  ],
+  defaultParams: dailyAverageParamsSchema.parse({}),
+  parseParams: (value) => dailyAverageParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = dailyAverageParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+    const levels = dailyAverageLevels(ctx.history, ctx.now, params.lookbackDays, params.useMedian);
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      if (ctx.takeProfitEnabled !== false && price.gte(avg.mul(1 + params.takeProfitPct / 100))) {
+        return sell('тейк-профит');
+      }
+      if (ctx.stopLossEnabled !== false && price.lte(avg.mul(1 - params.stopLossPct / 100))) {
+        return sell('стоп-лосс');
+      }
+      if (!levels) return hold('недостаточно полных дней');
+      if (price.gte(levels.high.mul(1 + params.exitBufferPct / 100))) {
+        return sell('цена у дневной высокой');
+      }
+      return hold('ожидание дневной высокой');
+    }
+
+    if (!levels) return hold('недостаточно полных дней');
+    if (price.lte(levels.low.mul(1 - params.entryBufferPct / 100))) {
+      return buy('цена у дневной низкой');
+    }
+    return hold('цена выше дневной низкой');
+  },
+};
+
 const staticLimitParamsSchema = z
   .object({
     buyPriceUsd: z.number().min(0).max(1e15).default(0),
@@ -966,6 +1057,7 @@ export const strategyDefinitions = [
   bollingerReversion,
   squeezeBreakout,
   failedBreakout,
+  dailyAverage,
   staticLimit,
 ];
 
