@@ -338,19 +338,22 @@ export function holdoutBlockStats(
   blocks = 3,
   options: { exposure?: boolean[] } = {},
 ): HoldoutBlockStats | null {
-  if (blocks <= 0 || equityCurve.length < blocks) return null;
+  if (blocks <= 0 || equityCurve.length < blocks * 2) return null;
   const size = Math.floor(equityCurve.length / blocks);
   if (size <= 0) return null;
   let previous = Number(equityCurve[0]?.equityUsd ?? 0);
   if (!Number.isFinite(previous) || previous <= 0) return null;
   const returnsPct: string[] = [];
+  const numeric: number[] = [];
   let traded = 0;
   for (let index = 0; index < blocks; index += 1) {
     const startIndex = index * size;
     const endIndex = index === blocks - 1 ? equityCurve.length - 1 : (index + 1) * size - 1;
     const end = Number(equityCurve[endIndex]?.equityUsd ?? previous);
     if (!Number.isFinite(end)) return null;
-    returnsPct.push(((end / previous - 1) * 100).toFixed(2));
+    const blockReturn = (end / previous - 1) * 100;
+    numeric.push(blockReturn);
+    returnsPct.push(blockReturn.toFixed(2));
     previous = end;
     if (
       options.exposure?.length === equityCurve.length &&
@@ -359,7 +362,6 @@ export function holdoutBlockStats(
       traded += 1;
     }
   }
-  const numeric = returnsPct.map(Number);
   return {
     returnsPct,
     positive: numeric.filter((value) => value > 0).length,
