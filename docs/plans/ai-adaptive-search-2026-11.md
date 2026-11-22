@@ -125,3 +125,15 @@ A 5,000-variant pilot on the local 4-core AMD machine:
 - one-fold evaluation took **191 s** for 5,000 variants on 4 workers.
 
 Extrapolation: 50,000 one-fold probes ≈ 32 min locally; 1,000,000 ≈ 10+ hours. This confirms that the hard screen alone is not the 99% filter. The next implementation must be a **signal-only evaluator with precomputed indicators**, not a full `runBacktest` on one fold. The 31.56% survivor rate is a useful baseline for the signal screen's recall.
+
+## Staged pilot 2026-11-22
+
+10,000 proposals on the local 4-core machine, synthetic 180-day 1h fixture:
+
+- hard parameter/data screen: **0 rejected** (generator already valid);
+- one-fold trade probe: **2,954 survivors (29.54%)**;
+- full 8-fold evaluation: 2,954; 2,833 passed the minimum trades;
+- top-10 holdout on the synthetic fixture: **10 recommendations** (fixture result, not a production claim);
+- time: one-fold **442 s**, full 8 folds **984 s**; generate+screen < 1 s.
+
+The funnel cut full 8-fold evaluations by ~70%, but the one-fold probe still cost 7.4 min. A 50k/1M pilot needs the signal-only evaluator, not a one-fold full backtest. This is the baseline for Phase 9.
