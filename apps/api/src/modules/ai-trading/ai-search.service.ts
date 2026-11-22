@@ -53,6 +53,7 @@ import {
   minTradesFor,
   stabilityPctFor,
   searchWorkerCount,
+  shuffleVariantsInPlace,
   MIN_SEARCH_DAYS,
   type SearchVariant,
   type VariantMetrics,
@@ -693,6 +694,10 @@ export class AiSearchService {
     control: { cancelled: boolean },
     meta: SearchMeta,
   ): Promise<void> {
+    // The generator groups variants by strategy. Shuffle deterministically so
+    // worker chunks mix fast and slow strategies instead of waiting for one
+    // slow stateful chunk.
+    shuffleVariantsInPlace(variants, input.seed ?? 7);
     const folds = buildSearchFolds(candles, input.timeframe, lookbackDays);
     const foldCount = folds.folds.length;
     const minTrades = minTradesFor(foldCount);
