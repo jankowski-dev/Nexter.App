@@ -3,6 +3,7 @@ import {
   aiCycleStepKeys,
   aiCycleStepSchema,
   aiCycleStepStatuses,
+  aiSearchFunnelStageKeySchema,
   aiSearchNearMissSchema,
   type AiCycleStatus,
   type AiCycleStep,
@@ -67,6 +68,7 @@ function normalizeStep(value: unknown): AiCycleStep | null {
   const raw = value as Record<string, unknown>;
   if (!aiCycleStepKeys.includes(raw.key as (typeof aiCycleStepKeys)[number])) return null;
   const progress = raw.progressPct;
+  const stage = aiSearchFunnelStageKeySchema.safeParse(raw.stage);
   const parsed = aiCycleStepSchema.safeParse({
     key: raw.key,
     status: aiCycleStepStatuses.includes(raw.status as (typeof aiCycleStepStatuses)[number])
@@ -78,6 +80,7 @@ function normalizeStep(value: unknown): AiCycleStep | null {
       typeof progress === 'number' && Number.isFinite(progress)
         ? Math.min(100, Math.max(0, Math.floor(progress)))
         : null,
+    stage: stage.success ? stage.data : null,
     startedAt: text(raw.startedAt),
     finishedAt: text(raw.finishedAt),
   });

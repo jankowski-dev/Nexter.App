@@ -1,4 +1,10 @@
-import { BadRequestException, NotFoundException, type ArgumentsHost } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+  type ArgumentsHost,
+} from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
@@ -48,6 +54,25 @@ describe('AllExceptionsFilter cache headers', () => {
       const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
       expect(payload.error?.code).toBe(code);
     }
+  });
+
+  it('preserves the AI cycle limit code on 429 responses', () => {
+    const { reply, host } = harness('/api/v1/ai-trading/cycle');
+
+    new AllExceptionsFilter().catch(
+      new HttpException(
+        {
+          code: 'AI_CYCLE_LIMIT',
+          message: 'Дневной лимит циклов ИИ исчерпан: 1 за 24 часа.',
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      ),
+      host,
+    );
+
+    expect(reply.status).toHaveBeenCalledWith(429);
+    const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
+    expect(payload.error?.code).toBe('AI_CYCLE_LIMIT');
   });
 
   it('leaves the SPA fallback alone', () => {

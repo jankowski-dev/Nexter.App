@@ -1,9 +1,10 @@
+import { aiSearchFunnelStageLabels, type AiSearchFunnelStageKey } from '@nexter/contracts';
 import { mulberry32, type VariantMetrics } from './ai-search.helpers';
 
 export const FULL_MAX_DRAWDOWN_PCT = 20;
 export const FULL_MIN_WORST_RETURN_PCT = -15;
 
-export type FunnelStageKey = 'screen' | 'probe' | 'budget' | 'full' | 'control' | 'holdout';
+export type FunnelStageKey = AiSearchFunnelStageKey;
 
 export interface FunnelStageReport {
   key: FunnelStageKey;
@@ -38,14 +39,7 @@ export interface ControlEstimateInput {
   passed: number;
 }
 
-export const FUNNEL_STAGE_LABELS: Record<FunnelStageKey, string> = {
-  screen: 'Сигналы',
-  probe: 'Проба',
-  budget: 'Бюджет',
-  full: 'OOS',
-  control: 'Контроль',
-  holdout: 'Holdout',
-};
+export const FUNNEL_STAGE_LABELS: Record<FunnelStageKey, string> = aiSearchFunnelStageLabels;
 
 const STAGE_WEIGHTS: Record<FunnelStageKey, number> = {
   screen: 0.06,

@@ -101,6 +101,37 @@ describe('normalizeCycle', () => {
     expect(cycle.nearMisses).toHaveLength(1);
     expect(cycle.nearMisses[0]?.strategyKey).toBe('grid_range');
   });
+
+  it('keeps a valid search stage and clears unknown stages', () => {
+    const cycle = normalizeCycle(run, {
+      kind: 'cycle',
+      assetId,
+      timeframe: '1h',
+      steps: [
+        {
+          key: 'search',
+          status: 'running',
+          message: 'Проба: 5 / 10',
+          error: null,
+          stage: 'probe',
+          startedAt: '2026-11-21T09:00:00.000Z',
+          finishedAt: null,
+        },
+        {
+          key: 'data',
+          status: 'succeeded',
+          message: 'ok',
+          error: null,
+          stage: 'unknown-stage',
+          startedAt: '2026-11-21T09:00:00.000Z',
+          finishedAt: '2026-11-21T09:01:00.000Z',
+        },
+      ],
+    });
+
+    expect(cycle.steps.find((step) => step.key === 'search')?.stage).toBe('probe');
+    expect(cycle.steps.find((step) => step.key === 'data')?.stage).toBeNull();
+  });
 });
 
 describe('searchPollTimeout', () => {

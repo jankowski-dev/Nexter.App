@@ -720,4 +720,100 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(dashboard.body.workersCount).toBe(1);
     expect(dashboard.body.activeWorkers).toBe(0);
   }, 120_000);
+
+  it('stores the cycle limit and skips the 24h check when unlimited', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const defaults = await agent.get('/api/v1/settings/ai').expect(200);
+    expect(defaults.body.cycleLimit).toEqual({ perDay: 20, unlimited: false });
+
+    for (const cycleLimit of [
+      { perDay: 0, unlimited: false },
+      { perDay: 201, unlimited: false },
+      { perDay: 2.5, unlimited: false },
+      { perDay: 10, unlimited: 'yes' },
+    ]) {
+      const rejected = await agent
+        .put('/api/v1/settings/ai')
+        .set('x-csrf-token', owner.csrf)
+        .send({ cycleLimit })
+        .expect(400);
+      expect(rejected.body.error.code).toBe('VALIDATION_ERROR');
+    }
+
+    const finite = await agent
+      .put('/api/v1/settings/ai')
+      .set('x-csrf-token', owner.csrf)
+      .send({ cycleLimit: { perDay: 1, unlimited: false } })
+      .expect(200);
+    expect(finite.body.cycleLimit).toEqual({ perDay: 1, unlimited: false });
+
+    const profile = await agent.get('/api/v1/ai-trading/profile').expect(200);
+    expect(profile.body.modelSettings).toMatchObject({
+      model: 'deepseek-flash',
+      maxTokens: 2000,
+    });
+
+    const assets = await agent.get('/api/v1/assets').expect(200);
+    const based = (assets.body.assets as Array<{ id: string; symbol: string }>).find(
+      (asset) => asset.symbol === 'BASED',
+    );
+    const assetId = based?.id as string;
+    await agent
+      .post('/api/v1/ai-trading/profile/tokens')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframes: ['1h'], priority: 1 })
+      .expect(201);
+
+    await db.insert(aiPipelineRuns).values({
+      profileId: profile.body.id as string,
+      trigger: 'manual',
+      status: 'succeeded',
+      summary: { kind: 'cycle', assetId, timeframe: '1h' },
+    });
+
+    const blocked = await agent
+      .post('/api/v1/ai-trading/cycle')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframe: '1h', maxDrafts: 0, variants: 100 })
+      .expect(429);
+    expect(blocked.body.error.code).toBe('AI_CYCLE_LIMIT');
+    expect(blocked.body.error.message).toContain('1 за 24 часа');
+
+    await agent
+      .put('/api/v1/ai-trading/profile')
+      .set('x-csrf-token', owner.csrf)
+      .send({
+        modelSettings: {
+          model: 'deepseek-flash',
+          temperature: 0.25,
+          maxTokens: 2000,
+          timeoutSeconds: 60,
+        },
+      })
+      .expect(200);
+    const afterProfileSave = await agent.get('/api/v1/settings/ai').expect(200);
+    expect(afterProfileSave.body.cycleLimit).toEqual({ perDay: 1, unlimited: false });
+
+    const audit = await agent.get('/api/v1/audit-log?action=ai.settings_updated').expect(200);
+    expect(audit.body.data[0].after.cycleLimit).toEqual({ perDay: 1, unlimited: false });
+
+    const unlimited = await agent
+      .put('/api/v1/settings/ai')
+      .set('x-csrf-token', owner.csrf)
+      .send({ cycleLimit: { perDay: 1, unlimited: true } })
+      .expect(200);
+    expect(unlimited.body.cycleLimit).toEqual({ perDay: 1, unlimited: true });
+
+    const started = await agent
+      .post('/api/v1/ai-trading/cycle')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframe: '1h', maxDrafts: 0, variants: 100 })
+      .expect(202);
+    const cancelled = await agent
+      .post(`/api/v1/ai-trading/cycle/${started.body.cycleId as string}/cancel`)
+      .set('x-csrf-token', owner.csrf);
+    expect([200, 409]).toContain(cancelled.status);
+  }, 60_000);
 });

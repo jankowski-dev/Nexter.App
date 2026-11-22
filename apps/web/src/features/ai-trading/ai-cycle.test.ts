@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aiCycleLimitDefaults,
   aiCycleRequestSchema,
   aiCycleStatusSchema,
   aiCycleStepKeys,
+  aiCycleStepSchema,
   aiCyclesQuerySchema,
   aiCyclesResponseSchema,
+  aiSearchFunnelStageLabels,
+  readAiCycleLimit,
+  updateAiSettingsRequestSchema,
+  withAiCycleLimit,
 } from '@nexter/contracts';
 
 describe('AI cycle contracts', () => {
@@ -73,6 +79,67 @@ describe('AI cycle contracts', () => {
         steps: [{ ...status.steps[0], key: 'unknown' }],
       }),
     ).toThrow();
+  });
+
+  it('validates finite and unlimited cycle limit settings', () => {
+    expect(
+      updateAiSettingsRequestSchema.parse({ cycleLimit: { perDay: 5, unlimited: false } }),
+    ).toEqual({ cycleLimit: { perDay: 5, unlimited: false } });
+    expect(
+      updateAiSettingsRequestSchema.parse({ cycleLimit: { perDay: 5, unlimited: true } }),
+    ).toEqual({ cycleLimit: { perDay: 5, unlimited: true } });
+    for (const perDay of [0, 201, 2.5]) {
+      expect(() =>
+        updateAiSettingsRequestSchema.parse({ cycleLimit: { perDay, unlimited: false } }),
+      ).toThrow();
+    }
+
+    expect(readAiCycleLimit(null)).toEqual(aiCycleLimitDefaults);
+    expect(readAiCycleLimit({ cycleLimit: { perDay: 8, unlimited: true } })).toEqual({
+      perDay: 8,
+      unlimited: true,
+    });
+    expect(readAiCycleLimit({ cycleLimit: { perDay: -1, unlimited: false } })).toEqual(
+      aiCycleLimitDefaults,
+    );
+    expect(
+      withAiCycleLimit({ model: 'deepseek-flash' }, { perDay: 8, unlimited: true }),
+    ).toMatchObject({
+      model: 'deepseek-flash',
+      cycleLimit: { perDay: 8, unlimited: true },
+    });
+  });
+
+  it('uses the shared funnel stage labels and keeps the search stage in cycle steps', () => {
+    expect(aiSearchFunnelStageLabels).toEqual({
+      screen: 'Сигналы',
+      probe: 'Проба',
+      budget: 'Бюджет',
+      full: 'OOS',
+      control: 'Контроль',
+      holdout: 'Holdout',
+    });
+
+    const searchStep = aiCycleStepSchema.parse({
+      key: 'search',
+      status: 'running',
+      message: 'Сигналы: 10 / 100',
+      error: null,
+      stage: 'screen',
+      startedAt: '2026-11-21T00:00:00.000Z',
+      finishedAt: null,
+    });
+    expect(searchStep.stage).toBe('screen');
+
+    const legacyStep = aiCycleStepSchema.parse({
+      key: 'search',
+      status: 'succeeded',
+      message: null,
+      error: null,
+      startedAt: '2026-11-21T00:00:00.000Z',
+      finishedAt: '2026-11-21T00:01:00.000Z',
+    });
+    expect(legacyStep.stage).toBeNull();
   });
 
   it('parses a cycle history response and validates the limit', () => {
