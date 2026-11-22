@@ -213,7 +213,9 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .get(`/api/v1/ai-trading/search/${searchId}/results`)
       .expect(200);
     expect(searchResults.body.stats.total).toBeGreaterThan(0);
-    expect(searchResults.body.stats.evaluated).toBe(searchResults.body.stats.total);
+    expect(searchResults.body.stats.evaluated + searchResults.body.stats.screenedOut).toBe(
+      searchResults.body.stats.total,
+    );
     const histogram = searchResults.body.stats.histogram as Array<{ count: number }>;
     expect(histogram).toHaveLength(8);
     const histogramTotal = histogram.reduce((sum, bucket) => sum + bucket.count, 0);

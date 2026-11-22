@@ -634,6 +634,7 @@ export class AiSearchService {
       stats: (payload.stats as AiSearchStats | undefined) ?? {
         total: 0,
         evaluated: 0,
+        screenedOut: 0,
         valid: 0,
         oosPassed: 0,
         holdoutTested: 0,
@@ -949,6 +950,7 @@ export class AiSearchService {
       folds.folds.length,
       metrics.length,
       top.length,
+      variants.length - screenedVariants.length,
     );
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
@@ -1107,6 +1109,7 @@ export class AiSearchService {
     foldCount: number,
     oosPassed: number,
     holdoutTested: number,
+    screenedOut: number,
   ): AiSearchStats {
     const returns = metrics.map((item) => item.returnPct);
     const drawdowns = metrics.map((item) => item.drawdown);
@@ -1135,6 +1138,7 @@ export class AiSearchService {
     return {
       total,
       evaluated,
+      screenedOut,
       valid: metrics.length,
       oosPassed,
       holdoutTested,

@@ -418,6 +418,7 @@ export const aiSearchHistogramBucketSchema = z.object({
 export const aiSearchStatsSchema = z.object({
   total: z.number().int(),
   evaluated: z.number().int(),
+  screenedOut: z.number().int().default(0),
   valid: z.number().int(),
   oosPassed: z.number().int().default(0),
   holdoutTested: z.number().int().default(0),
