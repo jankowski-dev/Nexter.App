@@ -302,3 +302,10 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - Removed the Orders `Отложенные покупки` panel.
 - Operations embedded toolbar holds search, filters and `Новая операция` in one row.
 - Buy TP/SL hints show projected USD from the entered amount; chain selector is a compact icon badge.
+
+## Finance overview visual refresh
+
+- `Финансы → Обзор` accounts use kind-tinted `tone-surface` cards with a type glyph, native/BYN balances, an archived badge and assets/liabilities/net-capital totals.
+- `Категории периода` splits expenses and income. Expenses are a colored donut with a legend of amounts, shares and bars; income is a compact secondary block; both have friendly empty states.
+- `Последние 12 месяцев` replaces the table with grouped emerald/rose bars, per-month net labels, hover/focus details and 12-month totals.
+- No schema, API, data or dependency change.
