@@ -435,6 +435,7 @@ export class AiSearchService {
         and(
           eq(aiPipelineRuns.profileId, profile.id),
           sql`${aiPipelineRuns.summary}->>'variants' is not null`,
+          sql`${aiPipelineRuns.summary}->>'hidden' is distinct from 'true'`,
         ),
       )
       .orderBy(desc(aiPipelineRuns.createdAt))
@@ -736,6 +737,42 @@ export class AiSearchService {
         );
     }
     return this.status(userId, runId);
+  }
+
+  async hideRun(userId: string, runId: string, meta: SearchMeta): Promise<void> {
+    const profile = await this.aiTrading.getProfile(userId);
+    const run = await this.requireRun(profile.id, runId);
+
+    if (run.status === 'queued' || run.status === 'running') {
+      throw new ConflictException({
+        code: 'AI_SEARCH_RUN_ACTIVE',
+        message: 'Stop the search before removing it from history',
+      });
+    }
+
+    const summary = run.summary as Record<string, unknown>;
+    if (summary.hidden === true) return;
+
+    const hiddenAt = new Date().toISOString();
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(aiPipelineRuns)
+        .set({ summary: { ...summary, hidden: true, hiddenAt } })
+        .where(eq(aiPipelineRuns.id, runId));
+      await this.audit.log(
+        {
+          userId,
+          action: 'ai_trading.search_run_hidden',
+          entityType: 'ai_pipeline_run',
+          entityId: runId,
+          before: { status: run.status, hidden: false },
+          after: { hidden: true, hiddenAt },
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
   }
 
   private async execute(

@@ -699,6 +699,39 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
 
+    const tokensAfterDelete = await agent.get('/api/v1/ai-trading/profile/tokens').expect(200);
+    expect(tokensAfterDelete.body.data).toHaveLength(0);
+
+    const preserved = await db.execute(sql`
+      select
+        (select count(*)::int from market_candles where asset_id = ${assetId}) as candles,
+        (select count(*)::int from ai_pipeline_runs where profile_id = ${profile.body.id}) as runs,
+        (select count(*)::int from ai_candidates where profile_id = ${profile.body.id}) as candidates,
+        (select count(*)::int from trading_bots where user_id = ${owner.userId}) as bots
+    `);
+    expect(preserved.rows[0]).toMatchObject({
+      candles: expect.any(Number),
+      runs: expect.any(Number),
+      candidates: expect.any(Number),
+      bots: expect.any(Number),
+    });
+    expect((preserved.rows[0] as { candles: number }).candles).toBeGreaterThan(0);
+    expect((preserved.rows[0] as { runs: number }).runs).toBeGreaterThan(0);
+    expect((preserved.rows[0] as { candidates: number }).candidates).toBeGreaterThan(0);
+    expect((preserved.rows[0] as { bots: number }).bots).toBeGreaterThan(0);
+
+    const tokenRemovalAudit = await db.execute(
+      sql`select count(*)::int as n from audit_log where action = 'ai_trading.token_removed' and entity_id = ${token.body.id}`,
+    );
+    expect((tokenRemovalAudit.rows[0] as { n: number } | undefined)?.n).toBe(1);
+
+    const reAdded = await agent
+      .post('/api/v1/ai-trading/profile/tokens')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId, timeframes: ['1h', '1d'], priority: 5 })
+      .expect(201);
+    expect(reAdded.body.id).not.toBe(token.body.id);
+
     const services = await agent.get('/api/v1/ai-trading/services').expect(200);
     expect(services.body.data).toHaveLength(5);
 
@@ -719,6 +752,68 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(dashboard.body.tokensCount).toBe(1);
     expect(dashboard.body.workersCount).toBe(1);
     expect(dashboard.body.activeWorkers).toBe(0);
+
+    await agent
+      .delete(`/api/v1/ai-trading/search/${searchId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
+
+    const runsAfterHide = await agent.get('/api/v1/ai-trading/search/runs').expect(200);
+    expect(
+      (runsAfterHide.body.data as Array<{ runId: string }>).some((run) => run.runId === searchId),
+    ).toBe(false);
+
+    const hiddenStatus = await agent.get(`/api/v1/ai-trading/search/${searchId}`).expect(200);
+    expect(hiddenStatus.body.status).toBe('succeeded');
+
+    const hiddenEvidence = await db.execute(sql`
+      select
+        (select count(*)::int from ai_pipeline_runs where id = ${searchId}) as runs,
+        (select count(*)::int from ai_artifacts where run_id = ${searchId}) as artifacts,
+        (select count(*)::int from ai_candidates where run_id = ${searchId}) as candidates
+    `);
+    expect(hiddenEvidence.rows[0]).toMatchObject({
+      runs: 1,
+      artifacts: expect.any(Number),
+      candidates: expect.any(Number),
+    });
+    expect((hiddenEvidence.rows[0] as { artifacts: number }).artifacts).toBeGreaterThan(0);
+    expect((hiddenEvidence.rows[0] as { candidates: number }).candidates).toBeGreaterThan(0);
+
+    const hideAudit = await db.execute(
+      sql`select count(*)::int as n from audit_log where action = 'ai_trading.search_run_hidden' and entity_id = ${searchId}`,
+    );
+    expect((hideAudit.rows[0] as { n: number } | undefined)?.n).toBe(1);
+
+    const [activeRun] = await db
+      .insert(aiPipelineRuns)
+      .values({
+        profileId: profile.body.id as string,
+        trigger: 'manual',
+        status: 'running',
+        summary: {
+          assetId,
+          timeframe: '1h',
+          variants: 100,
+          progress: { evaluated: 10, total: 100 },
+        },
+      })
+      .returning({ id: aiPipelineRuns.id });
+    const activeRunId = activeRun?.id as string;
+    const activeHide = await agent
+      .delete(`/api/v1/ai-trading/search/${activeRunId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(409);
+    expect(activeHide.body.error.code).toBe('AI_SEARCH_RUN_ACTIVE');
+
+    await db
+      .update(aiPipelineRuns)
+      .set({ status: 'cancelled', finishedAt: new Date() })
+      .where(eq(aiPipelineRuns.id, activeRunId));
+    await agent
+      .delete(`/api/v1/ai-trading/search/${activeRunId}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
   }, 120_000);
 
   it('stores the cycle limit and skips the 24h check when unlimited', async () => {

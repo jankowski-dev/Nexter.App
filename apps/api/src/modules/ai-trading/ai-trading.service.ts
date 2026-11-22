@@ -350,7 +350,47 @@ export class AiTradingService {
   }
 
   async removeToken(userId: string, id: string, meta: AiTradingMeta): Promise<void> {
-    await this.updateToken(userId, id, { enabled: false }, meta);
+    const profile = await this.ensureProfile(userId);
+    const [existing] = await this.db
+      .select()
+      .from(aiProfileTokens)
+      .where(and(eq(aiProfileTokens.id, id), eq(aiProfileTokens.profileId, profile.id)))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI token not found' });
+    }
+
+    await this.db.transaction(async (tx) => {
+      const [removed] = await tx
+        .delete(aiProfileTokens)
+        .where(and(eq(aiProfileTokens.id, id), eq(aiProfileTokens.profileId, profile.id)))
+        .returning({ id: aiProfileTokens.id });
+
+      if (!removed) {
+        throw new NotFoundException({ code: 'NOT_FOUND', message: 'AI token not found' });
+      }
+
+      await this.audit.log(
+        {
+          userId,
+          action: 'ai_trading.token_removed',
+          entityType: 'ai_profile_token',
+          entityId: id,
+          before: {
+            assetId: existing.assetId,
+            timeframes: existing.timeframes,
+            priority: existing.priority,
+            maxAllocationPct: existing.maxAllocationPct,
+            enabled: existing.enabled,
+          },
+          after: null,
+          ip: meta.ip,
+          userAgent: meta.userAgent,
+        },
+        { executor: tx, strict: true },
+      );
+    });
   }
 
   async listServices(userId: string, meta: AiTradingMeta): Promise<AiServiceConfig[]> {

@@ -252,6 +252,18 @@ export class AiTradingController {
     return this.aiSearch.cancel(auth.user.id, runId);
   }
 
+  @Delete('search/:runId')
+  hideSearchRun(
+    @CurrentAuth() auth: AuthContext,
+    @Param('runId', new ParseUUIDPipe()) runId: string,
+    @Req() request: FastifyRequest,
+  ): Promise<void> {
+    return this.aiSearch.hideRun(auth.user.id, runId, {
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+    });
+  }
+
   @Get('bots/health')
   botHealth(@CurrentAuth() auth: AuthContext): Promise<AiBotHealthResponse> {
     return this.aiHealth.list(auth.user.id);

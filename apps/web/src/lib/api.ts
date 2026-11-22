@@ -1394,6 +1394,10 @@ export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
   return apiFetch('/api/v1/ai-trading/search/runs', {}, aiSearchRunsResponseSchema);
 }
 
+export async function deleteAiSearchRun(runId: string): Promise<void> {
+  await apiDelete(`/api/v1/ai-trading/search/${runId}`);
+}
+
 export async function fetchAiRecommendations(): Promise<AiRecommendationsResponse> {
   return apiFetch(
     '/api/v1/ai-trading/recommendations',
