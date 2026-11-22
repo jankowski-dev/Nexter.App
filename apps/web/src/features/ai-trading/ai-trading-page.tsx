@@ -140,6 +140,8 @@ export function AiTradingPage() {
   }
   const [cancelTarget, setCancelTarget] = useState<AiCycleStatus | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cycleExporting, setCycleExporting] = useState(false);
+  const [cycleExportError, setCycleExportError] = useState<string | null>(null);
 
   const dashboard = useQuery({
     queryKey: ['ai-dashboard'],
@@ -175,6 +177,21 @@ export function AiTradingPage() {
       return value === 'queued' || value === 'running' ? 1000 : false;
     },
   });
+
+  async function exportCycleSearch() {
+    const runId = cycle.data?.searchRunId;
+    if (!runId || cycleExporting) return;
+    setCycleExporting(true);
+    setCycleExportError(null);
+    try {
+      const results = await fetchAiSearchResults(runId);
+      downloadJson(`ai-search-${runId}.json`, results);
+    } catch (error) {
+      setCycleExportError(toRussianError(error, 'Не удалось экспортировать результаты поиска'));
+    } finally {
+      setCycleExporting(false);
+    }
+  }
 
   const tokenRows = tokens.data?.data ?? [];
   const searchable = tokenRows.filter(
@@ -452,6 +469,9 @@ export function AiTradingPage() {
           onOpenBots={() => {
             window.location.href = '/portfolio#robots';
           }}
+          onExport={cycle.data?.searchRunId ? exportCycleSearch : undefined}
+          exporting={cycleExporting}
+          exportError={cycleExportError}
         />
       ) : null}
       <ConfirmDialog
@@ -655,6 +675,9 @@ function AiCycleCard({
   onClear,
   onCancel,
   onOpenBots,
+  onExport,
+  exporting,
+  exportError,
 }: {
   cycle: AiCycleStatus | null;
   loading: boolean;
@@ -663,6 +686,9 @@ function AiCycleCard({
   onClear: () => void;
   onCancel: () => void;
   onOpenBots: () => void;
+  onExport?: () => void;
+  exporting?: boolean;
+  exportError?: string | null;
 }) {
   if (loading) return <LoadingRows rows={2} />;
   if (!cycle) {
@@ -705,6 +731,16 @@ function AiCycleCard({
           </span>
         </div>
         <div className="flex items-center gap-3">
+          {cycle.searchRunId && onExport ? (
+            <button
+              type="button"
+              className="text-xs text-zinc-500 underline disabled:opacity-50"
+              onClick={onExport}
+              disabled={exporting}
+            >
+              {exporting ? 'Экспортирую…' : 'Экспорт JSON'}
+            </button>
+          ) : null}
           {cycle.status === 'queued' || cycle.status === 'running' ? (
             <button type="button" className="text-xs text-red-700 underline" onClick={onCancel}>
               Отменить
@@ -726,6 +762,7 @@ function AiCycleCard({
           ) : null}
         </div>
       </div>
+      {exportError ? <p className="mt-2 text-[11px] text-red-700">{exportError}</p> : null}
       {errorText ? (
         <p className="mt-2 text-[11px] text-amber-700">
           Статус не обновился: {errorText}{' '}
