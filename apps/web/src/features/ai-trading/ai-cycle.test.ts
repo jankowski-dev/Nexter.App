@@ -8,6 +8,7 @@ import {
   aiCyclesQuerySchema,
   aiCyclesResponseSchema,
   aiSearchFunnelStageLabels,
+  aiSearchNearMissSchema,
   readAiCycleLimit,
   updateAiSettingsRequestSchema,
   withAiCycleLimit,
@@ -186,5 +187,35 @@ describe('AI cycle contracts', () => {
     expect(aiCyclesQuerySchema.parse({ limit: '5' }).limit).toBe(5);
     expect(() => aiCyclesQuerySchema.parse({ limit: 0 })).toThrow();
     expect(() => aiCyclesQuerySchema.parse({ limit: 51 })).toThrow();
+  });
+
+  it('parses holdout block fields and legacy rows without them', () => {
+    const nearMiss = aiSearchNearMissSchema.parse({
+      strategyKey: 'trend_pullback',
+      strategyName: 'Откат в тренде',
+      params: {},
+      oosMedianReturnPct: '1.00',
+      oosMeanReturnPct: '0.50',
+      oosWorstReturnPct: '-3.00',
+      maxDrawdownPct: '4.00',
+      trades: 12,
+      positiveFolds: 5,
+      stabilityPct: '62.50',
+      holdoutReturnPct: '-2.00',
+      holdoutDrawdownPct: '5.00',
+      policyScore: '1.00',
+      reasons: ['holdout recent block negative'],
+      holdoutBlockReturnsPct: ['1.00', '-2.00', '-1.00'],
+      holdoutBlocksNonNegative: 1,
+      holdoutBlocksTotal: 3,
+    });
+    expect(nearMiss.holdoutBlocksNonNegative).toBe(1);
+    const legacyInput: Record<string, unknown> = { ...nearMiss };
+    delete legacyInput.holdoutBlockReturnsPct;
+    delete legacyInput.holdoutBlocksNonNegative;
+    delete legacyInput.holdoutBlocksTotal;
+    const legacy = aiSearchNearMissSchema.parse(legacyInput);
+    expect(legacy.holdoutBlockReturnsPct).toEqual([]);
+    expect(legacy.holdoutBlocksTotal).toBe(0);
   });
 });

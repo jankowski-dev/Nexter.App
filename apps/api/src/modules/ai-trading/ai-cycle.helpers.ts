@@ -26,6 +26,8 @@ export interface NormalizedCycle {
   searchRunId: string | null;
   recommended: number;
   draftsCreated: number;
+  oosPassed: number;
+  holdoutTested: number;
   rejectionReasons: Record<string, number>;
   nearMisses: AiCycleStatus['nearMisses'];
   error: string | null;
@@ -131,6 +133,8 @@ export function normalizeCycle(run: CycleRunLike, summaryValue: unknown): Normal
     searchRunId: searchRunId.success ? searchRunId.data : null,
     recommended: nonNegativeInt(summary.recommended),
     draftsCreated: nonNegativeInt(summary.draftsCreated),
+    oosPassed: nonNegativeInt(summary.oosPassed),
+    holdoutTested: nonNegativeInt(summary.holdoutTested),
     rejectionReasons: normalizeReasons(summary.rejectionReasons),
     nearMisses: normalizeNearMisses(summary.nearMisses),
     error: sanitizeStoredError(text(summary.error)),

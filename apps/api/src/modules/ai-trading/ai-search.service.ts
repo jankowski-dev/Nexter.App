@@ -50,13 +50,16 @@ import {
   candlesPerDay,
   generateSearchVariants,
   historyDaysFor,
+  holdoutBlockStats,
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  selectHoldoutCandidates,
   stabilityPctFor,
   searchWorkerCount,
   shuffleVariantsInPlace,
   MIN_SEARCH_DAYS,
+  type HoldoutBlockStats,
   type SearchFold,
   type SearchVariant,
   type VariantMetrics,
@@ -112,6 +115,9 @@ interface SearchRunSummary {
 interface SearchCandidate extends VariantMetrics {
   variant: SearchVariant;
   holdoutReturnPct: string | null;
+  holdoutBlockReturnsPct: string[];
+  holdoutBlocksNonNegative: number;
+  holdoutBlocksTotal: number;
 }
 
 const FEE_BPS = 25;
@@ -573,6 +579,17 @@ export class AiSearchService {
           holdoutReturnPct:
             typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
           policyScore: candidate.policyScore ?? '0',
+          holdoutBlockReturnsPct: Array.isArray(metrics.holdoutBlockReturnsPct)
+            ? (metrics.holdoutBlockReturnsPct as unknown[]).filter(
+                (value): value is string => typeof value === 'string',
+              )
+            : [],
+          holdoutBlocksNonNegative:
+            typeof metrics.holdoutBlocksNonNegative === 'number'
+              ? metrics.holdoutBlocksNonNegative
+              : 0,
+          holdoutBlocksTotal:
+            typeof metrics.holdoutBlocksTotal === 'number' ? metrics.holdoutBlocksTotal : 0,
           suggestedAllocationUsd: allocation,
           invalidationRules,
           linkedBotId: typeof metrics.botId === 'string' ? metrics.botId : null,
@@ -676,7 +693,7 @@ export class AiSearchService {
       .from(aiCandidates)
       .where(eq(aiCandidates.runId, runId))
       .orderBy(desc(aiCandidates.policyScore))
-      .limit(20);
+      .limit(50);
     const payload = (artifact?.payload ?? {}) as Record<string, unknown>;
     return {
       runId,
@@ -884,6 +901,9 @@ export class AiSearchService {
       reasons: string[],
       holdoutReturnPct: string | null = null,
       holdoutDrawdownPct: string | null = null,
+      holdoutBlockReturnsPct: string[] = [],
+      holdoutBlocksNonNegative = 0,
+      holdoutBlocksTotal = 0,
     ) => {
       if (aggregate.trades <= 0 || Number(aggregate.oosMedianReturnPct) <= 0) return;
       nearMisses.push({
@@ -901,6 +921,9 @@ export class AiSearchService {
         holdoutDrawdownPct,
         policyScore: aggregate.policyScore,
         reasons,
+        holdoutBlockReturnsPct,
+        holdoutBlocksNonNegative,
+        holdoutBlocksTotal,
       });
     };
 
@@ -956,7 +979,14 @@ export class AiSearchService {
         return;
       }
 
-      metrics.push({ ...aggregate, variant, holdoutReturnPct: null });
+      metrics.push({
+        ...aggregate,
+        variant,
+        holdoutReturnPct: null,
+        holdoutBlockReturnsPct: [],
+        holdoutBlocksNonNegative: 0,
+        holdoutBlocksTotal: 0,
+      });
     };
 
     // Stage: safe signal screen over every proposal. Only "too few entry signals"
@@ -1184,7 +1214,7 @@ export class AiSearchService {
     // Stage: final untouched holdout for the top OOS candidates.
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
     stageStarted = Date.now();
-    const top = metrics.slice(0, 10);
+    const top = selectHoldoutCandidates(metrics, 50);
     for (const candidate of top) {
       const definition = strategyByKey.get(candidate.variant.strategyKey);
       if (!definition) continue;
@@ -1204,8 +1234,12 @@ export class AiSearchService {
         );
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
+        const blocks: HoldoutBlockStats | null = holdoutBlockStats(result.equityCurve);
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
-        const rejection = holdoutRejection(returnPct, drawdown, FULL_MAX_DRAWDOWN_PCT);
+        candidate.holdoutBlockReturnsPct = blocks?.returnsPct ?? [];
+        candidate.holdoutBlocksNonNegative = blocks?.nonNegative ?? 0;
+        candidate.holdoutBlocksTotal = blocks?.total ?? 0;
+        const rejection = holdoutRejection(returnPct, drawdown, FULL_MAX_DRAWDOWN_PCT, blocks);
         if (rejection !== null) {
           candidate.policyScore = '0';
           reject(rejection);
@@ -1224,6 +1258,9 @@ export class AiSearchService {
             [rejection],
             candidate.holdoutReturnPct,
             result.stats.maxDrawdownPct,
+            blocks?.returnsPct ?? [],
+            blocks?.nonNegative ?? 0,
+            blocks?.total ?? 0,
           );
         } else if (Number(candidate.policyScore) <= 0) {
           reject('non-positive policy score');
@@ -1242,11 +1279,17 @@ export class AiSearchService {
             ['non-positive policy score'],
             candidate.holdoutReturnPct,
             result.stats.maxDrawdownPct,
+            blocks?.returnsPct ?? [],
+            blocks?.nonNegative ?? 0,
+            blocks?.total ?? 0,
           );
           candidate.policyScore = '0';
         }
       } catch {
         candidate.holdoutReturnPct = null;
+        candidate.holdoutBlockReturnsPct = [];
+        candidate.holdoutBlocksNonNegative = 0;
+        candidate.holdoutBlocksTotal = 0;
         candidate.policyScore = '0';
         reject('holdout failed');
         rememberNearMiss(
@@ -1273,6 +1316,11 @@ export class AiSearchService {
         candidate.holdoutReturnPct !== null &&
         Number(candidate.holdoutReturnPct) > 0 &&
         Number(candidate.policyScore) > 0,
+    );
+    recommended.sort(
+      (left, right) =>
+        right.holdoutBlocksNonNegative - left.holdoutBlocksNonNegative ||
+        Number(right.policyScore) - Number(left.policyScore),
     );
     stageReport('holdout').input = top.length;
     stageReport('holdout').output = recommended.length;
@@ -1304,6 +1352,9 @@ export class AiSearchService {
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
       item.reasons.includes('holdout drawdown too high') ||
+      item.reasons.includes('holdout blocks unstable') ||
+      item.reasons.includes('holdout recent block negative') ||
+      item.reasons.includes('holdout blocks unavailable') ||
       item.reasons.includes('holdout failed');
     const nearMissesTop = nearMisses
       .sort((left, right) => {
@@ -1314,7 +1365,7 @@ export class AiSearchService {
           Number(right.oosMedianReturnPct) - Number(left.oosMedianReturnPct)
         );
       })
-      .slice(0, 10);
+      .slice(0, 50);
     const payload = {
       assetId: input.assetId,
       timeframe: input.timeframe,
@@ -1376,6 +1427,9 @@ export class AiSearchService {
               positiveFolds: candidate.positiveFolds,
               stabilityPct: candidate.stabilityPct,
               holdoutReturnPct: candidate.holdoutReturnPct,
+              holdoutBlockReturnsPct: candidate.holdoutBlockReturnsPct,
+              holdoutBlocksNonNegative: candidate.holdoutBlocksNonNegative,
+              holdoutBlocksTotal: candidate.holdoutBlocksTotal,
               policyScore: candidate.policyScore,
               horizonDays: input.horizonDays,
             },
@@ -1592,6 +1646,15 @@ export class AiSearchService {
       holdoutReturnPct:
         typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
       policyScore: row.policyScore ?? '0',
+      holdoutBlockReturnsPct: Array.isArray(metrics.holdoutBlockReturnsPct)
+        ? (metrics.holdoutBlockReturnsPct as unknown[]).filter(
+            (value): value is string => typeof value === 'string',
+          )
+        : [],
+      holdoutBlocksNonNegative:
+        typeof metrics.holdoutBlocksNonNegative === 'number' ? metrics.holdoutBlocksNonNegative : 0,
+      holdoutBlocksTotal:
+        typeof metrics.holdoutBlocksTotal === 'number' ? metrics.holdoutBlocksTotal : 0,
     };
   }
 
