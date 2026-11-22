@@ -130,6 +130,7 @@ const STRATEGY_CATALOG = JSON.stringify(
         max: field.max,
         unit: field.unit,
         integer: field.integer,
+        type: field.type,
       })),
       defaults: definition.defaultParams,
     })),
@@ -141,7 +142,7 @@ const SYSTEM_PROMPT = `Ты — аналитик sandbox-торговли кри
 
 Правила:
 - выбери 1–3 стратегии только из списка ниже;
-- params должны содержать только ключи из params выбранной стратегии и укладываться в min/max;
+- params должны содержать только ключи из params выбранной стратегии и укладываться в min/max; поля type "boolean" принимают true или false;
 - учитывай комиссии, проскальзывание, просадку и недостаток истории;
 - rationale — короткое объяснение на русском, без гарантий доходности;
 - warnings — реальные ограничения данных или риски;

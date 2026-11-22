@@ -3,6 +3,7 @@ import { botStrategyKeySchema } from '@nexter/contracts';
 import {
   bollingerReversion,
   crashProtectedGrid,
+  dailyAverage,
   dcaDip,
   donchianBreakout,
   failedBreakout,
@@ -42,9 +43,30 @@ function risingHistory(): StrategySample[] {
   return history(Array.from({ length: 40 }, (_, index) => 1 + index * 0.02));
 }
 
+/**
+ * Builds complete UTC days that end on 2025-12-31, so the default test clock
+ * (2026-01-01T12:00Z) sees every day as completed. Each day has low, middle
+ * and high samples at 00:00, 01:00 and 02:00 UTC.
+ */
+function dailyHistory(days: Array<{ low: number; high: number }>): StrategySample[] {
+  const end = Date.UTC(2025, 11, 31);
+  return days.flatMap((day, index) => {
+    const start = end - (days.length - 1 - index) * 86_400_000;
+    const middle = (day.low + day.high) / 2;
+    return [day.low, middle, day.high].map((price, sampleIndex) => ({
+      priceUsd: price.toFixed(8),
+      capturedAt: new Date(start + sampleIndex * 3_600_000),
+    }));
+  });
+}
+
+function flatDailyHistory(days: number, low = 1, high = 2): StrategySample[] {
+  return dailyHistory(Array.from({ length: days }, () => ({ low, high })));
+}
+
 describe('trading bot strategy registry', () => {
-  it('exposes twelve templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(12);
+  it('exposes thirteen templates with valid default params', () => {
+    expect(strategyDefinitions).toHaveLength(13);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
@@ -57,6 +79,7 @@ describe('trading bot strategy registry', () => {
       'bollinger_reversion',
       'squeeze_breakout',
       'failed_breakout',
+      'daily_average',
       'static_limit',
     ]);
 
@@ -75,12 +98,15 @@ describe('trading bot strategy registry', () => {
 
   it('is accepted by the shared contract', () => {
     expect(botStrategyKeySchema.parse('trailing_stop')).toBe('trailing_stop');
+    expect(botStrategyKeySchema.parse('daily_average')).toBe('daily_average');
   });
 
   it('rejects invalid parameters', () => {
     expect(() => momentumBreakout.parseParams({ fastPeriod: 1, slowPeriod: 20 })).toThrow();
     expect(() => momentumBreakout.parseParams({ fastPeriod: 20, slowPeriod: 10 })).toThrow();
     expect(() => dcaDip.parseParams({ maxAdds: 0 })).toThrow();
+    expect(() => dailyAverage.parseParams({ lookbackDays: 4 })).toThrow();
+    expect(() => dailyAverage.parseParams({ useMedian: 'true' })).toThrow();
   });
 });
 
@@ -639,6 +665,127 @@ describe('failed_breakout', () => {
           state: { breakdownLevel: '1' },
         }),
       ).reason,
+    ).toBe('стоп-лосс');
+  });
+});
+
+describe('daily_average', () => {
+  const params = dailyAverage.defaultParams;
+
+  it('buys at the average daily low with the entry buffer', () => {
+    const history = flatDailyHistory(20);
+    expect(dailyAverage.evaluate(context({ params, history, priceUsd: '0.99400000' }))).toEqual({
+      action: 'buy',
+      reason: 'цена у дневной низкой',
+    });
+    expect(dailyAverage.evaluate(context({ params, history, priceUsd: '0.99900000' })).action).toBe(
+      'hold',
+    );
+  });
+
+  it('sells at the average daily high with the exit buffer', () => {
+    const history = flatDailyHistory(20);
+    const position = { amount: '10', avgCostUsd: '2.00000000', costBasisUsd: '20.00000000' };
+    expect(
+      dailyAverage.evaluate(context({ params, history, priceUsd: '2.01000000', position })),
+    ).toEqual({ action: 'sell', reason: 'цена у дневной высокой' });
+    expect(
+      dailyAverage.evaluate(context({ params, history, priceUsd: '2.00500000', position })).action,
+    ).toBe('hold');
+  });
+
+  it('holds with insufficient complete days and ignores the current partial day', () => {
+    expect(dailyAverage.evaluate(context({ params, history: flatDailyHistory(19) })).reason).toBe(
+      'недостаточно полных дней',
+    );
+
+    const partialDay = Array.from({ length: 10 }, (_, index) => ({
+      priceUsd: '0.50000000',
+      capturedAt: new Date(Date.UTC(2026, 0, 1, 0, index)),
+    }));
+    expect(
+      dailyAverage.evaluate(
+        context({
+          params,
+          history: [...flatDailyHistory(19), ...partialDay],
+          priceUsd: '0.96000000',
+        }),
+      ).action,
+    ).toBe('hold');
+  });
+
+  it('honours the entry and exit buffers', () => {
+    const history = flatDailyHistory(20);
+    expect(dailyAverage.evaluate(context({ params, history, priceUsd: '0.99700000' })).action).toBe(
+      'hold',
+    );
+    expect(
+      dailyAverage.evaluate(
+        context({
+          params: { ...params, entryBufferPct: 0 },
+          history,
+          priceUsd: '0.99700000',
+        }),
+      ).action,
+    ).toBe('buy');
+
+    const position = { amount: '10', avgCostUsd: '2.00000000', costBasisUsd: '20.00000000' };
+    expect(
+      dailyAverage.evaluate(context({ params, history, priceUsd: '2.00500000', position })).action,
+    ).toBe('hold');
+    expect(
+      dailyAverage.evaluate(
+        context({
+          params: { ...params, exitBufferPct: 0 },
+          history,
+          priceUsd: '2.00500000',
+          position,
+        }),
+      ).action,
+    ).toBe('sell');
+  });
+
+  it('switches between average and median daily levels', () => {
+    const history = dailyHistory([
+      { low: 0.5, high: 2 },
+      { low: 1, high: 2 },
+      { low: 1, high: 2 },
+      { low: 1, high: 2 },
+      { low: 1, high: 2.5 },
+    ]);
+    const medianParams = { ...params, lookbackDays: 5, useMedian: true };
+    const averageParams = { ...params, lookbackDays: 5, useMedian: false };
+
+    expect(
+      dailyAverage.evaluate(context({ params: averageParams, history, priceUsd: '0.95000000' }))
+        .action,
+    ).toBe('hold');
+    expect(
+      dailyAverage.evaluate(context({ params: medianParams, history, priceUsd: '0.95000000' }))
+        .action,
+    ).toBe('buy');
+
+    const position = { amount: '10', avgCostUsd: '2.05000000', costBasisUsd: '20.50000000' };
+    expect(
+      dailyAverage.evaluate(
+        context({ params: averageParams, history, priceUsd: '2.05000000', position }),
+      ).action,
+    ).toBe('hold');
+    expect(
+      dailyAverage.evaluate(
+        context({ params: medianParams, history, priceUsd: '2.05000000', position }),
+      ),
+    ).toEqual({ action: 'sell', reason: 'цена у дневной высокой' });
+  });
+
+  it('keeps take-profit and stop-loss protection', () => {
+    const history = flatDailyHistory(20);
+    const position = { amount: '10', avgCostUsd: '1.50000000', costBasisUsd: '15.00000000' };
+    expect(
+      dailyAverage.evaluate(context({ params, history, priceUsd: '1.58000000', position })).reason,
+    ).toBe('тейк-профит');
+    expect(
+      dailyAverage.evaluate(context({ params, history, priceUsd: '1.37000000', position })).reason,
     ).toBe('стоп-лосс');
   });
 });

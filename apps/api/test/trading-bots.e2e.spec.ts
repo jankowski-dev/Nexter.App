@@ -122,6 +122,15 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(momentum.defaultParams).toMatchObject({ fastPeriod: 5, slowPeriod: 20 });
     expect(Array.isArray(momentum.paramFields)).toBe(true);
 
+    const dailyAverage = strategies.body.data.find(
+      (item: { key: string }) => item.key === 'daily_average',
+    );
+    expect(dailyAverage).toMatchObject({ kind: 'system', name: 'Дневная средняя' });
+    expect(dailyAverage.defaultParams).toMatchObject({ lookbackDays: 20, useMedian: false });
+    expect(dailyAverage.paramFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'useMedian', type: 'boolean' })]),
+    );
+
     const created = await agent
       .post('/api/v1/trading-bots/bots')
       .set('x-csrf-token', owner.csrf)

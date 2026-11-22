@@ -162,6 +162,7 @@ interface StrategyParamField {
   step?: number;
   unit?: string;
   integer?: boolean;
+  type?: 'number' | 'boolean';
 }
 
 interface StrategyDefinition {
@@ -174,6 +175,7 @@ interface StrategyDefinition {
   risks: string;
   icon: string;
   kind: 'system' | 'custom';
+  historySampling?: 'recent' | 'hourly';
   defaultParams: Record<string, unknown>;
   paramFields: StrategyParamField[];
   parseParams(value: Record<string, unknown>): Record<string, unknown>;
@@ -181,7 +183,7 @@ interface StrategyDefinition {
 }
 ```
 
-`paramFields` — метаданные для автоматической формы параметров в боте. `guide` — подробное объяснение механики; `bestFor` — когда стратегия уместна; `risks` — основные риски. Всё это показывается в read-only drawer стратегии. `kind` — маркер `Системная`/`Кастомная`; сейчас одиннадцать стратегий системные, `crash_protected_grid` — кастомная.
+`paramFields` — метаданные для автоматической формы параметров в боте. `guide` — подробное объяснение механики; `bestFor` — когда стратегия уместна; `risks` — основные риски. Всё это показывается в read-only drawer стратегии. `kind` — маркер `Системная`/`Кастомная`; сейчас двенадцать стратегий системные, `crash_protected_grid` — кастомная. `type: 'boolean'` рисует параметр как селектор `Да`/`Нет`; `historySampling: 'hourly'` просит runner загружать по одному сэмплу котировки на час для дневных стратегий.
 
 Новая стратегия: файл в `apps/api/src/modules/trading-bots/strategies/`, Zod-схема параметров, `paramFields`, `guide`, регистрация в `strategyDefinitions`, unit-тесты и deploy. UI автоматически покажет новую стратегию.
 
@@ -200,6 +202,7 @@ interface StrategyDefinition {
 | `bollinger_reversion`  | Возврат к Bollinger    | закрытие ниже нижней полосы                 | возврат к средней, TP, SL                                                             | period 20, stdDev 2, exitAboveMean 0.5%, TP 8%, SL 5%                   |
 | `squeeze_breakout`     | Выход из сжатия        | сжатие полос + пробой верхней полосы        | возврат под среднюю, TP, SL                                                           | period 20, stdDev 2, squeeze 2%, buffer 0.2%, TP 12%, SL 5%             |
 | `failed_breakout`      | Неудавшийся пробой     | ложный пробой поддержки и возврат выше неё  | TP, SL                                                                                | lookback 20, breakdown 0.5%, TP 8%, SL 4%                               |
+| `daily_average`        | Дневная средняя        | цена ниже среднего/медианного дневного low  | средний/медианный дневной high, TP, SL                                                | lookbackDays 20, entry/exit 0.5%, TP 5%, SL 8%, useMedian false         |
 | `static_limit`         | Статичный лимит        | цена дошла до `buyPriceUsd`                 | `stopPriceUsd` или `takeProfitPriceUsd`; после выхода ждёт восстановления выше лимита | buy/stop/take в USD, один токен, не предлагается ИИ                     |
 
 Все стратегии long-only и работают по каждому токену независимо. Внутри одного токена цикл всегда `покупка → удержание → продажа`; одновременно можно держать позиции по разным токенам. Общий risk layer в runner: max positions, position size, cash, cooldown, daily loss limit, freshness quote (≤5 минут).
@@ -367,10 +370,10 @@ interface StrategyDefinition {
 
 ## 12. Проверка
 
-- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для двенадцати стратегий.
+- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — реестр, `guide`/`kind`/`paramFields`, параметры, buy/sell/hold для тринадцати стратегий.
 - Unit: `apps/api/src/modules/trading-bots/backtest/backtest.engine.spec.ts` — buy/sell-циклы, принудительное закрытие, drawdown, buy-and-hold, stateful crash-grid (пауза, закрытие, resume, TP), synthetic TP/SL и вызов `evaluate` на защитном выходе.
 - Unit: `apps/api/src/modules/trading-bots/backtest/historical-data.service.spec.ts` — выбор GeckoTerminal/CoinGecko, synthetic-флаг и fallback при неполном покрытии периода.
-- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — twelve strategies, including `crash_protected_grid`, `failed_breakout` and `static_limit` state transitions.
+- Unit: `apps/api/src/modules/trading-bots/strategies/strategies.spec.ts` — thirteen strategies, including `crash_protected_grid`, `failed_breakout`, `daily_average` and `static_limit` state transitions.
 - Unit: `apps/web/src/lib/search.test.ts` — общий поиск (регистр, `ё`, несколько слов).
 - UI: журналы бота загружают по 20 записей с `limit/offset`; журнал бэктеста — первые 20 с кнопкой `Ещё`.
 - E2E: `apps/api/test/trading-bots.e2e.spec.ts` — read-only стратегии, создание бота с `strategyKey`/`strategyParams`, валидация бюджета, buy/sell по котировкам, статистика, диагностика сигналов, смена стратегии, reset, archive, preview/run/list/PDF бэктеста.

@@ -30,7 +30,7 @@ import { useEffect, useState } from 'react';
 import { BotUptimeText } from './bot-uptime';
 import { AiJournalPanel } from './ai-journal-panel';
 import { BacktestPanel } from './backtest-panel';
-import { paramsToForm } from './strategy-params';
+import { formatStrategyParamValue, paramsToForm } from './strategy-params';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
@@ -509,8 +509,7 @@ export function BotDetailDrawer({
                   <div key={field.key}>
                     <div className="text-zinc-500">{field.label}</div>
                     <div className="font-mono text-zinc-900">
-                      {value === undefined || value === null ? '—' : String(value)}
-                      {field.unit ? ` ${field.unit}` : ''}
+                      {formatStrategyParamValue(field, value)}
                     </div>
                   </div>
                 );

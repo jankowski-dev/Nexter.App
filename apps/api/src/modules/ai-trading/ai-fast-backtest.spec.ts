@@ -1,7 +1,8 @@
 import type { BotCandle } from '@nexter/contracts';
 import { describe, expect, it } from 'vitest';
 import { runBacktest } from '../trading-bots/backtest/backtest.engine';
-import { strategyDefinitions } from '../trading-bots/strategies';
+import { dailyAverage, strategyDefinitions } from '../trading-bots/strategies';
+import { createFastRuntime } from './ai-fast-strategies';
 import { aggregateVariant, buildSearchFolds, generateSearchVariants } from './ai-search.helpers';
 import { evaluateVariantFolds } from './ai-search.evaluate';
 
@@ -72,4 +73,20 @@ describe('native AI search engine', () => {
       }
     }
   }, 180_000);
+
+  it('has no native runtime for daily_average and uses the Decimal fallback', () => {
+    const candles = seededCandles().slice(0, 30 * 24);
+    const variant = { strategyKey: 'daily_average', params: dailyAverage.defaultParams };
+    expect(createFastRuntime(variant, candles)).toBeNull();
+
+    const result = evaluateVariantFolds(
+      variant,
+      [{ candles, warmupCandles: 10 * 24 }],
+      '1h',
+      'next-open',
+    );
+    expect(result.unknownStrategy).toBe(false);
+    expect(result.aggregate).not.toBeNull();
+    expect(typeof result.aggregate?.trades).toBe('number');
+  }, 30_000);
 });

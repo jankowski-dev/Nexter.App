@@ -43,6 +43,8 @@ export interface StrategyParamField {
   step?: number;
   unit?: string;
   integer?: boolean;
+  /** Defaults to `number`; boolean fields render as a Да/Нет selector. */
+  type?: 'number' | 'boolean';
 }
 
 export interface StrategyDefinition {
@@ -59,6 +61,11 @@ export interface StrategyDefinition {
   aiEligible?: boolean;
   /** State needs a warmup pass before OOS scoring. */
   stateful?: boolean;
+  /**
+   * Bot runner history source. `hourly` loads the latest quote sample per hour
+   * for the retention window instead of the last 300 minute samples.
+   */
+  historySampling?: 'recent' | 'hourly';
   defaultParams: Record<string, unknown>;
   paramFields: StrategyParamField[];
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;

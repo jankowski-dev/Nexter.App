@@ -47,8 +47,9 @@ function randomFieldValue(
   definition: StrategyDefinition,
   fieldKey: string,
   rng: () => number,
-): number {
+): number | boolean {
   const field = definition.paramFields.find((item) => item.key === fieldKey);
+  if (field?.type === 'boolean') return rng() < 0.5;
   const fallback = Number(definition.defaultParams[fieldKey] ?? 0);
   if (!field) return fallback;
   const min = field.min ?? fallback;

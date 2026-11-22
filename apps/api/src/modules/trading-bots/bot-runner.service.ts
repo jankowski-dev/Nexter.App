@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, desc, eq, gte, isNull, lt } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import {
   assets,
   botEquitySnapshots,
@@ -27,6 +27,7 @@ import { MarketQuoteService, type MarketQuoteValue } from '../market-data/market
 import { NotificationsService } from '../notifications/notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { strategyByKey } from './strategies';
+import type { StrategyDefinition } from './strategies/types';
 
 const HISTORY_LIMIT = 300;
 const RUNNER_LOCK_KEY = 'nexter:bot-runner';
@@ -287,7 +288,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       }
 
       await this.sampleQuote(asset.id, quote, now);
-      const history = await this.loadHistory(asset.id);
+      const history = await this.loadHistory(asset.id, definition, now);
       const position = positionByAsset.get(asset.id) ?? null;
       const buyCount = countBuysSinceLastSell(
         tradeRows.filter((trade) => trade.assetId === asset.id),
@@ -589,7 +590,10 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     });
   }
 
-  private async loadHistory(assetId: string) {
+  private async loadHistory(assetId: string, definition: StrategyDefinition, now: Date) {
+    if (definition.historySampling === 'hourly') {
+      return this.loadHourlyHistory(assetId, now);
+    }
     const rows = await this.db
       .select()
       .from(botQuoteSamples)
@@ -597,6 +601,37 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       .orderBy(desc(botQuoteSamples.capturedAt))
       .limit(HISTORY_LIMIT);
     return rows.reverse();
+  }
+
+  /**
+   * Daily strategies need multiple complete UTC days. The regular history
+   * query only keeps the last 300 minute samples, so load the latest sample
+   * per hour instead and let the strategy aggregate days from it.
+   */
+  private async loadHourlyHistory(assetId: string, now: Date) {
+    const cutoff = new Date(now.getTime() - env.BOT_SAMPLE_RETENTION_DAYS * 86_400_000);
+    const result = await this.db.execute(sql`
+      select distinct on (date_trunc('hour', captured_at at time zone 'UTC'))
+        price_usd as "priceUsd",
+        change_24h_pct as "change24hPct",
+        captured_at as "capturedAt"
+      from bot_quote_samples
+      where asset_id = ${assetId} and captured_at >= ${cutoff}
+      order by date_trunc('hour', captured_at at time zone 'UTC') asc, captured_at desc
+    `);
+    return (
+      result.rows as unknown as Array<{
+        priceUsd: string;
+        change24hPct: string | null;
+        capturedAt: Date | string;
+      }>
+    )
+      .map((row) => ({
+        priceUsd: String(row.priceUsd),
+        change24hPct: row.change24hPct === null ? null : String(row.change24hPct),
+        capturedAt: new Date(row.capturedAt),
+      }))
+      .sort((left, right) => left.capturedAt.getTime() - right.capturedAt.getTime());
   }
 
   private async snapshot(botId: string, now: Date, force: boolean): Promise<void> {

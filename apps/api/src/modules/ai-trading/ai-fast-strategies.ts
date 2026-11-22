@@ -536,6 +536,8 @@ export function createFastRuntime(
       });
     }
     default:
+      // Strategies without a native runtime (for example daily_average) use
+      // the Decimal engine; the search falls back per variant.
       return null;
   }
 }
