@@ -31,6 +31,7 @@ The signal screen still counts entry signals at closes; it remains a safe upper 
 
 - Positive: AI search and holdout metrics no longer contain the same-close look-ahead; OOS, drawdown and holdout are more realistic.
 - Positive: the fast engine and the Decimal engine match in both modes: **330/330** extended next-open parity plus the focused engine tests.
+- 20k synthetic 1h pilot: **685** OOS passers vs 687 same-close and 10 vs 10 synthetic recommendations. The H5 impact on 1h data is small; the audit's 26-candle gap fixture shows the larger bias.
 - Neutral: bot backtests and their PDFs stay on `same-close` until a separate rebase; the option is available.
 - Negative: metrics and recommendations change. Returns generally fall; drawdown may rise; the existing 0-recommendation outcome can persist.
 - Negative: a queued order can fill at a gap far from the signal close, which is the intended realism.

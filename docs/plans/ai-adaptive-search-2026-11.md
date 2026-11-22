@@ -223,4 +223,5 @@ The AI search and final holdout now fill at the next candle open instead of the 
 
 - Focused engine tests cover a gapped next-open fill and a last-candle signal that must be ignored.
 - Extended parity: **330/330** variants exact between the native and Decimal engines in next-open mode.
+- 20k synthetic 1h pilot: **685** OOS passers vs 687 same-close; 10 vs 10 synthetic recommendations. The 1h impact is small (the audit measured |Δ| ≤ 0.32 pp on a 1h fixture); the 26-candle gap fixture shows the larger H5 bias. Full evaluation took 353 s with the production survivor shuffle (same-close 20k without shuffle: 503 s; the difference is chunk balance, not H5).
 - `AI_SEARCH_EXECUTION=same-close` / request `execution: "same-close"` is the rollback.
