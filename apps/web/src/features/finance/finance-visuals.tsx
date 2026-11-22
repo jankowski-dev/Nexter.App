@@ -229,7 +229,7 @@ export function FinanceAccountsBlock({
                 tone="text-rose-700"
               />
               <TotalCell
-                label="Чистый капитал"
+                label="Итого по счетам"
                 value={financeMoney(netWorthBase, 'BYN')}
                 tone={hasNegativeNetWorth ? 'text-rose-700' : 'text-emerald-800'}
               />

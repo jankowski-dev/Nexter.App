@@ -68,7 +68,8 @@ describe('finance overview visuals', () => {
 
     expect(html).toContain('Основная карта');
     expect(html).toContain('Карта · BYN');
-    expect(html).toContain('Чистый капитал');
+    expect(html).toContain('Итого по счетам');
+    expect(html).not.toContain('Чистый капитал');
   });
 
   it('renders category shares and the empty state', () => {
