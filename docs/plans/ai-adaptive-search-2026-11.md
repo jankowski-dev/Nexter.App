@@ -186,3 +186,19 @@ CPU profile of 100 slow variants: **85–90% Decimal.js**, indicators ~3%, Zod ~
 - `AI_SEARCH_FAST_ENGINE=0` is the rollback; set `AI_SEARCH_FULL_BUDGET=8000` when running the slower Decimal path.
 
 No threshold, holdout or candidate-set changes. Bots and holdout remain on the Decimal engine.
+
+## 20k fast-engine pilot 2026-11-22
+
+The native search engine (ADR 0077) was run on 20,000 proposals over the synthetic 180-day 1h fixture with 4 workers:
+
+| Stage            | Result                                             |
+| ---------------- | -------------------------------------------------- |
+| Generated        | 20,000                                             |
+| Signal screen    | 11,078 survivors; 8,922 rejected (44.6%) in 13.4 s |
+| Full eight folds | 11,078 evaluated in 503 s                          |
+| OOS passers      | 687                                                |
+| Holdout tested   | 10                                                 |
+| Recommendations  | 10 (synthetic fixture; not a production claim)     |
+| Total            | 517 s; 45 ms/variant wall                          |
+
+Extrapolation: 50k ≈ 21 min on 4 workers / ≈14 min on 6; 100k stays within the 90-minute cycle. With the budget disabled by default, every signal-screen survivor is evaluated — no sample-based loss.
