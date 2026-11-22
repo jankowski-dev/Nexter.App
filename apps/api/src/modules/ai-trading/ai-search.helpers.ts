@@ -254,16 +254,115 @@ export function searchWorkerCount(
   return Math.max(1, Math.min(maxWorkers, Math.floor(value)));
 }
 
-export type HoldoutRejection = 'negative holdout' | 'holdout drawdown too high' | null;
+export interface HoldoutCandidateLike {
+  policyScore: string;
+  oosMedianReturnPct: string;
+  variant: { strategyKey: string; params: Record<string, unknown> };
+}
+
+function compareHoldoutCandidates<T extends HoldoutCandidateLike>(left: T, right: T): number {
+  return (
+    Number(right.policyScore) - Number(left.policyScore) ||
+    Number(right.oosMedianReturnPct) - Number(left.oosMedianReturnPct) ||
+    left.variant.strategyKey.localeCompare(right.variant.strategyKey) ||
+    JSON.stringify(left.variant.params).localeCompare(JSON.stringify(right.variant.params))
+  );
+}
+
+export function selectHoldoutCandidates<T extends HoldoutCandidateLike>(
+  candidates: T[],
+  limit = 50,
+): T[] {
+  if (limit <= 0) return [];
+  const groups = new Map<string, T[]>();
+  for (const candidate of candidates) {
+    const list = groups.get(candidate.variant.strategyKey) ?? [];
+    list.push(candidate);
+    groups.set(candidate.variant.strategyKey, list);
+  }
+  const order = [...groups.keys()].sort(
+    (left, right) =>
+      compareHoldoutCandidates(groups.get(left)?.[0] as T, groups.get(right)?.[0] as T) ||
+      left.localeCompare(right),
+  );
+  for (const list of groups.values()) list.sort(compareHoldoutCandidates);
+  const selected: T[] = [];
+  const chosen = new Set<T>();
+  for (let rank = 0; selected.length < limit; rank += 1) {
+    let added = 0;
+    for (const key of order) {
+      const candidate = groups.get(key)?.[rank];
+      if (!candidate) continue;
+      selected.push(candidate);
+      chosen.add(candidate);
+      added += 1;
+      if (selected.length >= limit) break;
+    }
+    if (added === 0) break;
+  }
+  if (selected.length < limit) {
+    for (const candidate of [...candidates].sort(compareHoldoutCandidates)) {
+      if (chosen.has(candidate)) continue;
+      selected.push(candidate);
+      if (selected.length >= limit) break;
+    }
+  }
+  return selected;
+}
+
+export interface HoldoutBlockStats {
+  returnsPct: string[];
+  nonNegative: number;
+  total: number;
+  lastNegative: boolean;
+}
+
+export function holdoutBlockStats(
+  equityCurve: Array<{ equityUsd: string }>,
+  blocks = 3,
+): HoldoutBlockStats | null {
+  if (blocks <= 0 || equityCurve.length < blocks) return null;
+  const size = Math.floor(equityCurve.length / blocks);
+  if (size <= 0) return null;
+  let previous = Number(equityCurve[0]?.equityUsd ?? 0);
+  if (!Number.isFinite(previous) || previous <= 0) return null;
+  const returnsPct: string[] = [];
+  for (let index = 0; index < blocks; index += 1) {
+    const endIndex = index === blocks - 1 ? equityCurve.length - 1 : (index + 1) * size - 1;
+    const end = Number(equityCurve[endIndex]?.equityUsd ?? previous);
+    if (!Number.isFinite(end)) return null;
+    returnsPct.push(((end / previous - 1) * 100).toFixed(2));
+    previous = end;
+  }
+  const numeric = returnsPct.map(Number);
+  return {
+    returnsPct,
+    nonNegative: numeric.filter((value) => value >= 0).length,
+    total: numeric.length,
+    lastNegative: (numeric.at(-1) ?? 0) < 0,
+  };
+}
+
+export type HoldoutRejection =
+  | 'negative holdout'
+  | 'holdout drawdown too high'
+  | 'holdout blocks unstable'
+  | 'holdout recent block negative'
+  | 'holdout blocks unavailable'
+  | null;
 
 export function holdoutRejection(
   returnPct: number,
   drawdownPct: number,
-  maxDrawdownPct = 20,
+  maxDrawdownPct: number,
+  blocks: HoldoutBlockStats | null,
 ): HoldoutRejection {
   if (!Number.isFinite(returnPct) || returnPct <= 0) return 'negative holdout';
   if (Number.isFinite(drawdownPct) && drawdownPct > maxDrawdownPct) {
     return 'holdout drawdown too high';
   }
+  if (!blocks || blocks.total < 3) return 'holdout blocks unavailable';
+  if (blocks.nonNegative < 2) return 'holdout blocks unstable';
+  if (blocks.lastNegative) return 'holdout recent block negative';
   return null;
 }

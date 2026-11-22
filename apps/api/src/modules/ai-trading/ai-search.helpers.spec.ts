@@ -5,9 +5,11 @@ import {
   buildSearchFolds,
   generateSearchVariants,
   historyDaysFor,
+  holdoutBlockStats,
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  selectHoldoutCandidates,
   shuffleVariantsInPlace,
   stabilityPctFor,
 } from './ai-search.helpers';
@@ -81,6 +83,70 @@ describe('AI search helpers', () => {
   });
 });
 
+function candidate(strategyKey: string, policyScore: number, id: string) {
+  return {
+    id,
+    policyScore: policyScore.toFixed(4),
+    oosMedianReturnPct: '1.00',
+    variant: { strategyKey, params: { id } },
+  };
+}
+
+describe('holdout selection', () => {
+  it('selects 50 candidates round-robin by strategy and fills the remainder by score', () => {
+    const keys = Array.from({ length: 12 }, (_, index) => `s${String(index).padStart(2, '0')}`);
+    const candidates = keys.flatMap((key, strategyIndex) =>
+      Array.from({ length: 5 }, (_, rank) =>
+        candidate(key, 100 - strategyIndex - rank * 10, `${key}-${rank}`),
+      ),
+    );
+    const selected = selectHoldoutCandidates(candidates, 50);
+    expect(selected).toHaveLength(50);
+    expect(new Set(selected.map((item) => item.id)).size).toBe(50);
+    expect(selected.slice(0, 12).map((item) => item.variant.strategyKey)).toEqual(keys);
+    expect(selected.slice(12, 24).map((item) => item.variant.strategyKey)).toEqual(keys);
+    expect(selected.slice(-2).map((item) => item.id)).toEqual(['s00-4', 's01-4']);
+    expect(selectHoldoutCandidates(candidates, 50)).toEqual(selected);
+  });
+
+  it('skips exhausted strategies and never duplicates candidates', () => {
+    const candidates = [
+      candidate('a', 10, 'a-0'),
+      candidate('b', 9, 'b-0'),
+      candidate('b', 8, 'b-1'),
+      candidate('b', 7, 'b-2'),
+    ];
+    const selected = selectHoldoutCandidates(candidates, 5);
+    expect(selected.map((item) => item.id)).toEqual(['a-0', 'b-0', 'b-1', 'b-2']);
+  });
+});
+
+describe('holdout blocks', () => {
+  it('splits the holdout equity curve into three 10-day block returns', () => {
+    const curve = [100, 110, 120, 100, 90, 80, 90, 100, 110].map((equity) => ({
+      equityUsd: String(equity),
+    }));
+    const stats = holdoutBlockStats(curve, 3);
+    expect(stats).not.toBeNull();
+    expect(stats?.returnsPct).toEqual(['20.00', '-33.33', '37.50']);
+    expect(stats?.nonNegative).toBe(2);
+    expect(stats?.total).toBe(3);
+    expect(stats?.lastNegative).toBe(false);
+  });
+
+  it('flags a negative last block and an unusable curve', () => {
+    const lastNegative = holdoutBlockStats(
+      [100, 110, 120, 130, 140, 150, 100, 90, 80].map((equity) => ({
+        equityUsd: String(equity),
+      })),
+      3,
+    );
+    expect(lastNegative?.nonNegative).toBe(2);
+    expect(lastNegative?.lastNegative).toBe(true);
+    expect(holdoutBlockStats([{ equityUsd: '100' }, { equityUsd: '110' }], 3)).toBeNull();
+  });
+});
+
 describe('partial history windows', () => {
   it('counts available days and fits fewer folds into a 146-day window', () => {
     const candles = hourlyCandles(146);
@@ -103,18 +169,35 @@ describe('partial history windows', () => {
   });
 });
 
+const passingBlocks = {
+  returnsPct: ['1.00', '2.00', '3.00'],
+  nonNegative: 3,
+  total: 3,
+  lastNegative: false,
+};
+
 describe('holdoutRejection', () => {
   it('accepts a positive holdout below the drawdown limit', () => {
-    expect(holdoutRejection(5, 10, 20)).toBeNull();
+    expect(holdoutRejection(5, 10, 20, passingBlocks)).toBeNull();
   });
 
   it('labels a non-positive return as a negative holdout', () => {
-    expect(holdoutRejection(0, 10, 20)).toBe('negative holdout');
-    expect(holdoutRejection(-1, 10, 20)).toBe('negative holdout');
+    expect(holdoutRejection(0, 10, 20, passingBlocks)).toBe('negative holdout');
+    expect(holdoutRejection(-1, 10, 20, passingBlocks)).toBe('negative holdout');
   });
 
   it('labels a positive return with a high drawdown separately', () => {
-    expect(holdoutRejection(108.78, 21, 20)).toBe('holdout drawdown too high');
+    expect(holdoutRejection(108.78, 21, 20, passingBlocks)).toBe('holdout drawdown too high');
+  });
+
+  it('rejects an unstable block set, a negative last block, and missing blocks', () => {
+    expect(holdoutRejection(5, 10, 20, { ...passingBlocks, nonNegative: 1 })).toBe(
+      'holdout blocks unstable',
+    );
+    expect(
+      holdoutRejection(5, 10, 20, { ...passingBlocks, nonNegative: 2, lastNegative: true }),
+    ).toBe('holdout recent block negative');
+    expect(holdoutRejection(5, 10, 20, null)).toBe('holdout blocks unavailable');
   });
 });
 
