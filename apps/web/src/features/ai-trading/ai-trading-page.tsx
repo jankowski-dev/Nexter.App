@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
+import { TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -12,6 +13,7 @@ import {
   cancelAiCycle,
   cancelAiSearch,
   createTradingBot,
+  deleteAiSearchRun,
   fetchAiSearchResults,
   fetchAiSearchRuns,
   fetchAiSearchStatus,
@@ -51,6 +53,7 @@ import type {
   AiSearchCandidate,
   AiSearchExecution,
   AiSearchResults,
+  AiSearchRunSummary,
   AiSearchTimeframe,
   AiTimeframe,
   BotCreateRequest,
@@ -968,6 +971,8 @@ function UniverseSection({
   const [timeframes, setTimeframes] = useState<AiTimeframe[]>(['1h', '4h']);
   const [priority, setPriority] = useState('0');
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<AiProfileToken | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const existingIds = new Set(tokens.map((token) => token.asset.id));
   const options = watchlistEntries.filter((entry) => !existingIds.has(entry.asset.id));
 
@@ -997,7 +1002,12 @@ function UniverseSection({
 
   const remove = useMutation({
     mutationFn: (id: string) => removeAiToken(id),
-    onSuccess: onChanged,
+    onSuccess: () => {
+      setDeleteTarget(null);
+      setDeleteError(null);
+      onChanged();
+    },
+    onError: (err) => setDeleteError(toRussianError(err, 'Не удалось удалить токен')),
   });
 
   return (
@@ -1090,15 +1100,42 @@ function UniverseSection({
               />
               <Button
                 variant="ghost"
-                className="h-8 px-2 text-xs text-red-700 hover:text-red-800"
-                onClick={() => remove.mutate(token.id)}
+                className="h-8 w-8 px-0 text-zinc-500 hover:text-red-700"
+                aria-label={`Удалить ${token.asset.symbol} из вселенной`}
+                title="Удалить из вселенной"
+                disabled={remove.isPending}
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteTarget(token);
+                }}
               >
-                Убрать
+                <TrashIcon />
               </Button>
             </div>
           ))
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Удалить токен из вселенной?"
+        description={
+          deleteTarget
+            ? `${deleteTarget.asset.symbol} будет удалён из AI-вселенной. История поисков, свечи, роботы и рекомендации сохранятся.`
+            : ''
+        }
+        confirmLabel="Удалить токен"
+        busy={remove.isPending}
+        error={deleteError}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.id);
+        }}
+        onCancel={() => {
+          if (!remove.isPending) {
+            setDeleteTarget(null);
+            setDeleteError(null);
+          }
+        }}
+      />
     </Card>
   );
 }
@@ -1652,6 +1689,8 @@ function SearchSection({
   const [variants, setVariants] = useState('5000');
   const [horizon, setHorizon] = useState('5');
   const [runId, setRunId] = useState<string | null>(null);
+  const [deleteRun, setDeleteRun] = useState<AiSearchRunSummary | null>(null);
+  const [deleteRunError, setDeleteRunError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dataNotice, setDataNotice] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState<{
@@ -1722,6 +1761,18 @@ function SearchSection({
   const cancel = useMutation({
     mutationFn: () => cancelAiSearch(runId as string),
     onError: (err) => setError(toRussianError(err, 'Не удалось остановить поиск')),
+  });
+
+  const removeRun = useMutation({
+    mutationFn: (id: string) => deleteAiSearchRun(id),
+    onSuccess: (_result, id) => {
+      if (runId === id) setRunId(null);
+      setDeleteRun(null);
+      setDeleteRunError(null);
+      onChanged();
+    },
+    onError: (err) =>
+      setDeleteRunError(toRussianError(err, 'Не удалось удалить запуск из истории')),
   });
 
   const loadData = useMutation({
@@ -1898,41 +1949,63 @@ function SearchSection({
             </p>
           ) : (
             <div className="mt-3 space-y-1.5">
-              {runs.data.data.map((run) => (
-                <button
-                  key={run.runId}
-                  type="button"
-                  onClick={() => setRunId(run.runId)}
-                  className={`flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs transition-colors hover:border-emerald-300 ${
-                    run.runId === runId
-                      ? 'border-emerald-300 bg-emerald-50/50'
-                      : 'border-zinc-200 bg-white'
-                  }`}
-                >
-                  <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-zinc-900">
-                      {run.symbol} · {run.timeframe}
-                    </span>
-                    <Badge
-                      tone={
-                        run.status === 'succeeded'
-                          ? 'success'
-                          : run.status === 'failed'
-                            ? 'danger'
-                            : run.status === 'cancelled'
-                              ? 'warning'
-                              : 'info'
-                      }
+              {runs.data.data.map((run) => {
+                const terminal = run.status !== 'queued' && run.status !== 'running';
+                return (
+                  <div
+                    key={run.runId}
+                    className={`flex w-full items-center gap-1 rounded-lg border px-2.5 py-2 text-xs transition-colors hover:border-emerald-300 ${
+                      run.runId === runId
+                        ? 'border-emerald-300 bg-emerald-50/50'
+                        : 'border-zinc-200 bg-white'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setRunId(run.runId)}
+                      className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 text-left"
                     >
-                      {run.status}
-                    </Badge>
-                    <span className="text-zinc-500">
-                      {run.variants} вариантов · {run.recommended} рекомендаций
-                    </span>
-                  </span>
-                  <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>
-                </button>
-              ))}
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-900">
+                          {run.symbol} · {run.timeframe}
+                        </span>
+                        <Badge
+                          tone={
+                            run.status === 'succeeded'
+                              ? 'success'
+                              : run.status === 'failed'
+                                ? 'danger'
+                                : run.status === 'cancelled'
+                                  ? 'warning'
+                                  : 'info'
+                          }
+                        >
+                          {run.status}
+                        </Badge>
+                        <span className="text-zinc-500">
+                          {run.variants} вариантов · {run.recommended} рекомендаций
+                        </span>
+                      </span>
+                      <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>
+                    </button>
+                    {terminal ? (
+                      <Button
+                        variant="ghost"
+                        className="h-7 w-7 shrink-0 px-0 text-zinc-400 hover:text-red-700"
+                        aria-label={`Удалить запуск ${run.symbol} ${run.timeframe} из истории`}
+                        title="Удалить из истории"
+                        disabled={removeRun.isPending}
+                        onClick={() => {
+                          setDeleteRunError(null);
+                          setDeleteRun(run);
+                        }}
+                      >
+                        <TrashIcon />
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>
@@ -2196,6 +2269,27 @@ function SearchSection({
         onCreated={(bot) => {
           setCreatedBot(bot);
           onChanged();
+        }}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteRun)}
+        title="Удалить запуск из истории?"
+        description={
+          deleteRun
+            ? `Запуск ${deleteRun.symbol} · ${deleteRun.timeframe} будет скрыт из истории поисков. Результаты, свечи, рекомендации и аудит сохранятся.`
+            : ''
+        }
+        confirmLabel="Удалить из истории"
+        busy={removeRun.isPending}
+        error={deleteRunError}
+        onConfirm={() => {
+          if (deleteRun) removeRun.mutate(deleteRun.runId);
+        }}
+        onCancel={() => {
+          if (!removeRun.isPending) {
+            setDeleteRun(null);
+            setDeleteRunError(null);
+          }
         }}
       />
     </div>
