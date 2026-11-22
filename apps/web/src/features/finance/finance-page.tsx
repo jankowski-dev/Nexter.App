@@ -26,7 +26,6 @@ import { Decimal } from 'decimal.js';
 import { useMemo, useRef, useState } from 'react';
 import type {
   FinanceAccount,
-  FinanceAccountKind,
   FinanceCategory,
   FinanceCategoryKind,
   FinanceCurrency,
@@ -35,7 +34,6 @@ import type {
   FinanceTransaction,
   FinanceTransactionKind,
   FinanceTransfer,
-  FinanceTransferKind,
 } from '@nexter/contracts';
 import {
   FinanceAccountDialog,
@@ -45,6 +43,17 @@ import {
 } from './finance-dialogs';
 import { categoryColorClass } from './category-colors';
 import { FinanceCreditDialog } from './finance-credit-dialog';
+import {
+  accountKindLabels,
+  financeMoney as money,
+  monthLabel,
+  transferKindLabels,
+} from './finance-view-model';
+import {
+  FinanceAccountsBlock,
+  FinanceCategoriesBlock,
+  FinanceMonthsBlock,
+} from './finance-visuals';
 
 type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories' | 'import';
 type JournalFilter = 'all' | 'income' | 'expense' | 'transfer' | 'cancelled';
@@ -56,22 +65,6 @@ const tabLabels: Record<FinanceTab, string> = {
   accounts: 'Счета',
   categories: 'Категории',
   import: 'Импорт',
-};
-
-const accountKindLabels: Record<FinanceAccountKind, string> = {
-  cash: 'Наличные',
-  card: 'Карта',
-  bank: 'Банк',
-  savings: 'Накопления',
-  investment: 'Инвестиции',
-  credit: 'Кредит',
-};
-
-const transferKindLabels: Record<FinanceTransferKind, string> = {
-  exchange: 'Обмен валют',
-  card_topup: 'Пополнение карты',
-  credit: 'Кредит / погашение',
-  other: 'Другое',
 };
 
 const periodLabels: Record<PeriodPreset, string> = {
@@ -103,28 +96,6 @@ function monthEnd(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number);
   const date = new Date(Date.UTC(year, monthNumber, 0));
   return date.toISOString().slice(0, 10);
-}
-
-function money(
-  value: string | number | null | undefined,
-  currency: FinanceCurrency | 'BYN',
-): string {
-  if (value === null || value === undefined || value === '') return '—';
-  const number = Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return new Intl.NumberFormat('ru-RU', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(number);
-}
-
-function monthLabel(month: string): string {
-  const value = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(
-    new Date(`${month}-01T12:00:00`),
-  );
-  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function statusTone(status: string): 'success' | 'warning' | 'neutral' {
@@ -277,6 +248,7 @@ export function FinancePage() {
   const categoryRows = categories.data?.categories ?? [];
   const accountById = new Map(accountRows.map((account) => [account.id, account]));
   const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
+  const categoryColorById = new Map(categoryRows.map((category) => [category.id, category.color]));
 
   function invalidate(): void {
     for (const key of [
@@ -573,129 +545,23 @@ export function FinancePage() {
             меняется. Сама операция — во вкладке «Переводы».
           </p>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardTitle>Счета</CardTitle>
-              <CardDescription>Текущие балансы по валютам.</CardDescription>
-              <div className="mt-4 space-y-2">
-                {accountRows.map((account) => (
-                  <div
-                    key={account.id}
-                    className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 px-3 py-2 ${
-                      account.archivedAt ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-zinc-900">{account.name}</div>
-                      <div className="text-xs text-zinc-500">
-                        {accountKindLabels[account.kind]} · {account.currency}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-sm font-semibold text-zinc-900">
-                        {money(account.balance, account.currency)}
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        {money(account.balanceBase, 'BYN')}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card>
-              <CardTitle>Категории периода</CardTitle>
-              <CardDescription>{periodRange.label}</CardDescription>
-              <div className="mt-4 space-y-3">
-                {(summary.data?.categories ?? []).length === 0 ? (
-                  <p className="text-sm text-zinc-500">Операций за период пока нет.</p>
-                ) : (
-                  (summary.data?.categories ?? []).map((category) => {
-                    const known = category.categoryId
-                      ? categoryById.get(category.categoryId)
-                      : null;
-                    const max = Math.max(
-                      ...(summary.data?.categories ?? []).map((item) => Number(item.amountBase)),
-                      1,
-                    );
-                    return (
-                      <div key={`${category.categoryId ?? category.name}-${category.kind}`}>
-                        <div className="flex items-center justify-between gap-2 text-sm">
-                          <span className="flex items-center gap-2 text-zinc-700">
-                            <span
-                              className={`h-2.5 w-2.5 rounded-full ${
-                                categoryColorClass[known?.color ?? 'default'] ??
-                                categoryColorClass.default
-                              }`}
-                            />
-                            {category.name}
-                            <Badge tone={category.kind === 'income' ? 'success' : 'neutral'}>
-                              {category.kind === 'income' ? 'доход' : 'расход'}
-                            </Badge>
-                          </span>
-                          <span className="font-mono text-zinc-900">
-                            {money(category.amountBase, 'BYN')}
-                          </span>
-                        </div>
-                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100">
-                          <div
-                            className={`h-full rounded-full ${
-                              category.kind === 'income' ? 'bg-emerald-500' : 'bg-red-400'
-                            }`}
-                            style={{
-                              width: `${Math.max(2, (Number(category.amountBase) / max) * 100)}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </Card>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <FinanceAccountsBlock
+              accounts={accountRows}
+              assetsBase={summary.data?.assetsBase}
+              liabilitiesBase={summary.data?.liabilitiesBase}
+              netWorthBase={summary.data?.netWorthBase}
+              onManage={() => setTab('accounts')}
+            />
+            <FinanceCategoriesBlock
+              categories={summary.data?.categories ?? []}
+              colorById={categoryColorById}
+              periodLabel={periodRange.label}
+              onAddExpense={() => setTransactionDialog({ kind: 'expense' })}
+            />
           </div>
 
-          <Card>
-            <CardTitle>Последние 12 месяцев</CardTitle>
-            <CardDescription>
-              Доходы, расходы (включая погашение кредита) и чистый поток в BYN.
-            </CardDescription>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-200 text-left text-xs text-zinc-500">
-                    <th className="py-2 pr-3 font-medium">Месяц</th>
-                    <th className="py-2 pr-3 text-right font-medium">Доходы</th>
-                    <th className="py-2 pr-3 text-right font-medium">Расходы</th>
-                    <th className="py-2 text-right font-medium">Сальдо</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(summary.data?.months ?? []).map((row) => (
-                    <tr key={row.month} className="border-b border-zinc-100 last:border-0">
-                      <td className="py-2 pr-3 capitalize text-zinc-700">
-                        {monthLabel(row.month)}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono text-emerald-700">
-                        {money(row.incomeBase, 'BYN')}
-                      </td>
-                      <td className="py-2 pr-3 text-right font-mono text-red-700">
-                        {money(row.expenseBase, 'BYN')}
-                      </td>
-                      <td
-                        className={`py-2 text-right font-mono ${
-                          Number(row.netBase) >= 0 ? 'text-emerald-700' : 'text-red-700'
-                        }`}
-                      >
-                        {money(row.netBase, 'BYN')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+          <FinanceMonthsBlock months={summary.data?.months ?? []} />
         </div>
       ) : null}
 
