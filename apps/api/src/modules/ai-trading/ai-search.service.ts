@@ -42,6 +42,7 @@ import {
 } from './ai-error.helpers';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
 import { evaluateVariantFolds } from './ai-search.evaluate';
+import { screenVariant } from './ai-search.screen';
 import {
   buildSearchFolds,
   candlesPerDay,
@@ -633,6 +634,7 @@ export class AiSearchService {
       stats: (payload.stats as AiSearchStats | undefined) ?? {
         total: 0,
         evaluated: 0,
+        screenedOut: 0,
         valid: 0,
         oosPassed: 0,
         holdoutTested: 0,
@@ -711,6 +713,17 @@ export class AiSearchService {
     const reject = (reason: string) => {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
     };
+
+    const screenedVariants = variants.filter((variant) => {
+      const screen = screenVariant(variant, folds.folds, {
+        timeframe: input.timeframe,
+        minTrades,
+      });
+      if (screen.ok) return true;
+      reject(screen.reason ?? 'too few entry signals');
+      return false;
+    });
+    const screenedOutCount = variants.length - screenedVariants.length;
 
     const rememberNearMiss = (
       aggregate: VariantMetrics,
@@ -799,15 +812,17 @@ export class AiSearchService {
     const workerCount = searchWorkerCount();
     if (shouldUseWorkers(process.env, workerCount, workerFileExists())) {
       let lastWritten = 0;
-      const pool = await runWorkerPool(variants, folds.folds, input.timeframe, {
+      const pool = await runWorkerPool(screenedVariants, folds.folds, input.timeframe, {
         workerCount,
         workerPath: defaultWorkerPath(),
         control,
         onProgress: (value) => {
           evaluated = value;
-          if (value - lastWritten >= 50 || value === variants.length) {
+          if (value - lastWritten >= 50 || value === screenedVariants.length) {
             lastWritten = value;
-            void this.updateProgress(runId, input, variants.length, value).catch(() => undefined);
+            void this.updateProgress(runId, input, variants.length, screenedOutCount + value).catch(
+              () => undefined,
+            );
           }
         },
       });
@@ -815,14 +830,14 @@ export class AiSearchService {
         await cancelRun();
         return;
       }
-      evaluated = variants.length;
+      evaluated = screenedVariants.length;
       pool.results.forEach((result, index) => {
-        const variant = variants[index];
+        const variant = screenedVariants[index];
         if (variant) processEvaluation(variant, result);
       });
-      await this.updateProgress(runId, input, variants.length, evaluated);
+      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
     } else {
-      for (const [index, variant] of variants.entries()) {
+      for (const [index, variant] of screenedVariants.entries()) {
         // Yield after every variant: a 5 000-variant search must not block the API event loop.
         if (index > 0) {
           await new Promise((resolve) => setImmediate(resolve));
@@ -834,10 +849,11 @@ export class AiSearchService {
 
         evaluated += 1;
         if (evaluated % 50 === 0) {
-          await this.updateProgress(runId, input, variants.length, evaluated);
+          await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
         }
         processEvaluation(variant, evaluateVariantFolds(variant, folds.folds, input.timeframe));
       }
+      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
     }
 
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
@@ -938,6 +954,7 @@ export class AiSearchService {
       folds.folds.length,
       metrics.length,
       top.length,
+      screenedOutCount,
     );
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
@@ -1032,7 +1049,7 @@ export class AiSearchService {
             timeframe: input.timeframe,
             variants: variants.length,
             lookbackDays,
-            progress: { evaluated, total: variants.length },
+            progress: { evaluated: screenedOutCount + evaluated, total: variants.length },
             stats,
           } satisfies SearchRunSummary,
         })
@@ -1096,6 +1113,7 @@ export class AiSearchService {
     foldCount: number,
     oosPassed: number,
     holdoutTested: number,
+    screenedOut: number,
   ): AiSearchStats {
     const returns = metrics.map((item) => item.returnPct);
     const drawdowns = metrics.map((item) => item.drawdown);
@@ -1124,6 +1142,7 @@ export class AiSearchService {
     return {
       total,
       evaluated,
+      screenedOut,
       valid: metrics.length,
       oosPassed,
       holdoutTested,

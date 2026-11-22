@@ -137,3 +137,9 @@ Extrapolation: 50,000 one-fold probes ≈ 32 min locally; 1,000,000 ≈ 10+ hour
 - time: one-fold **442 s**, full 8 folds **984 s**; generate+screen < 1 s.
 
 The funnel cut full 8-fold evaluations by ~70%, but the one-fold probe still cost 7.4 min. A 50k/1M pilot needs the signal-only evaluator, not a one-fold full backtest. This is the baseline for Phase 9.
+
+## Signal-screen pilot 2026-11-22
+
+On 5,000 random variants over 180 days (8 folds), the signal-only screen took **2.9 s** and rejected **2,186 (43.7%)** with `too few entry signals`; 2,814 survived. It covers 7 strategies where counting buy signals is a safe upper bound. Grid/DCA/crash/failed breakout are position/state-dependent and deliberately skip this hard gate.
+
+For comparison, the one-fold full backtest of the same 5,000 took 191 s. The signal screen is ~65× cheaper and already removes almost half the proposals before any P&L simulation.
