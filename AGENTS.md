@@ -122,6 +122,16 @@ Phase 11 — Other modules implemented (2026-11-09): end-to-end encrypted passwo
 
 Phase 3 — Accounting core, Phase 4 — Notion import, Phase 5 — MVP-1 UI, Phase 6 — MVP-1 hardening, and Phase 7 — Swap foundation are accepted. Phase 7 is scoped by ADR 0009: BSC quote/build/simulate only, no signing. Phase 8 adds WalletConnect/Tangem, exact approvals, step-up TOTP, submission/tracking, and accounting integration. No private keys or seed phrases may ever reach the server.
 
+AI staged search funnel (2026-11-22, no migration): search now runs screen → optional probe (off by default) → budget (disabled by default after the native engine) → 8-fold OOS → control samples → holdout; the artifact returns per-stage counts/timings and control recall, status exposes stage progress, the request limit is 100,000 and the UI offers 10k/20k/50k. The one-fold probe lost 18.3% of OOS passers (47.8% inside squeeze), so it stays opt-in. Production release: PR #296 merged as `4c7fd39`, deployment `7979156534`, bundle `assets/index-BnXGP_a5.js`, `/health` and `/ready` 200.
+
+Native fast AI search backtest (2026-11-22, no migration): all 11 strategies have native-number indicator/decision runtimes with Decimal cash/position/fills; boundary comparisons within `1e-11` re-run only that fold on the Decimal engine. Parity 132/132 focused, 990/990 extended, production path 300/300 exact; 25x raw and 7.8x end-to-end speedups; a 5,000-variant search goes from ~15 minutes to ~2. The funnel budget is disabled by default, so every signal-screen survivor is evaluated. `AI_SEARCH_FAST_ENGINE=0` is the rollback. Production release: PR #297 merged as `c4962476`, deployment `7979408773`, bundle unchanged `assets/index-BnXGP_a5.js`, `/health` and `/ready` 200. See ADR 0077.
+
+Cycle search JSON export (2026-11-22, no migration): the AI cycle card downloads the linked search results artifact (`Экспорт JSON`), using the cycle's `searchRunId`; exporting/error states are inline. Production release: PR #298 merged as `1b94484`, deployment `7979549415`, bundle `assets/index-DSvrmy0_.js`, `/health` and `/ready` 200.
+
+20k fast-engine pilot (2026-11-22): 20,000 variants → 11,078 signal-screen survivors → 687 OOS passers → 10 holdout recommendations on the synthetic fixture (not a production claim). Timings on 4 workers: screen 13.4 s, full eight folds 503 s, total 517 s (45 ms/variant wall; unshuffled survivor order).
+
+50k fast-engine pilot (2026-11-22): 50,000 variants → 27,716 screen survivors → 1,597 OOS passers → 10 holdout recommendations on the synthetic fixture. With the production survivor shuffle: screen 32.0 s, full eight folds 641 s, total 674 s on 4 workers (23 ms/variant wall). Production 6 workers ≈ 7.5 min; 100k ≈ 15 min, inside the 90-minute cycle. Every screen survivor is evaluated (budget disabled).
+
 ## Non-negotiable rules
 
 1. No private keys, seed phrases, or signing keys on the server.
