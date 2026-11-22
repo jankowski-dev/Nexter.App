@@ -45,6 +45,24 @@ function runtime(values: RuntimeValues & { isAmbiguous: () => boolean }): FastSt
   };
 }
 
+function utcDayKey(value: string): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function numericMedian(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? (sorted[middle] as number)
+    : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
+}
+
+function numericAverage(values: number[]): number {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
 export function createFastRuntime(
   variant: SearchVariant,
   candles: BotCandle[],
@@ -535,9 +553,76 @@ export function createFastRuntime(
           step(index, current, position, useStopLoss, useTakeProfit),
       });
     }
+    case 'daily_average': {
+      const lookbackDays = Math.max(1, Math.floor(num(params, 'lookbackDays', 20)));
+      const entryBuffer = num(params, 'entryBufferPct', 0.5);
+      const exitBuffer = num(params, 'exitBufferPct', 0.5);
+      const takeProfit = num(params, 'takeProfitPct', 5);
+      const stopLoss = num(params, 'stopLossPct', 8);
+      const useMedian = params.useMedian === true;
+      const dayStats = new Map<string, { low: number; high: number }>();
+      const keyByIndex: string[] = [];
+      for (const candle of candles) {
+        const key = utcDayKey(candle.date);
+        keyByIndex.push(key);
+        const value = Number(candle.closeUsd);
+        const stat = dayStats.get(key);
+        if (!stat) {
+          dayStats.set(key, { low: value, high: value });
+        } else {
+          if (value < stat.low) stat.low = value;
+          if (value > stat.high) stat.high = value;
+        }
+      }
+      const sortedKeys = [...dayStats.keys()].sort((left, right) => left.localeCompare(right));
+      const dayIndex = new Map(sortedKeys.map((key, index) => [key, index]));
+      const levelsByDay = new Map<string, { low: number; high: number } | null>();
+      for (const key of sortedKeys) {
+        const complete = dayIndex.get(key) ?? 0;
+        if (complete < lookbackDays) {
+          levelsByDay.set(key, null);
+          continue;
+        }
+        const windowKeys = sortedKeys.slice(complete - lookbackDays, complete);
+        const lows = windowKeys.map((item) => (dayStats.get(item) as { low: number }).low);
+        const highs = windowKeys.map((item) => (dayStats.get(item) as { high: number }).high);
+        levelsByDay.set(key, {
+          low: useMedian ? numericMedian(lows) : numericAverage(lows),
+          high: useMedian ? numericMedian(highs) : numericAverage(highs),
+        });
+      }
+      return build({
+        stateful: false,
+        stopLossPct: stopLoss,
+        takeProfitPct: takeProfit,
+        warmup: () => undefined,
+        evaluate: (index, current, _change24h, position, _buyCount, useStopLoss, useTakeProfit) => {
+          const levels = levelsByDay.get(keyByIndex[index] as string) ?? null;
+          if (position) {
+            const avg = position.avgCostUsd;
+            if (useTakeProfit && cmp.gte(current, avg * (1 + takeProfit / 100))) {
+              return { action: 'sell', reason: 'take profit' };
+            }
+            if (useStopLoss && cmp.lte(current, avg * (1 - stopLoss / 100))) {
+              return { action: 'sell', reason: 'stop loss' };
+            }
+            if (!levels) return HOLD;
+            if (cmp.gte(current, levels.high * (1 + exitBuffer / 100))) {
+              return { action: 'sell', reason: 'daily high' };
+            }
+            return HOLD;
+          }
+          if (!levels) return HOLD;
+          if (cmp.lte(current, levels.low * (1 - entryBuffer / 100))) {
+            return { action: 'buy', reason: 'daily low' };
+          }
+          return HOLD;
+        },
+      });
+    }
     default:
-      // Strategies without a native runtime (for example daily_average) use
-      // the Decimal engine; the search falls back per variant.
+      // Unknown or intentionally unsupported strategies use the Decimal
+      // engine; the search falls back per variant.
       return null;
   }
 }
