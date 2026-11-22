@@ -21,6 +21,7 @@ export type NavIconName =
   | 'quality'
   | 'upload'
   | 'sliders'
+  | 'download'
   | 'ai';
 
 const icons: Record<NavIconName, ReactNode> = {
@@ -142,6 +143,13 @@ const icons: Record<NavIconName, ReactNode> = {
     <>
       <path d="M12 3.5 13.8 8l4.5 1.8-4.5 1.8L12 16l-1.8-4.4L5.7 9.8 10.2 8 12 3.5Z" />
       <path d="m19 15 .9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15Z" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3.5v11" />
+      <path d="m7.5 10 4.5 4.5 4.5-4.5" />
+      <path d="M5 20.5h14" />
     </>
   ),
   settings: (

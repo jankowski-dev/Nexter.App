@@ -296,5 +296,10 @@ try {
   await browser.close();
 }
 
+const publicDir = path.join(root, 'apps/web/public/docs');
+fs.mkdirSync(publicDir, { recursive: true });
+fs.copyFileSync(pdfPath, path.join(publicDir, 'nexter-ai-system-engineering.pdf'));
+
 console.log(`Wrote ${pdfPath}`);
 console.log(`Wrote ${htmlPath}`);
+console.log(`Copied to ${publicDir}`);
