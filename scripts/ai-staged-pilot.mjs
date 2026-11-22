@@ -10,10 +10,7 @@ const { buildSearchFolds, generateSearchVariants, minTradesFor } = require(
 const { screenVariant } = require(`${dist}/modules/ai-trading/ai-search.screen.js`);
 const { runWorkerPool } = require(`${dist}/modules/ai-trading/ai-search.pool.js`);
 const { evaluateVariantFolds } = require(`${dist}/modules/ai-trading/ai-search.evaluate.js`);
-const { runBacktest } = require(`${dist}/modules/trading-bots/backtest/backtest.engine.js`);
-const { strategyByKey, strategyDefinitions } = require(
-  `${dist}/modules/trading-bots/strategies/index.js`,
-);
+const { strategyDefinitions } = require(`${dist}/modules/trading-bots/strategies/index.js`);
 
 const total = Number(process.env.PILOT_VARIANTS ?? 10000);
 const workers = Number(process.env.PILOT_WORKERS ?? 4);

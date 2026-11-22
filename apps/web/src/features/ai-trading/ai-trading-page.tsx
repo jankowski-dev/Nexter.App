@@ -550,6 +550,7 @@ const cycleStepLabels: Record<AiCycleStep['key'], string> = {
 
 const rejectionLabels: Record<string, string> = {
   'too few trades': 'мало сделок',
+  'too few entry signals': 'мало входных сигналов',
   'non-positive OOS median': 'медиана OOS ≤ 0',
   'unstable folds': 'нестабильные фолды',
   'drawdown too high': 'просадка выше лимита',

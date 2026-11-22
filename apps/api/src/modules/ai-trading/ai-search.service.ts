@@ -42,6 +42,7 @@ import {
 } from './ai-error.helpers';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
 import { evaluateVariantFolds } from './ai-search.evaluate';
+import { screenVariant } from './ai-search.screen';
 import {
   buildSearchFolds,
   candlesPerDay,
@@ -712,6 +713,16 @@ export class AiSearchService {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
     };
 
+    const screenedVariants = variants.filter((variant) => {
+      const screen = screenVariant(variant, folds.folds, {
+        timeframe: input.timeframe,
+        minTrades,
+      });
+      if (screen.ok) return true;
+      reject(screen.reason ?? 'too few entry signals');
+      return false;
+    });
+
     const rememberNearMiss = (
       aggregate: VariantMetrics,
       variant: SearchVariant,
@@ -799,7 +810,7 @@ export class AiSearchService {
     const workerCount = searchWorkerCount();
     if (shouldUseWorkers(process.env, workerCount, workerFileExists())) {
       let lastWritten = 0;
-      const pool = await runWorkerPool(variants, folds.folds, input.timeframe, {
+      const pool = await runWorkerPool(screenedVariants, folds.folds, input.timeframe, {
         workerCount,
         workerPath: defaultWorkerPath(),
         control,
@@ -817,12 +828,12 @@ export class AiSearchService {
       }
       evaluated = variants.length;
       pool.results.forEach((result, index) => {
-        const variant = variants[index];
+        const variant = screenedVariants[index];
         if (variant) processEvaluation(variant, result);
       });
       await this.updateProgress(runId, input, variants.length, evaluated);
     } else {
-      for (const [index, variant] of variants.entries()) {
+      for (const [index, variant] of screenedVariants.entries()) {
         // Yield after every variant: a 5 000-variant search must not block the API event loop.
         if (index > 0) {
           await new Promise((resolve) => setImmediate(resolve));
