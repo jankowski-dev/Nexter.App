@@ -271,6 +271,8 @@ export const aiLabBacktestResponseSchema = z.object({
 
 export const aiSearchTimeframes = ['1h', '4h'] as const;
 export const aiSearchTimeframeSchema = z.enum(aiSearchTimeframes);
+export const aiSearchExecutions = ['same-close', 'next-open'] as const;
+export const aiSearchExecutionSchema = z.enum(aiSearchExecutions);
 
 export const aiSearchRequestSchema = z.object({
   assetId: z.uuid(),
@@ -278,6 +280,7 @@ export const aiSearchRequestSchema = z.object({
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
   variants: z.number().int().min(100).max(100000).default(5000),
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
+  execution: aiSearchExecutionSchema.default('next-open'),
 });
 
 export const aiRecommendationStatusSchema = z.enum([
@@ -345,6 +348,7 @@ export const aiCycleRequestSchema = z.object({
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
   variants: z.number().int().min(100).max(100000).default(5000),
   maxDrafts: z.number().int().min(0).max(10).default(3),
+  execution: aiSearchExecutionSchema.default('next-open'),
 });
 export const aiCycleStepSchema = z.object({
   key: z.enum(aiCycleStepKeys),
@@ -481,6 +485,7 @@ export const aiSearchRunSummarySchema = z.object({
   symbol: z.string(),
   name: z.string(),
   timeframe: z.string(),
+  execution: aiSearchExecutionSchema.default('next-open'),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   variants: z.number().int(),
   recommended: z.number().int(),
@@ -513,6 +518,7 @@ export const aiSearchCandidateSchema = z.object({
 export const aiSearchStatusSchema = z.object({
   runId: z.uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  execution: aiSearchExecutionSchema.default('next-open'),
   evaluated: z.number().int(),
   total: z.number().int(),
   percent: z.number(),
@@ -529,6 +535,7 @@ export const aiSearchStatusSchema = z.object({
 export const aiSearchResultsSchema = z.object({
   runId: z.uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  execution: aiSearchExecutionSchema.default('next-open'),
   stats: aiSearchStatsSchema,
   funnel: aiSearchFunnelSchema.nullable().default(null),
   candidates: z.array(aiSearchCandidateSchema),
@@ -614,6 +621,7 @@ export type AiLabQuery = z.infer<typeof aiLabQuerySchema>;
 export type AiLabBacktestRequest = z.infer<typeof aiLabBacktestRequestSchema>;
 export type AiLabBacktestResponse = z.infer<typeof aiLabBacktestResponseSchema>;
 export type AiSearchTimeframe = z.infer<typeof aiSearchTimeframeSchema>;
+export type AiSearchExecution = z.infer<typeof aiSearchExecutionSchema>;
 export type AiSearchRequest = z.infer<typeof aiSearchRequestSchema>;
 export type AiRecommendationStatus = z.infer<typeof aiRecommendationStatusSchema>;
 export type AiRecommendationInvalidationRule = z.infer<

@@ -76,6 +76,61 @@ describe('runBacktest', () => {
     expect(result.stats.buyHoldReturnPct).toBe('-10.00');
   });
 
+  it('fills a next-open decision at the following candle open', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const candles = [
+      bar('2026-01-01', 100, 100, 100, 100),
+      bar('2026-01-02', 100, 100, 100, 100),
+      bar('2026-01-03', 100, 100, 100, 100),
+      bar('2026-01-04', 100, 100, 100, 97),
+      bar('2026-01-05', 90, 100, 90, 100),
+    ];
+    const sameClose = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    const nextOpen = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+      execution: 'next-open',
+    });
+
+    expect(sameClose.trades[0]?.date).toBe('2026-01-04');
+    expect(Number(sameClose.trades[0]?.priceUsd)).toBe(97);
+    expect(nextOpen.trades[0]?.date).toBe('2026-01-05');
+    expect(Number(nextOpen.trades[0]?.priceUsd)).toBe(90);
+    expect(nextOpen.stats.tradesCount).toBe(2);
+  });
+
+  it('ignores a next-open signal on the last candle', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const candles = series([100, 100, 100, 90]);
+    const sameClose = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    const nextOpen = runBacktest(meanReversion, params, candles, {
+      feeBps: 0,
+      slippageBps: 0,
+      execution: 'next-open',
+    });
+
+    expect(sameClose.trades).toHaveLength(2);
+    expect(nextOpen.trades).toHaveLength(0);
+  });
+
   it('warms up indicators without trading before the scoring window', () => {
     const params = meanReversion.parseParams({
       lookback: 3,

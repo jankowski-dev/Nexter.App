@@ -16,6 +16,7 @@ export type WorkerFactory = (workerPath: string) => WorkerLike;
 export interface WorkerPoolOptions {
   workerCount: number;
   workerPath: string;
+  execution?: 'same-close' | 'next-open';
   createWorker?: WorkerFactory;
   onProgress?: (evaluated: number) => void;
   control?: { cancelled: boolean };
@@ -118,7 +119,12 @@ export function runWorkerPool(
               fail(new Error(`search worker exited with code ${String(code)}`));
             }
           });
-          worker.postMessage({ variants: chunk, folds, timeframe });
+          worker.postMessage({
+            variants: chunk,
+            folds,
+            timeframe,
+            execution: options.execution ?? 'next-open',
+          });
         }),
     ),
   )

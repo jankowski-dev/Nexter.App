@@ -7,6 +7,7 @@ interface WorkerJob {
   variants: SearchVariant[];
   folds: SearchFold[];
   timeframe: AiSearchTimeframe;
+  execution?: 'same-close' | 'next-open';
 }
 
 if (!parentPort) {
@@ -19,7 +20,14 @@ port.on('message', (message: WorkerJob) => {
   try {
     const results = [];
     for (const [index, variant] of message.variants.entries()) {
-      results.push(evaluateVariantFolds(variant, message.folds, message.timeframe));
+      results.push(
+        evaluateVariantFolds(
+          variant,
+          message.folds,
+          message.timeframe,
+          message.execution ?? 'next-open',
+        ),
+      );
       if ((index + 1) % 25 === 0) {
         port.postMessage({ type: 'progress', evaluated: index + 1 });
       }

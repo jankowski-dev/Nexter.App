@@ -19,6 +19,7 @@ import {
 } from '@nexter/db';
 import type {
   AiSearchCandidate,
+  AiSearchExecution,
   AiSearchFunnel,
   AiSearchRequest,
   AiRecommendationsResponse,
@@ -86,6 +87,7 @@ interface SearchMeta {
 }
 
 interface SearchProgress {
+  execution?: AiSearchExecution;
   stage?: FunnelStageKey;
   stageEvaluated?: number;
   stageTotal?: number;
@@ -98,6 +100,7 @@ interface SearchProgress {
 interface SearchRunSummary {
   assetId: string;
   timeframe: AiSearchTimeframe;
+  execution: AiSearchExecution;
   variants: number;
   lookbackDays?: number;
   progress: SearchProgress;
@@ -202,6 +205,7 @@ export class AiSearchService {
           summary: {
             assetId: input.assetId,
             timeframe: input.timeframe,
+            execution: this.executionFor(input),
             variants: variants.length,
             lookbackDays,
             progress: { evaluated: 0, total: variants.length },
@@ -240,6 +244,7 @@ export class AiSearchService {
           summary: {
             assetId: input.assetId,
             timeframe: input.timeframe,
+            execution: this.executionFor(input),
             variants: variants.length,
             lookbackDays,
             progress: { evaluated: 0, total: variants.length },
@@ -268,6 +273,10 @@ export class AiSearchService {
     return process.env.NODE_ENV === 'test' || process.env.AI_SEARCH_INLINE === '1';
   }
 
+  private executionFor(input: AiSearchRequest): AiSearchExecution {
+    return process.env.AI_SEARCH_EXECUTION === 'same-close' ? 'same-close' : input.execution;
+  }
+
   private async failRun(
     userId: string,
     runId: string,
@@ -289,6 +298,7 @@ export class AiSearchService {
               summary: {
                 assetId: input.assetId,
                 timeframe: input.timeframe,
+                execution: this.executionFor(input),
                 variants: variantCount,
                 progress: { evaluated: 0, total: variantCount },
                 error: message,
@@ -459,6 +469,7 @@ export class AiSearchService {
             symbol: asset.symbol,
             name: asset.name,
             timeframe: typeof summary.timeframe === 'string' ? summary.timeframe : '1h',
+            execution: summary.execution ?? 'next-open',
             status: row.status as AiSearchStatus['status'],
             variants: summary.variants ?? summary.progress?.total ?? 0,
             recommended: summary.stats?.recommended ?? 0,
@@ -635,6 +646,7 @@ export class AiSearchService {
     return {
       runId: run.id,
       status: run.status as AiSearchStatus['status'],
+      execution: progress?.execution ?? summary.execution ?? 'next-open',
       evaluated,
       total,
       percent:
@@ -668,6 +680,10 @@ export class AiSearchService {
     return {
       runId,
       status: run.status as AiSearchResults['status'],
+      execution:
+        (payload.execution as AiSearchExecution | undefined) ??
+        (run.summary as Partial<SearchRunSummary>).execution ??
+        'next-open',
       stats: (payload.stats as AiSearchStats | undefined) ?? {
         total: 0,
         evaluated: 0,
@@ -737,6 +753,7 @@ export class AiSearchService {
     // worker chunks mix fast and slow strategies instead of waiting for one
     // slow stateful chunk.
     shuffleVariantsInPlace(variants, input.seed ?? 7);
+    const execution = this.executionFor(input);
     const folds = buildSearchFolds(candles, input.timeframe, lookbackDays);
     const foldCount = folds.folds.length;
     const minTrades = minTradesFor(foldCount);
@@ -794,6 +811,7 @@ export class AiSearchService {
       const fraction = stageTotal > 0 ? stageEvaluated / stageTotal : 0;
       const percent = overallPercent(activeStages, stage, fraction);
       return {
+        execution,
         stage,
         stageEvaluated,
         stageTotal,
@@ -948,6 +966,7 @@ export class AiSearchService {
         screenSurvivors,
         folds.folds.slice(0, probeFoldCount),
         input.timeframe,
+        execution,
         control,
         (done) => {
           void writeProgress(progressFor('probe', done, screenSurvivors.length));
@@ -1017,6 +1036,7 @@ export class AiSearchService {
         fullVariants,
         folds.folds,
         input.timeframe,
+        execution,
         control,
         (done) => {
           evaluated = done;
@@ -1068,6 +1088,7 @@ export class AiSearchService {
           controlVariants,
           folds.folds,
           input.timeframe,
+          execution,
           control,
           (done) => {
             void writeProgress(progressFor('control', done, controlVariants.length));
@@ -1141,6 +1162,7 @@ export class AiSearchService {
             slippageBps: SLIPPAGE_BPS,
             changeLookbackCandles: candlesPerDay(input.timeframe),
             warmupCandles: folds.holdoutWarmupCandles,
+            execution,
           },
         );
         const returnPct = Number(result.stats.totalReturnPct);
@@ -1259,6 +1281,7 @@ export class AiSearchService {
     const payload = {
       assetId: input.assetId,
       timeframe: input.timeframe,
+      execution,
       variants: variants.length,
       stats,
       funnel,
@@ -1333,6 +1356,7 @@ export class AiSearchService {
           summary: {
             assetId: input.assetId,
             timeframe: input.timeframe,
+            execution,
             variants: variants.length,
             lookbackDays,
             progress: {
@@ -1382,6 +1406,7 @@ export class AiSearchService {
     variants: SearchVariant[],
     folds: SearchFold[],
     timeframe: AiSearchTimeframe,
+    execution: AiSearchExecution,
     control: { cancelled: boolean },
     onProgress: (evaluated: number) => void,
   ): Promise<VariantFoldEvaluation[] | null> {
@@ -1391,6 +1416,7 @@ export class AiSearchService {
       const pool = await runWorkerPool(variants, folds, timeframe, {
         workerCount,
         workerPath: defaultWorkerPath(),
+        execution,
         control,
         onProgress,
       });
@@ -1403,7 +1429,7 @@ export class AiSearchService {
         await new Promise((resolve) => setImmediate(resolve));
       }
       if (control.cancelled) return null;
-      results.push(evaluateVariantFolds(variant, folds, timeframe));
+      results.push(evaluateVariantFolds(variant, folds, timeframe, execution));
       onProgress(index + 1);
     }
     return results;
@@ -1422,6 +1448,7 @@ export class AiSearchService {
             summary: {
               assetId: input.assetId,
               timeframe: input.timeframe,
+              execution: progress.execution ?? this.executionFor(input),
               variants: progress.total,
               progress,
             } satisfies SearchRunSummary,

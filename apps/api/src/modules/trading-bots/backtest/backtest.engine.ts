@@ -28,6 +28,11 @@ export interface BacktestOptions {
   reinvestProfit?: boolean;
   /** Number of candles used for the "24h" change; defaults to the previous candle. */
   changeLookbackCandles?: number;
+  /**
+   * Execution model for strategy decisions. `same-close` fills at the signal
+   * candle close (legacy); `next-open` fills at the next candle open.
+   */
+  execution?: 'same-close' | 'next-open';
   /** Candles used only to warm up indicators; scoring starts after them. */
   warmupCandles?: number;
 }
@@ -56,6 +61,7 @@ export function runBacktest(
   const initialCapital = decimal(options.initialCapitalUsd ?? DEFAULT_CAPITAL);
   const feeRate = decimal(String(options.feeBps ?? DEFAULT_FEE_BPS)).div(10_000);
   const slippageRate = decimal(String(options.slippageBps ?? DEFAULT_SLIPPAGE_BPS)).div(10_000);
+  const execution = options.execution ?? 'same-close';
   const maxAddsRaw = Number(params.maxAdds);
   const maxAdds = Number.isFinite(maxAddsRaw) && maxAddsRaw >= 1 ? Math.floor(maxAddsRaw) : 1;
 
@@ -73,6 +79,7 @@ export function runBacktest(
   const equityCurve: BotBacktestEquityPoint[] = [];
   const samples: StrategySample[] = [];
   let strategyState: Record<string, unknown> = {};
+  let pendingOrder: { action: 'buy' | 'sell'; reason: string } | null = null;
 
   const equityAt = (price: Decimal) => (position ? cash.plus(position.amount.mul(price)) : cash);
 
@@ -212,6 +219,19 @@ export function runBacktest(
       capturedAt: candleTimestamp(candle.date, '12:00:00.000'),
     });
 
+    if (execution === 'next-open' && pendingOrder) {
+      const order = pendingOrder;
+      pendingOrder = null;
+      const openPrice = decimal(candle.openUsd);
+      if (order.action === 'buy') {
+        if (!position || buyCount < maxAdds) {
+          executeBuy(candle.date, openPrice, `${order.reason} (следующая свеча)`);
+        }
+      } else if (position) {
+        executeSell(candle.date, openPrice, `${order.reason} (следующая свеча)`);
+      }
+    }
+
     const openPosition = position as OpenPosition | null;
     const synthetic = candle.synthetic === true;
     let protectiveExit = false;
@@ -290,7 +310,11 @@ export function runBacktest(
     });
     strategyState = decision.nextState ?? strategyState;
 
-    if (!protectiveExit) {
+    if (execution === 'next-open') {
+      if (!protectiveExit && index < candles.length - 1 && decision.action !== 'hold') {
+        pendingOrder = { action: decision.action, reason: decision.reason };
+      }
+    } else if (!protectiveExit) {
       if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
         executeBuy(candle.date, close, decision.reason);
       } else if (decision.action === 'sell' && position) {

@@ -37,6 +37,7 @@ function evaluateDecimalFold(
   variant: SearchVariant,
   fold: SearchFold,
   timeframe: AiSearchTimeframe,
+  execution: 'same-close' | 'next-open',
 ): FoldResult | null {
   const definition = strategyByKey.get(variant.strategyKey);
   if (!definition) return null;
@@ -47,6 +48,7 @@ function evaluateDecimalFold(
       slippageBps: SLIPPAGE_BPS,
       changeLookbackCandles: candlesPerDay(timeframe),
       warmupCandles: fold.warmupCandles,
+      execution,
     });
     return result.stats;
   } catch {
@@ -58,10 +60,11 @@ function evaluateDecimal(
   variant: SearchVariant,
   folds: SearchFold[],
   timeframe: AiSearchTimeframe,
+  execution: 'same-close' | 'next-open',
 ): FoldResult[] | null {
   const results: FoldResult[] = [];
   for (const fold of folds) {
-    const result = evaluateDecimalFold(variant, fold, timeframe);
+    const result = evaluateDecimalFold(variant, fold, timeframe, execution);
     if (!result) return null;
     results.push(result);
   }
@@ -72,6 +75,7 @@ function evaluateFast(
   variant: SearchVariant,
   folds: SearchFold[],
   timeframe: AiSearchTimeframe,
+  execution: 'same-close' | 'next-open',
 ): FoldResult[] | null {
   const results: FoldResult[] = [];
   for (const fold of folds) {
@@ -84,11 +88,12 @@ function evaluateFast(
         slippageBps: SLIPPAGE_BPS,
         changeLookbackCandles: candlesPerDay(timeframe),
         warmupCandles: fold.warmupCandles,
+        execution,
       });
       if (result.ambiguous === true) {
         // Re-run only the boundary fold on the Decimal engine. Folds are
         // independent, so the aggregate stays exact.
-        const exact = evaluateDecimalFold(variant, fold, timeframe);
+        const exact = evaluateDecimalFold(variant, fold, timeframe, execution);
         if (!exact) return null;
         results.push(exact);
       } else {
@@ -106,16 +111,17 @@ export function evaluateVariantFolds(
   variant: SearchVariant,
   folds: SearchFold[],
   timeframe: AiSearchTimeframe,
+  execution: 'same-close' | 'next-open' = 'next-open',
 ): VariantFoldEvaluation {
   const definition = strategyByKey.get(variant.strategyKey);
   if (!definition) return { unknownStrategy: true, aggregate: null };
 
   let results: FoldResult[] | null = null;
   if (fastEngineEnabled()) {
-    results = evaluateFast(variant, folds, timeframe);
+    results = evaluateFast(variant, folds, timeframe, execution);
   }
   if (results === null) {
-    results = evaluateDecimal(variant, folds, timeframe);
+    results = evaluateDecimal(variant, folds, timeframe, execution);
   }
   if (results === null || results.length === 0) {
     return { unknownStrategy: false, aggregate: null };

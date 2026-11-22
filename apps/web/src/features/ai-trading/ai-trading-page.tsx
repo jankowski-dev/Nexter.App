@@ -48,6 +48,7 @@ import type {
   AiProfileToken,
   AiProfileUpdateRequest,
   AiSearchCandidate,
+  AiSearchExecution,
   AiSearchFunnelStageKey,
   AiSearchResults,
   AiSearchTimeframe,
@@ -70,6 +71,11 @@ const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> 
   partial: 'warning',
   stale: 'warning',
   missing: 'danger',
+};
+
+const executionLabels: Record<AiSearchExecution, string> = {
+  'next-open': 'следующая свеча',
+  'same-close': 'по закрытию',
 };
 
 const funnelStageLabels: Record<AiSearchFunnelStageKey, string> = {
@@ -220,6 +226,7 @@ export function AiTradingPage() {
         horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
         variants: Number(variants),
         maxDrafts: Number(maxDrafts),
+        execution: 'next-open',
       }),
     onSuccess: (result) => {
       selectCycle(result.cycleId);
@@ -1679,6 +1686,7 @@ function SearchSection({
         timeframe,
         horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
         variants: Number(variants),
+        execution: 'next-open',
       }),
     onMutate: () => {
       setError(null);
@@ -1745,6 +1753,7 @@ function SearchSection({
   const currentStatus = status.data;
   const currentResults: AiSearchResults | undefined = results.data;
   const funnel = currentResults?.funnel ?? null;
+  const execution = currentResults?.execution ?? currentStatus?.execution ?? 'next-open';
   const running = currentStatus?.status === 'queued' || currentStatus?.status === 'running';
   const stats = currentResults?.stats ?? currentStatus?.stats;
 
@@ -1948,6 +1957,9 @@ function SearchSection({
                   ? `${funnelStageLabels[currentStatus.stage]}: ${currentStatus.stageEvaluated} / ${currentStatus.stageTotal}`
                   : `${currentStatus.evaluated} / ${currentStatus.total} вариантов`}
               </span>
+              <span className="text-xs text-zinc-400">
+                исполнение: {executionLabels[currentStatus.execution]}
+              </span>
             </div>
             {running ? (
               <Button
@@ -2019,7 +2031,7 @@ function SearchSection({
           <CardTitle>Воронка поиска</CardTitle>
           <CardDescription>
             Дешёвые этапы отсекают варианты до полного бэктеста. Контрольная выборка проверяет, не
-            потеряли ли фильтры сильных кандидатов.
+            потеряли ли фильтры сильных кандидатов. Исполнение: {executionLabels[execution]}.
           </CardDescription>
           <div className="mt-3 flex flex-wrap items-stretch gap-2">
             {funnel.stages.map((stage, index) => (
