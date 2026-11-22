@@ -1,6 +1,11 @@
-export function holdoutConsistencyLabel(nonNegative: number, total: number): string {
+export function holdoutConsistencyLabel(positive: number, total: number): string {
   if (total <= 0) return '—';
-  return `${nonNegative}/${total}`;
+  return `${positive}/${total}`;
+}
+
+export function holdoutActiveLabel(traded: number, total: number): string {
+  if (total <= 0) return '—';
+  return `${traded}/${total}`;
 }
 
 export function holdoutBlockSummary(returnsPct: string[]): string {

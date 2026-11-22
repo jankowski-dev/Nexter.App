@@ -207,16 +207,23 @@ describe('AI cycle contracts', () => {
       policyScore: '1.00',
       reasons: ['holdout recent block negative'],
       holdoutBlockReturnsPct: ['1.00', '-2.00', '-1.00'],
+      holdoutBlocksPositive: 1,
       holdoutBlocksNonNegative: 1,
+      holdoutBlocksTraded: 2,
       holdoutBlocksTotal: 3,
     });
-    expect(nearMiss.holdoutBlocksNonNegative).toBe(1);
+    expect(nearMiss.holdoutBlocksPositive).toBe(1);
+    expect(nearMiss.holdoutBlocksTraded).toBe(2);
     const legacyInput: Record<string, unknown> = { ...nearMiss };
     delete legacyInput.holdoutBlockReturnsPct;
+    delete legacyInput.holdoutBlocksPositive;
     delete legacyInput.holdoutBlocksNonNegative;
+    delete legacyInput.holdoutBlocksTraded;
     delete legacyInput.holdoutBlocksTotal;
     const legacy = aiSearchNearMissSchema.parse(legacyInput);
     expect(legacy.holdoutBlockReturnsPct).toEqual([]);
+    expect(legacy.holdoutBlocksPositive).toBe(0);
+    expect(legacy.holdoutBlocksTraded).toBe(0);
     expect(legacy.holdoutBlocksTotal).toBe(0);
   });
 
@@ -247,17 +254,24 @@ describe('AI cycle contracts', () => {
       expiresAt: '2026-11-26T00:00:00.000Z',
       expired: false,
       holdoutBlockReturnsPct: ['1.00', '2.00', '0.50'],
+      holdoutBlocksPositive: 3,
       holdoutBlocksNonNegative: 3,
+      holdoutBlocksTraded: 3,
       holdoutBlocksTotal: 3,
     };
     const parsed = aiRecommendationSchema.parse(recommendation);
-    expect(parsed.holdoutBlocksNonNegative).toBe(3);
+    expect(parsed.holdoutBlocksPositive).toBe(3);
+    expect(parsed.holdoutBlocksTraded).toBe(3);
     const legacyInput: Record<string, unknown> = { ...recommendation };
     delete legacyInput.holdoutBlockReturnsPct;
+    delete legacyInput.holdoutBlocksPositive;
     delete legacyInput.holdoutBlocksNonNegative;
+    delete legacyInput.holdoutBlocksTraded;
     delete legacyInput.holdoutBlocksTotal;
     const legacy = aiRecommendationSchema.parse(legacyInput);
     expect(legacy.holdoutBlockReturnsPct).toEqual([]);
+    expect(legacy.holdoutBlocksPositive).toBe(0);
+    expect(legacy.holdoutBlocksTraded).toBe(0);
     expect(legacy.holdoutBlocksTotal).toBe(0);
   });
 });

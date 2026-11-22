@@ -36,7 +36,11 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatUsd } from '@/lib/format';
-import { holdoutBlockSummary, holdoutConsistencyLabel } from './ai-holdout-format';
+import {
+  holdoutActiveLabel,
+  holdoutBlockSummary,
+  holdoutConsistencyLabel,
+} from './ai-holdout-format';
 import { aiSearchFunnelStageLabels } from '@nexter/contracts';
 import type {
   AiBotHealth,
@@ -606,8 +610,9 @@ const rejectionLabels: Record<string, string> = {
   'worst fold too deep': 'худший фолд слишком глубокий',
   'negative holdout': 'отрицательный holdout',
   'holdout drawdown too high': 'просадка на holdout выше лимита',
-  'holdout blocks unstable': 'holdout нестабилен по 10-дневным блокам',
-  'holdout recent block negative': 'последний 10-дневный блок отрицательный',
+  'holdout blocks unstable': 'меньше двух положительных блоков',
+  'holdout too few active blocks': 'меньше двух активных блоков',
+  'holdout recent block negative': 'последний 15-дневный блок отрицательный',
   'holdout blocks unavailable': 'блоки holdout недоступны',
   'non-positive policy score': 'policyScore ≤ 0',
   'holdout failed': 'ошибка holdout',
@@ -852,6 +857,9 @@ function AiCycleCard({
         <div className="mt-2 text-[11px] text-zinc-500">
           Прошли OOS: {cycle.oosPassed} · допущено к holdout: {cycle.holdoutTested} · не
           тестировались: {Math.max(0, cycle.oosPassed - cycle.holdoutTested)}
+          {cycle.settlementDays > 0
+            ? ` · holdout ${cycle.holdoutCycles}×15 (10+${cycle.settlementDays})`
+            : ''}
         </div>
       ) : null}
       {cycle.status === 'succeeded' ? (
@@ -881,7 +889,7 @@ function AiCycleCard({
                   ? ''
                   : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}
                 {item.holdoutBlocksTotal > 0
-                  ? ` · блоки ${holdoutBlockSummary(item.holdoutBlockReturnsPct)} (${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)})`
+                  ? ` · блоки ${holdoutBlockSummary(item.holdoutBlockReturnsPct)} (${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.)`
                   : ''}{' '}
                 · {item.reasons.map(rejectionLabel).join(', ')}
               </span>
@@ -1626,11 +1634,15 @@ function RecommendationCard({
             {item.holdoutBlocksTotal > 0 ? (
               <Badge
                 tone={
-                  item.holdoutBlocksNonNegative === item.holdoutBlocksTotal ? 'success' : 'warning'
+                  item.holdoutBlocksPositive === item.holdoutBlocksTotal &&
+                  item.holdoutBlocksTraded === item.holdoutBlocksTotal
+                    ? 'success'
+                    : 'warning'
                 }
               >
                 holdout{' '}
-                {holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}
+                {holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} ·{' '}
+                {holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.
               </Badge>
             ) : null}
             <span className="text-xs text-zinc-500">
@@ -1671,10 +1683,10 @@ function RecommendationCard({
           value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
         />
         <LabFeature
-          label="Блоки 10д"
+          label="Блоки 15д"
           value={
             item.holdoutBlocksTotal > 0
-              ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}`
+              ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
               : '—'
           }
         />
@@ -2113,6 +2125,9 @@ function SearchSection({
               <div className="mt-2 text-[11px] text-zinc-500">
                 Прошли OOS: {stats.oosPassed} · допущено к holdout: {stats.holdoutTested} · не
                 тестировались: {Math.max(0, stats.oosPassed - stats.holdoutTested)}
+                {(currentResults?.settlementDays ?? 0) > 0
+                  ? ` · holdout ${currentResults?.holdoutCycles ?? 0}×15 (10+${currentResults?.settlementDays ?? 0})`
+                  : ''}
               </div>
             </>
           ) : null}
@@ -2301,11 +2316,10 @@ function SearchSection({
                 </div>
                 {item.holdoutBlocksTotal > 0 ? (
                   <div className="mt-1 text-[11px] text-zinc-600">
-                    Блоки 10 дней: {holdoutBlockSummary(item.holdoutBlockReturnsPct)} ·{' '}
-                    {holdoutConsistencyLabel(
-                      item.holdoutBlocksNonNegative,
-                      item.holdoutBlocksTotal,
-                    )}
+                    Блоки 15 дней: {holdoutBlockSummary(item.holdoutBlockReturnsPct)} ·{' '}
+                    {holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)}{' '}
+                    поз. / {holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)}{' '}
+                    акт.
                   </div>
                 ) : null}
                 <div className="mt-1 text-[11px] text-amber-800">
@@ -2369,16 +2383,19 @@ function SearchCandidateCard({
           {candidate.holdoutBlocksTotal > 0 ? (
             <Badge
               tone={
-                candidate.holdoutBlocksNonNegative === candidate.holdoutBlocksTotal
+                candidate.holdoutBlocksPositive === candidate.holdoutBlocksTotal &&
+                candidate.holdoutBlocksTraded === candidate.holdoutBlocksTotal
                   ? 'success'
                   : 'warning'
               }
             >
               holdout{' '}
               {holdoutConsistencyLabel(
-                candidate.holdoutBlocksNonNegative,
+                candidate.holdoutBlocksPositive,
                 candidate.holdoutBlocksTotal,
-              )}
+              )}{' '}
+              · {holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)}{' '}
+              акт.
             </Badge>
           ) : null}
         </div>
@@ -2394,10 +2411,10 @@ function SearchCandidateCard({
           value={candidate.holdoutReturnPct === null ? '—' : formatPct(candidate.holdoutReturnPct)}
         />
         <LabFeature
-          label="Блоки 10д"
+          label="Блоки 15д"
           value={
             candidate.holdoutBlocksTotal > 0
-              ? `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksNonNegative, candidate.holdoutBlocksTotal)}`
+              ? `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksPositive, candidate.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)} акт.`
               : '—'
           }
         />

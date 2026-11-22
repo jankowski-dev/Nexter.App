@@ -28,6 +28,8 @@ export interface NormalizedCycle {
   draftsCreated: number;
   oosPassed: number;
   holdoutTested: number;
+  settlementDays: number;
+  holdoutCycles: number;
   rejectionReasons: Record<string, number>;
   nearMisses: AiCycleStatus['nearMisses'];
   error: string | null;
@@ -135,6 +137,8 @@ export function normalizeCycle(run: CycleRunLike, summaryValue: unknown): Normal
     draftsCreated: nonNegativeInt(summary.draftsCreated),
     oosPassed: nonNegativeInt(summary.oosPassed),
     holdoutTested: nonNegativeInt(summary.holdoutTested),
+    settlementDays: nonNegativeInt(summary.settlementDays),
+    holdoutCycles: nonNegativeInt(summary.holdoutCycles),
     rejectionReasons: normalizeReasons(summary.rejectionReasons),
     nearMisses: normalizeNearMisses(summary.nearMisses),
     error: sanitizeStoredError(text(summary.error)),

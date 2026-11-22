@@ -229,8 +229,17 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(searchResults.body.stats.oosPassed).toBeGreaterThanOrEqual(
       searchResults.body.stats.holdoutTested,
     );
+    expect(searchResults.body.settlementDays).toBe(5);
+    expect(searchResults.body.holdoutCycles).toBe(3);
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
     expect(Array.isArray(searchResults.body.nearMisses)).toBe(true);
+    for (const candidate of searchResults.body.candidates) {
+      if (candidate.holdoutBlocksTotal > 0) {
+        expect(candidate.holdoutBlockReturnsPct).toHaveLength(3);
+        expect(candidate.holdoutBlocksPositive).toBeLessThanOrEqual(3);
+        expect(candidate.holdoutBlocksTraded).toBeLessThanOrEqual(3);
+      }
+    }
 
     const funnel = searchResults.body.funnel as {
       stages: Array<{ key: string; input: number; output: number; rejected: number }>;

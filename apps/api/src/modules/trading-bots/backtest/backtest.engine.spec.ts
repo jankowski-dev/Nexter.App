@@ -453,6 +453,18 @@ describe('settlement ranges', () => {
     expect(result.trades[1]?.reason).toBe('закрытие в конце периода');
   });
 
+  it('also blocks next-open buys whose fill would land in settlement', () => {
+    const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
+      execution: 'next-open',
+      warmupCandles: 1,
+      settlementRanges: [{ start: 1, end: 3 }],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    expect(result.trades.map((trade) => trade.side)).toEqual(['buy', 'sell']);
+    expect(result.trades[0]?.date).toBe('2026-01-04');
+  });
+
   it('force-closes at each settlement end and starts the next cycle flat', () => {
     const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
       settlementRanges: [{ start: 2, end: 5 }],
