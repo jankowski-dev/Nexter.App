@@ -19,6 +19,9 @@ export interface SearchFoldSet {
   holdout: BotCandle[];
   holdoutWarmup: BotCandle[];
   holdoutWarmupCandles: number;
+  settlementRanges: Array<{ start: number; end: number }>;
+  settlementDays: number;
+  holdoutCycles: number;
 }
 
 export interface VariantMetrics {
@@ -114,7 +117,11 @@ export function generateSearchVariants(
 }
 
 export const MIN_SEARCH_DAYS = 140;
-export const HOLD_OUT_DAYS = 30;
+export const HOLD_OUT_TEST_DAYS = 10;
+export const HOLD_OUT_SETTLEMENT_DAYS = 5;
+export const HOLD_OUT_CYCLE_DAYS = HOLD_OUT_TEST_DAYS + HOLD_OUT_SETTLEMENT_DAYS;
+export const HOLD_OUT_CYCLES = 3;
+export const HOLD_OUT_DAYS = HOLD_OUT_CYCLE_DAYS * HOLD_OUT_CYCLES;
 
 export function candlesPerDay(timeframe: AiSearchTimeframe): number {
   return Math.max(1, Math.round(86_400_000 / TIMEFRAME_MS[timeframe]));
@@ -167,11 +174,18 @@ export function buildSearchFolds(
     });
   }
   const holdoutWarmupCandles = Math.min(searchEnd, Math.max(15 * perDay, 240));
+  const settlementRanges = Array.from({ length: HOLD_OUT_CYCLES }, (_, index) => ({
+    start: (index * HOLD_OUT_CYCLE_DAYS + HOLD_OUT_TEST_DAYS) * perDay,
+    end: (index * HOLD_OUT_CYCLE_DAYS + HOLD_OUT_CYCLE_DAYS) * perDay,
+  }));
   return {
     folds,
     holdout: use.slice(searchEnd, total),
     holdoutWarmup: use.slice(searchEnd - holdoutWarmupCandles, searchEnd),
     holdoutWarmupCandles,
+    settlementRanges,
+    settlementDays: HOLD_OUT_SETTLEMENT_DAYS,
+    holdoutCycles: HOLD_OUT_CYCLES,
   };
 }
 
@@ -312,7 +326,9 @@ export function selectHoldoutCandidates<T extends HoldoutCandidateLike>(
 
 export interface HoldoutBlockStats {
   returnsPct: string[];
+  positive: number;
   nonNegative: number;
+  traded: number;
   total: number;
   lastNegative: boolean;
 }
@@ -320,6 +336,7 @@ export interface HoldoutBlockStats {
 export function holdoutBlockStats(
   equityCurve: Array<{ equityUsd: string }>,
   blocks = 3,
+  options: { exposure?: boolean[] } = {},
 ): HoldoutBlockStats | null {
   if (blocks <= 0 || equityCurve.length < blocks) return null;
   const size = Math.floor(equityCurve.length / blocks);
@@ -327,17 +344,27 @@ export function holdoutBlockStats(
   let previous = Number(equityCurve[0]?.equityUsd ?? 0);
   if (!Number.isFinite(previous) || previous <= 0) return null;
   const returnsPct: string[] = [];
+  let traded = 0;
   for (let index = 0; index < blocks; index += 1) {
+    const startIndex = index * size;
     const endIndex = index === blocks - 1 ? equityCurve.length - 1 : (index + 1) * size - 1;
     const end = Number(equityCurve[endIndex]?.equityUsd ?? previous);
     if (!Number.isFinite(end)) return null;
     returnsPct.push(((end / previous - 1) * 100).toFixed(2));
     previous = end;
+    if (
+      options.exposure?.length === equityCurve.length &&
+      options.exposure.slice(startIndex, endIndex + 1).some(Boolean)
+    ) {
+      traded += 1;
+    }
   }
   const numeric = returnsPct.map(Number);
   return {
     returnsPct,
+    positive: numeric.filter((value) => value > 0).length,
     nonNegative: numeric.filter((value) => value >= 0).length,
+    traded,
     total: numeric.length,
     lastNegative: (numeric.at(-1) ?? 0) < 0,
   };
@@ -347,6 +374,7 @@ export type HoldoutRejection =
   | 'negative holdout'
   | 'holdout drawdown too high'
   | 'holdout blocks unstable'
+  | 'holdout too few active blocks'
   | 'holdout recent block negative'
   | 'holdout blocks unavailable'
   | null;
@@ -362,7 +390,8 @@ export function holdoutRejection(
     return 'holdout drawdown too high';
   }
   if (!blocks || blocks.total < 3) return 'holdout blocks unavailable';
-  if (blocks.nonNegative < 2) return 'holdout blocks unstable';
+  if (blocks.positive < 2) return 'holdout blocks unstable';
+  if (blocks.traded < 2) return 'holdout too few active blocks';
   if (blocks.lastNegative) return 'holdout recent block negative';
   return null;
 }

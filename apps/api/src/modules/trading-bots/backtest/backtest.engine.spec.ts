@@ -421,3 +421,46 @@ describe('runBacktest', () => {
     ]);
   });
 });
+
+describe('settlement ranges', () => {
+  const buyAlways: StrategyDefinition = {
+    ...meanReversion,
+    evaluate: () => ({ action: 'buy', reason: 'test buy' }),
+  };
+
+  it('returns an exposure point for every equity point', () => {
+    const params = meanReversion.parseParams({
+      lookback: 3,
+      entryDropPct: 2,
+      exitAbovePct: 0,
+      takeProfitPct: 50,
+      stopLossPct: 50,
+    });
+    const result = runBacktest(meanReversion, params, series([100, 100, 100, 97, 100]));
+    expect(result.exposure).toHaveLength(result.equityCurve.length);
+    expect(result.exposure.some((point) => point.inPosition)).toBe(true);
+  });
+
+  it('ignores buys inside settlement and opens after it ends', () => {
+    const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
+      warmupCandles: 1,
+      settlementRanges: [{ start: 1, end: 3 }],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    expect(result.trades.map((trade) => trade.side)).toEqual(['buy', 'sell']);
+    expect(result.trades[0]?.date).toBe('2026-01-04');
+    expect(result.trades[1]?.reason).toBe('закрытие в конце периода');
+  });
+
+  it('force-closes at each settlement end and starts the next cycle flat', () => {
+    const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
+      settlementRanges: [{ start: 2, end: 5 }],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    expect(result.trades.map((trade) => trade.side)).toEqual(['buy', 'sell', 'buy', 'sell']);
+    expect(result.trades[1]?.reason).toBe('закрытие settlement');
+    expect(result.exposure[4]?.inPosition).toBe(false);
+  });
+});
