@@ -128,7 +128,9 @@ Native fast AI search backtest (2026-11-22, no migration): all 11 strategies hav
 
 Cycle search JSON export (2026-11-22, no migration): the AI cycle card downloads the linked search results artifact (`Экспорт JSON`), using the cycle's `searchRunId`; exporting/error states are inline. Production release: PR #298 merged as `1b94484`, deployment `7979549415`, bundle `assets/index-DSvrmy0_.js`, `/health` and `/ready` 200.
 
-20k fast-engine pilot (2026-11-22): 20,000 variants → 11,078 signal-screen survivors → 687 OOS passers → 10 holdout recommendations on the synthetic fixture (not a production claim). Timings on 4 workers: screen 13.4 s, full eight folds 503 s, total 517 s (45 ms/variant wall). Estimated 50k: ~21 min on 4 workers / ~14 min on 6; 100k stays within the 90-minute cycle. See the adaptive search plan.
+20k fast-engine pilot (2026-11-22): 20,000 variants → 11,078 signal-screen survivors → 687 OOS passers → 10 holdout recommendations on the synthetic fixture (not a production claim). Timings on 4 workers: screen 13.4 s, full eight folds 503 s, total 517 s (45 ms/variant wall; unshuffled survivor order).
+
+50k fast-engine pilot (2026-11-22): 50,000 variants → 27,716 screen survivors → 1,597 OOS passers → 10 holdout recommendations on the synthetic fixture. With the production survivor shuffle: screen 32.0 s, full eight folds 641 s, total 674 s on 4 workers (23 ms/variant wall). Production 6 workers ≈ 7.5 min; 100k ≈ 15 min, inside the 90-minute cycle. Every screen survivor is evaluated (budget disabled).
 
 ## Non-negotiable rules
 

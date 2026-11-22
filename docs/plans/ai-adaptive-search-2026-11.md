@@ -202,3 +202,19 @@ The native search engine (ADR 0077) was run on 20,000 proposals over the synthet
 | Total            | 517 s; 45 ms/variant wall                          |
 
 Extrapolation: 50k ≈ 21 min on 4 workers / ≈14 min on 6; 100k stays within the 90-minute cycle. With the budget disabled by default, every signal-screen survivor is evaluated — no sample-based loss.
+
+## 50k fast-engine pilot 2026-11-22
+
+The same fixture and native engine with the production-style survivor shuffle before worker chunking, 4 workers:
+
+| Stage            | Result                                              |
+| ---------------- | --------------------------------------------------- |
+| Generated        | 50,000                                              |
+| Signal screen    | 27,716 survivors; 22,284 rejected (44.6%) in 32.0 s |
+| Full eight folds | 27,716 evaluated in 641 s                           |
+| OOS passers      | 1,597                                               |
+| Holdout tested   | 10                                                  |
+| Recommendations  | 10 (synthetic fixture; not a production claim)      |
+| Total            | 674 s; 23 ms/variant wall                           |
+
+The earlier 20k run without the shuffle was 45 ms/variant; shuffling survivors before chunking nearly halved the wall time, confirming the worker-balance fix. Production 6 workers ≈ 7.5 min for 50k; 100k ≈ 15 min, well inside the 90-minute cycle. Every signal-screen survivor is evaluated (budget disabled).
