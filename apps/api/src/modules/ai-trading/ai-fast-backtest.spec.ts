@@ -45,25 +45,30 @@ describe('native AI search engine', () => {
         .slice(0, 2);
       expect(sample.length).toBeGreaterThan(0);
       for (const variant of sample) {
-        const fast = evaluateVariantFolds(variant, [fold], '1h');
-        expect(fast.unknownStrategy).toBe(false);
-        expect(fast.aggregate).not.toBeNull();
-        const decimal = runBacktest(definition, variant.params, fold.candles, {
-          initialCapitalUsd: '1000',
-          feeBps: 25,
-          slippageBps: 10,
-          changeLookbackCandles: 24,
-          warmupCandles: fold.warmupCandles,
-        });
-        expect({
-          strategy: definition.key,
-          params: variant.params,
-          ...fast.aggregate,
-        }).toEqual({
-          strategy: definition.key,
-          params: variant.params,
-          ...aggregateVariant([decimal.stats]),
-        });
+        for (const execution of ['same-close', 'next-open'] as const) {
+          const fast = evaluateVariantFolds(variant, [fold], '1h', execution);
+          expect(fast.unknownStrategy).toBe(false);
+          expect(fast.aggregate).not.toBeNull();
+          const decimal = runBacktest(definition, variant.params, fold.candles, {
+            initialCapitalUsd: '1000',
+            feeBps: 25,
+            slippageBps: 10,
+            changeLookbackCandles: 24,
+            warmupCandles: fold.warmupCandles,
+            execution,
+          });
+          expect({
+            strategy: definition.key,
+            params: variant.params,
+            execution,
+            ...fast.aggregate,
+          }).toEqual({
+            strategy: definition.key,
+            params: variant.params,
+            execution,
+            ...aggregateVariant([decimal.stats]),
+          });
+        }
       }
     }
   }, 180_000);

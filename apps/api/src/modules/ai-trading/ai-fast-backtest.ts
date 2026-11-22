@@ -44,6 +44,7 @@ export interface FastBacktestOptions {
   changeLookbackCandles?: number;
   useStopLoss?: boolean;
   useTakeProfit?: boolean;
+  execution?: 'same-close' | 'next-open';
   collectTrades?: boolean;
   collectEquity?: boolean;
   onCandle?: (info: {
@@ -114,6 +115,7 @@ export function runFastBacktest(
   const changeLookback = Math.max(1, Math.floor(options.changeLookbackCandles ?? 1));
   const useStopLoss = options.useStopLoss !== false;
   const useTakeProfit = options.useTakeProfit !== false;
+  const execution = options.execution ?? 'same-close';
   const maxAdds = Math.max(1, Math.floor(runtime.maxAdds));
   const stopLossPct = useStopLoss ? positive(runtime.stopLossPct) : null;
   const takeProfitPct = useTakeProfit ? positive(runtime.takeProfitPct) : null;
@@ -146,6 +148,7 @@ export function runFastBacktest(
   let maxDrawdownPct = 0;
   let tradesCount = 0;
   let ambiguous = false;
+  let pending: FastDecision | null = null;
   const trades: FastTrade[] = [];
   const equityCurve: Array<{ index: number; equity: number }> = [];
   const near = (left: number, right: number) => {
@@ -216,6 +219,18 @@ export function runFastBacktest(
 
   for (let index = warmup; index < length; index += 1) {
     const price = close[index] as number;
+    if (execution === 'next-open' && pending) {
+      const order = pending;
+      pending = null;
+      const openPrice = new Decimal((candles[index] as BotCandle).openUsd);
+      if (order.action === 'buy') {
+        if (amount.lte(0) || buyCount < maxAdds) {
+          executeBuy(openPrice, index, order.reason);
+        }
+      } else if (order.action === 'sell' && amount.gt(0)) {
+        executeSell(openPrice, index, order.reason);
+      }
+    }
     let protectiveExit = false;
 
     if (amount.gt(0)) {
@@ -277,7 +292,11 @@ export function runFastBacktest(
       useTakeProfit,
     );
 
-    if (!protectiveExit) {
+    if (execution === 'next-open') {
+      if (!protectiveExit && index < length - 1 && decision.action !== 'hold') {
+        pending = decision;
+      }
+    } else if (!protectiveExit) {
       if (decision.action === 'buy' && (amount.lte(0) || buyCount < maxAdds)) {
         executeBuy(closeDecimalAt(index), index, decision.reason);
       } else if (decision.action === 'sell' && amount.gt(0)) {

@@ -559,6 +559,7 @@ export class AiCycleService implements OnModuleInit {
         timeframe: input.timeframe,
         horizonDays: input.horizonDays,
         variants: input.variants,
+        execution: input.execution,
       },
       meta,
     );

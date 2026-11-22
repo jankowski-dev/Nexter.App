@@ -201,8 +201,6 @@ The native search engine (ADR 0077) was run on 20,000 proposals over the synthet
 | Recommendations  | 10 (synthetic fixture; not a production claim)     |
 | Total            | 517 s; 45 ms/variant wall                          |
 
-Extrapolation: 50k ≈ 21 min on 4 workers / ≈14 min on 6; 100k stays within the 90-minute cycle. With the budget disabled by default, every signal-screen survivor is evaluated — no sample-based loss.
-
 ## 50k fast-engine pilot 2026-11-22
 
 The same fixture and native engine with the production-style survivor shuffle before worker chunking, 4 workers:
@@ -218,3 +216,12 @@ The same fixture and native engine with the production-style survivor shuffle be
 | Total            | 674 s; 23 ms/variant wall                           |
 
 The earlier 20k run without the shuffle was 45 ms/variant; shuffling survivors before chunking nearly halved the wall time, confirming the worker-balance fix. Production 6 workers ≈ 7.5 min for 50k; 100k ≈ 15 min, well inside the 90-minute cycle. Every signal-screen survivor is evaluated (budget disabled).
+
+## H5 next-open execution 2026-11-22
+
+The AI search and final holdout now fill at the next candle open instead of the signal candle close, removing the same-close look-ahead confirmed by audit H5. Protective stops/take-profits remain intrabar; pending orders fill at the next open before the candle's protective checks; the last-candle decision is ignored and the end-of-period force-close stays. Bot backtests keep the legacy same-close default until a separate rebase.
+
+- Focused engine tests cover a gapped next-open fill and a last-candle signal that must be ignored.
+- Extended parity: **330/330** variants exact between the native and Decimal engines in next-open mode.
+- 20k synthetic 1h pilot: **685** OOS passers vs 687 same-close; 10 vs 10 synthetic recommendations. The 1h impact is small (the audit measured |Δ| ≤ 0.32 pp on a 1h fixture); the 26-candle gap fixture shows the larger H5 bias. Full evaluation took 353 s with the production survivor shuffle (same-close 20k without shuffle: 503 s; the difference is chunk balance, not H5).
+- `AI_SEARCH_EXECUTION=same-close` / request `execution: "same-close"` is the rollback.
