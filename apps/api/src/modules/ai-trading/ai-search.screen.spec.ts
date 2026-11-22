@@ -57,6 +57,34 @@ describe('screenVariant', () => {
     ).toBe('lookback too long');
   });
 
+  it('keeps a rising market with momentum signals', () => {
+    const rising = Array.from({ length: 120 }, (_, index) => ({
+      date: `2026-02-${String((index % 28) + 1).padStart(2, '0')}`,
+      openUsd: String(100 + index),
+      highUsd: String(101 + index),
+      lowUsd: String(99 + index),
+      closeUsd: String(100 + index),
+      volumeUsd: '1000',
+    }));
+    const result = screenVariant(
+      { strategyKey: momentumBreakout.key, params: momentumBreakout.defaultParams },
+      [{ candles: rising, warmupCandles: 30 }],
+      { timeframe: '1h', minTrades: 1 },
+    );
+    expect(result.ok).toBe(true);
+    expect(result.signalCount).toBeGreaterThan(0);
+  });
+
+  it('rejects strategies without enough entry signals', () => {
+    expect(
+      screenVariant(
+        { strategyKey: momentumBreakout.key, params: momentumBreakout.defaultParams },
+        folds,
+        { timeframe: '1h', minTrades: 1 },
+      ).reason,
+    ).toBe('too few entry signals');
+  });
+
   it('rejects fast/slow ordering and impossible thresholds', () => {
     expect(
       screenVariant(
