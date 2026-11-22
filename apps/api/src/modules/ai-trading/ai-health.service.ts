@@ -23,6 +23,13 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { NotificationsService } from '../notifications/notifications.service';
 import { evaluateAiBotHealth, type AiHealthCandidate } from './ai-health.helpers';
+import {
+  AI_HEALTH_NOTIFICATION_COOLDOWN_MS,
+  decideAiHealthNotification,
+  toAiHealthNotificationState,
+  type AiHealthNotificationDecision,
+  type AiHealthNotificationState,
+} from './ai-health.notifications';
 
 const CHECK_INTERVAL_MS = 5 * 60_000;
 const ERROR_LOOKBACK_MS = 24 * 60 * 60_000;
@@ -81,11 +88,7 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
       for (const item of health) {
         const row = rows.find((entry) => entry.bot.id === item.botId);
         if (!row) continue;
-        if (item.level === 'ok') {
-          await this.emitRecovery(row, item);
-          continue;
-        }
-        await this.emitRecommendation(row, item);
+        await this.processHealth(row, item);
       }
     } catch (error) {
       this.logger.error(
@@ -237,22 +240,81 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
     });
   }
 
-  private async emitRecovery(row: BotRow, health: AiBotHealth): Promise<void> {
-    const [previous] = await this.db
-      .select({ payload: notifications.payload })
+  private async processHealth(row: BotRow, health: AiBotHealth): Promise<void> {
+    const now = new Date();
+    const { latest, recent } = await this.loadNotificationState(row.bot.userId, row.bot.id, now);
+    const decision = decideAiHealthNotification({
+      level: health.level,
+      reasons: health.reasons,
+      latest,
+      recent,
+      now,
+    });
+
+    if (decision.kind === null) {
+      this.logger.debug(
+        `AI health notification suppressed for bot ${row.bot.id} (${health.level}: ${decision.signature || 'ok'})`,
+      );
+      return;
+    }
+
+    if (decision.kind === 'recovered') {
+      await this.emitRecovery(row, health);
+      return;
+    }
+
+    await this.emitRecommendation(row, health, decision);
+  }
+
+  private async loadNotificationState(
+    userId: string,
+    botId: string,
+    now: Date,
+  ): Promise<{ latest: AiHealthNotificationState | null; recent: AiHealthNotificationState[] }> {
+    const cooldownStart = new Date(now.getTime() - AI_HEALTH_NOTIFICATION_COOLDOWN_MS);
+    const rows = await this.db
+      .select({ payload: notifications.payload, createdAt: notifications.createdAt })
       .from(notifications)
       .where(
         and(
-          eq(notifications.userId, row.bot.userId),
+          eq(notifications.userId, userId),
           eq(notifications.type, 'ai_bot_health'),
-          sql`${notifications.payload}->>'botId' = ${row.bot.id}`,
+          sql`${notifications.payload}->>'botId' = ${botId}`,
+          gte(notifications.createdAt, cooldownStart),
+        ),
+      )
+      .orderBy(sql`${notifications.createdAt} desc`);
+
+    const recent = rows
+      .map((row) => toAiHealthNotificationState(row.payload, row.createdAt))
+      .filter((entry): entry is AiHealthNotificationState => entry !== null);
+
+    if (recent.length > 0) {
+      return { latest: recent[0] ?? null, recent };
+    }
+
+    const [latestRow] = await this.db
+      .select({ payload: notifications.payload, createdAt: notifications.createdAt })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, userId),
+          eq(notifications.type, 'ai_bot_health'),
+          sql`${notifications.payload}->>'botId' = ${botId}`,
         ),
       )
       .orderBy(sql`${notifications.createdAt} desc`)
       .limit(1);
 
-    if (typeof previous?.payload.level !== 'string' || previous.payload.level === 'ok') return;
+    return {
+      latest: latestRow
+        ? toAiHealthNotificationState(latestRow.payload, latestRow.createdAt)
+        : null,
+      recent: [],
+    };
+  }
 
+  private async emitRecovery(row: BotRow, health: AiBotHealth): Promise<void> {
     await this.notifications.create({
       userId: row.bot.userId,
       type: 'ai_bot_health',
@@ -265,33 +327,16 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
         level: 'ok',
         signature: 'ok',
         reasons: [],
+        newReasons: [],
       },
     });
   }
 
-  private async emitRecommendation(row: BotRow, health: AiBotHealth): Promise<void> {
-    const signature = health.reasons
-      .map((reason) => reason.code)
-      .sort()
-      .join(',');
-
-    const [previous] = await this.db
-      .select({ payload: notifications.payload })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, row.bot.userId),
-          eq(notifications.type, 'ai_bot_health'),
-          sql`${notifications.payload}->>'botId' = ${row.bot.id}`,
-        ),
-      )
-      .orderBy(sql`${notifications.createdAt} desc`)
-      .limit(1);
-
-    const previousSignature =
-      typeof previous?.payload.signature === 'string' ? previous.payload.signature : null;
-    if (previousSignature === signature) return;
-
+  private async emitRecommendation(
+    row: BotRow,
+    health: AiBotHealth,
+    decision: AiHealthNotificationDecision,
+  ): Promise<void> {
     const isStop = health.level === 'stop';
     await this.notifications.create({
       userId: row.bot.userId,
@@ -305,8 +350,9 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
         botId: row.bot.id,
         candidateId: health.candidateId,
         level: health.level,
-        signature,
-        reasons: health.reasons.map((reason) => reason.code),
+        signature: decision.signature,
+        reasons: decision.reasonCodes,
+        newReasons: decision.newReasonCodes,
       },
     });
 
@@ -317,7 +363,8 @@ export class AiHealthService implements OnApplicationBootstrap, OnApplicationShu
       entityId: row.bot.id,
       after: {
         level: health.level,
-        reasons: health.reasons.map((reason) => reason.code),
+        reasons: decision.reasonCodes,
+        newReasons: decision.newReasonCodes,
         totalPnlPct: health.totalPnlPct,
       },
     });
