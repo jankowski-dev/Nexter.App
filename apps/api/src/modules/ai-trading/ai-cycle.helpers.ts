@@ -142,3 +142,13 @@ export function normalizeCycle(run: CycleRunLike, summaryValue: unknown): Normal
     finishedAt: run.finishedAt?.toISOString() ?? null,
   };
 }
+
+export function sortRecommendationsForDrafts<
+  T extends { holdoutBlocksNonNegative: number; policyScore: string },
+>(items: T[]): T[] {
+  return [...items].sort(
+    (left, right) =>
+      right.holdoutBlocksNonNegative - left.holdoutBlocksNonNegative ||
+      Number(right.policyScore) - Number(left.policyScore),
+  );
+}

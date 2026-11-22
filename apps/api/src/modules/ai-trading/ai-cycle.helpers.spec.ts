@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   normalizeCycle,
   searchPollTimeout,
+  sortRecommendationsForDrafts,
   SEARCH_HARD_TIMEOUT_MS,
   SEARCH_IDLE_TIMEOUT_MS,
 } from './ai-cycle.helpers';
@@ -154,5 +155,21 @@ describe('searchPollTimeout', () => {
     expect(searchPollTimeout(deadline, deadline - SEARCH_IDLE_TIMEOUT_MS - 1, deadline)).toBe(
       'hard',
     );
+  });
+});
+
+describe('sortRecommendationsForDrafts', () => {
+  it('prefers block consistency over a higher policy score and does not mutate the input', () => {
+    const input = [
+      { id: 'high-2', holdoutBlocksNonNegative: 2, policyScore: '100' },
+      { id: 'low-3', holdoutBlocksNonNegative: 3, policyScore: '1' },
+      { id: 'mid-3', holdoutBlocksNonNegative: 3, policyScore: '5' },
+    ];
+    expect(sortRecommendationsForDrafts(input).map((item) => item.id)).toEqual([
+      'mid-3',
+      'low-3',
+      'high-2',
+    ]);
+    expect(input.map((item) => item.id)).toEqual(['high-2', 'low-3', 'mid-3']);
   });
 });

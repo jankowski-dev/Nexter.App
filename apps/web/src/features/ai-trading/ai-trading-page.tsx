@@ -1623,6 +1623,16 @@ function RecommendationCard({
               {item.symbol} · {item.name}
             </span>
             <Badge tone={tone}>{label}</Badge>
+            {item.holdoutBlocksTotal > 0 ? (
+              <Badge
+                tone={
+                  item.holdoutBlocksNonNegative === item.holdoutBlocksTotal ? 'success' : 'warning'
+                }
+              >
+                holdout{' '}
+                {holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}
+              </Badge>
+            ) : null}
             <span className="text-xs text-zinc-500">
               {item.timeframe} · {item.strategyName}
             </span>
@@ -1659,6 +1669,14 @@ function RecommendationCard({
         <LabFeature
           label="Holdout"
           value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+        />
+        <LabFeature
+          label="Блоки 10д"
+          value={
+            item.holdoutBlocksTotal > 0
+              ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}`
+              : '—'
+          }
         />
         <LabFeature label="Policy" value={item.policyScore} />
         <LabFeature label="Аллокация" value={formatUsd(item.suggestedAllocationUsd)} />
@@ -2072,25 +2090,31 @@ function SearchSection({
             />
           </div>
           {stats ? (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <LabFeature label="Всего" value={String(stats.total)} />
-              <LabFeature label="Оценено" value={String(stats.evaluated)} />
-              <LabFeature label="Отсеяно сигналами" value={String(stats.screenedOut)} />
-              <LabFeature label="Отсеяно пробой" value={String(stats.probeOut)} />
-              <LabFeature label="Отсеяно бюджетом" value={String(stats.budgetOut)} />
-              <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
-              <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
-              <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
-              <LabFeature label="Медиана OOS" value={formatPct(stats.medianOosReturnPct)} />
-              <LabFeature label="Худший OOS" value={formatPct(stats.worstOosReturnPct)} />
-              <LabFeature label="Прибыльных" value={percentMagnitude(stats.profitablePct)} />
-              <LabFeature label="Средняя DD" value={percentMagnitude(stats.averageDrawdownPct)} />
-              <LabFeature label="Стабильность" value={percentMagnitude(stats.stabilityPct)} />
-              <LabFeature
-                label="Holdout"
-                value={stats.holdoutReturnPct === null ? '—' : formatPct(stats.holdoutReturnPct)}
-              />
-            </div>
+            <>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <LabFeature label="Всего" value={String(stats.total)} />
+                <LabFeature label="Оценено" value={String(stats.evaluated)} />
+                <LabFeature label="Отсеяно сигналами" value={String(stats.screenedOut)} />
+                <LabFeature label="Отсеяно пробой" value={String(stats.probeOut)} />
+                <LabFeature label="Отсеяно бюджетом" value={String(stats.budgetOut)} />
+                <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
+                <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
+                <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
+                <LabFeature label="Медиана OOS" value={formatPct(stats.medianOosReturnPct)} />
+                <LabFeature label="Худший OOS" value={formatPct(stats.worstOosReturnPct)} />
+                <LabFeature label="Прибыльных" value={percentMagnitude(stats.profitablePct)} />
+                <LabFeature label="Средняя DD" value={percentMagnitude(stats.averageDrawdownPct)} />
+                <LabFeature label="Стабильность" value={percentMagnitude(stats.stabilityPct)} />
+                <LabFeature
+                  label="Holdout"
+                  value={stats.holdoutReturnPct === null ? '—' : formatPct(stats.holdoutReturnPct)}
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-zinc-500">
+                Прошли OOS: {stats.oosPassed} · допущено к holdout: {stats.holdoutTested} · не
+                тестировались: {Math.max(0, stats.oosPassed - stats.holdoutTested)}
+              </div>
+            </>
           ) : null}
           {stats && stats.histogram.length > 0 ? (
             <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2">
