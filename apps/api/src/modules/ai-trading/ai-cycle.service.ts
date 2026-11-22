@@ -45,7 +45,12 @@ import {
   sleep,
   withDbRetry,
 } from './ai-error.helpers';
-import { normalizeCycle, searchPollTimeout, SEARCH_HARD_TIMEOUT_MS } from './ai-cycle.helpers';
+import {
+  normalizeCycle,
+  searchPollTimeout,
+  sortRecommendationsForDrafts,
+  SEARCH_HARD_TIMEOUT_MS,
+} from './ai-cycle.helpers';
 import { candlesPerDay, MIN_SEARCH_DAYS } from './ai-search.helpers';
 import { FUNNEL_STAGE_LABELS } from './ai-search.funnel';
 import { selectDraftCandidates } from './ai-risk.helpers';
@@ -66,6 +71,8 @@ interface CycleSummary {
   searchRunId: string | null;
   recommended: number;
   draftsCreated: number;
+  oosPassed: number;
+  holdoutTested: number;
   rejectionReasons: Record<string, number>;
   nearMisses: AiSearchNearMiss[];
   error?: string | null;
@@ -234,6 +241,8 @@ export class AiCycleService implements OnModuleInit {
       searchRunId: null,
       recommended: 0,
       draftsCreated: 0,
+      oosPassed: 0,
+      holdoutTested: 0,
       rejectionReasons: {},
       nearMisses: [],
       error: null,
@@ -338,6 +347,8 @@ export class AiCycleService implements OnModuleInit {
         searchRunId: cycle.searchRunId,
         recommended: cycle.recommended,
         draftsCreated: cycle.draftsCreated,
+        oosPassed: cycle.oosPassed,
+        holdoutTested: cycle.holdoutTested,
         error: cycle.error,
         createdAt: cycle.createdAt,
         finishedAt: cycle.finishedAt,
@@ -451,6 +462,8 @@ export class AiCycleService implements OnModuleInit {
       searchRunId: cycle.searchRunId,
       recommended: cycle.recommended,
       draftsCreated: cycle.draftsCreated,
+      oosPassed: cycle.oosPassed,
+      holdoutTested: cycle.holdoutTested,
       rejectionReasons: cycle.rejectionReasons,
       nearMisses: cycle.nearMisses,
       error: cycle.error,
@@ -679,9 +692,13 @@ export class AiCycleService implements OnModuleInit {
       progressPct: 0,
     });
     const results = await this.aiSearch.results(userId, searchRunId);
-    const recommended = results.candidates.filter((item) => item.status === 'recommended');
+    const recommended = sortRecommendationsForDrafts(
+      results.candidates.filter((item) => item.status === 'recommended'),
+    );
     await this.updateSummary(cycleId, (summary) => {
       summary.recommended = recommended.length;
+      summary.oosPassed = results.stats?.oosPassed ?? 0;
+      summary.holdoutTested = results.stats?.holdoutTested ?? 0;
       summary.rejectionReasons = results.rejectionReasons;
       summary.nearMisses = results.nearMisses.slice(0, 5);
     });

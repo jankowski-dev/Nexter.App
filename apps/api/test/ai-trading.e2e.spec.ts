@@ -223,6 +223,12 @@ describe.runIf(canRun)('AI trading control center API', () => {
     expect(histogram).toHaveLength(8);
     const histogramTotal = histogram.reduce((sum, bucket) => sum + bucket.count, 0);
     expect(histogramTotal).toBeLessThanOrEqual(searchResults.body.stats.evaluated);
+    expect(searchResults.body.stats.holdoutTested).toBe(
+      Math.min(50, searchResults.body.stats.oosPassed),
+    );
+    expect(searchResults.body.stats.oosPassed).toBeGreaterThanOrEqual(
+      searchResults.body.stats.holdoutTested,
+    );
     expect(Array.isArray(searchResults.body.candidates)).toBe(true);
     expect(Array.isArray(searchResults.body.nearMisses)).toBe(true);
 

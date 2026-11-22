@@ -341,6 +341,9 @@ export const aiRecommendationSchema = z.object({
   stabilityPct: z.string(),
   holdoutReturnPct: z.string().nullable(),
   policyScore: z.string(),
+  holdoutBlockReturnsPct: z.array(z.string()).default([]),
+  holdoutBlocksNonNegative: z.number().int().default(0),
+  holdoutBlocksTotal: z.number().int().default(0),
   suggestedAllocationUsd: z.string(),
   invalidationRules: z.array(aiRecommendationInvalidationRuleSchema),
   linkedBotId: z.uuid().nullable(),
@@ -394,6 +397,9 @@ export const aiSearchNearMissSchema = z.object({
   holdoutDrawdownPct: z.string().nullable().default(null),
   policyScore: z.string(),
   reasons: z.array(z.string()),
+  holdoutBlockReturnsPct: z.array(z.string()).default([]),
+  holdoutBlocksNonNegative: z.number().int().default(0),
+  holdoutBlocksTotal: z.number().int().default(0),
 });
 
 export const aiCycleStatusSchema = z.object({
@@ -403,6 +409,8 @@ export const aiCycleStatusSchema = z.object({
   searchRunId: z.uuid().nullable(),
   recommended: z.number().int(),
   draftsCreated: z.number().int(),
+  oosPassed: z.number().int().default(0),
+  holdoutTested: z.number().int().default(0),
   rejectionReasons: z.record(z.string(), z.number().int()).default({}),
   nearMisses: z.array(aiSearchNearMissSchema).default([]),
   error: z.string().nullable(),
@@ -420,6 +428,8 @@ export const aiCycleSummarySchema = z.object({
   searchRunId: z.uuid().nullable(),
   recommended: z.number().int(),
   draftsCreated: z.number().int(),
+  oosPassed: z.number().int().default(0),
+  holdoutTested: z.number().int().default(0),
   error: z.string().nullable(),
   createdAt: z.iso.datetime(),
   finishedAt: z.iso.datetime().nullable(),
@@ -523,6 +533,9 @@ export const aiSearchCandidateSchema = z.object({
   stabilityPct: z.string(),
   holdoutReturnPct: z.string().nullable(),
   policyScore: z.string(),
+  holdoutBlockReturnsPct: z.array(z.string()).default([]),
+  holdoutBlocksNonNegative: z.number().int().default(0),
+  holdoutBlocksTotal: z.number().int().default(0),
 });
 
 export const aiSearchStatusSchema = z.object({

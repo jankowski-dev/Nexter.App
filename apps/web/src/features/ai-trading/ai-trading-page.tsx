@@ -36,6 +36,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatUsd } from '@/lib/format';
+import { holdoutBlockSummary, holdoutConsistencyLabel } from './ai-holdout-format';
 import { aiSearchFunnelStageLabels } from '@nexter/contracts';
 import type {
   AiBotHealth,
@@ -605,6 +606,9 @@ const rejectionLabels: Record<string, string> = {
   'worst fold too deep': 'худший фолд слишком глубокий',
   'negative holdout': 'отрицательный holdout',
   'holdout drawdown too high': 'просадка на holdout выше лимита',
+  'holdout blocks unstable': 'holdout нестабилен по 10-дневным блокам',
+  'holdout recent block negative': 'последний 10-дневный блок отрицательный',
+  'holdout blocks unavailable': 'блоки holdout недоступны',
   'non-positive policy score': 'policyScore ≤ 0',
   'holdout failed': 'ошибка holdout',
   'backtest failed': 'ошибка бэктеста',
@@ -844,6 +848,12 @@ function AiCycleCard({
           {cycleErrorText(cycle.error)}
         </p>
       ) : null}
+      {cycle.oosPassed > 0 ? (
+        <div className="mt-2 text-[11px] text-zinc-500">
+          Прошли OOS: {cycle.oosPassed} · допущено к holdout: {cycle.holdoutTested} · не
+          тестировались: {Math.max(0, cycle.oosPassed - cycle.holdoutTested)}
+        </div>
+      ) : null}
       {cycle.status === 'succeeded' ? (
         <p className="mt-2 text-xs text-zinc-500">
           Рекомендаций: {cycle.recommended} · создано черновиков: {cycle.draftsCreated}. Старт
@@ -869,7 +879,10 @@ function AiCycleCard({
                 {item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
                 {item.holdoutDrawdownPct === null
                   ? ''
-                  : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}{' '}
+                  : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}
+                {item.holdoutBlocksTotal > 0
+                  ? ` · блоки ${holdoutBlockSummary(item.holdoutBlockReturnsPct)} (${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)})`
+                  : ''}{' '}
                 · {item.reasons.map(rejectionLabel).join(', ')}
               </span>
             ))}
@@ -1610,6 +1623,16 @@ function RecommendationCard({
               {item.symbol} · {item.name}
             </span>
             <Badge tone={tone}>{label}</Badge>
+            {item.holdoutBlocksTotal > 0 ? (
+              <Badge
+                tone={
+                  item.holdoutBlocksNonNegative === item.holdoutBlocksTotal ? 'success' : 'warning'
+                }
+              >
+                holdout{' '}
+                {holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}
+              </Badge>
+            ) : null}
             <span className="text-xs text-zinc-500">
               {item.timeframe} · {item.strategyName}
             </span>
@@ -1646,6 +1669,14 @@ function RecommendationCard({
         <LabFeature
           label="Holdout"
           value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
+        />
+        <LabFeature
+          label="Блоки 10д"
+          value={
+            item.holdoutBlocksTotal > 0
+              ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}`
+              : '—'
+          }
         />
         <LabFeature label="Policy" value={item.policyScore} />
         <LabFeature label="Аллокация" value={formatUsd(item.suggestedAllocationUsd)} />
@@ -2059,25 +2090,31 @@ function SearchSection({
             />
           </div>
           {stats ? (
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <LabFeature label="Всего" value={String(stats.total)} />
-              <LabFeature label="Оценено" value={String(stats.evaluated)} />
-              <LabFeature label="Отсеяно сигналами" value={String(stats.screenedOut)} />
-              <LabFeature label="Отсеяно пробой" value={String(stats.probeOut)} />
-              <LabFeature label="Отсеяно бюджетом" value={String(stats.budgetOut)} />
-              <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
-              <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
-              <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
-              <LabFeature label="Медиана OOS" value={formatPct(stats.medianOosReturnPct)} />
-              <LabFeature label="Худший OOS" value={formatPct(stats.worstOosReturnPct)} />
-              <LabFeature label="Прибыльных" value={percentMagnitude(stats.profitablePct)} />
-              <LabFeature label="Средняя DD" value={percentMagnitude(stats.averageDrawdownPct)} />
-              <LabFeature label="Стабильность" value={percentMagnitude(stats.stabilityPct)} />
-              <LabFeature
-                label="Holdout"
-                value={stats.holdoutReturnPct === null ? '—' : formatPct(stats.holdoutReturnPct)}
-              />
-            </div>
+            <>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                <LabFeature label="Всего" value={String(stats.total)} />
+                <LabFeature label="Оценено" value={String(stats.evaluated)} />
+                <LabFeature label="Отсеяно сигналами" value={String(stats.screenedOut)} />
+                <LabFeature label="Отсеяно пробой" value={String(stats.probeOut)} />
+                <LabFeature label="Отсеяно бюджетом" value={String(stats.budgetOut)} />
+                <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
+                <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
+                <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
+                <LabFeature label="Медиана OOS" value={formatPct(stats.medianOosReturnPct)} />
+                <LabFeature label="Худший OOS" value={formatPct(stats.worstOosReturnPct)} />
+                <LabFeature label="Прибыльных" value={percentMagnitude(stats.profitablePct)} />
+                <LabFeature label="Средняя DD" value={percentMagnitude(stats.averageDrawdownPct)} />
+                <LabFeature label="Стабильность" value={percentMagnitude(stats.stabilityPct)} />
+                <LabFeature
+                  label="Holdout"
+                  value={stats.holdoutReturnPct === null ? '—' : formatPct(stats.holdoutReturnPct)}
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-zinc-500">
+                Прошли OOS: {stats.oosPassed} · допущено к holdout: {stats.holdoutTested} · не
+                тестировались: {Math.max(0, stats.oosPassed - stats.holdoutTested)}
+              </div>
+            </>
           ) : null}
           {stats && stats.histogram.length > 0 ? (
             <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2">
@@ -2149,6 +2186,10 @@ function SearchSection({
             {funnel.estimatedRecallPct === null
               ? 'Контрольная выборка не запускалась.'
               : `Оценка полноты: ${funnel.estimatedRecallPct}% (могло быть пропущено ~${funnel.estimatedMissed}).`}
+          </div>
+          <div className="mt-1 text-[11px] text-zinc-500">
+            «Мало сделок» — меньше 8 сделок за 8 OOS-фолдов (≈80 дней); для короткой истории порог
+            ниже. Это диагностика, не рекомендация.
           </div>
         </Card>
       ) : null}
@@ -2258,6 +2299,15 @@ function SearchSection({
                       : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}
                   </span>
                 </div>
+                {item.holdoutBlocksTotal > 0 ? (
+                  <div className="mt-1 text-[11px] text-zinc-600">
+                    Блоки 10 дней: {holdoutBlockSummary(item.holdoutBlockReturnsPct)} ·{' '}
+                    {holdoutConsistencyLabel(
+                      item.holdoutBlocksNonNegative,
+                      item.holdoutBlocksTotal,
+                    )}
+                  </div>
+                ) : null}
                 <div className="mt-1 text-[11px] text-amber-800">
                   {item.reasons.map(rejectionLabel).join(' · ')}
                 </div>
@@ -2314,7 +2364,24 @@ function SearchCandidateCard({
           <div className="text-sm font-semibold text-zinc-900">{candidate.strategyName}</div>
           <div className="text-[11px] text-zinc-500">{candidate.strategyKey}</div>
         </div>
-        <Badge tone="success">OOS {formatPct(candidate.oosMedianReturnPct)}</Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="success">OOS {formatPct(candidate.oosMedianReturnPct)}</Badge>
+          {candidate.holdoutBlocksTotal > 0 ? (
+            <Badge
+              tone={
+                candidate.holdoutBlocksNonNegative === candidate.holdoutBlocksTotal
+                  ? 'success'
+                  : 'warning'
+              }
+            >
+              holdout{' '}
+              {holdoutConsistencyLabel(
+                candidate.holdoutBlocksNonNegative,
+                candidate.holdoutBlocksTotal,
+              )}
+            </Badge>
+          ) : null}
+        </div>
       </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <LabFeature label="Средний OOS" value={formatPct(candidate.oosMeanReturnPct)} />
@@ -2325,6 +2392,14 @@ function SearchCandidateCard({
         <LabFeature
           label="Holdout"
           value={candidate.holdoutReturnPct === null ? '—' : formatPct(candidate.holdoutReturnPct)}
+        />
+        <LabFeature
+          label="Блоки 10д"
+          value={
+            candidate.holdoutBlocksTotal > 0
+              ? `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksNonNegative, candidate.holdoutBlocksTotal)}`
+              : '—'
+          }
         />
         <LabFeature label="Policy" value={candidate.policyScore} />
         <LabFeature label="Фолды" value={`${candidate.positiveFolds} / 8`} />
