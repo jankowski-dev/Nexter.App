@@ -3,6 +3,24 @@ import { assetSchema } from './accounting';
 
 export const aiTimeframes = ['1h', '1d', '4h', '15m', '5m'] as const;
 export const aiTimeframeSchema = z.enum(aiTimeframes);
+export const aiSearchFunnelStageKeys = [
+  'screen',
+  'probe',
+  'budget',
+  'full',
+  'control',
+  'holdout',
+] as const;
+export const aiSearchFunnelStageKeySchema = z.enum(aiSearchFunnelStageKeys);
+export type AiSearchFunnelStageKey = z.infer<typeof aiSearchFunnelStageKeySchema>;
+export const aiSearchFunnelStageLabels: Record<AiSearchFunnelStageKey, string> = {
+  screen: 'Сигналы',
+  probe: 'Проба',
+  budget: 'Бюджет',
+  full: 'OOS',
+  control: 'Контроль',
+  holdout: 'Holdout',
+};
 export const aiServiceKeys = ['data', 'analyst', 'backtest', 'risk', 'reporter'] as const;
 export const aiServiceKeySchema = z.enum(aiServiceKeys);
 
@@ -356,6 +374,7 @@ export const aiCycleStepSchema = z.object({
   message: z.string().nullable(),
   error: z.string().nullable(),
   progressPct: z.number().int().min(0).max(100).nullable().default(null),
+  stage: aiSearchFunnelStageKeySchema.nullable().default(null),
   startedAt: z.iso.datetime().nullable(),
   finishedAt: z.iso.datetime().nullable(),
 });
@@ -418,15 +437,6 @@ export const aiSearchHistogramBucketSchema = z.object({
   label: z.string(),
   count: z.number().int(),
 });
-
-export const aiSearchFunnelStageKeySchema = z.enum([
-  'screen',
-  'probe',
-  'budget',
-  'full',
-  'control',
-  'holdout',
-]);
 
 export const aiSearchFunnelStageSchema = z.object({
   key: aiSearchFunnelStageKeySchema,
@@ -644,7 +654,6 @@ export type AiCycleSummary = z.infer<typeof aiCycleSummarySchema>;
 export type AiCyclesQuery = z.infer<typeof aiCyclesQuerySchema>;
 export type AiCyclesResponse = z.infer<typeof aiCyclesResponseSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
-export type AiSearchFunnelStageKey = z.infer<typeof aiSearchFunnelStageKeySchema>;
 export type AiSearchFunnelStage = z.infer<typeof aiSearchFunnelStageSchema>;
 export type AiSearchFunnelControlHit = z.infer<typeof aiSearchFunnelControlHitSchema>;
 export type AiSearchFunnel = z.infer<typeof aiSearchFunnelSchema>;

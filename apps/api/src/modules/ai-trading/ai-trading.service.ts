@@ -31,25 +31,15 @@ import {
 import { AuditService } from '../../shared/audit/audit.service';
 import { decimal } from '../../shared/money/decimal';
 import { DB } from '../../shared/db/db.module';
+import {
+  DEFAULT_AI_MODEL_SETTINGS,
+  DEFAULT_AI_SCHEDULE,
+} from '../../shared/ai/ai-profile-defaults';
 
 interface AiTradingMeta {
   ip?: string;
   userAgent?: string;
 }
-
-const defaultModelSettings = {
-  model: 'deepseek-flash',
-  temperature: 0.2,
-  maxTokens: 2000,
-  timeoutSeconds: 60,
-};
-
-const defaultSchedule = {
-  weeklyReview: true,
-  weeklyDay: 0,
-  weeklyHour: 3,
-  events: true,
-};
 
 const serviceDefaults: Record<string, Record<string, unknown>> = {
   data: { historyDays: 365, minLiquidityUsd: '25000', timeframes: ['1h', '1d'] },
@@ -192,7 +182,9 @@ export class AiTradingService {
           ? { maxBacktestsPerDay: input.maxBacktestsPerDay }
           : {}),
         ...(input.workerMaxTokens !== undefined ? { workerMaxTokens: input.workerMaxTokens } : {}),
-        ...(input.modelSettings !== undefined ? { modelSettings: input.modelSettings } : {}),
+        ...(input.modelSettings !== undefined
+          ? { modelSettings: { ...before.modelSettings, ...input.modelSettings } }
+          : {}),
         ...(input.schedule !== undefined ? { schedule: input.schedule } : {}),
         updatedAt: new Date(),
       })
@@ -549,8 +541,8 @@ export class AiTradingService {
       .values({
         userId,
         name: 'AI Trading',
-        modelSettings: defaultModelSettings,
-        schedule: defaultSchedule,
+        modelSettings: DEFAULT_AI_MODEL_SETTINGS,
+        schedule: DEFAULT_AI_SCHEDULE,
       })
       .onConflictDoNothing()
       .returning();

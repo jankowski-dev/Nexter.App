@@ -34,6 +34,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime, formatPct, formatUsd } from '@/lib/format';
+import { aiSearchFunnelStageLabels } from '@nexter/contracts';
 import type {
   AiBotHealth,
   AiBotHealthResponse,
@@ -49,7 +50,6 @@ import type {
   AiProfileUpdateRequest,
   AiSearchCandidate,
   AiSearchExecution,
-  AiSearchFunnelStageKey,
   AiSearchResults,
   AiSearchTimeframe,
   AiTimeframe,
@@ -76,15 +76,6 @@ const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> 
 const executionLabels: Record<AiSearchExecution, string> = {
   'next-open': 'следующая свеча',
   'same-close': 'по закрытию',
-};
-
-const funnelStageLabels: Record<AiSearchFunnelStageKey, string> = {
-  screen: 'Сигналы',
-  probe: 'Проба',
-  budget: 'Бюджет',
-  full: 'OOS',
-  control: 'Контроль',
-  holdout: 'Holdout',
 };
 
 function formatDurationMs(ms: number): string {
@@ -783,6 +774,8 @@ function AiCycleCard({
           const progress = stepProgressPct(step);
           const active = step.status === 'running';
           const failed = step.status === 'failed';
+          const searchStageLabel =
+            step.key === 'search' && step.stage ? aiSearchFunnelStageLabels[step.stage] : null;
           return (
             <div
               key={step.key}
@@ -794,9 +787,18 @@ function AiCycleCard({
                 <Badge tone={cycleStepTone(step.status)}>
                   {cycleStepStatusLabels[step.status]}
                 </Badge>
-                <span className="text-xs font-medium text-zinc-800">
-                  {cycleStepLabels[step.key]}
+                <span
+                  className={
+                    active && searchStageLabel
+                      ? 'text-sm font-semibold text-zinc-900'
+                      : 'text-xs font-medium text-zinc-800'
+                  }
+                >
+                  {active && searchStageLabel ? searchStageLabel : cycleStepLabels[step.key]}
                 </span>
+                {active && searchStageLabel ? (
+                  <span className="text-[10px] uppercase tracking-wide text-zinc-400">Поиск</span>
+                ) : null}
               </div>
               {step.message ? (
                 <div className="mt-1 text-[11px] text-zinc-500">{step.message}</div>
@@ -1954,7 +1956,7 @@ function SearchSection({
               </Badge>
               <span className="text-xs text-zinc-500">
                 {currentStatus.stage
-                  ? `${funnelStageLabels[currentStatus.stage]}: ${currentStatus.stageEvaluated} / ${currentStatus.stageTotal}`
+                  ? `${aiSearchFunnelStageLabels[currentStatus.stage]}: ${currentStatus.stageEvaluated} / ${currentStatus.stageTotal}`
                   : `${currentStatus.evaluated} / ${currentStatus.total} вариантов`}
               </span>
               <span className="text-xs text-zinc-400">
@@ -2038,7 +2040,7 @@ function SearchSection({
               <div key={stage.key} className="flex items-center gap-2">
                 <div className="min-w-[104px] rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2">
                   <div className="text-[10px] uppercase tracking-wide text-zinc-400">
-                    {funnelStageLabels[stage.key]}
+                    {aiSearchFunnelStageLabels[stage.key]}
                   </div>
                   <div className="mt-0.5 text-sm font-medium text-zinc-800">
                     {stage.input} → {stage.output}
