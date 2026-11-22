@@ -37,7 +37,7 @@ stricter block activity rule before the adaptive strategy work.
    - Recommendation requires: overall return > 0, drawdown <= 20%, at least 2
      positive blocks, at least 2 active blocks, and the last block >= 0.
 4. **No threshold changes.** OOS min trades, positive folds, drawdown and worst
-   fold stay as before. Holdout is still not used for ranking.
+   fold stay as before. Holdout is not used to select or recommend a candidate; it only orders already-passed drafts by consistency.
 5. **Old runs are immutable.** Existing artifacts keep their old block fields
    and recommendations; new runs use settlement.
 

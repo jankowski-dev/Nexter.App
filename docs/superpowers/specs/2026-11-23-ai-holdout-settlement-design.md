@@ -39,7 +39,7 @@ adaptive strategy work.
    - Recommendation requires: overall return > 0, drawdown <= 20%, at least 2
      positive blocks, at least 2 active blocks, and the last block >= 0.
 4. **No threshold changes.** OOS min trades, positive folds, drawdown and worst
-   fold stay as before. Holdout is still not used for ranking.
+   fold stay as before. Holdout is not used to select or recommend a candidate; it only orders already-passed drafts by consistency.
 5. **Old runs are immutable.** Existing artifacts keep their old block fields
    and recommendations; new runs use settlement.
 
@@ -65,7 +65,7 @@ search period further; five is the first fair value.
 - Near-miss/candidate metrics gain `holdoutBlocksPositive` and
   `holdoutBlocksTraded`.
 - Cycle status/summary gain `settlementDays` for the UI.
-- UI labels show `10 / 10 / 10+5` and `positive/total`, `active/total`.
+- UI labels show `3×15 (10+5)` and `positive/total`, `active/total`.
 
 ## Non-goals
 
@@ -78,9 +78,9 @@ search period further; five is the first fair value.
 
 - Settlement can still end with an open loser if the strategy's exit logic is
   bad; that is a real failure, not a boundary artifact.
-- The holdout moves 5 days back from the latest candle. The regime verdict can
-  still use the latest data, but the evaluated holdout is 5 days older.
-- The search period drops from 145 to 135 days; a 180-day history has seven
+- The holdout still ends at the latest candle; its start moves 15 days back versus
+  the old 30-day holdout. The evaluated window is the most recent 45 days.
+- The search period drops from 150 to 135 days; a 180-day history has seven
   folds instead of eight, and 140–146 day histories have three folds.
 - The holdout is the most recent 45 days, so the evaluated regime is current;
   the trade-off is less OOS history.

@@ -253,6 +253,9 @@ describe('AI cycle contracts', () => {
       createdAt: '2026-11-21T00:00:00.000Z',
       expiresAt: '2026-11-26T00:00:00.000Z',
       expired: false,
+      foldCount: 7,
+      settlementDays: 5,
+      holdoutCycles: 3,
       holdoutBlockReturnsPct: ['1.00', '2.00', '0.50'],
       holdoutBlocksPositive: 3,
       holdoutBlocksNonNegative: 3,
@@ -263,12 +266,18 @@ describe('AI cycle contracts', () => {
     expect(parsed.holdoutBlocksPositive).toBe(3);
     expect(parsed.holdoutBlocksTraded).toBe(3);
     const legacyInput: Record<string, unknown> = { ...recommendation };
+    delete legacyInput.foldCount;
+    delete legacyInput.settlementDays;
+    delete legacyInput.holdoutCycles;
     delete legacyInput.holdoutBlockReturnsPct;
     delete legacyInput.holdoutBlocksPositive;
     delete legacyInput.holdoutBlocksNonNegative;
     delete legacyInput.holdoutBlocksTraded;
     delete legacyInput.holdoutBlocksTotal;
     const legacy = aiRecommendationSchema.parse(legacyInput);
+    expect(legacy.foldCount).toBe(8);
+    expect(legacy.settlementDays).toBe(0);
+    expect(legacy.holdoutCycles).toBe(0);
     expect(legacy.holdoutBlockReturnsPct).toEqual([]);
     expect(legacy.holdoutBlocksPositive).toBe(0);
     expect(legacy.holdoutBlocksTraded).toBe(0);

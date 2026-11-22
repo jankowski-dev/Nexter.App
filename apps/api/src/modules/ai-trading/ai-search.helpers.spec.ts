@@ -51,7 +51,7 @@ describe('AI search helpers', () => {
     expect(new Set(first.map((variant) => JSON.stringify(variant))).size).toBe(first.length);
   });
 
-  it('builds eight non-overlapping OOS folds and a warmup-prefixed 30-day holdout', () => {
+  it('builds seven OOS folds and a warmup-prefixed 45-day holdout', () => {
     const {
       folds,
       holdout,
@@ -134,7 +134,7 @@ describe('holdout selection', () => {
 });
 
 describe('holdout blocks', () => {
-  it('splits the holdout equity curve into three 10-day block returns', () => {
+  it('splits the holdout equity curve into three equal blocks', () => {
     const curve = [100, 110, 120, 100, 90, 80, 90, 100, 110].map((equity) => ({
       equityUsd: String(equity),
     }));
@@ -148,6 +148,18 @@ describe('holdout blocks', () => {
     expect(stats?.traded).toBe(2);
     expect(stats?.total).toBe(3);
     expect(stats?.lastNegative).toBe(false);
+  });
+
+  it('handles a 45-point curve and requires at least two points per block', () => {
+    const curve = Array.from({ length: 45 }, (_, index) => ({ equityUsd: String(100 + index) }));
+    const exposure = Array.from({ length: 45 }, (_, index) => index < 15 || index >= 30);
+    const stats = holdoutBlockStats(curve, 3, { exposure });
+    expect(stats?.total).toBe(3);
+    expect(stats?.returnsPct).toHaveLength(3);
+    expect(stats?.traded).toBe(2);
+    expect(
+      holdoutBlockStats([{ equityUsd: '100' }, { equityUsd: '110' }, { equityUsd: '120' }], 3),
+    ).toBeNull();
   });
 
   it('flags a negative last block and an unusable curve', () => {

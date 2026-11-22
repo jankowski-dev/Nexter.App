@@ -114,6 +114,7 @@ interface SearchRunSummary {
 
 interface SearchCandidate extends VariantMetrics {
   variant: SearchVariant;
+  foldCount: number;
   holdoutReturnPct: string | null;
   holdoutBlockReturnsPct: string[];
   holdoutBlocksPositive: number;
@@ -578,6 +579,9 @@ export class AiSearchService {
           trades: typeof metrics.trades === 'number' ? metrics.trades : 0,
           positiveFolds: typeof metrics.positiveFolds === 'number' ? metrics.positiveFolds : 0,
           stabilityPct: value('stabilityPct', '0'),
+          foldCount: typeof metrics.foldCount === 'number' ? metrics.foldCount : 8,
+          settlementDays: typeof metrics.settlementDays === 'number' ? metrics.settlementDays : 0,
+          holdoutCycles: typeof metrics.holdoutCycles === 'number' ? metrics.holdoutCycles : 0,
           holdoutReturnPct:
             typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
           policyScore: candidate.policyScore ?? '0',
@@ -736,6 +740,7 @@ export class AiSearchService {
         medianOosReturnPct: '0',
         worstOosReturnPct: '0',
         stabilityPct: '0',
+        foldCount: 8,
         holdoutReturnPct: null,
         histogram: [],
       },
@@ -1000,6 +1005,7 @@ export class AiSearchService {
       metrics.push({
         ...aggregate,
         variant,
+        foldCount: folds.folds.length,
         holdoutReturnPct: null,
         holdoutBlockReturnsPct: [],
         holdoutBlocksPositive: 0,
@@ -1465,6 +1471,9 @@ export class AiSearchService {
               positiveFolds: candidate.positiveFolds,
               stabilityPct: candidate.stabilityPct,
               holdoutReturnPct: candidate.holdoutReturnPct,
+              foldCount: candidate.foldCount,
+              settlementDays: folds.settlementDays,
+              holdoutCycles: folds.holdoutCycles,
               holdoutBlockReturnsPct: candidate.holdoutBlockReturnsPct,
               holdoutBlocksPositive: candidate.holdoutBlocksPositive,
               holdoutBlocksNonNegative: candidate.holdoutBlocksNonNegative,
@@ -1655,6 +1664,7 @@ export class AiSearchService {
             )
           : '0.00',
       holdoutReturnPct: recommended[0]?.holdoutReturnPct ?? null,
+      foldCount,
       histogram: histogramRanges.map((range) => ({
         label: range.label,
         count: returns.filter(range.test).length,
@@ -1683,6 +1693,9 @@ export class AiSearchService {
       trades: typeof metrics.trades === 'number' ? metrics.trades : 0,
       positiveFolds: typeof metrics.positiveFolds === 'number' ? metrics.positiveFolds : 0,
       stabilityPct: value('stabilityPct', '0'),
+      foldCount: typeof metrics.foldCount === 'number' ? metrics.foldCount : 8,
+      settlementDays: typeof metrics.settlementDays === 'number' ? metrics.settlementDays : 0,
+      holdoutCycles: typeof metrics.holdoutCycles === 'number' ? metrics.holdoutCycles : 0,
       holdoutReturnPct:
         typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
       policyScore: row.policyScore ?? '0',

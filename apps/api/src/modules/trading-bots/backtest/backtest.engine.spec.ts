@@ -465,6 +465,34 @@ describe('settlement ranges', () => {
     expect(result.trades[0]?.date).toBe('2026-01-04');
   });
 
+  it('still executes a protective stop inside settlement', () => {
+    const buyOnce: StrategyDefinition = {
+      ...meanReversion,
+      evaluate: (ctx) =>
+        ctx.position ? { action: 'hold', reason: 'hold' } : { action: 'buy', reason: 'test buy' },
+    };
+    const result = runBacktest(buyOnce, { stopLossPct: 5 }, series([100, 100, 100, 90, 90, 90]), {
+      settlementRanges: [{ start: 2, end: 5 }],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    const stop = result.trades.find((trade) => trade.side === 'sell');
+    expect(stop?.reason).toContain('стоп-лосс');
+    expect(stop?.date).toBe('2026-01-04');
+  });
+
+  it('force-closes every settlement range, not only the last', () => {
+    const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
+      settlementRanges: [
+        { start: 2, end: 3 },
+        { start: 5, end: 6 },
+      ],
+      feeBps: 0,
+      slippageBps: 0,
+    });
+    expect(result.trades.filter((trade) => trade.reason === 'закрытие settlement')).toHaveLength(2);
+  });
+
   it('force-closes at each settlement end and starts the next cycle flat', () => {
     const result = runBacktest(buyAlways, {}, series([100, 100, 100, 100, 100, 100, 100, 100]), {
       settlementRanges: [{ start: 2, end: 5 }],

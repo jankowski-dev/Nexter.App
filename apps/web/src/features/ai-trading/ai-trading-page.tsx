@@ -889,7 +889,14 @@ function AiCycleCard({
                   ? ''
                   : ` · DD ${formatPct(item.holdoutDrawdownPct)}`}
                 {item.holdoutBlocksTotal > 0
-                  ? ` · блоки ${holdoutBlockSummary(item.holdoutBlockReturnsPct)} (${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.)`
+                  ? ` · блоки ${holdoutBlockSummary(item.holdoutBlockReturnsPct)} (${
+                      cycle.settlementDays > 0
+                        ? `${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
+                        : holdoutConsistencyLabel(
+                            item.holdoutBlocksNonNegative,
+                            item.holdoutBlocksTotal,
+                          )
+                    })`
                   : ''}{' '}
                 · {item.reasons.map(rejectionLabel).join(', ')}
               </span>
@@ -1600,6 +1607,7 @@ function RecommendationCard({
   onAccept: () => void;
   onReject: () => void;
 }) {
+  const settled = item.settlementDays > 0;
   const tone =
     item.status === 'accepted'
       ? 'info'
@@ -1634,15 +1642,19 @@ function RecommendationCard({
             {item.holdoutBlocksTotal > 0 ? (
               <Badge
                 tone={
-                  item.holdoutBlocksPositive === item.holdoutBlocksTotal &&
-                  item.holdoutBlocksTraded === item.holdoutBlocksTotal
-                    ? 'success'
-                    : 'warning'
+                  settled
+                    ? item.holdoutBlocksPositive === item.holdoutBlocksTotal &&
+                      item.holdoutBlocksTraded === item.holdoutBlocksTotal
+                      ? 'success'
+                      : 'warning'
+                    : item.holdoutBlocksNonNegative === item.holdoutBlocksTotal
+                      ? 'success'
+                      : 'warning'
                 }
               >
-                holdout{' '}
-                {holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} ·{' '}
-                {holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.
+                {settled
+                  ? `holdout ${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} · ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
+                  : `holdout ${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}`}
               </Badge>
             ) : null}
             <span className="text-xs text-zinc-500">
@@ -1683,10 +1695,12 @@ function RecommendationCard({
           value={item.holdoutReturnPct === null ? '—' : formatPct(item.holdoutReturnPct)}
         />
         <LabFeature
-          label="Блоки 15д"
+          label={settled ? 'Блоки 15д' : 'Блоки 10д'}
           value={
             item.holdoutBlocksTotal > 0
-              ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
+              ? settled
+                ? `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
+                : `${holdoutBlockSummary(item.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(item.holdoutBlocksNonNegative, item.holdoutBlocksTotal)}`
               : '—'
           }
         />
@@ -1863,8 +1877,8 @@ function SearchSection({
           <div>
             <CardTitle>Поиск стратегий</CardTitle>
             <CardDescription>
-              Массовый подбор параметров на purged walk-forward: 150 дней поиска, 8 фолдов и
-              30-дневный holdout. Рекомендация не запускает робота.
+              Массовый подбор параметров на purged walk-forward: 135 дней поиска, 3–7 фолдов и
+              45-дневный holdout (3×15: 10 тест + 5 settlement). Рекомендация не запускает робота.
             </CardDescription>
           </div>
           <div className="flex flex-wrap items-end gap-2">
@@ -2203,8 +2217,7 @@ function SearchSection({
               : `Оценка полноты: ${funnel.estimatedRecallPct}% (могло быть пропущено ~${funnel.estimatedMissed}).`}
           </div>
           <div className="mt-1 text-[11px] text-zinc-500">
-            «Мало сделок» — меньше 8 сделок за 8 OOS-фолдов (≈80 дней); для короткой истории порог
-            ниже. Это диагностика, не рекомендация.
+            {`«Мало сделок» — меньше ${Math.max(5, currentResults?.stats?.foldCount ?? 8)} сделок за ${currentResults?.stats?.foldCount ?? 8} OOS-фолдов. Это диагностика, не рекомендация.`}
           </div>
         </Card>
       ) : null}
@@ -2248,6 +2261,7 @@ function SearchSection({
                 <SearchCandidateCard
                   key={candidate.id}
                   candidate={candidate}
+                  settlementDays={currentResults?.settlementDays ?? 0}
                   onAccept={(item) =>
                     setAcceptTarget({
                       id: item.id,
@@ -2316,10 +2330,14 @@ function SearchSection({
                 </div>
                 {item.holdoutBlocksTotal > 0 ? (
                   <div className="mt-1 text-[11px] text-zinc-600">
-                    Блоки 15 дней: {holdoutBlockSummary(item.holdoutBlockReturnsPct)} ·{' '}
-                    {holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)}{' '}
-                    поз. / {holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)}{' '}
-                    акт.
+                    Блоки {currentResults?.settlementDays ? '15 дней' : '10 дней'}:{' '}
+                    {holdoutBlockSummary(item.holdoutBlockReturnsPct)} ·{' '}
+                    {currentResults?.settlementDays
+                      ? `${holdoutConsistencyLabel(item.holdoutBlocksPositive, item.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(item.holdoutBlocksTraded, item.holdoutBlocksTotal)} акт.`
+                      : holdoutConsistencyLabel(
+                          item.holdoutBlocksNonNegative,
+                          item.holdoutBlocksTotal,
+                        )}
                   </div>
                 ) : null}
                 <div className="mt-1 text-[11px] text-amber-800">
@@ -2367,10 +2385,13 @@ function SearchSection({
 function SearchCandidateCard({
   candidate,
   onAccept,
+  settlementDays,
 }: {
   candidate: AiSearchCandidate;
   onAccept: (candidate: AiSearchCandidate) => void;
+  settlementDays: number;
 }) {
+  const settled = settlementDays > 0;
   return (
     <div className="rounded-xl border border-zinc-200 px-3 py-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2383,19 +2404,19 @@ function SearchCandidateCard({
           {candidate.holdoutBlocksTotal > 0 ? (
             <Badge
               tone={
-                candidate.holdoutBlocksPositive === candidate.holdoutBlocksTotal &&
-                candidate.holdoutBlocksTraded === candidate.holdoutBlocksTotal
-                  ? 'success'
-                  : 'warning'
+                settled
+                  ? candidate.holdoutBlocksPositive === candidate.holdoutBlocksTotal &&
+                    candidate.holdoutBlocksTraded === candidate.holdoutBlocksTotal
+                    ? 'success'
+                    : 'warning'
+                  : candidate.holdoutBlocksNonNegative === candidate.holdoutBlocksTotal
+                    ? 'success'
+                    : 'warning'
               }
             >
-              holdout{' '}
-              {holdoutConsistencyLabel(
-                candidate.holdoutBlocksPositive,
-                candidate.holdoutBlocksTotal,
-              )}{' '}
-              · {holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)}{' '}
-              акт.
+              {settled
+                ? `holdout ${holdoutConsistencyLabel(candidate.holdoutBlocksPositive, candidate.holdoutBlocksTotal)} · ${holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)} акт.`
+                : `holdout ${holdoutConsistencyLabel(candidate.holdoutBlocksNonNegative, candidate.holdoutBlocksTotal)}`}
             </Badge>
           ) : null}
         </div>
@@ -2411,15 +2432,17 @@ function SearchCandidateCard({
           value={candidate.holdoutReturnPct === null ? '—' : formatPct(candidate.holdoutReturnPct)}
         />
         <LabFeature
-          label="Блоки 15д"
+          label={settled ? 'Блоки 15д' : 'Блоки 10д'}
           value={
             candidate.holdoutBlocksTotal > 0
-              ? `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksPositive, candidate.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)} акт.`
+              ? settled
+                ? `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksPositive, candidate.holdoutBlocksTotal)} поз. / ${holdoutActiveLabel(candidate.holdoutBlocksTraded, candidate.holdoutBlocksTotal)} акт.`
+                : `${holdoutBlockSummary(candidate.holdoutBlockReturnsPct)} · ${holdoutConsistencyLabel(candidate.holdoutBlocksNonNegative, candidate.holdoutBlocksTotal)}`
               : '—'
           }
         />
         <LabFeature label="Policy" value={candidate.policyScore} />
-        <LabFeature label="Фолды" value={`${candidate.positiveFolds} / 8`} />
+        <LabFeature label="Фолды" value={`${candidate.positiveFolds} / ${candidate.foldCount}`} />
         <LabFeature label="Действует до" value={formatDateTime(candidate.expiresAt)} />
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">

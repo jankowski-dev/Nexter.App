@@ -240,6 +240,13 @@ describe.runIf(canRun)('AI trading control center API', () => {
         expect(candidate.holdoutBlocksTraded).toBeLessThanOrEqual(3);
       }
     }
+    for (const nearMiss of searchResults.body.nearMisses) {
+      if (nearMiss.holdoutBlocksTotal > 0) {
+        expect(nearMiss.holdoutBlockReturnsPct).toHaveLength(3);
+        expect(nearMiss.holdoutBlocksPositive).toBeLessThanOrEqual(3);
+        expect(nearMiss.holdoutBlocksTraded).toBeLessThanOrEqual(3);
+      }
+    }
 
     const funnel = searchResults.body.funnel as {
       stages: Array<{ key: string; input: number; output: number; rejected: number }>;

@@ -343,6 +343,7 @@ export function holdoutBlockStats(
   if (size <= 0) return null;
   let previous = Number(equityCurve[0]?.equityUsd ?? 0);
   if (!Number.isFinite(previous) || previous <= 0) return null;
+  // Gate counts use the raw returns; returnsPct is only the 2-decimal display value.
   const returnsPct: string[] = [];
   const numeric: number[] = [];
   let traded = 0;
