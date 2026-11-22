@@ -881,6 +881,25 @@ export class AiSearchService {
             candidate.holdoutReturnPct,
             result.stats.maxDrawdownPct,
           );
+        } else if (Number(candidate.policyScore) <= 0) {
+          reject('non-positive policy score');
+          rememberNearMiss(
+            {
+              oosMedianReturnPct: candidate.oosMedianReturnPct,
+              oosMeanReturnPct: candidate.oosMeanReturnPct,
+              oosWorstReturnPct: candidate.oosWorstReturnPct,
+              maxDrawdownPct: candidate.maxDrawdownPct,
+              trades: candidate.trades,
+              positiveFolds: candidate.positiveFolds,
+              stabilityPct: candidate.stabilityPct,
+              policyScore: candidate.policyScore,
+            },
+            candidate.variant,
+            ['non-positive policy score'],
+            candidate.holdoutReturnPct,
+            result.stats.maxDrawdownPct,
+          );
+          candidate.policyScore = '0';
         }
       } catch {
         candidate.holdoutReturnPct = null;
@@ -917,7 +936,7 @@ export class AiSearchService {
       allMetrics,
       recommended,
       folds.folds.length,
-      allMetrics.length,
+      metrics.length,
       top.length,
     );
     const holdoutFailed = (item: AiSearchNearMiss) =>
