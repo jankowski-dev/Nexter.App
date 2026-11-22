@@ -1,6 +1,6 @@
 # AI System Engineering Guide — final PDF plan
 
-Status: planned. Produce **after the last Phase 8 item** (durable worker, data-quality hardening, next-open execution decision). This is not the user-facing product manual; it explains the algorithm and data flow from first principles.
+Status: **produced 2026-11-22**. Source: `docs/guides/ai-system-engineering-guide.md`; print HTML: `docs/guides/ai-system-engineering-guide.html`; PDF: `docs/guides/nexter-ai-system-engineering.pdf`; build: `node scripts/docs/build-ai-engineering-guide.mjs`. This is not the user-facing product manual; it explains the algorithm and data flow from first principles.
 
 ## Goal
 
@@ -52,3 +52,10 @@ Tone: “explain the internal combustion engine”, not “explain the dashboard
 ## Output
 
 `docs/guides/nexter-ai-system-engineering.pdf` plus its source Markdown and diagram sources.
+
+## Generated 2026-11-22
+
+- 23-page A4 PDF, Russian, vector SVG diagrams, print header/footer and page numbers.
+- Covers the data pipeline, adaptive walk-forward, Decimal backtest engine, 11 strategies, signal screen/funnel/control samples, native fast engine and parity, H5 next-open execution, filters/holdout, recommendations/risk, paper bots/invalidation, reliability and worked examples.
+- Source Markdown is the editable text; the build script converts it to print HTML and renders the PDF through Playwright Chromium.
+- Synthetic examples only; no secrets or production data.
