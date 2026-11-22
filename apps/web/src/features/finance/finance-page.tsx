@@ -545,7 +545,7 @@ export function FinancePage() {
             меняется. Сама операция — во вкладке «Переводы».
           </p>
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-4 xl:grid-cols-2">
             <FinanceAccountsBlock
               accounts={accountRows}
               assetsBase={summary.data?.assetsBase}

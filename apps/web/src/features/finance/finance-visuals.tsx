@@ -202,12 +202,14 @@ export function FinanceAccountsBlock({
                     >
                       {financeMoney(account.balance, account.currency)}
                     </div>
-                    <div className="text-right">
-                      <div className="text-[10px] text-zinc-500">в BYN</div>
-                      <div className="font-mono text-xs font-medium tabular-nums text-zinc-700">
-                        {financeMoney(account.balanceBase, 'BYN')}
+                    {account.currency === 'BYN' ? null : (
+                      <div className="text-right">
+                        <div className="text-[10px] text-zinc-500">в BYN</div>
+                        <div className="font-mono text-xs font-medium tabular-nums text-zinc-700">
+                          {financeMoney(account.balanceBase, 'BYN')}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
