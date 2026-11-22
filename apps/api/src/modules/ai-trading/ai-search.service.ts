@@ -776,7 +776,7 @@ export class AiSearchService {
       Math.max(0, folds.folds.length),
     );
     const probeEnabled = probeFoldCount > 0;
-    const fullBudget = envCount('AI_SEARCH_FULL_BUDGET', 8000);
+    const fullBudget = envCount('AI_SEARCH_FULL_BUDGET', 0);
     const budgetEnabled = fullBudget > 0;
     const controlSampleSize = envCount('AI_SEARCH_CONTROL_SAMPLE', 50);
     const activeStages: FunnelStageKey[] = ['screen'];

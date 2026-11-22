@@ -172,3 +172,17 @@ screen -> probe (optional) -> budget -> full OOS -> control sample -> holdout
 All 15 probe false negatives were `squeeze_breakout`: the strategy can have no trade in fold 0 and still pass in later folds. Therefore the probe is **disabled by default** (`AI_SEARCH_PROBE_FOLDS=0`) until fold selection is improved. The signal screen is safe and stays on. The budget sample is unbiased and controlled, so it does not need the probe.
 
 Timings on the local 4-core machine: signal screen 2.4 s, one-fold probe 221 s, full eight folds 1,120 s. The probe is cheap per variant but its recall cost is currently too high; the signal screen plus an 8k budget is the safe default for 10k–50k searches.
+
+## Native fast backtest 2026-11-22
+
+CPU profile of 100 slow variants: **85–90% Decimal.js**, indicators ~3%, Zod ~0.3%. A native-number search path for all 11 strategies now runs indicators and decisions in native numbers, while cash/position/fills stay in Decimal. Boundary comparisons are flagged at `1e-11` relative and only that fold is re-run on the Decimal engine.
+
+- Parity across all 11 strategies: **132/132** focused and **990/990** extended, exact.
+- Production path (fast plus ambiguous-fold fallback): **300/300** screened variants matched Decimal exactly.
+- Raw native path: **25x** faster (467 → 19 ms/variant).
+- End-to-end with ambiguous-fold fallback (300 screened variants): **7.8x** faster (572 → 73 ms/variant).
+- Expected 5,000-variant AKEDO search: ~15 minutes → ~2 minutes.
+- The funnel budget is disabled by default (`AI_SEARCH_FULL_BUDGET=0`); with the native path, 10k–100k searches evaluate every signal-screen survivor and lose no candidates.
+- `AI_SEARCH_FAST_ENGINE=0` is the rollback; set `AI_SEARCH_FULL_BUDGET=8000` when running the slower Decimal path.
+
+No threshold, holdout or candidate-set changes. Bots and holdout remain on the Decimal engine.

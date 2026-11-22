@@ -20,7 +20,7 @@ Run the search as a staged funnel and report every stage:
 
 1. **Screen** — the existing safe checks plus the signal-count upper bound. Invalid parameters and too few entry signals cannot become recommendations.
 2. **Probe** — optional one-fold (or N-fold) trade probe, controlled by `AI_SEARCH_PROBE_FOLDS`. It is **disabled by default** because the measured recall was 81.7%; it remains available for experiments and future fold-selection work.
-3. **Budget** — when survivors exceed `AI_SEARCH_FULL_BUDGET` (default 8,000), take a deterministic uniform sample. If the probe is enabled, rank by probe score and keep a 2% random exploration slice instead. This bounds full evaluation time without using the holdout.
+3. **Budget** — when survivors exceed `AI_SEARCH_FULL_BUDGET` (default 0, disabled after the native engine; historically 8,000), take a deterministic uniform sample. If the probe is enabled, rank by probe score and keep a 2% random exploration slice instead. This bounds full evaluation time without using the holdout.
 4. **Full** — the existing eight-fold OOS evaluation and filters.
 5. **Control** — a deterministic sample of each rejected stage (signal screen, probe, budget) is fully evaluated. Control passers are counted and shown but are never promoted to candidates or recommendations. The report estimates missed passers and recall.
 6. **Holdout** — unchanged top-10 untouched 30-day holdout.
@@ -49,3 +49,7 @@ The request limit rises from 5,000 to 100,000 proposals, matching the generator 
 | `AI_SEARCH_FULL_BUDGET`    | `8000`  | Max full evaluations; `0` disables the budget cap |
 | `AI_SEARCH_CONTROL_SAMPLE` | `50`    | Control variants per rejected stage; `0` disables |
 | `AI_SEARCH_WORKERS`        | `4`     | Worker-thread pool size (production `6`)          |
+
+## Addendum 2026-11-22 — native engine
+
+With the native search backtest (ADR 0077), full evaluation is ~7.8x faster end-to-end. The budget cap is therefore **disabled by default** (`AI_SEARCH_FULL_BUDGET=0`), so 10k–100k searches evaluate every signal-screen survivor and lose no candidates. The budget remains available as an explicit opt-in for the slower Decimal path (`AI_SEARCH_FAST_ENGINE=0`).

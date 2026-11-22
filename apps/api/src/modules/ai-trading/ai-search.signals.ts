@@ -16,7 +16,7 @@ function closes(candles: BotCandle[]): number[] {
   return candles.map((candle) => Number(candle.closeUsd));
 }
 
-function smaSeries(values: number[], period: number): Array<number | null> {
+export function smaSeries(values: number[], period: number): Array<number | null> {
   if (period <= 0) return values.map(() => null);
   const result = new Array<number | null>(values.length).fill(null);
   let sum = 0;
@@ -28,7 +28,7 @@ function smaSeries(values: number[], period: number): Array<number | null> {
   return result;
 }
 
-function rollingHighBefore(values: number[], period: number): Array<number | null> {
+export function rollingHighBefore(values: number[], period: number): Array<number | null> {
   const result = new Array<number | null>(values.length).fill(null);
   if (period <= 0) return result;
   const deque: number[] = [];
@@ -48,7 +48,63 @@ function rollingHighBefore(values: number[], period: number): Array<number | nul
   return result;
 }
 
-function bollingerSeries(
+export function rollingHighAt(values: number[], period: number): Array<number | null> {
+  const result = new Array<number | null>(values.length).fill(null);
+  if (period <= 0) return result;
+  const deque: number[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    while (
+      deque.length > 0 &&
+      (values[deque[deque.length - 1] as number] as number) <= (values[index] as number)
+    ) {
+      deque.pop();
+    }
+    deque.push(index);
+    while ((deque[0] as number) < index - period + 1) deque.shift();
+    if (index >= period - 1) result[index] = values[deque[0] as number] as number;
+  }
+  return result;
+}
+
+export function rollingLowBefore(values: number[], period: number): Array<number | null> {
+  const result = new Array<number | null>(values.length).fill(null);
+  if (period <= 0) return result;
+  const deque: number[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    if (index > 0) {
+      while (
+        deque.length > 0 &&
+        (values[deque[deque.length - 1] as number] as number) >= (values[index - 1] as number)
+      ) {
+        deque.pop();
+      }
+      deque.push(index - 1);
+      while (deque.length > 0 && (deque[0] as number) < index - period) deque.shift();
+      if (index >= period) result[index] = values[deque[0] as number] as number;
+    }
+  }
+  return result;
+}
+
+export function rollingLowAt(values: number[], period: number): Array<number | null> {
+  const result = new Array<number | null>(values.length).fill(null);
+  if (period <= 0) return result;
+  const deque: number[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    while (
+      deque.length > 0 &&
+      (values[deque[deque.length - 1] as number] as number) >= (values[index] as number)
+    ) {
+      deque.pop();
+    }
+    deque.push(index);
+    while ((deque[0] as number) < index - period + 1) deque.shift();
+    if (index >= period - 1) result[index] = values[deque[0] as number] as number;
+  }
+  return result;
+}
+
+export function bollingerSeries(
   values: number[],
   period: number,
   stdDev: number,
