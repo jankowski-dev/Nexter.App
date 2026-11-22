@@ -19,6 +19,7 @@ import {
 } from '@nexter/db';
 import type {
   AiSearchCandidate,
+  AiSearchFunnel,
   AiSearchRequest,
   AiRecommendationsResponse,
   AiSearchNearMiss,
@@ -41,7 +42,7 @@ import {
   withDbRetry,
 } from './ai-error.helpers';
 import { isRecommendationExpired, recommendationExpiresAt } from './ai-recommendation';
-import { evaluateVariantFolds } from './ai-search.evaluate';
+import { evaluateVariantFolds, type VariantFoldEvaluation } from './ai-search.evaluate';
 import { screenVariant } from './ai-search.screen';
 import {
   buildSearchFolds,
@@ -55,9 +56,23 @@ import {
   searchWorkerCount,
   shuffleVariantsInPlace,
   MIN_SEARCH_DAYS,
+  type SearchFold,
   type SearchVariant,
   type VariantMetrics,
 } from './ai-search.helpers';
+import {
+  FULL_MAX_DRAWDOWN_PCT,
+  FULL_MIN_WORST_RETURN_PCT,
+  estimateRecall,
+  overallPercent,
+  passesFullCriteria,
+  seededSample,
+  type ControlEstimateInput,
+  type FunnelControlHit,
+  type FunnelReport,
+  type FunnelStageKey,
+  type FunnelStageReport,
+} from './ai-search.funnel';
 import {
   defaultWorkerPath,
   runWorkerPool,
@@ -70,13 +85,24 @@ interface SearchMeta {
   userAgent?: string;
 }
 
+interface SearchProgress {
+  stage?: FunnelStageKey;
+  stageEvaluated?: number;
+  stageTotal?: number;
+  stagePercent?: number;
+  percent?: number;
+  evaluated: number;
+  total: number;
+}
+
 interface SearchRunSummary {
   assetId: string;
   timeframe: AiSearchTimeframe;
   variants: number;
   lookbackDays?: number;
-  progress: { evaluated: number; total: number };
+  progress: SearchProgress;
   stats?: AiSearchStats;
+  funnel?: FunnelReport;
   error?: string;
 }
 
@@ -87,8 +113,12 @@ interface SearchCandidate extends VariantMetrics {
 
 const FEE_BPS = 25;
 const SLIPPAGE_BPS = 10;
-const MAX_DRAWDOWN_PCT = 20;
-const MIN_WORST_RETURN = -15;
+const SCREEN_CHUNK = 250;
+
+function envCount(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : fallback;
+}
 
 function toBotCandles(
   rows: Array<{
@@ -599,14 +629,20 @@ export class AiSearchService {
   async statusForProfile(profileId: string, runId: string): Promise<AiSearchStatus> {
     const run = await this.requireRun(profileId, runId);
     const summary = run.summary as unknown as Partial<SearchRunSummary>;
-    const evaluated = summary.progress?.evaluated ?? 0;
-    const total = summary.progress?.total ?? summary.variants ?? 0;
+    const progress = summary.progress;
+    const evaluated = progress?.evaluated ?? 0;
+    const total = progress?.total ?? summary.variants ?? 0;
     return {
       runId: run.id,
       status: run.status as AiSearchStatus['status'],
       evaluated,
       total,
-      percent: total > 0 ? Math.min(100, Math.round((evaluated / total) * 100)) : 0,
+      percent:
+        progress?.percent ?? (total > 0 ? Math.min(100, Math.round((evaluated / total) * 100)) : 0),
+      stage: progress?.stage ?? null,
+      stageEvaluated: progress?.stageEvaluated ?? 0,
+      stageTotal: progress?.stageTotal ?? 0,
+      stagePercent: progress?.stagePercent ?? 0,
       stats: summary.stats ?? null,
       error: summary.error ?? null,
       startedAt: run.startedAt?.toISOString() ?? null,
@@ -636,6 +672,8 @@ export class AiSearchService {
         total: 0,
         evaluated: 0,
         screenedOut: 0,
+        probeOut: 0,
+        budgetOut: 0,
         valid: 0,
         oosPassed: 0,
         holdoutTested: 0,
@@ -653,6 +691,7 @@ export class AiSearchService {
         holdoutReturnPct: null,
         histogram: [],
       },
+      funnel: (payload.funnel as AiSearchFunnel | undefined) ?? null,
       candidates: rows.map((row) => this.toCandidate(row)),
       nearMisses: (payload.nearMisses as AiSearchNearMiss[] | undefined) ?? [],
       rejectionReasons: (payload.rejectionReasons as Record<string, number> | undefined) ?? {},
@@ -713,22 +752,76 @@ export class AiSearchService {
     }> = [];
     const rejectionReasons: Record<string, number> = {};
     const nearMisses: AiSearchNearMiss[] = [];
+    const controlHits: FunnelControlHit[] = [];
     let evaluated = 0;
+
+    const stageKeys: FunnelStageKey[] = ['screen', 'probe', 'budget', 'full', 'control', 'holdout'];
+    const stages = new Map<FunnelStageKey, FunnelStageReport>();
+    for (const key of stageKeys) {
+      stages.set(key, {
+        key,
+        input: 0,
+        output: 0,
+        rejected: 0,
+        durationMs: 0,
+        controlSampled: 0,
+        controlPassed: 0,
+      });
+    }
+    const stageReport = (key: FunnelStageKey): FunnelStageReport =>
+      stages.get(key) as FunnelStageReport;
+
+    const probeFoldCount = Math.min(
+      envCount('AI_SEARCH_PROBE_FOLDS', 0),
+      Math.max(0, folds.folds.length),
+    );
+    const probeEnabled = probeFoldCount > 0;
+    const fullBudget = envCount('AI_SEARCH_FULL_BUDGET', 8000);
+    const budgetEnabled = fullBudget > 0;
+    const controlSampleSize = envCount('AI_SEARCH_CONTROL_SAMPLE', 50);
+    const activeStages: FunnelStageKey[] = ['screen'];
+    if (probeEnabled) activeStages.push('probe');
+    if (budgetEnabled) activeStages.push('budget');
+    activeStages.push('full');
+    if (controlSampleSize > 0) activeStages.push('control');
+    activeStages.push('holdout');
+
+    const progressFor = (
+      stage: FunnelStageKey,
+      stageEvaluated: number,
+      stageTotal: number,
+    ): SearchProgress => {
+      const fraction = stageTotal > 0 ? stageEvaluated / stageTotal : 0;
+      const percent = overallPercent(activeStages, stage, fraction);
+      return {
+        stage,
+        stageEvaluated,
+        stageTotal,
+        stagePercent: Math.round(fraction * 100),
+        percent,
+        evaluated: Math.round((percent / 100) * variants.length),
+        total: variants.length,
+      };
+    };
+
+    let lastWriteAt = 0;
+    let writeChain = Promise.resolve();
+    const writeProgress = (progress: SearchProgress, force = false): Promise<void> => {
+      const now = Date.now();
+      if (!force && now - lastWriteAt < 1000) return writeChain;
+      lastWriteAt = now;
+      writeChain = writeChain
+        .then(() => this.updateProgress(runId, input, progress))
+        .catch(() => undefined);
+      return writeChain;
+    };
 
     const reject = (reason: string) => {
       rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
     };
-
-    const screenedVariants = variants.filter((variant) => {
-      const screen = screenVariant(variant, folds.folds, {
-        timeframe: input.timeframe,
-        minTrades,
-      });
-      if (screen.ok) return true;
-      reject(screen.reason ?? 'too few entry signals');
-      return false;
-    });
-    const screenedOutCount = variants.length - screenedVariants.length;
+    const rejectMany = (reason: string, count: number) => {
+      if (count > 0) rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + count;
+    };
 
     const rememberNearMiss = (
       aggregate: VariantMetrics,
@@ -764,10 +857,7 @@ export class AiSearchService {
       this.active.delete(runId);
     };
 
-    const processEvaluation = (
-      variant: SearchVariant,
-      evaluation: ReturnType<typeof evaluateVariantFolds>,
-    ) => {
+    const processEvaluation = (variant: SearchVariant, evaluation: VariantFoldEvaluation) => {
       if (evaluation.unknownStrategy) {
         reject('unknown strategy');
         return;
@@ -800,12 +890,12 @@ export class AiSearchService {
         rememberNearMiss(aggregate, variant, ['unstable folds']);
         return;
       }
-      if (Number(aggregate.maxDrawdownPct) > MAX_DRAWDOWN_PCT) {
+      if (Number(aggregate.maxDrawdownPct) > FULL_MAX_DRAWDOWN_PCT) {
         reject('drawdown too high');
         rememberNearMiss(aggregate, variant, ['drawdown too high']);
         return;
       }
-      if (Number(aggregate.oosWorstReturnPct) < MIN_WORST_RETURN) {
+      if (Number(aggregate.oosWorstReturnPct) < FULL_MIN_WORST_RETURN_PCT) {
         reject('worst fold too deep');
         rememberNearMiss(aggregate, variant, ['worst fold too deep']);
         return;
@@ -814,54 +904,228 @@ export class AiSearchService {
       metrics.push({ ...aggregate, variant, holdoutReturnPct: null });
     };
 
-    const workerCount = searchWorkerCount();
-    if (shouldUseWorkers(process.env, workerCount, workerFileExists())) {
-      let lastWritten = 0;
-      const pool = await runWorkerPool(screenedVariants, folds.folds, input.timeframe, {
-        workerCount,
-        workerPath: defaultWorkerPath(),
-        control,
-        onProgress: (value) => {
-          evaluated = value;
-          if (value - lastWritten >= 50 || value === screenedVariants.length) {
-            lastWritten = value;
-            void this.updateProgress(runId, input, variants.length, screenedOutCount + value).catch(
-              () => undefined,
-            );
-          }
-        },
-      });
-      if (pool.cancelled || control.cancelled) {
+    // Stage: safe signal screen over every proposal. Only "too few entry signals"
+    // is eligible for the false-negative control sample; invalid params cannot pass.
+    let stageStarted = Date.now();
+    const screenSurvivors: SearchVariant[] = [];
+    const softRejected: SearchVariant[] = [];
+    for (let offset = 0; offset < variants.length; offset += SCREEN_CHUNK) {
+      if (control.cancelled) {
         await cancelRun();
         return;
       }
-      evaluated = screenedVariants.length;
-      pool.results.forEach((result, index) => {
-        const variant = screenedVariants[index];
+      const chunk = variants.slice(offset, offset + SCREEN_CHUNK);
+      for (const variant of chunk) {
+        const screen = screenVariant(variant, folds.folds, {
+          timeframe: input.timeframe,
+          minTrades,
+        });
+        if (screen.ok) {
+          screenSurvivors.push(variant);
+        } else {
+          reject(screen.reason ?? 'screen rejected');
+          if (screen.reason === 'too few entry signals') softRejected.push(variant);
+        }
+      }
+      const done = Math.min(variants.length, offset + SCREEN_CHUNK);
+      await writeProgress(progressFor('screen', done, variants.length));
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    stageReport('screen').input = variants.length;
+    stageReport('screen').output = screenSurvivors.length;
+    stageReport('screen').rejected = variants.length - screenSurvivors.length;
+    stageReport('screen').durationMs = Date.now() - stageStarted;
+    await writeProgress(progressFor('screen', variants.length, variants.length), true);
+
+    // Stage: one-fold (or N-fold) probe. This is probabilistic: a variant can
+    // trade only in later folds, so the probe has its own control sample.
+    let probeSurvivors = screenSurvivors;
+    const probeRejected: SearchVariant[] = [];
+    let probeEvaluations: VariantFoldEvaluation[] = [];
+    if (probeEnabled && screenSurvivors.length > 0) {
+      stageStarted = Date.now();
+      const results = await this.evaluateVariants(
+        screenSurvivors,
+        folds.folds.slice(0, probeFoldCount),
+        input.timeframe,
+        control,
+        (done) => {
+          void writeProgress(progressFor('probe', done, screenSurvivors.length));
+        },
+      );
+      if (!results) {
+        await cancelRun();
+        return;
+      }
+      probeEvaluations = results;
+      probeSurvivors = [];
+      for (let index = 0; index < screenSurvivors.length; index += 1) {
+        const variant = screenSurvivors[index] as SearchVariant;
+        const result = results[index];
+        if (result?.aggregate && result.aggregate.trades >= 1) {
+          probeSurvivors.push(variant);
+        } else {
+          probeRejected.push(variant);
+          reject('too few probe trades');
+        }
+      }
+      stageReport('probe').durationMs = Date.now() - stageStarted;
+    }
+    stageReport('probe').input = screenSurvivors.length;
+    stageReport('probe').output = probeSurvivors.length;
+    stageReport('probe').rejected = probeRejected.length;
+    await writeProgress(progressFor('probe', screenSurvivors.length, screenSurvivors.length), true);
+
+    // Stage: hard evaluation budget. Ranking is only a priority order; the
+    // random exploration slice keeps a statistical path for promising variants
+    // outside the top of the probe ranking.
+    let fullVariants = probeSurvivors;
+    let budgetDropped: SearchVariant[] = [];
+    stageStarted = Date.now();
+    if (budgetEnabled && probeSurvivors.length > fullBudget) {
+      if (probeEnabled) {
+        const scored = probeSurvivors.map((variant, index) => ({
+          variant,
+          score: Number(probeEvaluations[index]?.aggregate?.policyScore ?? 0),
+        }));
+        scored.sort((left, right) => right.score - left.score);
+        const exploration = Math.max(1, Math.round(fullBudget * 0.02));
+        const topCount = Math.max(0, fullBudget - exploration);
+        const top = scored.slice(0, topCount).map((item) => item.variant);
+        const rest = scored.slice(topCount).map((item) => item.variant);
+        const explorationSlice = seededSample(rest, exploration, `${runId}:budget`);
+        const keep = new Set<SearchVariant>(explorationSlice);
+        fullVariants = [...top, ...explorationSlice];
+        budgetDropped = rest.filter((variant) => !keep.has(variant));
+      } else {
+        fullVariants = seededSample(probeSurvivors, fullBudget, `${runId}:budget`);
+        const keep = new Set<SearchVariant>(fullVariants);
+        budgetDropped = probeSurvivors.filter((variant) => !keep.has(variant));
+      }
+      rejectMany('budget cap', budgetDropped.length);
+    }
+    stageReport('budget').input = probeSurvivors.length;
+    stageReport('budget').output = fullVariants.length;
+    stageReport('budget').rejected = budgetDropped.length;
+    stageReport('budget').durationMs = Date.now() - stageStarted;
+    await writeProgress(progressFor('budget', probeSurvivors.length, probeSurvivors.length), true);
+
+    // Stage: full walk-forward evaluation of the survivors.
+    stageStarted = Date.now();
+    if (fullVariants.length > 0) {
+      const results = await this.evaluateVariants(
+        fullVariants,
+        folds.folds,
+        input.timeframe,
+        control,
+        (done) => {
+          evaluated = done;
+          void writeProgress(progressFor('full', done, fullVariants.length));
+        },
+      );
+      if (!results) {
+        await cancelRun();
+        return;
+      }
+      evaluated = fullVariants.length;
+      results.forEach((result, index) => {
+        const variant = fullVariants[index];
         if (variant) processEvaluation(variant, result);
       });
-      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
-    } else {
-      for (const [index, variant] of screenedVariants.entries()) {
-        // Yield after every variant: a 5 000-variant search must not block the API event loop.
-        if (index > 0) {
-          await new Promise((resolve) => setImmediate(resolve));
-        }
-        if (control.cancelled) {
+    }
+    stageReport('full').input = fullVariants.length;
+    stageReport('full').output = metrics.length;
+    stageReport('full').rejected = fullVariants.length - metrics.length;
+    stageReport('full').durationMs = Date.now() - stageStarted;
+    await writeProgress(progressFor('full', fullVariants.length, fullVariants.length), true);
+
+    // Stage: diagnostic control sample. Rejected variants are fully evaluated so
+    // the report can estimate false negatives, but they never become candidates.
+    const controlEstimates: ControlEstimateInput[] = [];
+    stageStarted = Date.now();
+    if (controlSampleSize > 0) {
+      const groups: Array<{ stage: FunnelStageKey; sample: SearchVariant[]; rejected: number }> = [
+        {
+          stage: 'screen',
+          sample: seededSample(softRejected, controlSampleSize, `${runId}:screen`),
+          rejected: softRejected.length,
+        },
+        {
+          stage: 'probe',
+          sample: seededSample(probeRejected, controlSampleSize, `${runId}:probe`),
+          rejected: probeRejected.length,
+        },
+        {
+          stage: 'budget',
+          sample: seededSample(budgetDropped, controlSampleSize, `${runId}:budget`),
+          rejected: budgetDropped.length,
+        },
+      ];
+      const controlVariants = groups.flatMap((group) => group.sample);
+      stageReport('control').input = controlVariants.length;
+      if (controlVariants.length > 0) {
+        const results = await this.evaluateVariants(
+          controlVariants,
+          folds.folds,
+          input.timeframe,
+          control,
+          (done) => {
+            void writeProgress(progressFor('control', done, controlVariants.length));
+          },
+        );
+        if (!results) {
           await cancelRun();
           return;
         }
-
-        evaluated += 1;
-        if (evaluated % 50 === 0) {
-          await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
+        let cursor = 0;
+        for (const group of groups) {
+          const start = cursor;
+          cursor += group.sample.length;
+          let passed = 0;
+          for (let index = start; index < cursor; index += 1) {
+            const variant = controlVariants[index] as SearchVariant;
+            const result = results[index];
+            if (
+              !result?.aggregate ||
+              !passesFullCriteria(result.aggregate, minTrades, minPositiveFolds)
+            ) {
+              continue;
+            }
+            passed += 1;
+            if (controlHits.length < 10) {
+              controlHits.push({
+                stage: group.stage,
+                strategyKey: variant.strategyKey,
+                params: variant.params,
+                oosMedianReturnPct: result.aggregate.oosMedianReturnPct,
+                maxDrawdownPct: result.aggregate.maxDrawdownPct,
+                trades: result.aggregate.trades,
+                positiveFolds: result.aggregate.positiveFolds,
+              });
+            }
+          }
+          const stage = stageReport(group.stage);
+          stage.controlSampled = group.sample.length;
+          stage.controlPassed = passed;
+          controlEstimates.push({
+            rejected: group.rejected,
+            sampled: group.sample.length,
+            passed,
+          });
         }
-        processEvaluation(variant, evaluateVariantFolds(variant, folds.folds, input.timeframe));
+        stageReport('control').output = controlEstimates.reduce(
+          (sum, item) => sum + item.passed,
+          0,
+        );
+        stageReport('control').rejected = controlVariants.length - stageReport('control').output;
       }
-      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
     }
+    stageReport('control').durationMs = Date.now() - stageStarted;
+    await writeProgress(progressFor('control', 1, 1), true);
 
+    // Stage: final untouched holdout for the top OOS candidates.
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
+    stageStarted = Date.now();
     const top = metrics.slice(0, 10);
     for (const candidate of top) {
       const definition = strategyByKey.get(candidate.variant.strategyKey);
@@ -882,7 +1146,7 @@ export class AiSearchService {
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
-        const rejection = holdoutRejection(returnPct, drawdown, MAX_DRAWDOWN_PCT);
+        const rejection = holdoutRejection(returnPct, drawdown, FULL_MAX_DRAWDOWN_PCT);
         if (rejection !== null) {
           candidate.policyScore = '0';
           reject(rejection);
@@ -951,6 +1215,14 @@ export class AiSearchService {
         Number(candidate.holdoutReturnPct) > 0 &&
         Number(candidate.policyScore) > 0,
     );
+    stageReport('holdout').input = top.length;
+    stageReport('holdout').output = recommended.length;
+    stageReport('holdout').rejected = top.length - recommended.length;
+    stageReport('holdout').durationMs = Date.now() - stageStarted;
+
+    const screenedOutCount = variants.length - screenSurvivors.length;
+    const probeOutCount = probeRejected.length;
+    const budgetOutCount = budgetDropped.length;
     const stats = this.buildStats(
       variants.length,
       evaluated,
@@ -960,7 +1232,16 @@ export class AiSearchService {
       metrics.length,
       top.length,
       screenedOutCount,
+      probeOutCount,
+      budgetOutCount,
     );
+    const recall = estimateRecall(metrics.length, controlEstimates);
+    const funnel: FunnelReport = {
+      stages: stageKeys.map((key) => stageReport(key)),
+      controlHits,
+      estimatedMissed: recall.missed,
+      estimatedRecallPct: recall.recallPct,
+    };
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
       item.reasons.includes('holdout drawdown too high') ||
@@ -980,6 +1261,7 @@ export class AiSearchService {
       timeframe: input.timeframe,
       variants: variants.length,
       stats,
+      funnel,
       candidates: recommended.map((candidate) => ({
         strategyKey: candidate.variant.strategyKey,
         params: candidate.variant.params,
@@ -987,23 +1269,22 @@ export class AiSearchService {
       })),
       nearMisses: nearMissesTop,
       rejectionReasons,
-      variantMetrics: allMetrics.map((item) => ({
-        strategyKey: item.variant.strategyKey,
-        params: item.variant.params,
-        trades: item.trades,
-        oosMedianReturnPct: item.returnPct.toFixed(2),
-        positiveFolds: item.positiveFolds,
-        maxDrawdownPct: item.drawdown.toFixed(2),
-        policyScore: item.policyScore,
-      })),
+      variantMetrics: [...allMetrics]
+        .sort((left, right) => Number(right.policyScore) - Number(left.policyScore))
+        .slice(0, 2000)
+        .map((item) => ({
+          strategyKey: item.variant.strategyKey,
+          params: item.variant.params,
+          trades: item.trades,
+          oosMedianReturnPct: item.returnPct.toFixed(2),
+          positiveFolds: item.positiveFolds,
+          maxDrawdownPct: item.drawdown.toFixed(2),
+          policyScore: item.policyScore,
+        })),
     };
 
     if (control.cancelled) {
-      await this.db
-        .update(aiPipelineRuns)
-        .set({ status: 'cancelled', finishedAt: new Date() })
-        .where(eq(aiPipelineRuns.id, runId));
-      this.active.delete(runId);
+      await cancelRun();
       return;
     }
 
@@ -1054,8 +1335,17 @@ export class AiSearchService {
             timeframe: input.timeframe,
             variants: variants.length,
             lookbackDays,
-            progress: { evaluated: screenedOutCount + evaluated, total: variants.length },
+            progress: {
+              stage: 'holdout',
+              stageEvaluated: 1,
+              stageTotal: 1,
+              stagePercent: 100,
+              percent: 100,
+              evaluated: variants.length,
+              total: variants.length,
+            },
             stats,
+            funnel,
           } satisfies SearchRunSummary,
         })
         .where(eq(aiPipelineRuns.id, runId));
@@ -1071,7 +1361,11 @@ export class AiSearchService {
             timeframe: input.timeframe,
             variants: variants.length,
             evaluated,
+            screenedOut: screenedOutCount,
+            probeOut: probeOutCount,
+            budgetOut: budgetOutCount,
             recommended: recommended.length,
+            estimatedRecallPct: recall.recallPct,
             rejectionReasons,
           },
           ip: meta.ip,
@@ -1084,11 +1378,41 @@ export class AiSearchService {
     this.active.delete(runId);
   }
 
+  private async evaluateVariants(
+    variants: SearchVariant[],
+    folds: SearchFold[],
+    timeframe: AiSearchTimeframe,
+    control: { cancelled: boolean },
+    onProgress: (evaluated: number) => void,
+  ): Promise<VariantFoldEvaluation[] | null> {
+    if (variants.length === 0) return [];
+    const workerCount = searchWorkerCount();
+    if (shouldUseWorkers(process.env, workerCount, workerFileExists())) {
+      const pool = await runWorkerPool(variants, folds, timeframe, {
+        workerCount,
+        workerPath: defaultWorkerPath(),
+        control,
+        onProgress,
+      });
+      if (pool.cancelled || control.cancelled) return null;
+      return pool.results;
+    }
+    const results: VariantFoldEvaluation[] = [];
+    for (const [index, variant] of variants.entries()) {
+      if (index > 0) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      if (control.cancelled) return null;
+      results.push(evaluateVariantFolds(variant, folds, timeframe));
+      onProgress(index + 1);
+    }
+    return results;
+  }
+
   private async updateProgress(
     runId: string,
     input: AiSearchRequest,
-    total: number,
-    evaluated: number,
+    progress: SearchProgress,
   ): Promise<void> {
     try {
       await withDbRetry(() =>
@@ -1098,8 +1422,8 @@ export class AiSearchService {
             summary: {
               assetId: input.assetId,
               timeframe: input.timeframe,
-              variants: total,
-              progress: { evaluated, total },
+              variants: progress.total,
+              progress,
             } satisfies SearchRunSummary,
           })
           .where(eq(aiPipelineRuns.id, runId)),
@@ -1119,6 +1443,8 @@ export class AiSearchService {
     oosPassed: number,
     holdoutTested: number,
     screenedOut: number,
+    probeOut: number,
+    budgetOut: number,
   ): AiSearchStats {
     const returns = metrics.map((item) => item.returnPct);
     const drawdowns = metrics.map((item) => item.drawdown);
@@ -1148,6 +1474,8 @@ export class AiSearchService {
       total,
       evaluated,
       screenedOut,
+      probeOut,
+      budgetOut,
       valid: metrics.length,
       oosPassed,
       holdoutTested,

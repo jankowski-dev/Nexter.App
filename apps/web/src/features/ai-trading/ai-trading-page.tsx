@@ -48,6 +48,7 @@ import type {
   AiProfileToken,
   AiProfileUpdateRequest,
   AiSearchCandidate,
+  AiSearchFunnelStageKey,
   AiSearchResults,
   AiSearchTimeframe,
   AiTimeframe,
@@ -70,6 +71,25 @@ const coverageTones: Record<AiCoverageStatus, 'success' | 'warning' | 'danger'> 
   stale: 'warning',
   missing: 'danger',
 };
+
+const funnelStageLabels: Record<AiSearchFunnelStageKey, string> = {
+  screen: 'Сигналы',
+  probe: 'Проба',
+  budget: 'Бюджет',
+  full: 'OOS',
+  control: 'Контроль',
+  holdout: 'Holdout',
+};
+
+function formatDurationMs(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '—';
+  if (ms < 1000) return `${Math.round(ms)} мс`;
+  const seconds = ms / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} с`;
+  const minutes = Math.floor(seconds / 60);
+  const rest = Math.round(seconds % 60);
+  return `${minutes} мин ${rest} с`;
+}
 
 // 5m remains supported for legacy data but is not offered for the short-swing AI universe.
 const timeframeOptions: AiTimeframe[] = ['1h', '1d', '4h', '15m'];
@@ -362,6 +382,9 @@ export function AiTradingPage() {
               <option value="500">500</option>
               <option value="1000">1 000</option>
               <option value="5000">5 000</option>
+              <option value="10000">10 000</option>
+              <option value="20000">20 000</option>
+              <option value="50000">50 000</option>
             </Select>
           </label>
           <label className="text-xs text-zinc-600">
@@ -551,6 +574,8 @@ const cycleStepLabels: Record<AiCycleStep['key'], string> = {
 const rejectionLabels: Record<string, string> = {
   'too few trades': 'мало сделок',
   'too few entry signals': 'мало входных сигналов',
+  'too few probe trades': 'мало сделок в пробе',
+  'budget cap': 'отсечено бюджетом полного прогона',
   'non-positive OOS median': 'медиана OOS ≤ 0',
   'unstable folds': 'нестабильные фолды',
   'drawdown too high': 'просадка выше лимита',
@@ -1682,6 +1707,7 @@ function SearchSection({
 
   const currentStatus = status.data;
   const currentResults: AiSearchResults | undefined = results.data;
+  const funnel = currentResults?.funnel ?? null;
   const running = currentStatus?.status === 'queued' || currentStatus?.status === 'running';
   const stats = currentResults?.stats ?? currentStatus?.stats;
 
@@ -1753,6 +1779,9 @@ function SearchSection({
                 <option value="500">500</option>
                 <option value="1000">1 000</option>
                 <option value="5000">5 000</option>
+                <option value="10000">10 000</option>
+                <option value="20000">20 000</option>
+                <option value="50000">50 000</option>
               </Select>
             </label>
             <Button
@@ -1878,7 +1907,9 @@ function SearchSection({
                 {currentStatus.status}
               </Badge>
               <span className="text-xs text-zinc-500">
-                {currentStatus.evaluated} / {currentStatus.total} вариантов
+                {currentStatus.stage
+                  ? `${funnelStageLabels[currentStatus.stage]}: ${currentStatus.stageEvaluated} / ${currentStatus.stageTotal}`
+                  : `${currentStatus.evaluated} / ${currentStatus.total} вариантов`}
               </span>
             </div>
             {running ? (
@@ -1902,6 +1933,9 @@ function SearchSection({
             <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <LabFeature label="Всего" value={String(stats.total)} />
               <LabFeature label="Оценено" value={String(stats.evaluated)} />
+              <LabFeature label="Отсеяно сигналами" value={String(stats.screenedOut)} />
+              <LabFeature label="Отсеяно пробой" value={String(stats.probeOut)} />
+              <LabFeature label="Отсеяно бюджетом" value={String(stats.budgetOut)} />
               <LabFeature label="Прошли фильтры" value={String(stats.valid)} />
               <LabFeature label="Рекомендаций" value={String(stats.recommended)} />
               <LabFeature label="Лучший OOS" value={formatPct(stats.bestOosReturnPct)} />
@@ -1940,6 +1974,53 @@ function SearchSection({
               </div>
             </div>
           ) : null}
+        </Card>
+      ) : null}
+
+      {funnel && funnel.stages.length > 0 ? (
+        <Card>
+          <CardTitle>Воронка поиска</CardTitle>
+          <CardDescription>
+            Дешёвые этапы отсекают варианты до полного бэктеста. Контрольная выборка проверяет, не
+            потеряли ли фильтры сильных кандидатов.
+          </CardDescription>
+          <div className="mt-3 flex flex-wrap items-stretch gap-2">
+            {funnel.stages.map((stage, index) => (
+              <div key={stage.key} className="flex items-center gap-2">
+                <div className="min-w-[104px] rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-2">
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-400">
+                    {funnelStageLabels[stage.key]}
+                  </div>
+                  <div className="mt-0.5 text-sm font-medium text-zinc-800">
+                    {stage.input} → {stage.output}
+                  </div>
+                  <div className="text-[10px] text-zinc-500">
+                    {stage.rejected > 0 ? `−${stage.rejected}` : 'без отсева'} ·{' '}
+                    {formatDurationMs(stage.durationMs)}
+                  </div>
+                  {stage.controlSampled > 0 ? (
+                    <div className="mt-0.5 text-[10px] text-amber-700">
+                      контроль {stage.controlPassed}/{stage.controlSampled}
+                    </div>
+                  ) : null}
+                </div>
+                {index < funnel.stages.length - 1 ? (
+                  <span className="text-xs text-zinc-300">→</span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {funnel.controlHits.length > 0 ? (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-800">
+              Контроль нашёл {funnel.controlHits.length} вариант(ов), которые прошли бы OOS после
+              отсева. Это диагностика полноты, а не рекомендации.
+            </div>
+          ) : null}
+          <div className="mt-2 text-xs text-zinc-500">
+            {funnel.estimatedRecallPct === null
+              ? 'Контрольная выборка не запускалась.'
+              : `Оценка полноты: ${funnel.estimatedRecallPct}% (могло быть пропущено ~${funnel.estimatedMissed}).`}
+          </div>
         </Card>
       ) : null}
 

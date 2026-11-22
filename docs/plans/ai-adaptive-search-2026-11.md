@@ -143,3 +143,32 @@ The funnel cut full 8-fold evaluations by ~70%, but the one-fold probe still cos
 On 5,000 random variants over 180 days (8 folds), the signal-only screen took **2.9 s** and rejected **2,186 (43.7%)** with `too few entry signals`; 2,814 survived. It covers 7 strategies where counting buy signals is a safe upper bound. Grid/DCA/crash/failed breakout are position/state-dependent and deliberately skip this hard gate.
 
 For comparison, the one-fold full backtest of the same 5,000 took 191 s. The signal screen is ~65× cheaper and already removes almost half the proposals before any P&L simulation.
+
+## Staged funnel implementation 2026-11-22
+
+The production search now exposes the funnel as stages:
+
+```
+screen -> probe (optional) -> budget -> full OOS -> control sample -> holdout
+```
+
+- Stage counts, rejections, durations and control passers are stored in the search artifact (`funnel`) and shown in the UI.
+- `stats.total = stats.screenedOut + stats.probeOut + stats.budgetOut + stats.evaluated`.
+- `AI_SEARCH_FULL_BUDGET` defaults to `8000`; above it the funnel takes a deterministic uniform sample (2% random exploration when the probe ranking is active).
+- Control samples never become candidates; they only estimate missed passers and recall.
+- The request limit is now 100,000 variants.
+
+### One-fold probe recall experiment
+
+3,000 variants, 180 days, 8 folds, full eight-fold ground truth:
+
+| Stage                     | Result                                                   |
+| ------------------------- | -------------------------------------------------------- |
+| Signal screen             | 1,265 rejected (42.17%), **0 false negatives**           |
+| One-fold probe (≥1 trade) | 1,969 rejected overall, **15 false negatives**           |
+| Full OOS passers          | 82                                                       |
+| Combined funnel           | 1,016 full evaluations (66.13% saved), **81.71% recall** |
+
+All 15 probe false negatives were `squeeze_breakout`: the strategy can have no trade in fold 0 and still pass in later folds. Therefore the probe is **disabled by default** (`AI_SEARCH_PROBE_FOLDS=0`) until fold selection is improved. The signal screen is safe and stays on. The budget sample is unbiased and controlled, so it does not need the probe.
+
+Timings on the local 4-core machine: signal screen 2.4 s, one-fold probe 221 s, full eight folds 1,120 s. The probe is cheap per variant but its recall cost is currently too high; the signal screen plus an 8k budget is the safe default for 10k–50k searches.

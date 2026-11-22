@@ -45,6 +45,7 @@ import {
 } from './ai-error.helpers';
 import { normalizeCycle, searchPollTimeout, SEARCH_HARD_TIMEOUT_MS } from './ai-cycle.helpers';
 import { candlesPerDay, MIN_SEARCH_DAYS } from './ai-search.helpers';
+import { FUNNEL_STAGE_LABELS } from './ai-search.funnel';
 import { selectDraftCandidates } from './ai-risk.helpers';
 import { AiRiskService } from './ai-risk.service';
 import { AiSearchService } from './ai-search.service';
@@ -572,6 +573,7 @@ export class AiCycleService implements OnModuleInit {
     });
     let lastMessage = '';
     let lastEvaluated = -1;
+    let lastPercent = -1;
     let lastProgressAt = Date.now();
     let dbFailures = 0;
     while (Date.now() < deadline) {
@@ -619,8 +621,9 @@ export class AiCycleService implements OnModuleInit {
             sanitizeSearchError(status.error) ?? `Поиск завершился статусом ${status.status}`,
         });
       }
-      if (status.evaluated > lastEvaluated) {
+      if (status.evaluated > lastEvaluated || status.percent > lastPercent) {
         lastEvaluated = status.evaluated;
+        lastPercent = status.percent;
         lastProgressAt = Date.now();
       }
       const timeout = searchPollTimeout(Date.now(), lastProgressAt, deadline);
@@ -633,7 +636,10 @@ export class AiCycleService implements OnModuleInit {
               : 'Поиск не завершился за 90 минут',
         });
       }
-      const message = `Поиск: ${status.evaluated} / ${status.total}`;
+      const message =
+        status.stage && status.stageTotal > 0
+          ? `${FUNNEL_STAGE_LABELS[status.stage]}: ${status.stageEvaluated} / ${status.stageTotal}`
+          : `Поиск: ${status.evaluated} / ${status.total}`;
       if (message !== lastMessage) {
         lastMessage = message;
         await this.setStep(cycleId, 'search', 'running', { message, progressPct: status.percent });
