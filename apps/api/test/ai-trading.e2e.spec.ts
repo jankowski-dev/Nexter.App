@@ -763,20 +763,20 @@ describe.runIf(canRun)('AI trading control center API', () => {
     await agent
       .post('/api/v1/ai-trading/profile/tokens')
       .set('x-csrf-token', owner.csrf)
-      .send({ assetId, timeframes: ['1d'], priority: 1 })
+      .send({ assetId, timeframes: ['1h'], priority: 1 })
       .expect(201);
 
     await db.insert(aiPipelineRuns).values({
       profileId: profile.body.id as string,
       trigger: 'manual',
       status: 'succeeded',
-      summary: { kind: 'cycle', assetId, timeframe: '1d' },
+      summary: { kind: 'cycle', assetId, timeframe: '1h' },
     });
 
     const blocked = await agent
       .post('/api/v1/ai-trading/cycle')
       .set('x-csrf-token', owner.csrf)
-      .send({ assetId, timeframe: '1d', maxDrafts: 0, variants: 100 })
+      .send({ assetId, timeframe: '1h', maxDrafts: 0, variants: 100 })
       .expect(429);
     expect(blocked.body.error.code).toBe('AI_CYCLE_LIMIT');
     expect(blocked.body.error.message).toContain('1 за 24 часа');
@@ -809,7 +809,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
     const started = await agent
       .post('/api/v1/ai-trading/cycle')
       .set('x-csrf-token', owner.csrf)
-      .send({ assetId, timeframe: '1d', maxDrafts: 0, variants: 100 })
+      .send({ assetId, timeframe: '1h', maxDrafts: 0, variants: 100 })
       .expect(202);
     const cancelled = await agent
       .post(`/api/v1/ai-trading/cycle/${started.body.cycleId as string}/cancel`)

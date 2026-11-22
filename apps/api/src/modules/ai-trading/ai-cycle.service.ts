@@ -177,6 +177,29 @@ export class AiCycleService implements OnModuleInit {
       });
     }
 
+    const cycleLimit = readAiCycleLimit(profile.modelSettings);
+    if (!cycleLimit.unlimited) {
+      const [daily] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(aiPipelineRuns)
+        .where(
+          and(
+            eq(aiPipelineRuns.profileId, profile.id),
+            gte(aiPipelineRuns.createdAt, new Date(Date.now() - 24 * 60 * 60_000)),
+            sql`${aiPipelineRuns.summary}->>'kind' = 'cycle'`,
+          ),
+        );
+      if (Number(daily?.count ?? 0) >= cycleLimit.perDay) {
+        throw new HttpException(
+          {
+            code: 'AI_CYCLE_LIMIT',
+            message: `Дневной лимит циклов ИИ исчерпан: ${cycleLimit.perDay} за 24 часа. Увеличьте лимит или включите «Не ограничивать» в настройках ИИ.`,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
     if (input.maxDrafts > 0) {
       const [watched] = await this.db
         .select({ id: watchlist.id })
@@ -199,29 +222,6 @@ export class AiCycleService implements OnModuleInit {
           message:
             'Чтобы создать черновик, токен должен быть активной записью группы «Основная». Добавьте его в watchlist или выберите «Черновиков: 0».',
         });
-      }
-    }
-
-    const cycleLimit = readAiCycleLimit(profile.modelSettings);
-    if (!cycleLimit.unlimited) {
-      const [daily] = await this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(aiPipelineRuns)
-        .where(
-          and(
-            eq(aiPipelineRuns.profileId, profile.id),
-            gte(aiPipelineRuns.createdAt, new Date(Date.now() - 24 * 60 * 60_000)),
-            sql`${aiPipelineRuns.summary}->>'kind' = 'cycle'`,
-          ),
-        );
-      if (Number(daily?.count ?? 0) >= cycleLimit.perDay) {
-        throw new HttpException(
-          {
-            code: 'AI_CYCLE_LIMIT',
-            message: `Дневной лимит циклов ИИ исчерпан: ${cycleLimit.perDay} за 24 часа. Увеличьте лимит или включите «Не ограничивать» в настройках ИИ.`,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
       }
     }
 
