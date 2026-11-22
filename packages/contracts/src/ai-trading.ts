@@ -276,7 +276,7 @@ export const aiSearchRequestSchema = z.object({
   assetId: z.uuid(),
   timeframe: aiSearchTimeframeSchema.default('1h'),
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
-  variants: z.number().int().min(100).max(5000).default(5000),
+  variants: z.number().int().min(100).max(100000).default(5000),
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
 });
 
@@ -343,7 +343,7 @@ export const aiCycleRequestSchema = z.object({
   assetId: z.uuid(),
   timeframe: z.enum(['1h', '4h']).default('1h'),
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
-  variants: z.number().int().min(100).max(5000).default(5000),
+  variants: z.number().int().min(100).max(100000).default(5000),
   maxDrafts: z.number().int().min(0).max(10).default(3),
 });
 export const aiCycleStepSchema = z.object({
@@ -415,10 +415,48 @@ export const aiSearchHistogramBucketSchema = z.object({
   count: z.number().int(),
 });
 
+export const aiSearchFunnelStageKeySchema = z.enum([
+  'screen',
+  'probe',
+  'budget',
+  'full',
+  'control',
+  'holdout',
+]);
+
+export const aiSearchFunnelStageSchema = z.object({
+  key: aiSearchFunnelStageKeySchema,
+  input: z.number().int(),
+  output: z.number().int(),
+  rejected: z.number().int(),
+  durationMs: z.number().int(),
+  controlSampled: z.number().int().default(0),
+  controlPassed: z.number().int().default(0),
+});
+
+export const aiSearchFunnelControlHitSchema = z.object({
+  stage: aiSearchFunnelStageKeySchema,
+  strategyKey: z.string(),
+  params: z.record(z.string(), z.unknown()),
+  oosMedianReturnPct: z.string(),
+  maxDrawdownPct: z.string(),
+  trades: z.number().int(),
+  positiveFolds: z.number().int(),
+});
+
+export const aiSearchFunnelSchema = z.object({
+  stages: z.array(aiSearchFunnelStageSchema).default([]),
+  controlHits: z.array(aiSearchFunnelControlHitSchema).default([]),
+  estimatedMissed: z.number().int().default(0),
+  estimatedRecallPct: z.string().nullable().default(null),
+});
+
 export const aiSearchStatsSchema = z.object({
   total: z.number().int(),
   evaluated: z.number().int(),
   screenedOut: z.number().int().default(0),
+  probeOut: z.number().int().default(0),
+  budgetOut: z.number().int().default(0),
   valid: z.number().int(),
   oosPassed: z.number().int().default(0),
   holdoutTested: z.number().int().default(0),
@@ -478,6 +516,10 @@ export const aiSearchStatusSchema = z.object({
   evaluated: z.number().int(),
   total: z.number().int(),
   percent: z.number(),
+  stage: aiSearchFunnelStageKeySchema.nullable().default(null),
+  stageEvaluated: z.number().int().default(0),
+  stageTotal: z.number().int().default(0),
+  stagePercent: z.number().default(0),
   stats: aiSearchStatsSchema.nullable(),
   error: z.string().nullable(),
   startedAt: z.iso.datetime().nullable(),
@@ -488,6 +530,7 @@ export const aiSearchResultsSchema = z.object({
   runId: z.uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   stats: aiSearchStatsSchema,
+  funnel: aiSearchFunnelSchema.nullable().default(null),
   candidates: z.array(aiSearchCandidateSchema),
   nearMisses: z.array(aiSearchNearMissSchema).default([]),
   rejectionReasons: z.record(z.string(), z.number().int()),
@@ -593,6 +636,10 @@ export type AiCycleSummary = z.infer<typeof aiCycleSummarySchema>;
 export type AiCyclesQuery = z.infer<typeof aiCyclesQuerySchema>;
 export type AiCyclesResponse = z.infer<typeof aiCyclesResponseSchema>;
 export type AiSearchStats = z.infer<typeof aiSearchStatsSchema>;
+export type AiSearchFunnelStageKey = z.infer<typeof aiSearchFunnelStageKeySchema>;
+export type AiSearchFunnelStage = z.infer<typeof aiSearchFunnelStageSchema>;
+export type AiSearchFunnelControlHit = z.infer<typeof aiSearchFunnelControlHitSchema>;
+export type AiSearchFunnel = z.infer<typeof aiSearchFunnelSchema>;
 export type AiSearchNearMiss = z.infer<typeof aiSearchNearMissSchema>;
 export type AiSearchCandidate = z.infer<typeof aiSearchCandidateSchema>;
 export type AiSearchStatus = z.infer<typeof aiSearchStatusSchema>;
