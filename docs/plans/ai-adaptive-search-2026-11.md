@@ -182,6 +182,7 @@ CPU profile of 100 slow variants: **85–90% Decimal.js**, indicators ~3%, Zod ~
 - Raw native path: **25x** faster (467 → 19 ms/variant).
 - End-to-end with ambiguous-fold fallback (300 screened variants): **7.8x** faster (572 → 73 ms/variant).
 - Expected 5,000-variant AKEDO search: ~15 minutes → ~2 minutes.
-- `AI_SEARCH_FAST_ENGINE=0` is the rollback.
+- The funnel budget is disabled by default (`AI_SEARCH_FULL_BUDGET=0`); with the native path, 10k–100k searches evaluate every signal-screen survivor and lose no candidates.
+- `AI_SEARCH_FAST_ENGINE=0` is the rollback; set `AI_SEARCH_FULL_BUDGET=8000` when running the slower Decimal path.
 
 No threshold, holdout or candidate-set changes. Bots and holdout remain on the Decimal engine.
