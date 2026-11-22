@@ -130,6 +130,36 @@ export function SettingsPage() {
         </div>
       ) : null}
 
+      <Card className="relative overflow-hidden border-zinc-800 bg-zinc-900 p-5 text-white shadow-lg shadow-emerald-950/20">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-emerald-500/15 blur-2xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-400/30 bg-emerald-500/15 text-emerald-300">
+              <NavIcon name="download" className="h-6 w-6" />
+            </span>
+            <div>
+              <div className="text-base font-semibold text-white">Инженерный гайд AI</div>
+              <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-300">
+                23 страницы: данные, walk-forward, воронка поиска, fast engine, H5, рекомендации и
+                paper-боты. PDF со схемами.
+              </p>
+            </div>
+          </div>
+          <Button
+            asChild
+            className="h-11 w-full border-emerald-500 bg-emerald-500 px-5 text-white shadow-md shadow-emerald-950/30 hover:border-emerald-400 hover:bg-emerald-400 sm:w-auto"
+          >
+            <a
+              href="/docs/nexter-ai-system-engineering.pdf"
+              download="nexter-ai-system-engineering.pdf"
+            >
+              <NavIcon name="download" className="h-4 w-4" />
+              Скачать PDF
+            </a>
+          </Button>
+        </div>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <SettingsNavCard
           to="/settings/accounting"
