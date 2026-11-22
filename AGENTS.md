@@ -132,6 +132,10 @@ Cycle search JSON export (2026-11-22, no migration): the AI cycle card downloads
 
 50k fast-engine pilot (2026-11-22): 50,000 variants → 27,716 screen survivors → 1,597 OOS passers → 10 holdout recommendations on the synthetic fixture. With the production survivor shuffle: screen 32.0 s, full eight folds 641 s, total 674 s on 4 workers (23 ms/variant wall). Production 6 workers ≈ 7.5 min; 100k ≈ 15 min, inside the 90-minute cycle. Every screen survivor is evaluated (budget disabled).
 
+Next-open execution (H5, 2026-11-22, no migration): AI search and its final holdout execute a close-`i` decision at `open[i+1]` with the same fees/slippage; protective stops/take-profits stay intrabar; a last-candle decision is ignored and the end-of-period force-close stays. AI search defaults `next-open`; manual bot backtests/PDF keep `same-close` until a separate rebase. `AI_SEARCH_EXECUTION=same-close` is the rollback. Fast/Decimal next-open parity 330/330; production-path 300/300; 20k synthetic pilot 685 vs 687 OOS and 10 vs 10 synthetic recommendations. Production release: PR #300 merged as `c4b5afb`, deployment `7980749981`, bundle `assets/index-Xo5PYsrx.js`, `/health` and `/ready` 200. See ADR 0078.
+
+Final AI engineering PDF guide (2026-11-22, no migration): `docs/guides/nexter-ai-system-engineering.pdf` (23 pages, Russian, vector SVG diagrams), source `docs/guides/ai-system-engineering-guide.md`, print HTML and reproducible build script `scripts/docs/build-ai-engineering-guide.mjs`. Covers data, adaptive walk-forward, Decimal engine, 11 strategies, funnel/control, native fast engine and parity, H5, holdout, recommendations/risk, paper bots/invalidation, reliability and worked examples. Source PDF PR #301.
+
 ## Non-negotiable rules
 
 1. No private keys, seed phrases, or signing keys on the server.
