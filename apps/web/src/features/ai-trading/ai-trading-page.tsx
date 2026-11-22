@@ -403,6 +403,8 @@ export function AiTradingPage() {
               <option value="10000">10 000</option>
               <option value="20000">20 000</option>
               <option value="50000">50 000</option>
+              <option value="100000">100 000</option>
+              <option value="200000">200 000</option>
             </Select>
           </label>
           <label className="text-xs text-zinc-600">
@@ -1882,6 +1884,8 @@ function SearchSection({
                 <option value="10000">10 000</option>
                 <option value="20000">20 000</option>
                 <option value="50000">50 000</option>
+                <option value="100000">100 000</option>
+                <option value="200000">200 000</option>
               </Select>
             </label>
             <Button

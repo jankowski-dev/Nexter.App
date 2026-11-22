@@ -29,7 +29,7 @@ No threshold, fold count, holdout policy or policy score changes. Screening neve
 
 Variants are generated grouped by strategy, so they are deterministically shuffled before worker chunks are formed. A 5,000-variant composition model showed one contiguous chunk carrying the slow `bollinger_reversion`/`squeeze_breakout` strategies and costing ~485 s while the average chunk cost was ~231 s; unscreened, the slowest chunk was ~876 s. The shuffle balances fast and slow strategies across workers without changing the evaluated set.
 
-The request limit rises from 5,000 to 100,000 proposals, matching the generator cap. The UI offers 10k/20k/50k.
+The request limit rises from 5,000 to 200,000 proposals, matching the generator cap. The UI offers 10k/20k/50k/100k/200k.
 
 ## Consequences
 
@@ -53,3 +53,7 @@ The request limit rises from 5,000 to 100,000 proposals, matching the generator 
 ## Addendum 2026-11-22 — native engine
 
 With the native search backtest (ADR 0077), full evaluation is ~7.8x faster end-to-end. The budget cap is therefore **disabled by default** (`AI_SEARCH_FULL_BUDGET=0`), so 10k–100k searches evaluate every signal-screen survivor and lose no candidates. The budget remains available as an explicit opt-in for the slower Decimal path (`AI_SEARCH_FAST_ENGINE=0`).
+
+## Addendum 2026-11-22 — 100k/200k options
+
+The request and generator caps are now 200,000; the cycle and manual search selectors offer 100k and 200k. With the native engine and budget disabled, estimates from the 50k pilot (4 workers → production 6) are ≈15 minutes for 100k and ≈30 minutes for 200k, plus a 1–2 minute signal screen. The cycle hard limit is 90 minutes. The generator may return fewer than the requested number when a strategy's unique parameter space is exhausted; the actual generated count is used.

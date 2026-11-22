@@ -74,19 +74,22 @@ describe('native AI search engine', () => {
     }
   }, 180_000);
 
-  it('has no native runtime for daily_average and uses the Decimal fallback', () => {
+  it('has a native runtime for daily_average and matches the Decimal engine', () => {
     const candles = seededCandles().slice(0, 30 * 24);
     const variant = { strategyKey: 'daily_average', params: dailyAverage.defaultParams };
-    expect(createFastRuntime(variant, candles)).toBeNull();
+    const runtime = createFastRuntime(variant, candles);
+    expect(runtime).not.toBeNull();
 
-    const result = evaluateVariantFolds(
-      variant,
-      [{ candles, warmupCandles: 10 * 24 }],
-      '1h',
-      'next-open',
-    );
-    expect(result.unknownStrategy).toBe(false);
-    expect(result.aggregate).not.toBeNull();
-    expect(typeof result.aggregate?.trades).toBe('number');
+    const fold = { candles, warmupCandles: 10 * 24 };
+    const fast = evaluateVariantFolds(variant, [fold], '1h', 'next-open');
+    const decimal = runBacktest(dailyAverage, variant.params, candles, {
+      initialCapitalUsd: '1000',
+      feeBps: 25,
+      slippageBps: 10,
+      changeLookbackCandles: 24,
+      warmupCandles: 10 * 24,
+      execution: 'next-open',
+    });
+    expect(fast.aggregate).toEqual(aggregateVariant([decimal.stats]));
   }, 30_000);
 });

@@ -296,7 +296,7 @@ export const aiSearchRequestSchema = z.object({
   assetId: z.uuid(),
   timeframe: aiSearchTimeframeSchema.default('1h'),
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
-  variants: z.number().int().min(100).max(100000).default(5000),
+  variants: z.number().int().min(100).max(200000).default(5000),
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
   execution: aiSearchExecutionSchema.default('next-open'),
 });
@@ -364,7 +364,7 @@ export const aiCycleRequestSchema = z.object({
   assetId: z.uuid(),
   timeframe: z.enum(['1h', '4h']).default('1h'),
   horizonDays: z.union([z.literal(1), z.literal(3), z.literal(5), z.literal(10)]).default(5),
-  variants: z.number().int().min(100).max(100000).default(5000),
+  variants: z.number().int().min(100).max(200000).default(5000),
   maxDrafts: z.number().int().min(0).max(10).default(3),
   execution: aiSearchExecutionSchema.default('next-open'),
 });
