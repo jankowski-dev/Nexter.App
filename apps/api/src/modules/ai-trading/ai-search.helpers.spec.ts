@@ -8,6 +8,7 @@ import {
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  shuffleVariantsInPlace,
   stabilityPctFor,
 } from './ai-search.helpers';
 import type { BotCandle } from '@nexter/contracts';
@@ -36,6 +37,16 @@ describe('AI search helpers', () => {
       expect(definition).toBeDefined();
       expect(() => definition?.parseParams(variant.params)).not.toThrow();
     }
+  });
+
+  it('shuffles variants deterministically with the same seed', () => {
+    const first = generateSearchVariants(strategyDefinitions, 120, 42);
+    const second = structuredClone(first);
+    shuffleVariantsInPlace(first, 7);
+    shuffleVariantsInPlace(second, 7);
+    expect(first).toEqual(second);
+    expect(first).not.toEqual(generateSearchVariants(strategyDefinitions, 120, 42));
+    expect(new Set(first.map((variant) => JSON.stringify(variant))).size).toBe(first.length);
   });
 
   it('builds eight non-overlapping OOS folds and a warmup-prefixed 30-day holdout', () => {

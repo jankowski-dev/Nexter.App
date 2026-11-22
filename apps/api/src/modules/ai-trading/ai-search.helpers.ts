@@ -209,6 +209,21 @@ export function aggregateVariant(
   };
 }
 
+/**
+ * Variants are generated grouped by strategy. Worker chunks therefore need a
+ * deterministic shuffle; otherwise one worker can receive all slow stateful
+ * strategies and the pool waits for it.
+ */
+export function shuffleVariantsInPlace(variants: SearchVariant[], seed = 7): void {
+  const rng = mulberry32(seed);
+  for (let index = variants.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(rng() * (index + 1));
+    const current = variants[index] as SearchVariant;
+    variants[index] = variants[swap] as SearchVariant;
+    variants[swap] = current;
+  }
+}
+
 export function splitVariants(variants: SearchVariant[], parts: number): SearchVariant[][] {
   if (variants.length === 0) return [];
   const count = Math.max(1, Math.min(variants.length, Math.floor(parts)));
