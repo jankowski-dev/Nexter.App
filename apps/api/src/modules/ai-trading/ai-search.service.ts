@@ -723,6 +723,7 @@ export class AiSearchService {
       reject(screen.reason ?? 'too few entry signals');
       return false;
     });
+    const screenedOutCount = variants.length - screenedVariants.length;
 
     const rememberNearMiss = (
       aggregate: VariantMetrics,
@@ -817,9 +818,11 @@ export class AiSearchService {
         control,
         onProgress: (value) => {
           evaluated = value;
-          if (value - lastWritten >= 50 || value === variants.length) {
+          if (value - lastWritten >= 50 || value === screenedVariants.length) {
             lastWritten = value;
-            void this.updateProgress(runId, input, variants.length, value).catch(() => undefined);
+            void this.updateProgress(runId, input, variants.length, screenedOutCount + value).catch(
+              () => undefined,
+            );
           }
         },
       });
@@ -827,12 +830,12 @@ export class AiSearchService {
         await cancelRun();
         return;
       }
-      evaluated = variants.length;
+      evaluated = screenedVariants.length;
       pool.results.forEach((result, index) => {
         const variant = screenedVariants[index];
         if (variant) processEvaluation(variant, result);
       });
-      await this.updateProgress(runId, input, variants.length, evaluated);
+      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
     } else {
       for (const [index, variant] of screenedVariants.entries()) {
         // Yield after every variant: a 5 000-variant search must not block the API event loop.
@@ -846,10 +849,11 @@ export class AiSearchService {
 
         evaluated += 1;
         if (evaluated % 50 === 0) {
-          await this.updateProgress(runId, input, variants.length, evaluated);
+          await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
         }
         processEvaluation(variant, evaluateVariantFolds(variant, folds.folds, input.timeframe));
       }
+      await this.updateProgress(runId, input, variants.length, screenedOutCount + evaluated);
     }
 
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
@@ -950,7 +954,7 @@ export class AiSearchService {
       folds.folds.length,
       metrics.length,
       top.length,
-      variants.length - screenedVariants.length,
+      screenedOutCount,
     );
     const holdoutFailed = (item: AiSearchNearMiss) =>
       item.reasons.includes('negative holdout') ||
@@ -1045,7 +1049,7 @@ export class AiSearchService {
             timeframe: input.timeframe,
             variants: variants.length,
             lookbackDays,
-            progress: { evaluated, total: variants.length },
+            progress: { evaluated: screenedOutCount + evaluated, total: variants.length },
             stats,
           } satisfies SearchRunSummary,
         })
