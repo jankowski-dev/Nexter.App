@@ -556,6 +556,7 @@ const rejectionLabels: Record<string, string> = {
   'worst fold too deep': 'худший фолд слишком глубокий',
   'negative holdout': 'отрицательный holdout',
   'holdout drawdown too high': 'просадка на holdout выше лимита',
+  'non-positive policy score': 'policyScore ≤ 0',
   'holdout failed': 'ошибка holdout',
   'backtest failed': 'ошибка бэктеста',
 };
