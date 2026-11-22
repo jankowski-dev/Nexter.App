@@ -1353,7 +1353,8 @@ export class AiSearchService {
     );
     recommended.sort(
       (left, right) =>
-        right.holdoutBlocksNonNegative - left.holdoutBlocksNonNegative ||
+        right.holdoutBlocksPositive - left.holdoutBlocksPositive ||
+        right.holdoutBlocksTraded - left.holdoutBlocksTraded ||
         Number(right.policyScore) - Number(left.policyScore),
     );
     stageReport('holdout').input = top.length;

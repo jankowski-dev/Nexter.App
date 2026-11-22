@@ -161,9 +161,9 @@ describe('searchPollTimeout', () => {
 describe('sortRecommendationsForDrafts', () => {
   it('prefers block consistency over a higher policy score and does not mutate the input', () => {
     const input = [
-      { id: 'high-2', holdoutBlocksNonNegative: 2, policyScore: '100' },
-      { id: 'low-3', holdoutBlocksNonNegative: 3, policyScore: '1' },
-      { id: 'mid-3', holdoutBlocksNonNegative: 3, policyScore: '5' },
+      { id: 'high-2', holdoutBlocksPositive: 2, holdoutBlocksTraded: 3, policyScore: '100' },
+      { id: 'low-3', holdoutBlocksPositive: 3, holdoutBlocksTraded: 2, policyScore: '1' },
+      { id: 'mid-3', holdoutBlocksPositive: 3, holdoutBlocksTraded: 3, policyScore: '5' },
     ];
     expect(sortRecommendationsForDrafts(input).map((item) => item.id)).toEqual([
       'mid-3',

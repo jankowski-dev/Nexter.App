@@ -148,11 +148,16 @@ export function normalizeCycle(run: CycleRunLike, summaryValue: unknown): Normal
 }
 
 export function sortRecommendationsForDrafts<
-  T extends { holdoutBlocksNonNegative: number; policyScore: string },
+  T extends {
+    holdoutBlocksPositive: number;
+    holdoutBlocksTraded: number;
+    policyScore: string;
+  },
 >(items: T[]): T[] {
   return [...items].sort(
     (left, right) =>
-      right.holdoutBlocksNonNegative - left.holdoutBlocksNonNegative ||
+      right.holdoutBlocksPositive - left.holdoutBlocksPositive ||
+      right.holdoutBlocksTraded - left.holdoutBlocksTraded ||
       Number(right.policyScore) - Number(left.policyScore),
   );
 }
