@@ -156,7 +156,7 @@ screen -> probe (optional) -> budget -> full OOS -> control sample -> holdout
 - `stats.total = stats.screenedOut + stats.probeOut + stats.budgetOut + stats.evaluated`.
 - `AI_SEARCH_FULL_BUDGET` defaults to `8000`; above it the funnel takes a deterministic uniform sample (2% random exploration when the probe ranking is active).
 - Control samples never become candidates; they only estimate missed passers and recall.
-- The request limit is now 100,000 variants.
+- The request limit and generator cap are now 200,000 variants; the UI offers 100k and 200k.
 
 ### One-fold probe recall experiment
 
@@ -225,3 +225,7 @@ The AI search and final holdout now fill at the next candle open instead of the 
 - Extended parity: **330/330** variants exact between the native and Decimal engines in next-open mode.
 - 20k synthetic 1h pilot: **685** OOS passers vs 687 same-close; 10 vs 10 synthetic recommendations. The 1h impact is small (the audit measured |Δ| ≤ 0.32 pp on a 1h fixture); the 26-candle gap fixture shows the larger H5 bias. Full evaluation took 353 s with the production survivor shuffle (same-close 20k without shuffle: 503 s; the difference is chunk balance, not H5).
 - `AI_SEARCH_EXECUTION=same-close` / request `execution: "same-close"` is the rollback.
+
+## 100k/200k options 2026-11-22
+
+The request schema and generator cap are 200,000; both the cycle and manual search selectors offer 100k/200k. The native engine evaluates every signal-screen survivor (budget disabled). Scaling from the 50k pilot: 100k ≈ 15 min, 200k ≈ 30 min on production 6 workers, plus 1–2 min screen; the 90-minute cycle limit covers both. The generator may return fewer than requested when a strategy's unique parameter space is exhausted; the artifact reports the actual generated count.

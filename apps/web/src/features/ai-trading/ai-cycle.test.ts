@@ -28,10 +28,16 @@ describe('AI cycle contracts', () => {
         variants: 50000,
       }).variants,
     ).toBe(50000);
+    expect(
+      aiCycleRequestSchema.parse({
+        assetId: '11111111-1111-4111-8111-111111111111',
+        variants: 200000,
+      }).variants,
+    ).toBe(200000);
     expect(() =>
       aiCycleRequestSchema.parse({
         assetId: '11111111-1111-4111-8111-111111111111',
-        variants: 100001,
+        variants: 200001,
       }),
     ).toThrow();
     expect(() =>
