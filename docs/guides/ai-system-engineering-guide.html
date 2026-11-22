@@ -1,1245 +1,422 @@
 <!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="utf-8" />
-    <title>Nexter AI — инженерное руководство</title>
-    <style>
-      :root {
-        color-scheme: light;
-      }
-      @page {
-        size: A4;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        font-family: 'Segoe UI', 'Arial', sans-serif;
-        color: #1f2937;
-        font-size: 11pt;
-        line-height: 1.55;
-      }
-      h1 {
-        font-size: 30pt;
-        line-height: 1.15;
-        margin: 70mm 0 6mm;
-        color: #064e3b;
-        letter-spacing: -0.02em;
-      }
-      h2 {
-        page-break-before: always;
-        font-size: 19pt;
-        color: #064e3b;
-        margin: 0 0 5mm;
-        padding-bottom: 2mm;
-        border-bottom: 1.5pt solid #a7f3d0;
-      }
-      h3 {
-        font-size: 14pt;
-        color: #065f46;
-        margin: 6mm 0 2mm;
-        page-break-after: avoid;
-      }
-      h4 {
-        font-size: 12pt;
-        color: #065f46;
-        margin: 4mm 0 1.5mm;
-      }
-      p {
-        margin: 0 0 3mm;
-        text-align: justify;
-      }
-      ul,
-      ol {
-        margin: 0 0 3mm 0;
-        padding-left: 7mm;
-      }
-      li {
-        margin: 0 0 1.4mm;
-      }
-      strong {
-        color: #111827;
-      }
-      code {
-        font-family: 'Cascadia Mono', 'Consolas', monospace;
-        font-size: 9.5pt;
-        background: #f1f5f9;
-        padding: 0.4mm 1.2mm;
-        border-radius: 1.5mm;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 2mm 0 5mm;
-        font-size: 9.7pt;
-        page-break-inside: avoid;
-      }
-      th,
-      td {
-        border: 0.6pt solid #cbd5e1;
-        padding: 1.6mm 2mm;
-        text-align: left;
-        vertical-align: top;
-      }
-      th {
-        background: #ecfdf5;
-        color: #064e3b;
-      }
-      tr:nth-child(even) td {
-        background: #f8fafc;
-      }
-      figure {
-        margin: 4mm 0 6mm;
-        padding: 3mm;
-        border: 0.6pt solid #d1fae5;
-        border-radius: 2mm;
-        background: #fbfefc;
-        page-break-inside: avoid;
-      }
-      figure svg {
-        width: 100%;
-        height: auto;
-        display: block;
-      }
-      figcaption {
-        margin-top: 2mm;
-        font-size: 9pt;
-        color: #475569;
-        text-align: center;
-      }
-      .callout {
-        margin: 4mm 0;
-        padding: 3mm 4mm;
-        border-left: 3pt solid #10b981;
-        background: #ecfdf5;
-        border-radius: 1.5mm;
-        font-size: 10.2pt;
-      }
-      .page-break {
-        page-break-after: always;
-      }
-      a {
-        color: #047857;
-        text-decoration: none;
-      }
-      blockquote {
-        margin: 3mm 0;
-        padding-left: 4mm;
-        border-left: 2pt solid #94a3b8;
-        color: #475569;
-      }
-      pre {
-        background: #0f172a;
-        color: #e2e8f0;
-        padding: 3mm;
-        border-radius: 2mm;
-        font-size: 9pt;
-        overflow-wrap: anywhere;
-      }
-      hr {
-        border: none;
-        border-top: 0.6pt solid #cbd5e1;
-        margin: 5mm 0;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Nexter AI: как устроен исследовательский контур</h1>
-    <p><strong>Инженерное руководство. Версия 1.1 — 22 ноября 2026.</strong></p>
-    <p>
-      Версия 1.1 добавляет двенадцатую стратегию «Дневная средняя», её native-реализацию, опции
-      поиска 100k/200k, кулдаун health-уведомлений и семантику удаления токенов/истории.
-    </p>
-    <p>
-      Это не руководство пользователя и не описание дашборда. Цель — объяснить, как работает
-      внутренний механизм: откуда берутся свечи, как строится walk-forward, как считается P&amp;L,
-      почему поиск отсеивает варианты, что такое OOS и holdout, как появляется рекомендация и как её
-      проверяет paper-бот. Аналогия — «как устроен двигатель внутреннего сгорания», а не «как
-      выглядит приборная панель».
-    </p>
-    <p>
-      Система работает <strong>только в рекомендательном режиме</strong>. AI не запускает и не
-      останавливает роботов, не перераспределяет бюджет и не подписывает транзакции. Все действия с
-      деньгами и запуск paper-ботов остаются за владельцем. Приватные ключи и seed-фразы никогда не
-      попадают на сервер.
-    </p>
-    <div class="callout">
-      <strong>Главная мысль.</strong> AI-контур — это аналитик и исследователь, а не исполнитель. Он
-      предлагает стратегии и параметры, объясняет метрики и оставляет решение человеку.
-    </div>
-    <h2>Содержание</h2>
-    <ol>
-      <li>Большая картина</li>
-      <li>Данные</li>
-      <li>Исследовательский цикл</li>
-      <li>Вселенная и профиль</li>
-      <li>Генерация вариантов</li>
-      <li>Walk-forward</li>
-      <li>Движок бэктеста</li>
-      <li>Стратегии и индикаторы</li>
-      <li>Воронка поиска</li>
-      <li>Быстрый поисковый движок</li>
-      <li>Фильтры и скоринг</li>
-      <li>Holdout</li>
-      <li>Исполнение на следующей свече</li>
-      <li>Рекомендации</li>
-      <li>Риск-слой</li>
-      <li>Paper-боты</li>
-      <li>Инвалидация</li>
-      <li>Надёжность и безопасность</li>
-      <li>Разобранные примеры</li>
-      <li>Формулы и глоссарий</li>
-      <li>Приложение</li>
-    </ol>
-    <div class="page-break"></div>
-    <h2>1. Большая картина</h2>
-    <p>Система состоит из пяти крупных частей.</p>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 300" role="img" aria-label="Архитектура Nexter">
-        <rect x="20" y="30" width="190" height="80" rx="10" fill="#ecfdf5" stroke="#059669" />
-        <text x="115" y="60" text-anchor="middle" font-size="16" font-weight="700">Web SPA</text>
-        <text x="115" y="82" text-anchor="middle" font-size="12">русский UI, USD</text>
-        <text x="115" y="99" text-anchor="middle" font-size="12">портфель, AI, роботы</text>
-        <rect x="365" y="30" width="190" height="80" rx="10" fill="#eff6ff" stroke="#2563eb" />
-        <text x="460" y="60" text-anchor="middle" font-size="16" font-weight="700">Nest API</text>
-        <text x="460" y="82" text-anchor="middle" font-size="12">REST, auth, audit</text>
-        <text x="460" y="99" text-anchor="middle" font-size="12">AI, swap, bots</text>
-        <rect x="710" y="30" width="190" height="80" rx="10" fill="#f5f3ff" stroke="#7c3aed" />
-        <text x="805" y="60" text-anchor="middle" font-size="16" font-weight="700">Postgres</text>
-        <text x="805" y="82" text-anchor="middle" font-size="12">ledger, candles</text>
-        <text x="805" y="99" text-anchor="middle" font-size="12">ai_*, bot_*</text>
-        <rect x="365" y="170" width="190" height="80" rx="10" fill="#fffbeb" stroke="#d97706" />
-        <text x="460" y="200" text-anchor="middle" font-size="16" font-weight="700">
-          Worker threads
-        </text>
-        <text x="460" y="222" text-anchor="middle" font-size="12">поиск вариантов</text>
-        <text x="460" y="239" text-anchor="middle" font-size="12">6 воркеров</text>
-        <rect x="20" y="170" width="190" height="80" rx="10" fill="#f8fafc" stroke="#64748b" />
-        <text x="115" y="200" text-anchor="middle" font-size="16" font-weight="700">Viber-бот</text>
-        <text x="115" y="222" text-anchor="middle" font-size="12">напоминания</text>
-        <text x="115" y="239" text-anchor="middle" font-size="12">аудио-заметки</text>
-        <line
-          x1="210"
-          y1="70"
-          x2="365"
-          y2="70"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#arrow)"
-        />
-        <line
-          x1="555"
-          y1="70"
-          x2="710"
-          y2="70"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#arrow)"
-        />
-        <line
-          x1="460"
-          y1="110"
-          x2="460"
-          y2="170"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#arrow)"
-        />
-        <line
-          x1="210"
-          y1="210"
-          x2="365"
-          y2="210"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#arrow)"
-        />
-        <defs>
-          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 1. API — единственная точка записи; воркеры только считают, Viber-бот только читает
-        задачи и присылает заметки.
-      </figcaption>
-    </figure>
-    <ul>
-      <li>
-        <strong>Web SPA</strong> — русский интерфейс. Показывает данные, поиск, рекомендации,
-        роботов, задачи, заметки, финансы. Не хранит секретов.
-      </li>
-      <li>
-        <strong>Nest API</strong> — авторизация владельца, аудит, ledger, swap-исполнение,
-        AI-контур, paper-боты, фоновые процессы.
-      </li>
-      <li>
-        <strong>Postgres</strong> — единственный источник истины: свечи, сделки, лоты, AI-артефакты,
-        рекомендации, роботы, аудит.
-      </li>
-      <li>
-        <strong>Worker threads</strong> — CPU-пул внутри API-процесса. Считает бэктесты вариантов;
-        не пишет в базу.
-      </li>
-      <li>
-        <strong>Viber-бот</strong> — отдельный процесс: напоминания о задачах и приём аудио-заметок.
-        Не управляет торговлей.
-      </li>
-    </ul>
-    <div class="callout">
-      <strong>Advisory vs executable.</strong> AI-рекомендация, метрики, near-miss и телеметрия —
-      advisory. Ledger, swap-ордера, подписи и переводы — executable и требуют отдельного
-      подтверждения владельца. Paper-боты исполняются только на виртуальных деньгах.
-    </div>
-    <h2>2. Данные</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 290" role="img" aria-label="Конвейер данных">
-        <rect x="20" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="105" y="56" text-anchor="middle" font-size="14" font-weight="700">
-          GeckoTerminal
-        </text>
-        <text x="105" y="76" text-anchor="middle" font-size="11">пул, OHLCV</text>
-        <rect x="210" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="295" y="56" text-anchor="middle" font-size="14" font-weight="700">CoinGecko</text>
-        <text x="295" y="76" text-anchor="middle" font-size="11">история, изменения</text>
-        <rect x="400" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="485" y="56" text-anchor="middle" font-size="14" font-weight="700">
-          DexScreener
-        </text>
-        <text x="485" y="76" text-anchor="middle" font-size="11">цена, 24ч</text>
-        <rect x="590" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="675" y="56" text-anchor="middle" font-size="14" font-weight="700">Binance</text>
-        <text x="675" y="76" text-anchor="middle" font-size="11">OHLCV fallback</text>
-        <rect x="330" y="140" width="260" height="70" rx="10" fill="#ecfdf5" stroke="#059669" />
-        <text x="460" y="168" text-anchor="middle" font-size="15" font-weight="700">
-          market_candles
-        </text>
-        <text x="460" y="190" text-anchor="middle" font-size="11">
-          1h / 4h / 1d, source, quality, gaps
-        </text>
-        <rect x="330" y="235" width="260" height="40" rx="8" fill="#f8fafc" stroke="#64748b" />
-        <text x="460" y="260" text-anchor="middle" font-size="12">
-          coverage: ok / partial / stale / missing
-        </text>
-        <line
-          x1="105"
-          y1="94"
-          x2="370"
-          y2="140"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a2)"
-        />
-        <line
-          x1="295"
-          y1="94"
-          x2="430"
-          y2="140"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a2)"
-        />
-        <line
-          x1="485"
-          y1="94"
-          x2="470"
-          y2="140"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a2)"
-        />
-        <line
-          x1="675"
-          y1="94"
-          x2="550"
-          y2="140"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a2)"
-        />
-        <line
-          x1="460"
-          y1="210"
-          x2="460"
-          y2="235"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a2)"
-        />
-        <defs>
-          <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 2. Несколько источников сводятся в один ряд свечей; качество и пропуски сохраняются как
-        метаданные.
-      </figcaption>
-    </figure>
-    <p>
-      <strong>Свечи.</strong> <code>market_candles</code> хранит
-      <code>open/high/low/close/volume_usd</code>, <code>source</code> и <code>quality</code>. Для
-      AI используются 1h и 4h; 1d — только контекст режима. История ограничена 180 днями; поиск
-      допускает 140–180 дней и сам выбирает число фолдов 5–8.
-    </p>
-    <p>
-      <strong>Качество.</strong> <code>quality='ok'</code> — нормальная свеча.
-      <code>synthetic</code> означает, что биржа/источник отдал только дневную точку или неполный
-      OHLC. Synthetic-свеча не доказывает внутридневной low/high, поэтому стоп-лосс в бэктесте
-      срабатывает по закрытию, а тейк-профит — по порогу. Это консервативно и не создаёт фиктивных
-      внутридневных сделок.
-    </p>
-    <p>
-      <strong>Пропуски.</strong> Coverage показывает <code>syntheticCandles</code> и
-      <code>maxGapCandles</code>. Если данных меньше 140 дней, поиск завершается на шаге данных с
-      понятной ошибкой, а не на середине бэктеста. Пропуски и synthetic — известный риск H6: система
-      их показывает, но не «дорисовывает» рынок.
-    </p>
-    <h2>3. Исследовательский цикл</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 220" role="img" aria-label="Цикл исследования">
-        <rect x="20" y="60" width="170" height="80" rx="10" fill="#ecfdf5" stroke="#059669" />
-        <text x="105" y="92" text-anchor="middle" font-size="15" font-weight="700">Данные</text>
-        <text x="105" y="114" text-anchor="middle" font-size="11">coverage, 140–180д</text>
-        <rect x="220" y="60" width="190" height="80" rx="10" fill="#eff6ff" stroke="#2563eb" />
-        <text x="315" y="92" text-anchor="middle" font-size="15" font-weight="700">Поиск</text>
-        <text x="315" y="114" text-anchor="middle" font-size="11">screen → folds → holdout</text>
-        <rect x="440" y="60" width="190" height="80" rx="10" fill="#f5f3ff" stroke="#7c3aed" />
-        <text x="535" y="92" text-anchor="middle" font-size="15" font-weight="700">
-          Рекомендации
-        </text>
-        <text x="535" y="114" text-anchor="middle" font-size="11">TTL, лимиты, риски</text>
-        <rect x="660" y="60" width="230" height="80" rx="10" fill="#fffbeb" stroke="#d97706" />
-        <text x="775" y="92" text-anchor="middle" font-size="15" font-weight="700">
-          Черновики роботов
-        </text>
-        <text x="775" y="114" text-anchor="middle" font-size="11">созданы, но не запущены</text>
-        <line
-          x1="190"
-          y1="100"
-          x2="220"
-          y2="100"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a3)"
-        />
-        <line
-          x1="410"
-          y1="100"
-          x2="440"
-          y2="100"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a3)"
-        />
-        <line
-          x1="630"
-          y1="100"
-          x2="660"
-          y2="100"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a3)"
-        />
-        <defs>
-          <marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 3. Один клик запускает четыре шага; старт роботов остаётся ручным.
-      </figcaption>
-    </figure>
-    <p>
-      Цикл — это удобная обёртка над поиском. Шаги: <code>data</code> → <code>search</code> →
-      <code>recommendations</code> → <code>drafts</code>. Каждый шаг пишет статус, сообщение и
-      процент; цикл можно отменить. При потере прогресса более чем на 10 минут цикл прерывается,
-      жёсткий предел — 90 минут. После рестарта API зависшие шаги помечаются, а не остаются «вечно
-      running».
-    </p>
-    <p>
-      В <code>Настройки → ИИ</code> задаётся дневной лимит циклов (1–200, по умолчанию 20) или
-      <code>Не ограничивать</code>; значение хранится в
-      <code>ai_profiles.model_settings.cycleLimit</code>. Большой прогон 100k/200k считается одним
-      циклом. При исчерпании лимита API возвращает <code>429 AI_CYCLE_LIMIT</code>, а не запускает
-      усечённый поиск.
-    </p>
-    <p>
-      Поиск выполняется в durable-очереди <code>ai_jobs</code>: job захватывается через
-      <code>FOR UPDATE SKIP LOCKED</code>, получает heartbeat и при падении процесса возвращается в
-      очередь. Это защищает от потери длинного прогона. Тесты и разработка используют inline-путь.
-    </p>
-    <h2>4. Вселенная и профиль</h2>
-    <p>
-      AI-профиль задаёт бюджет, лимиты и расписание. Вселенная — список токенов с разрешёнными
-      таймфреймами. По умолчанию новые AI-токены получают 1h+4h; 1d хранится как контекст, но не
-      участвует в поиске.
-    </p>
-    <p>
-      Вселенная — это membership-строки <code>ai_profile_tokens</code>. Кнопка удаления убирает
-      строку из вселенной и пишет аудит; свечи, артефакты, история поисков, кандидаты и роботы не
-      удаляются. Завершённый прогон в истории скрывается мягко (<code>summary.hidden</code>), а
-      активный прогон удалить нельзя (<code>409 AI_SEARCH_RUN_ACTIVE</code>).
-    </p>
-    <p>Профиль ограничивает:</p>
-    <ul>
-      <li>бюджет AI-роботов;</li>
-      <li>число одновременных роботов;</li>
-      <li>максимальную долю инвестированного капитала;</li>
-      <li>максимальную экспозицию на токен;</li>
-      <li>дневной лимит убытка;</li>
-      <li>максимальное число черновиков за цикл.</li>
-    </ul>
-    <p>
-      Бюджет — не «cash на бирже», а виртуальный лимит paper-режима. Реальный ledger и реальные
-      свопы живут отдельно и не смешиваются с AI-бюджетом.
-    </p>
-    <h2>5. Генерация вариантов</h2>
-    <p>
-      Вариант — это пара <code>(strategyKey, params)</code>. Реестр стратегий содержит 12
-      AI-eligible стратегий; <code>static_limit</code> исключён, потому что он ручной и привязан к
-      абсолютным ценам.
-    </p>
-    <p>Генератор:</p>
-    <ul>
-      <li>берёт <code>paramFields</code> каждой стратегии: min, max, step, integer;</li>
-      <li>использует seeded <code>mulberry32</code> — один seed даёт один и тот же набор;</li>
-      <li>делит бюджет поровну между стратегиями;</li>
-      <li>дедуплицирует параметры внутри стратегии;</li>
-      <li>проверяет <code>parseParams</code> через Zod;</li>
-      <li>ограничивает запрос 200 000 вариантами; UI предлагает 100k и 200k.</li>
-    </ul>
-    <p>
-      Поэтому «5 000 вариантов» — это 5 000 исходных предложений. Воронка затем отсеивает часть
-      дешёвыми проверками, а не считает 5 000 полных восьмифолдовых бэктестов вслепую. Для больших
-      прогонов доступны 100k и 200k; если уникальное пространство параметров стратегии исчерпано
-      раньше, генератор вернёт меньше, и артефакт покажет фактическое число.
-    </p>
-    <h2>6. Walk-forward</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 260" role="img" aria-label="Walk-forward и holdout">
-        <rect x="30" y="70" width="600" height="42" rx="6" fill="#eff6ff" stroke="#2563eb" />
-        <text x="330" y="96" text-anchor="middle" font-size="13">
-          180 дней истории: 8 фолдов по 10 дней OOS
-        </text>
-        <rect x="30" y="130" width="600" height="42" rx="6" fill="#ecfdf5" stroke="#059669" />
-        <text x="330" y="156" text-anchor="middle" font-size="13">
-          последние 30 дней — holdout, не участвует в выборе
-        </text>
-        <rect x="650" y="70" width="240" height="102" rx="8" fill="#fffbeb" stroke="#d97706" />
-        <text x="770" y="96" text-anchor="middle" font-size="13" font-weight="700">Один фолд</text>
-        <text x="770" y="118" text-anchor="middle" font-size="11">60д train-контекст</text>
-        <text x="770" y="136" text-anchor="middle" font-size="11">2д purge</text>
-        <text x="770" y="154" text-anchor="middle" font-size="11">10д OOS + warmup</text>
-        <line x1="30" y1="185" x2="630" y2="185" stroke="#334155" stroke-width="2" />
-        <line x1="30" y1="180" x2="30" y2="190" stroke="#334155" stroke-width="2" />
-        <line x1="630" y1="180" x2="630" y2="190" stroke="#334155" stroke-width="2" />
-        <text x="30" y="205" font-size="11">старт 180д</text>
-        <text x="630" y="205" font-size="11">конец поиска</text>
-        <text x="650" y="205" font-size="11">holdout: 30 дней</text>
-      </svg>
-      <figcaption>
-        Рис. 4. Фолды идут по истории; holdout — последние 30 дней и никогда не используется для
-        отбора.
-      </figcaption>
-    </figure>
-    <p>Один фолд:</p>
-    <ul>
-      <li>60 дней train-контекста (нужны для «медленных» индикаторов);</li>
-      <li>2 дня purge, чтобы не смешивать train и OOS;</li>
-      <li>10 дней OOS;</li>
-      <li>
-        warmup до 15 дней / минимум 240 свечей, чтобы stateful-стратегии стартовали «тёплыми».
-      </li>
-    </ul>
-    <p>
-      Для 140–180 дней число фолдов 5–8. Минимум сделок — <code>max(5, floor(folds))</code>; минимум
-      положительных фолдов — <code>max(2, ceil(0.625 * folds))</code>. Так короткая история не
-      требует невозможного числа сделок.
-    </p>
-    <p>
-      Holdout — отдельные 30 дней с собственным warmup-префиксом. Он не используется ни для screen,
-      ни для probe, ни для бюджета, ни для локального уточнения. Это единственная финальная
-      проверка.
-    </p>
-    <h2>7. Движок бэктеста</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 280" role="img" aria-label="Состояния движка бэктеста">
-        <rect x="20" y="90" width="150" height="70" rx="10" fill="#f8fafc" stroke="#64748b" />
-        <text x="95" y="118" text-anchor="middle" font-size="14" font-weight="700">Cash</text>
-        <text x="95" y="140" text-anchor="middle" font-size="11">1000 USD</text>
-        <rect x="230" y="90" width="170" height="70" rx="10" fill="#ecfdf5" stroke="#059669" />
-        <text x="315" y="118" text-anchor="middle" font-size="14" font-weight="700">Buy fill</text>
-        <text x="315" y="140" text-anchor="middle" font-size="11">fee + slippage</text>
-        <rect x="460" y="90" width="170" height="70" rx="10" fill="#eff6ff" stroke="#2563eb" />
-        <text x="545" y="118" text-anchor="middle" font-size="14" font-weight="700">Position</text>
-        <text x="545" y="140" text-anchor="middle" font-size="11">amount, avg cost</text>
-        <rect x="690" y="90" width="200" height="70" rx="10" fill="#fffbeb" stroke="#d97706" />
-        <text x="790" y="113" text-anchor="middle" font-size="13" font-weight="700">Exit</text>
-        <text x="790" y="133" text-anchor="middle" font-size="11">TP / SL / strategy / end</text>
-        <text x="790" y="150" text-anchor="middle" font-size="11">cash + realized P&amp;L</text>
-        <line
-          x1="170"
-          y1="125"
-          x2="230"
-          y2="125"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a4)"
-        />
-        <line
-          x1="400"
-          y1="125"
-          x2="460"
-          y2="125"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a4)"
-        />
-        <line
-          x1="630"
-          y1="125"
-          x2="690"
-          y2="125"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a4)"
-        />
-        <path
-          d="M790 160 L790 220 L95 220 L95 160"
-          fill="none"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a4)"
-        />
-        <text x="400" y="245" text-anchor="middle" font-size="11">
-          следующая сделка или конец периода
-        </text>
-        <defs>
-          <marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 5. Деньги, позиция и P&L считаются в Decimal; индикаторы и решения — в native-числах.
-      </figcaption>
-    </figure>
-    <p>Движок считает:</p>
-    <ul>
-      <li>начальный капитал (1000 USD в поиске);</li>
-      <li>комиссию 25 bps и слиппедж 10 bps на каждой стороне;</li>
-      <li>
-        размер позиции <code>initialCapital / maxAdds</code> (или всю сумму для одноуровневых
-        стратегий);
-      </li>
-      <li>среднюю цену и <code>buyCount</code>;</li>
-      <li>
-        стоп-лосс и тейк-профит: synthetic — по закрытию/порогу, real — open/low/high с гэпом;
-      </li>
-      <li>принудительное закрытие в конце периода;</li>
-      <li>
-        equity curve, максимальную просадку, total return, win rate, profit factor, buy-and-hold.
-      </li>
-    </ul>
-    <p>
-      Деньги всегда Decimal. Это важно: цена, комиссия, размер и P&amp;L не должны «плыть» из-за
-      бинарных дробей. Native-числа используются только там, где не принимаются финансовые решения:
-      индикаторы, сравнения и предварительная оценка.
-    </p>
-    <h2>8. Стратегии и индикаторы</h2>
-    <p>В реестре 12 AI-eligible стратегий:</p>
-    <table>
-      <thead>
-        <tr>
-          <th>Стратегия</th>
-          <th>Ключ</th>
-          <th>Идея</th>
-          <th>Вход</th>
-          <th>Выход</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Импульсный пробой</td>
-          <td><code>momentum_breakout</code></td>
-          <td>SMA + 24ч импульс</td>
-          <td>fast &gt; slow и рост ≥ порога</td>
-          <td>TP/SL или fast &lt; slow</td>
-        </tr>
-        <tr>
-          <td>Возврат к среднему</td>
-          <td><code>mean_reversion</code></td>
-          <td>отклонение от SMA</td>
-          <td>цена ниже SMA на %</td>
-          <td>возврат к SMA, TP/SL</td>
-        </tr>
-        <tr>
-          <td>Сетка в диапазоне</td>
-          <td><code>grid_range</code></td>
-          <td>ступени ниже якоря</td>
-          <td>цена ниже rolling high на шаг</td>
-          <td>TP/SL или ступень вверх</td>
-        </tr>
-        <tr>
-          <td>Откат в тренде</td>
-          <td><code>trend_pullback</code></td>
-          <td>тренд + откат</td>
-          <td>fast &gt; slow и откат к fast</td>
-          <td>TP/SL или слом тренда</td>
-        </tr>
-        <tr>
-          <td>Докупка на просадке</td>
-          <td><code>dca_dip</code></td>
-          <td>усреднение</td>
-          <td>просадка от якоря</td>
-          <td>TP/SL</td>
-        </tr>
-        <tr>
-          <td>Трейлинг-стоп</td>
-          <td><code>trailing_stop</code></td>
-          <td>пробой + трейлинг</td>
-          <td>пробой rolling high</td>
-          <td>hard stop / trailing</td>
-        </tr>
-        <tr>
-          <td>Защитная сетка</td>
-          <td><code>crash_protected_grid</code></td>
-          <td>сетка + crash-режим</td>
-          <td>ступени ниже HWM</td>
-          <td>TP/SL / crash close / resume</td>
-        </tr>
-        <tr>
-          <td>Пробой Дончиана</td>
-          <td><code>donchian_breakout</code></td>
-          <td>канал</td>
-          <td>пробой верхнего канала</td>
-          <td>нижний канал, TP/SL</td>
-        </tr>
-        <tr>
-          <td>Возврат к Bollinger</td>
-          <td><code>bollinger_reversion</code></td>
-          <td>полосы</td>
-          <td>ниже нижней полосы</td>
-          <td>средняя, TP/SL</td>
-        </tr>
-        <tr>
-          <td>Выход из сжатия</td>
-          <td><code>squeeze_breakout</code></td>
-          <td>сжатие + пробой</td>
-          <td>bandwidth ≤ порога и пробой upper</td>
-          <td>средняя, TP/SL</td>
-        </tr>
-        <tr>
-          <td>Неудавшийся пробой</td>
-          <td><code>failed_breakout</code></td>
-          <td>ложный пробой</td>
-          <td>возврат выше пробитой поддержки</td>
-          <td>TP/SL</td>
-        </tr>
-        <tr>
-          <td>Дневная средняя</td>
-          <td><code>daily_average</code></td>
-          <td>дневные low/high</td>
-          <td>цена ≤ среднего low − буфер</td>
-          <td>средний high + буфер, TP/SL</td>
-        </tr>
-      </tbody>
-    </table>
-    <p>
-      Stateful-стратегии (<code>trailing_stop</code>, <code>crash_protected_grid</code>,
-      <code>failed_breakout</code>) прогревают состояние на warmup-свечах без сделок. Иначе
-      HWM/peak/breakdown начинались бы с нуля и первый фолд был бы нечестным.
-    </p>
-    <p>
-      «Дневная средняя» группирует историю по полным UTC-дням и считает средний (или медианный)
-      low/high за <code>lookbackDays</code> (5–60, по умолчанию 20). Вход — цена не выше среднего
-      low минус <code>entryBufferPct</code>; выход — не ниже среднего high плюс
-      <code>exitBufferPct</code> или TP/SL. <code>useMedian</code> переключает среднее на медиану.
-      Неполные дни игнорируются; пока полных дней меньше lookback, стратегия держит позицию.
-      Live-бот загружает по одной котировке в час за период хранения, чтобы накопить полные дни.
-    </p>
-    <h2>9. Воронка поиска</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 300" role="img" aria-label="Воронка поиска">
-        <rect x="20" y="20" width="880" height="38" rx="6" fill="#eff6ff" stroke="#2563eb" />
-        <text x="460" y="44" text-anchor="middle" font-size="14" font-weight="700">
-          100 000 предложений
-        </text>
-        <rect x="120" y="78" width="680" height="38" rx="6" fill="#ecfdf5" stroke="#059669" />
-        <text x="460" y="102" text-anchor="middle" font-size="13">
-          Signal screen: 59 110 (40.9% отсеяно, 0 false negatives)
-        </text>
-        <rect x="180" y="136" width="560" height="38" rx="6" fill="#f8fafc" stroke="#64748b" />
-        <text x="460" y="160" text-anchor="middle" font-size="13">
-          Probe: выключен (терял 18.3% OOS)
-        </text>
-        <rect x="220" y="194" width="480" height="38" rx="6" fill="#fffbeb" stroke="#d97706" />
-        <text x="460" y="218" text-anchor="middle" font-size="13">
-          Full 8 folds: 59 110 (бюджет выключен)
-        </text>
-        <rect x="300" y="252" width="320" height="38" rx="6" fill="#f5f3ff" stroke="#7c3aed" />
-        <text x="460" y="276" text-anchor="middle" font-size="13">
-          OOS 2 987 → holdout 10 → рекомендации
-        </text>
-      </svg>
-      <figcaption>
-        Рис. 6. Дешёвые этапы отсеивают только то, что не может пройти, либо помечают контрольную
-        выборку.
-      </figcaption>
-    </figure>
-    <p>
-      <strong>Signal screen.</strong> Для стратегий, где реальный вход требует сигнала, считается
-      число входных сигналов по всем фолдам. Если оно меньше минимума сделок, вариант не может
-      пройти — это безопасное необходимое условие. На 200 000 вариантов screen занимает ~115 секунд
-      и отсеивает 40.9%; на 100 000 — ~57 секунд при той же доле. В контрольном пилоте false
-      negatives — 0. Grid/DCA/crash/failed breakout и «Дневная средняя» не скринятся: там докупки,
-      дневные уровни и состояние могут увеличить число входов.
-    </p>
-    <p>
-      <strong>Probe.</strong> Однофолдовый тест «есть ли хотя бы одна сделка». Он дешёвый, но теряет
-      18.3% реальных OOS-прошедших; внутри <code>squeeze_breakout</code> — 47.8%, потому что в
-      первом фолде может не быть сжатия. Поэтому probe выключен по умолчанию. Воронка поддерживает
-      его для экспериментов и контрольную выборку.
-    </p>
-    <p>
-      <strong>Бюджет.</strong> Если выживших больше лимита, берётся детерминированная равномерная
-      выборка. После native-движка бюджет выключен по умолчанию: 100k пилот полностью оценил 59 110
-      выживших за 21.5 минуты на 4 воркерах (22 мс/вариант). Это важно для принципа «без потерь»; на
-      6 production-воркерах 100k занимает ~15 минут, 200k — ~30 минут.
-    </p>
-    <p>
-      <strong>Контроль.</strong> Из каждого отсеянного этапа берётся до 50 вариантов и полностью
-      оценивается. Они никогда не становятся рекомендациями; отчёт показывает, сколько прошло бы
-      OOS, и оценку полноты. Это защита от «тихого» отсева хороших кандидатов.
-    </p>
-    <h2>10. Быстрый поисковый движок</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 250" role="img" aria-label="Fast engine и Decimal parity">
-        <rect x="20" y="50" width="260" height="130" rx="10" fill="#ecfdf5" stroke="#059669" />
-        <text x="150" y="78" text-anchor="middle" font-size="15" font-weight="700">
-          Native слой
-        </text>
-        <text x="150" y="102" text-anchor="middle" font-size="11">SMA, rolling high/low</text>
-        <text x="150" y="122" text-anchor="middle" font-size="11">Bollinger, band width</text>
-        <text x="150" y="142" text-anchor="middle" font-size="11">entry / exit / state</text>
-        <text x="150" y="162" text-anchor="middle" font-size="11">equity, drawdown</text>
-        <rect x="330" y="50" width="260" height="130" rx="10" fill="#eff6ff" stroke="#2563eb" />
-        <text x="460" y="78" text-anchor="middle" font-size="15" font-weight="700">
-          Decimal слой
-        </text>
-        <text x="460" y="102" text-anchor="middle" font-size="11">cash, position, amount</text>
-        <text x="460" y="122" text-anchor="middle" font-size="11">cost basis, fills</text>
-        <text x="460" y="142" text-anchor="middle" font-size="11">fees, slippage</text>
-        <text x="460" y="162" text-anchor="middle" font-size="11">total return</text>
-        <rect x="640" y="50" width="250" height="130" rx="10" fill="#fffbeb" stroke="#d97706" />
-        <text x="765" y="78" text-anchor="middle" font-size="15" font-weight="700">
-          Ambiguity fallback
-        </text>
-        <text x="765" y="102" text-anchor="middle" font-size="11">|a-b| ≤ 1e-11</text>
-        <text x="765" y="122" text-anchor="middle" font-size="11">только этот фолд</text>
-        <text x="765" y="142" text-anchor="middle" font-size="11">Decimal-движок</text>
-        <text x="765" y="162" text-anchor="middle" font-size="11">агрегат точный</text>
-        <line
-          x1="280"
-          y1="115"
-          x2="330"
-          y2="115"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a5)"
-        />
-        <line
-          x1="590"
-          y1="115"
-          x2="640"
-          y2="115"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a5)"
-        />
-        <defs>
-          <marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 7. Native считает быстро; Decimal отвечает за деньги; спорные сравнения пересчитываются
-        точно.
-      </figcaption>
-    </figure>
-    <p>
-      CPU-профиль показал, что 85–90% времени старого движка — Decimal.js: <code>finalise</code>,
-      конструктор, <code>parseDecimal</code>, <code>mul</code>, <code>plus</code>,
-      <code>minus</code>, <code>pow</code>. Индикаторы — ~3%, Zod — ~0.3%. Поэтому массовый поиск
-      переведён на native-числа, а денежная арифметика оставлена в Decimal.
-    </p>
-    <p>Ключевые решения:</p>
-    <ul>
-      <li>Все 12 стратегий имеют native-реализацию входа/выхода/состояния.</li>
-      <li>
-        Cash, позиция, amount, cost basis и fill считаются в Decimal — иначе полная покупка на весь
-        кэш может «сломаться» на одном ulp.
-      </li>
-      <li>
-        Стоп/тейк используют тот же Decimal-коэффициент, что и эталон (<code
-          >avgCost.mul(1 ± pct / 100)</code
-        >).
-      </li>
-      <li>
-        Сравнение в пределах <code>1e-11</code> относительно помечается как спорное; пересчитывается
-        только этот фолд.
-      </li>
-      <li>
-        Для «Дневной средней» дневные low/high считаются один раз на фолд, а вход/выход — за O(1):
-        <strong>37 мс/вариант вместо 2.9 с</strong> на Decimal, с точным parity.
-      </li>
-      <li><code>AI_SEARCH_FAST_ENGINE=0</code> — полный откат на Decimal.</li>
-    </ul>
-    <p>
-      Проверки: all-strategy parity в <code>same-close</code> и <code>next-open</code>, включая
-      «Дневную среднюю»; focused daily parity 20/20. Скорость: 25x raw, 7.8x end-to-end. Пилоты: 20k
-      — 11 078 screen survivors, 687 OOS, 517 с; 50k — 27 716 survivors, 641 с full eval, 1 597 OOS,
-      674 с total на 4 воркерах; 100k — 59 110 full evals, 2 987 OOS, 21.5 мин full, 22.4 мин total
-      на 4 воркерах; 200k generation/screen — 200 000 вариантов за 3.6 с, 118 213 survivors за 115
-      с, 147 МБ RSS.
-    </p>
-    <h2>11. Фильтры и скоринг</h2>
-    <p>После полного OOS варианта проверяются:</p>
-    <ol>
-      <li><code>trades &gt;= minTrades</code>;</li>
-      <li>медиана OOS &gt; 0;</li>
-      <li><code>positiveFolds &gt;= minPositiveFolds</code>;</li>
-      <li>максимальная просадка ≤ 20%;</li>
-      <li>худший фолд ≥ −15%.</li>
-    </ol>
-    <p>
-      Policy score = медиана OOS − 0.5 × максимальная просадка. Это не «магическая формула», а
-      способ поставить более устойчивый вариант выше более волатильного при равной доходности.
-    </p>
-    <p>
-      Фильтры не ослабляются. «Мало сделок» — самый частый отказ; это нормально: стратегия, которая
-      почти не торгует, не может доказать устойчивость.
-    </p>
-    <h2>12. Holdout</h2>
-    <p>
-      Holdout — последние 30 дней, отдельно от поиска. Сначала идёт warmup, затем оценка. Отказ:
-    </p>
-    <ul>
-      <li>отрицательный holdout return;</li>
-      <li>holdout drawdown &gt; 20%;</li>
-      <li>policy score ≤ 0 после holdout.</li>
-    </ul>
-    <p>
-      Top-10 — сознательный multiple-testing guard. Расширять top-N без статистической поправки
-      нельзя: это увеличивает шанс случайной «победы» на holdout. Near-miss показывает варианты,
-      которые прошли OOS, но не прошли holdout; это диагностика, а не рекомендация.
-    </p>
-    <h2>13. Исполнение на следующей свече</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 230" role="img" aria-label="Next-open execution">
-        <rect x="40" y="70" width="220" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="150" y="98" text-anchor="middle" font-size="13" font-weight="700">close i</text>
-        <text x="150" y="120" text-anchor="middle" font-size="11">сигнал стратегии</text>
-        <rect x="340" y="70" width="220" height="70" rx="8" fill="#ecfdf5" stroke="#059669" />
-        <text x="450" y="98" text-anchor="middle" font-size="13" font-weight="700">open i+1</text>
-        <text x="450" y="120" text-anchor="middle" font-size="11">fill с fee/slippage</text>
-        <rect x="640" y="70" width="240" height="70" rx="8" fill="#fffbeb" stroke="#d97706" />
-        <text x="760" y="98" text-anchor="middle" font-size="13" font-weight="700">
-          внутри свечи i+1
-        </text>
-        <text x="760" y="120" text-anchor="middle" font-size="11">SL/TP по low/high</text>
-        <line
-          x1="260"
-          y1="105"
-          x2="340"
-          y2="105"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a6)"
-        />
-        <line
-          x1="560"
-          y1="105"
-          x2="640"
-          y2="105"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a6)"
-        />
-        <defs>
-          <marker id="a6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 8. Решение принимается по закрытию, но исполняется только на следующем открытии — без
-        same-close look-ahead.
-      </figcaption>
-    </figure>
-    <p>
-      Audit H5 подтвердил look-ahead: решение и исполнение на одном close. Аблация на gap-фикстуре:
-      130.44% → 120.78%, DD 9.40 → 10.24, PF 10.92 → 9.62. На 1h-данных эффект меньше, но он
-      односторонний.
-    </p>
-    <p>Модель:</p>
-    <ul>
-      <li>сигнал на close <code>i</code> попадает в очередь;</li>
-      <li>fill на <code>open[i+1]</code> с теми же fee/slippage;</li>
-      <li>стоп/тейк остаются внутридневными;</li>
-      <li>pending исполняется до защитных проверок свечи;</li>
-      <li>решение на последней свече игнорируется, позиция закрывается в конце периода;</li>
-      <li>гейты <code>maxAdds</code>/наличие позиции перепроверяются при исполнении.</li>
-    </ul>
-    <p>
-      AI-поиск и holdout по умолчанию <code>next-open</code>. Бэктесты ручных стратегий/PDF пока
-      остаются <code>same-close</code> до отдельной перебазировки. Откат:
-      <code>AI_SEARCH_EXECUTION=same-close</code> или
-      <code>execution: &quot;same-close&quot;</code> в запросе.
-    </p>
-    <h2>14. Рекомендации</h2>
-    <p>Рекомендация содержит:</p>
-    <ul>
-      <li>стратегию и параметры;</li>
-      <li>OOS median/mean/worst, DD, trades, positive folds, stability;</li>
-      <li>holdout return;</li>
-      <li>policy score;</li>
-      <li>suggested allocation;</li>
-      <li>invalidation rules;</li>
-      <li>TTL (срок жизни).</li>
-    </ul>
-    <p>
-      Владелец может принять рекомендацию, отклонить её или создать черновик робота. Черновик
-      <strong>не запускается автоматически</strong>. AI не меняет бюджет, не останавливает роботов и
-      не перераспределяет позиции.
-    </p>
-    <h2>15. Риск-слой</h2>
-    <p>Перед созданием черновика проверяется:</p>
-    <ul>
-      <li>свободные worker slots;</li>
-      <li>свободный AI-бюджет;</li>
-      <li>максимальная инвестированная доля;</li>
-      <li>per-bot allocation;</li>
-      <li>per-token exposure.</li>
-    </ul>
-    <p>
-      Если лимит не позволяет, черновик пропускается с причиной. Это не ошибка, а нормальная защита.
-      Риск-слой не «дорисовывает» доходность и не ослабляет лимиты.
-    </p>
-    <h2>16. Paper-боты</h2>
-    <figure class="diagram">
-      <svg viewBox="0 0 920 260" role="img" aria-label="Paper bot runner">
-        <rect x="20" y="40" width="170" height="70" rx="8" fill="#f8fafc" stroke="#64748b" />
-        <text x="105" y="68" text-anchor="middle" font-size="13" font-weight="700">Tick 60s</text>
-        <text x="105" y="90" text-anchor="middle" font-size="11">advisory lock</text>
-        <rect x="220" y="40" width="170" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" />
-        <text x="305" y="68" text-anchor="middle" font-size="13" font-weight="700">Quote</text>
-        <text x="305" y="90" text-anchor="middle" font-size="11">свежесть, цена</text>
-        <rect x="420" y="40" width="170" height="70" rx="8" fill="#ecfdf5" stroke="#059669" />
-        <text x="505" y="68" text-anchor="middle" font-size="13" font-weight="700">Decision</text>
-        <text x="505" y="90" text-anchor="middle" font-size="11">strategy evaluate</text>
-        <rect x="620" y="40" width="170" height="70" rx="8" fill="#fffbeb" stroke="#d97706" />
-        <text x="705" y="68" text-anchor="middle" font-size="13" font-weight="700">Fill</text>
-        <text x="705" y="90" text-anchor="middle" font-size="11">paper, fee/slippage</text>
-        <rect x="220" y="150" width="570" height="70" rx="8" fill="#f5f3ff" stroke="#7c3aed" />
-        <text x="505" y="178" text-anchor="middle" font-size="13" font-weight="700">
-          Position / equity snapshot / trade &amp; event journal
-        </text>
-        <text x="505" y="200" text-anchor="middle" font-size="11">
-          owner-only start/stop; invalidation advisory
-        </text>
-        <line
-          x1="190"
-          y1="75"
-          x2="220"
-          y2="75"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a7)"
-        />
-        <line
-          x1="390"
-          y1="75"
-          x2="420"
-          y2="75"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a7)"
-        />
-        <line
-          x1="590"
-          y1="75"
-          x2="620"
-          y2="75"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a7)"
-        />
-        <line
-          x1="505"
-          y1="110"
-          x2="505"
-          y2="150"
-          stroke="#334155"
-          stroke-width="2"
-          marker-end="url(#a7)"
-        />
-        <defs>
-          <marker id="a7" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L9,3 z" fill="#334155" />
-          </marker>
-        </defs>
-      </svg>
-      <figcaption>
-        Рис. 9. Paper-бот живёт на виртуальных деньгах; реальные ключи и ledger не участвуют.
-      </figcaption>
-    </figure>
-    <p>
-      Бот тикает раз в 60 секунд под advisory lock. Он читает свежие котировки, вызывает стратегию,
-      исполняет paper-fill, обновляет позицию и equity snapshot, пишет trade/event journal.
-      Owner-only start/stop. Если рекомендация истекла или стратегия сломана, бот может быть
-      остановлен/помечен, но автоматического перераспределения нет.
-    </p>
-    <h2>17. Инвалидация</h2>
-    <p>Инвалидация — advisory-сигналы:</p>
-    <ul>
-      <li>drawdown;</li>
-      <li>дневной убыток;</li>
-      <li>устаревшая котировка;</li>
-      <li>стоп/тейк;</li>
-      <li>истёкший горизонт;</li>
-      <li>отрицательный P&amp;L;</li>
-      <li>ошибка бота;</li>
-      <li>отсутствующая рекомендация.</li>
-    </ul>
-    <p>
-      Монитор не останавливает бота сам. Он показывает <code>review</code>/<code>stop</code> и
-      причину; решение остаётся за владельцем.
-    </p>
-    <h2>18. Надёжность и безопасность</h2>
-    <ul>
-      <li>Пул БД ограничен; долгие запросы не должны исчерпывать соединения.</li>
-      <li>Поиск и цикл можно отменить; stale recovery помечает зависшие шаги.</li>
-      <li>
-        <code>ai_jobs</code> — durable-очередь с heartbeat и <code>FOR UPDATE SKIP LOCKED</code>.
-      </li>
-      <li><code>audit_log</code> append-only; приложение не имеет UPDATE/DELETE.</li>
-      <li>
-        Бэкапы: PITR + ежедневный шифрованный дамп + off-site retention. RPO 1 час, RTO 4 часа.
-      </li>
-      <li>Приватные ключи/seed никогда не на сервере; swap выше $500 требует step-up TOTP.</li>
-      <li>CSRF/Origin проверки; production отклоняет отсутствующий Origin/Referer.</li>
-      <li>AI-страницы и рекомендации owner-only.</li>
-      <li>
-        Health-уведомления ботов имеют кулдаун 6 часов на бота и причину. Повторный
-        <code>A → B → A</code> не присылает <code>A</code> снова; recovery отправляется только после
-        реально отправленного stop. Живой статус при этом остаётся на странице AI и в read-only
-        health endpoint (ADR 0079).
-      </li>
-      <li>
-        Удаление токена из вселенной и скрытие завершённого прогона не удаляют свечи, артефакты,
-        кандидатов и рекомендации; действия пишутся в аудит (ADR 0080).
-      </li>
-    </ul>
-    <h2>19. Разобранные примеры</h2>
-    <p>
-      <strong>Пример A: 0 рекомендаций.</strong> Токен падал последние 30 дней. Screen отсеял 810 из
-      5 000; полный OOS прошли 409; top-10 holdout все ушли в минус. Итог — 0. Это не сбой: политика
-      сознательно консервативна. Near-miss показывает, что именно не прошло.
-    </p>
-    <p>
-      <strong>Пример B: near-miss.</strong> Сетка/докупка дали положительный OOS, но holdout −36%
-      или DD &gt; 90%. Это типичный режимный провал; рекомендацией не становится.
-    </p>
-    <p>
-      <strong>Пример C: рекомендация.</strong> Вариант прошёл OOS median &gt; 0, 5+ положительных
-      фолдов, DD ≤ 20%, worst ≥ −15%, затем holdout &gt; 0 и policy &gt; 0. Создаётся кандидат с
-      allocation и invalidation rules; черновик робота ждёт ручного старта.
-    </p>
-    <p>
-      <strong>Пример D: риск-лимит.</strong> Свободных worker slots нет или token exposure уже на
-      максимуме. Черновик пропускается с причиной; это не ошибка поиска.
-    </p>
-    <p>
-      <strong>Пример E: масштаб.</strong> 50k вариантов: screen 27 716 за 32 с, full 8 folds 641 с
-      на 4 воркерах, 1 597 OOS, 674 с total. На production 6 воркерах ~7.5 минуты. 100k: 59 110
-      выживших, 2 987 OOS, 21.5 мин full на 4 воркерах (~15 мин на 6). 200k: ровно 200 000
-      сгенерировано за 3.6 с, 118 213 прошли screen за 115 с; полный прогон ~30 мин на 6 воркерах.
-    </p>
-    <h2>20. Формулы и глоссарий</h2>
-    <ul>
-      <li><strong>Return</strong> = (final equity − initial) / initial × 100.</li>
-      <li><strong>Max drawdown</strong> = max по equity curve от пика до впадины, %.</li>
-      <li><strong>Median OOS</strong> = медиана доходностей фолдов.</li>
-      <li><strong>Stability</strong> = positive folds / folds × 100.</li>
-      <li><strong>Policy score</strong> = median OOS − 0.5 × max drawdown.</li>
-      <li>
-        <strong>Fee</strong> = 25 bps на сторону; <strong>slippage</strong> = 10 bps на сторону.
-      </li>
-      <li>
-        <strong>Allocation</strong> = min(worker allocation, token exposure cap, free budget).
-      </li>
-      <li><strong>OOS</strong> — out-of-sample, 10-дневный фолд после train/purge.</li>
-      <li><strong>Holdout</strong> — последние 30 дней, финальная проверка.</li>
-      <li><strong>Near-miss</strong> — прошёл OOS, но не holdout/фильтр; не рекомендация.</li>
-    </ul>
-    <h2>21. Приложение</h2>
-    <p><strong>Ключевые файлы.</strong></p>
-    <ul>
-      <li>
-        <code>apps/api/src/modules/ai-trading/ai-search.service.ts</code> — оркестрация поиска,
-        воронка, holdout.
-      </li>
-      <li><code>ai-search.evaluate.ts</code> — fold-агрегация и fast/Decimal dispatch.</li>
-      <li><code>ai-search.signals.ts</code> — native-индикаторы и signal screen.</li>
-      <li><code>ai-search.funnel.ts</code> — stage/control/recall.</li>
-      <li><code>ai-search.pool.ts</code>, <code>ai-search.worker.ts</code> — worker pool.</li>
-      <li>
-        <code>ai-fast-backtest.ts</code>, <code>ai-fast-strategies.ts</code>,
-        <code>ai-fast-compare.ts</code> — native-движок.
-      </li>
-      <li>
-        <code>apps/api/src/modules/trading-bots/backtest/backtest.engine.ts</code> — Decimal-движок.
-      </li>
-      <li>
-        <code>apps/api/src/modules/trading-bots/strategies/index.ts</code> — реестр стратегий.
-      </li>
-      <li><code>apps/web/src/features/ai-trading/ai-trading-page.tsx</code> — AI UI.</li>
-    </ul>
-    <p><strong>Env.</strong></p>
-    <ul>
-      <li><code>AI_SEARCH_WORKERS</code> — размер пула (production 6).</li>
-      <li><code>AI_SEARCH_PROBE_FOLDS</code> — 0 по умолчанию.</li>
-      <li><code>AI_SEARCH_FULL_BUDGET</code> — 0 (без лимита) по умолчанию.</li>
-      <li><code>AI_SEARCH_CONTROL_SAMPLE</code> — 50.</li>
-      <li><code>AI_SEARCH_FAST_ENGINE</code> — 0 отключает native.</li>
-      <li>
-        <code>AI_SEARCH_EXECUTION</code> — <code>next-open</code> по умолчанию,
-        <code>same-close</code> откат.
-      </li>
-    </ul>
-    <p>
-      <strong>ADR.</strong> 0071–0080: AI control center, recommendation-only, Binance fallback,
-      one-click cycle, worker pool, funnel, fast engine, next-open, health-notification cooldown,
-      universe/history deletion.
-    </p>
-    <p>
-      <strong>Аудит.</strong> H1 (holdout warmup) исправлен; H4 (stateful warmup) исправлен; H5
-      (look-ahead) исправлен next-open; H2 (top-10) оставлен сознательно; H3/H6
-      (данные/наблюдаемость) — coverage/variantMetrics; H7/H8/H9 — арифметика/генерация/статистика
-      проверены; H10 — 0 рекомендаций статистически правдоподобен. Пороги не ослаблялись.
-    </p>
-    <p>
-      <strong>Воспроизводимость.</strong> Пилоты: <code>scripts/ai-staged-pilot.mjs</code>,
-      <code>scripts/ai-screen-pilot.mjs</code>; PDF:
-      <code>node scripts/docs/build-ai-engineering-guide.mjs</code>. Секреты и production-данные не
-      используются.
-    </p>
-  </body>
+<head>
+<meta charset="utf-8"/>
+<title>Nexter AI — инженерное руководство</title>
+<style>
+  :root { color-scheme: light; }
+  @page { size: A4; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "Arial", sans-serif;
+    color: #1f2937;
+    font-size: 11pt;
+    line-height: 1.55;
+  }
+  h1 {
+    font-size: 30pt;
+    line-height: 1.15;
+    margin: 70mm 0 6mm;
+    color: #064e3b;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    page-break-before: always;
+    font-size: 19pt;
+    color: #064e3b;
+    margin: 0 0 5mm;
+    padding-bottom: 2mm;
+    border-bottom: 1.5pt solid #a7f3d0;
+  }
+  h3 {
+    font-size: 14pt;
+    color: #065f46;
+    margin: 6mm 0 2mm;
+    page-break-after: avoid;
+  }
+  h4 { font-size: 12pt; color: #065f46; margin: 4mm 0 1.5mm; }
+  p { margin: 0 0 3mm; text-align: justify; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 7mm; }
+  li { margin: 0 0 1.4mm; }
+  strong { color: #111827; }
+  code {
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 9.5pt;
+    background: #f1f5f9;
+    padding: 0.4mm 1.2mm;
+    border-radius: 1.5mm;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 2mm 0 5mm;
+    font-size: 9.7pt;
+    page-break-inside: avoid;
+  }
+  th, td {
+    border: 0.6pt solid #cbd5e1;
+    padding: 1.6mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: #ecfdf5; color: #064e3b; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  figure {
+    margin: 4mm 0 6mm;
+    padding: 3mm;
+    border: 0.6pt solid #d1fae5;
+    border-radius: 2mm;
+    background: #fbfefc;
+    page-break-inside: avoid;
+  }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption {
+    margin-top: 2mm;
+    font-size: 9pt;
+    color: #475569;
+    text-align: center;
+  }
+  .callout {
+    margin: 4mm 0;
+    padding: 3mm 4mm;
+    border-left: 3pt solid #10b981;
+    background: #ecfdf5;
+    border-radius: 1.5mm;
+    font-size: 10.2pt;
+  }
+  .page-break { page-break-after: always; }
+  a { color: #047857; text-decoration: none; }
+  blockquote {
+    margin: 3mm 0;
+    padding-left: 4mm;
+    border-left: 2pt solid #94a3b8;
+    color: #475569;
+  }
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 3mm;
+    border-radius: 2mm;
+    font-size: 9pt;
+    overflow-wrap: anywhere;
+  }
+  hr { border: none; border-top: 0.6pt solid #cbd5e1; margin: 5mm 0; }
+</style>
+</head>
+<body>
+<h1>Nexter AI: как устроен исследовательский контур</h1>
+<p><strong>Инженерное руководство. Версия 1.2 — 22 ноября 2026.</strong></p>
+<p>Версия 1.2 добавляет диверсифицированный top-50 на holdout и проверку устойчивости по трём 10-дневным блокам.</p>
+<p>Это не руководство пользователя и не описание дашборда. Цель — объяснить, как работает внутренний механизм: откуда берутся свечи, как строится walk-forward, как считается P&amp;L, почему поиск отсеивает варианты, что такое OOS и holdout, как появляется рекомендация и как её проверяет paper-бот. Аналогия — «как устроен двигатель внутреннего сгорания», а не «как выглядит приборная панель».</p>
+<p>Система работает <strong>только в рекомендательном режиме</strong>. AI не запускает и не останавливает роботов, не перераспределяет бюджет и не подписывает транзакции. Все действия с деньгами и запуск paper-ботов остаются за владельцем. Приватные ключи и seed-фразы никогда не попадают на сервер.</p>
+<div class="callout">
+<strong>Главная мысль.</strong> AI-контур — это аналитик и исследователь, а не исполнитель. Он предлагает стратегии и параметры, объясняет метрики и оставляет решение человеку.
+</div>
+<h2>Содержание</h2>
+<ol><li>Большая картина</li><li>Данные</li><li>Исследовательский цикл</li><li>Вселенная и профиль</li><li>Генерация вариантов</li><li>Walk-forward</li><li>Движок бэктеста</li><li>Стратегии и индикаторы</li><li>Воронка поиска</li><li>Быстрый поисковый движок</li><li>Фильтры и скоринг</li><li>Holdout</li><li>Исполнение на следующей свече</li><li>Рекомендации</li><li>Риск-слой</li><li>Paper-боты</li><li>Инвалидация</li><li>Надёжность и безопасность</li><li>Разобранные примеры</li><li>Формулы и глоссарий</li><li>Приложение</li></ol>
+<div class="page-break"></div>
+<h2>1. Большая картина</h2>
+<p>Система состоит из пяти крупных частей.</p>
+<figure class="diagram">
+<svg viewBox="0 0 920 300" role="img" aria-label="Архитектура Nexter">
+<rect x="20" y="30" width="190" height="80" rx="10" fill="#ecfdf5" stroke="#059669"/>
+<text x="115" y="60" text-anchor="middle" font-size="16" font-weight="700">Web SPA</text>
+<text x="115" y="82" text-anchor="middle" font-size="12">русский UI, USD</text>
+<text x="115" y="99" text-anchor="middle" font-size="12">портфель, AI, роботы</text>
+<rect x="365" y="30" width="190" height="80" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+<text x="460" y="60" text-anchor="middle" font-size="16" font-weight="700">Nest API</text>
+<text x="460" y="82" text-anchor="middle" font-size="12">REST, auth, audit</text>
+<text x="460" y="99" text-anchor="middle" font-size="12">AI, swap, bots</text>
+<rect x="710" y="30" width="190" height="80" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="805" y="60" text-anchor="middle" font-size="16" font-weight="700">Postgres</text>
+<text x="805" y="82" text-anchor="middle" font-size="12">ledger, candles</text>
+<text x="805" y="99" text-anchor="middle" font-size="12">ai_*, bot_*</text>
+<rect x="365" y="170" width="190" height="80" rx="10" fill="#fffbeb" stroke="#d97706"/>
+<text x="460" y="200" text-anchor="middle" font-size="16" font-weight="700">Worker threads</text>
+<text x="460" y="222" text-anchor="middle" font-size="12">поиск вариантов</text>
+<text x="460" y="239" text-anchor="middle" font-size="12">6 воркеров</text>
+<rect x="20" y="170" width="190" height="80" rx="10" fill="#f8fafc" stroke="#64748b"/>
+<text x="115" y="200" text-anchor="middle" font-size="16" font-weight="700">Viber-бот</text>
+<text x="115" y="222" text-anchor="middle" font-size="12">напоминания</text>
+<text x="115" y="239" text-anchor="middle" font-size="12">аудио-заметки</text>
+<line x1="210" y1="70" x2="365" y2="70" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="555" y1="70" x2="710" y2="70" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="460" y1="110" x2="460" y2="170" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<line x1="210" y1="210" x2="365" y2="210" stroke="#334155" stroke-width="2" marker-end="url(#arrow)"/>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 1. API — единственная точка записи; воркеры только считают, Viber-бот только читает задачи и присылает заметки.</figcaption>
+</figure>
+<ul><li><strong>Web SPA</strong> — русский интерфейс. Показывает данные, поиск, рекомендации, роботов, задачи, заметки, финансы. Не хранит секретов.</li><li><strong>Nest API</strong> — авторизация владельца, аудит, ledger, swap-исполнение, AI-контур, paper-боты, фоновые процессы.</li><li><strong>Postgres</strong> — единственный источник истины: свечи, сделки, лоты, AI-артефакты, рекомендации, роботы, аудит.</li><li><strong>Worker threads</strong> — CPU-пул внутри API-процесса. Считает бэктесты вариантов; не пишет в базу.</li><li><strong>Viber-бот</strong> — отдельный процесс: напоминания о задачах и приём аудио-заметок. Не управляет торговлей.</li></ul>
+<div class="callout">
+<strong>Advisory vs executable.</strong> AI-рекомендация, метрики, near-miss и телеметрия — advisory. Ledger, swap-ордера, подписи и переводы — executable и требуют отдельного подтверждения владельца. Paper-боты исполняются только на виртуальных деньгах.
+</div>
+<h2>2. Данные</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 290" role="img" aria-label="Конвейер данных">
+<rect x="20" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="105" y="56" text-anchor="middle" font-size="14" font-weight="700">GeckoTerminal</text>
+<text x="105" y="76" text-anchor="middle" font-size="11">пул, OHLCV</text>
+<rect x="210" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="295" y="56" text-anchor="middle" font-size="14" font-weight="700">CoinGecko</text>
+<text x="295" y="76" text-anchor="middle" font-size="11">история, изменения</text>
+<rect x="400" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="485" y="56" text-anchor="middle" font-size="14" font-weight="700">DexScreener</text>
+<text x="485" y="76" text-anchor="middle" font-size="11">цена, 24ч</text>
+<rect x="590" y="30" width="170" height="64" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="675" y="56" text-anchor="middle" font-size="14" font-weight="700">Binance</text>
+<text x="675" y="76" text-anchor="middle" font-size="11">OHLCV fallback</text>
+<rect x="330" y="140" width="260" height="70" rx="10" fill="#ecfdf5" stroke="#059669"/>
+<text x="460" y="168" text-anchor="middle" font-size="15" font-weight="700">market_candles</text>
+<text x="460" y="190" text-anchor="middle" font-size="11">1h / 4h / 1d, source, quality, gaps</text>
+<rect x="330" y="235" width="260" height="40" rx="8" fill="#f8fafc" stroke="#64748b"/>
+<text x="460" y="260" text-anchor="middle" font-size="12">coverage: ok / partial / stale / missing</text>
+<line x1="105" y1="94" x2="370" y2="140" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+<line x1="295" y1="94" x2="430" y2="140" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+<line x1="485" y1="94" x2="470" y2="140" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+<line x1="675" y1="94" x2="550" y2="140" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+<line x1="460" y1="210" x2="460" y2="235" stroke="#334155" stroke-width="2" marker-end="url(#a2)"/>
+<defs><marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 2. Несколько источников сводятся в один ряд свечей; качество и пропуски сохраняются как метаданные.</figcaption>
+</figure>
+<p><strong>Свечи.</strong> <code>market_candles</code> хранит <code>open/high/low/close/volume_usd</code>, <code>source</code> и <code>quality</code>. Для AI используются 1h и 4h; 1d — только контекст режима. История ограничена 180 днями; поиск допускает 140–180 дней и сам выбирает число фолдов 5–8.</p>
+<p><strong>Качество.</strong> <code>quality='ok'</code> — нормальная свеча. <code>synthetic</code> означает, что биржа/источник отдал только дневную точку или неполный OHLC. Synthetic-свеча не доказывает внутридневной low/high, поэтому стоп-лосс в бэктесте срабатывает по закрытию, а тейк-профит — по порогу. Это консервативно и не создаёт фиктивных внутридневных сделок.</p>
+<p><strong>Пропуски.</strong> Coverage показывает <code>syntheticCandles</code> и <code>maxGapCandles</code>. Если данных меньше 140 дней, поиск завершается на шаге данных с понятной ошибкой, а не на середине бэктеста. Пропуски и synthetic — известный риск H6: система их показывает, но не «дорисовывает» рынок.</p>
+<h2>3. Исследовательский цикл</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 220" role="img" aria-label="Цикл исследования">
+<rect x="20" y="60" width="170" height="80" rx="10" fill="#ecfdf5" stroke="#059669"/>
+<text x="105" y="92" text-anchor="middle" font-size="15" font-weight="700">Данные</text>
+<text x="105" y="114" text-anchor="middle" font-size="11">coverage, 140–180д</text>
+<rect x="220" y="60" width="190" height="80" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+<text x="315" y="92" text-anchor="middle" font-size="15" font-weight="700">Поиск</text>
+<text x="315" y="114" text-anchor="middle" font-size="11">screen → folds → holdout</text>
+<rect x="440" y="60" width="190" height="80" rx="10" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="535" y="92" text-anchor="middle" font-size="15" font-weight="700">Рекомендации</text>
+<text x="535" y="114" text-anchor="middle" font-size="11">TTL, лимиты, риски</text>
+<rect x="660" y="60" width="230" height="80" rx="10" fill="#fffbeb" stroke="#d97706"/>
+<text x="775" y="92" text-anchor="middle" font-size="15" font-weight="700">Черновики роботов</text>
+<text x="775" y="114" text-anchor="middle" font-size="11">созданы, но не запущены</text>
+<line x1="190" y1="100" x2="220" y2="100" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+<line x1="410" y1="100" x2="440" y2="100" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+<line x1="630" y1="100" x2="660" y2="100" stroke="#334155" stroke-width="2" marker-end="url(#a3)"/>
+<defs><marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 3. Один клик запускает четыре шага; старт роботов остаётся ручным.</figcaption>
+</figure>
+<p>Цикл — это удобная обёртка над поиском. Шаги: <code>data</code> → <code>search</code> → <code>recommendations</code> → <code>drafts</code>. Каждый шаг пишет статус, сообщение и процент; цикл можно отменить. При потере прогресса более чем на 10 минут цикл прерывается, жёсткий предел — 90 минут. После рестарта API зависшие шаги помечаются, а не остаются «вечно running».</p>
+<p>В <code>Настройки → ИИ</code> задаётся дневной лимит циклов (1–200, по умолчанию 20) или <code>Не ограничивать</code>; значение хранится в <code>ai_profiles.model_settings.cycleLimit</code>. Большой прогон 100k/200k считается одним циклом. При исчерпании лимита API возвращает <code>429 AI_CYCLE_LIMIT</code>, а не запускает усечённый поиск.</p>
+<p>Поиск выполняется в durable-очереди <code>ai_jobs</code>: job захватывается через <code>FOR UPDATE SKIP LOCKED</code>, получает heartbeat и при падении процесса возвращается в очередь. Это защищает от потери длинного прогона. Тесты и разработка используют inline-путь.</p>
+<h2>4. Вселенная и профиль</h2>
+<p>AI-профиль задаёт бюджет, лимиты и расписание. Вселенная — список токенов с разрешёнными таймфреймами. По умолчанию новые AI-токены получают 1h+4h; 1d хранится как контекст, но не участвует в поиске.</p>
+<p>Вселенная — это membership-строки <code>ai_profile_tokens</code>. Кнопка удаления убирает строку из вселенной и пишет аудит; свечи, артефакты, история поисков, кандидаты и роботы не удаляются. Завершённый прогон в истории скрывается мягко (<code>summary.hidden</code>), а активный прогон удалить нельзя (<code>409 AI_SEARCH_RUN_ACTIVE</code>).</p>
+<p>Профиль ограничивает:</p>
+<ul><li>бюджет AI-роботов;</li><li>число одновременных роботов;</li><li>максимальную долю инвестированного капитала;</li><li>максимальную экспозицию на токен;</li><li>дневной лимит убытка;</li><li>максимальное число черновиков за цикл.</li></ul>
+<p>Бюджет — не «cash на бирже», а виртуальный лимит paper-режима. Реальный ledger и реальные свопы живут отдельно и не смешиваются с AI-бюджетом.</p>
+<h2>5. Генерация вариантов</h2>
+<p>Вариант — это пара <code>(strategyKey, params)</code>. Реестр стратегий содержит 12 AI-eligible стратегий; <code>static_limit</code> исключён, потому что он ручной и привязан к абсолютным ценам.</p>
+<p>Генератор:</p>
+<ul><li>берёт <code>paramFields</code> каждой стратегии: min, max, step, integer;</li><li>использует seeded <code>mulberry32</code> — один seed даёт один и тот же набор;</li><li>делит бюджет поровну между стратегиями;</li><li>дедуплицирует параметры внутри стратегии;</li><li>проверяет <code>parseParams</code> через Zod;</li><li>ограничивает запрос 200 000 вариантами; UI предлагает 100k и 200k.</li></ul>
+<p>Поэтому «5 000 вариантов» — это 5 000 исходных предложений. Воронка затем отсеивает часть дешёвыми проверками, а не считает 5 000 полных восьмифолдовых бэктестов вслепую. Для больших прогонов доступны 100k и 200k; если уникальное пространство параметров стратегии исчерпано раньше, генератор вернёт меньше, и артефакт покажет фактическое число.</p>
+<h2>6. Walk-forward</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 260" role="img" aria-label="Walk-forward и holdout">
+<rect x="30" y="70" width="600" height="42" rx="6" fill="#eff6ff" stroke="#2563eb"/>
+<text x="330" y="96" text-anchor="middle" font-size="13">180 дней истории: 8 фолдов по 10 дней OOS</text>
+<rect x="30" y="130" width="600" height="42" rx="6" fill="#ecfdf5" stroke="#059669"/>
+<text x="330" y="156" text-anchor="middle" font-size="13">последние 30 дней — holdout, не участвует в выборе</text>
+<rect x="650" y="70" width="240" height="102" rx="8" fill="#fffbeb" stroke="#d97706"/>
+<text x="770" y="96" text-anchor="middle" font-size="13" font-weight="700">Один фолд</text>
+<text x="770" y="118" text-anchor="middle" font-size="11">60д train-контекст</text>
+<text x="770" y="136" text-anchor="middle" font-size="11">2д purge</text>
+<text x="770" y="154" text-anchor="middle" font-size="11">10д OOS + warmup</text>
+<line x1="30" y1="185" x2="630" y2="185" stroke="#334155" stroke-width="2"/>
+<line x1="30" y1="180" x2="30" y2="190" stroke="#334155" stroke-width="2"/>
+<line x1="630" y1="180" x2="630" y2="190" stroke="#334155" stroke-width="2"/>
+<text x="30" y="205" font-size="11">старт 180д</text>
+<text x="630" y="205" font-size="11">конец поиска</text>
+<text x="650" y="205" font-size="11">holdout: 30 дней</text>
+</svg>
+<figcaption>Рис. 4. Фолды идут по истории; holdout — последние 30 дней и никогда не используется для отбора.</figcaption>
+</figure>
+<p>Один фолд:</p>
+<ul><li>60 дней train-контекста (нужны для «медленных» индикаторов);</li><li>2 дня purge, чтобы не смешивать train и OOS;</li><li>10 дней OOS;</li><li>warmup до 15 дней / минимум 240 свечей, чтобы stateful-стратегии стартовали «тёплыми».</li></ul>
+<p>Для 140–180 дней число фолдов 5–8. Минимум сделок — <code>max(5, floor(folds))</code>; минимум положительных фолдов — <code>max(2, ceil(0.625 * folds))</code>. Так короткая история не требует невозможного числа сделок.</p>
+<p>Holdout — отдельные 30 дней с собственным warmup-префиксом. Он не используется ни для screen, ни для probe, ни для бюджета, ни для локального уточнения. Это единственная финальная проверка.</p>
+<h2>7. Движок бэктеста</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 280" role="img" aria-label="Состояния движка бэктеста">
+<rect x="20" y="90" width="150" height="70" rx="10" fill="#f8fafc" stroke="#64748b"/>
+<text x="95" y="118" text-anchor="middle" font-size="14" font-weight="700">Cash</text>
+<text x="95" y="140" text-anchor="middle" font-size="11">1000 USD</text>
+<rect x="230" y="90" width="170" height="70" rx="10" fill="#ecfdf5" stroke="#059669"/>
+<text x="315" y="118" text-anchor="middle" font-size="14" font-weight="700">Buy fill</text>
+<text x="315" y="140" text-anchor="middle" font-size="11">fee + slippage</text>
+<rect x="460" y="90" width="170" height="70" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+<text x="545" y="118" text-anchor="middle" font-size="14" font-weight="700">Position</text>
+<text x="545" y="140" text-anchor="middle" font-size="11">amount, avg cost</text>
+<rect x="690" y="90" width="200" height="70" rx="10" fill="#fffbeb" stroke="#d97706"/>
+<text x="790" y="113" text-anchor="middle" font-size="13" font-weight="700">Exit</text>
+<text x="790" y="133" text-anchor="middle" font-size="11">TP / SL / strategy / end</text>
+<text x="790" y="150" text-anchor="middle" font-size="11">cash + realized P&amp;L</text>
+<line x1="170" y1="125" x2="230" y2="125" stroke="#334155" stroke-width="2" marker-end="url(#a4)"/>
+<line x1="400" y1="125" x2="460" y2="125" stroke="#334155" stroke-width="2" marker-end="url(#a4)"/>
+<line x1="630" y1="125" x2="690" y2="125" stroke="#334155" stroke-width="2" marker-end="url(#a4)"/>
+<path d="M790 160 L790 220 L95 220 L95 160" fill="none" stroke="#334155" stroke-width="2" marker-end="url(#a4)"/>
+<text x="400" y="245" text-anchor="middle" font-size="11">следующая сделка или конец периода</text>
+<defs><marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 5. Деньги, позиция и P&L считаются в Decimal; индикаторы и решения — в native-числах.</figcaption>
+</figure>
+<p>Движок считает:</p>
+<ul><li>начальный капитал (1000 USD в поиске);</li><li>комиссию 25 bps и слиппедж 10 bps на каждой стороне;</li><li>размер позиции <code>initialCapital / maxAdds</code> (или всю сумму для одноуровневых стратегий);</li><li>среднюю цену и <code>buyCount</code>;</li><li>стоп-лосс и тейк-профит: synthetic — по закрытию/порогу, real — open/low/high с гэпом;</li><li>принудительное закрытие в конце периода;</li><li>equity curve, максимальную просадку, total return, win rate, profit factor, buy-and-hold.</li></ul>
+<p>Деньги всегда Decimal. Это важно: цена, комиссия, размер и P&amp;L не должны «плыть» из-за бинарных дробей. Native-числа используются только там, где не принимаются финансовые решения: индикаторы, сравнения и предварительная оценка.</p>
+<h2>8. Стратегии и индикаторы</h2>
+<p>В реестре 12 AI-eligible стратегий:</p>
+<table><thead><tr><th>Стратегия</th><th>Ключ</th><th>Идея</th><th>Вход</th><th>Выход</th></tr></thead><tbody><tr><td>Импульсный пробой</td><td><code>momentum_breakout</code></td><td>SMA + 24ч импульс</td><td>fast &gt; slow и рост ≥ порога</td><td>TP/SL или fast &lt; slow</td></tr><tr><td>Возврат к среднему</td><td><code>mean_reversion</code></td><td>отклонение от SMA</td><td>цена ниже SMA на %</td><td>возврат к SMA, TP/SL</td></tr><tr><td>Сетка в диапазоне</td><td><code>grid_range</code></td><td>ступени ниже якоря</td><td>цена ниже rolling high на шаг</td><td>TP/SL или ступень вверх</td></tr><tr><td>Откат в тренде</td><td><code>trend_pullback</code></td><td>тренд + откат</td><td>fast &gt; slow и откат к fast</td><td>TP/SL или слом тренда</td></tr><tr><td>Докупка на просадке</td><td><code>dca_dip</code></td><td>усреднение</td><td>просадка от якоря</td><td>TP/SL</td></tr><tr><td>Трейлинг-стоп</td><td><code>trailing_stop</code></td><td>пробой + трейлинг</td><td>пробой rolling high</td><td>hard stop / trailing</td></tr><tr><td>Защитная сетка</td><td><code>crash_protected_grid</code></td><td>сетка + crash-режим</td><td>ступени ниже HWM</td><td>TP/SL / crash close / resume</td></tr><tr><td>Пробой Дончиана</td><td><code>donchian_breakout</code></td><td>канал</td><td>пробой верхнего канала</td><td>нижний канал, TP/SL</td></tr><tr><td>Возврат к Bollinger</td><td><code>bollinger_reversion</code></td><td>полосы</td><td>ниже нижней полосы</td><td>средняя, TP/SL</td></tr><tr><td>Выход из сжатия</td><td><code>squeeze_breakout</code></td><td>сжатие + пробой</td><td>bandwidth ≤ порога и пробой upper</td><td>средняя, TP/SL</td></tr><tr><td>Неудавшийся пробой</td><td><code>failed_breakout</code></td><td>ложный пробой</td><td>возврат выше пробитой поддержки</td><td>TP/SL</td></tr><tr><td>Дневная средняя</td><td><code>daily_average</code></td><td>дневные low/high</td><td>цена ≤ среднего low − буфер</td><td>средний high + буфер, TP/SL</td></tr></tbody></table>
+<p>Stateful-стратегии (<code>trailing_stop</code>, <code>crash_protected_grid</code>, <code>failed_breakout</code>) прогревают состояние на warmup-свечах без сделок. Иначе HWM/peak/breakdown начинались бы с нуля и первый фолд был бы нечестным.</p>
+<p>«Дневная средняя» группирует историю по полным UTC-дням и считает средний (или медианный) low/high за <code>lookbackDays</code> (5–60, по умолчанию 20). Вход — цена не выше среднего low минус <code>entryBufferPct</code>; выход — не ниже среднего high плюс <code>exitBufferPct</code> или TP/SL. <code>useMedian</code> переключает среднее на медиану. Неполные дни игнорируются; пока полных дней меньше lookback, стратегия держит позицию. Live-бот загружает по одной котировке в час за период хранения, чтобы накопить полные дни.</p>
+<h2>9. Воронка поиска</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 300" role="img" aria-label="Воронка поиска">
+<rect x="20" y="20" width="880" height="38" rx="6" fill="#eff6ff" stroke="#2563eb"/>
+<text x="460" y="44" text-anchor="middle" font-size="14" font-weight="700">100 000 предложений</text>
+<rect x="120" y="78" width="680" height="38" rx="6" fill="#ecfdf5" stroke="#059669"/>
+<text x="460" y="102" text-anchor="middle" font-size="13">Signal screen: 59 110 (40.9% отсеяно, 0 false negatives)</text>
+<rect x="180" y="136" width="560" height="38" rx="6" fill="#f8fafc" stroke="#64748b"/>
+<text x="460" y="160" text-anchor="middle" font-size="13">Probe: выключен (терял 18.3% OOS)</text>
+<rect x="220" y="194" width="480" height="38" rx="6" fill="#fffbeb" stroke="#d97706"/>
+<text x="460" y="218" text-anchor="middle" font-size="13">Full 8 folds: 59 110 (бюджет выключен)</text>
+<rect x="300" y="252" width="320" height="38" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="460" y="276" text-anchor="middle" font-size="13">OOS 2 987 → holdout 50 → рекомендации</text>
+</svg>
+<figcaption>Рис. 6. Дешёвые этапы отсеивают только то, что не может пройти, либо помечают контрольную выборку.</figcaption>
+</figure>
+<p><strong>Signal screen.</strong> Для стратегий, где реальный вход требует сигнала, считается число входных сигналов по всем фолдам. Если оно меньше минимума сделок, вариант не может пройти — это безопасное необходимое условие. На 200 000 вариантов screen занимает ~115 секунд и отсеивает 40.9%; на 100 000 — ~57 секунд при той же доле. В контрольном пилоте false negatives — 0. Grid/DCA/crash/failed breakout и «Дневная средняя» не скринятся: там докупки, дневные уровни и состояние могут увеличить число входов.</p>
+<p><strong>Probe.</strong> Однофолдовый тест «есть ли хотя бы одна сделка». Он дешёвый, но теряет 18.3% реальных OOS-прошедших; внутри <code>squeeze_breakout</code> — 47.8%, потому что в первом фолде может не быть сжатия. Поэтому probe выключен по умолчанию. Воронка поддерживает его для экспериментов и контрольную выборку.</p>
+<p><strong>Бюджет.</strong> Если выживших больше лимита, берётся детерминированная равномерная выборка. После native-движка бюджет выключен по умолчанию: 100k пилот полностью оценил 59 110 выживших за 21.5 минуты на 4 воркерах (22 мс/вариант). Это важно для принципа «без потерь»; на 6 production-воркерах 100k занимает ~15 минут, 200k — ~30 минут.</p>
+<p><strong>Контроль.</strong> Из каждого отсеянного этапа берётся до 50 вариантов и полностью оценивается. Они никогда не становятся рекомендациями; отчёт показывает, сколько прошло бы OOS, и оценку полноты. Это защита от «тихого» отсева хороших кандидатов.</p>
+<h2>10. Быстрый поисковый движок</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 250" role="img" aria-label="Fast engine и Decimal parity">
+<rect x="20" y="50" width="260" height="130" rx="10" fill="#ecfdf5" stroke="#059669"/>
+<text x="150" y="78" text-anchor="middle" font-size="15" font-weight="700">Native слой</text>
+<text x="150" y="102" text-anchor="middle" font-size="11">SMA, rolling high/low</text>
+<text x="150" y="122" text-anchor="middle" font-size="11">Bollinger, band width</text>
+<text x="150" y="142" text-anchor="middle" font-size="11">entry / exit / state</text>
+<text x="150" y="162" text-anchor="middle" font-size="11">equity, drawdown</text>
+<rect x="330" y="50" width="260" height="130" rx="10" fill="#eff6ff" stroke="#2563eb"/>
+<text x="460" y="78" text-anchor="middle" font-size="15" font-weight="700">Decimal слой</text>
+<text x="460" y="102" text-anchor="middle" font-size="11">cash, position, amount</text>
+<text x="460" y="122" text-anchor="middle" font-size="11">cost basis, fills</text>
+<text x="460" y="142" text-anchor="middle" font-size="11">fees, slippage</text>
+<text x="460" y="162" text-anchor="middle" font-size="11">total return</text>
+<rect x="640" y="50" width="250" height="130" rx="10" fill="#fffbeb" stroke="#d97706"/>
+<text x="765" y="78" text-anchor="middle" font-size="15" font-weight="700">Ambiguity fallback</text>
+<text x="765" y="102" text-anchor="middle" font-size="11">|a-b| ≤ 1e-11</text>
+<text x="765" y="122" text-anchor="middle" font-size="11">только этот фолд</text>
+<text x="765" y="142" text-anchor="middle" font-size="11">Decimal-движок</text>
+<text x="765" y="162" text-anchor="middle" font-size="11">агрегат точный</text>
+<line x1="280" y1="115" x2="330" y2="115" stroke="#334155" stroke-width="2" marker-end="url(#a5)"/>
+<line x1="590" y1="115" x2="640" y2="115" stroke="#334155" stroke-width="2" marker-end="url(#a5)"/>
+<defs><marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 7. Native считает быстро; Decimal отвечает за деньги; спорные сравнения пересчитываются точно.</figcaption>
+</figure>
+<p>CPU-профиль показал, что 85–90% времени старого движка — Decimal.js: <code>finalise</code>, конструктор, <code>parseDecimal</code>, <code>mul</code>, <code>plus</code>, <code>minus</code>, <code>pow</code>. Индикаторы — ~3%, Zod — ~0.3%. Поэтому массовый поиск переведён на native-числа, а денежная арифметика оставлена в Decimal.</p>
+<p>Ключевые решения:</p>
+<ul><li>Все 12 стратегий имеют native-реализацию входа/выхода/состояния.</li><li>Cash, позиция, amount, cost basis и fill считаются в Decimal — иначе полная покупка на весь кэш может «сломаться» на одном ulp.</li><li>Стоп/тейк используют тот же Decimal-коэффициент, что и эталон (<code>avgCost.mul(1 ± pct / 100)</code>).</li><li>Сравнение в пределах <code>1e-11</code> относительно помечается как спорное; пересчитывается только этот фолд.</li><li>Для «Дневной средней» дневные low/high считаются один раз на фолд, а вход/выход — за O(1): <strong>37 мс/вариант вместо 2.9 с</strong> на Decimal, с точным parity.</li><li><code>AI_SEARCH_FAST_ENGINE=0</code> — полный откат на Decimal.</li></ul>
+<p>Проверки: all-strategy parity в <code>same-close</code> и <code>next-open</code>, включая «Дневную среднюю»; focused daily parity 20/20. Скорость: 25x raw, 7.8x end-to-end. Пилоты: 20k — 11 078 screen survivors, 687 OOS, 517 с; 50k — 27 716 survivors, 641 с full eval, 1 597 OOS, 674 с total на 4 воркерах; 100k — 59 110 full evals, 2 987 OOS, 21.5 мин full, 22.4 мин total на 4 воркерах; 200k generation/screen — 200 000 вариантов за 3.6 с, 118 213 survivors за 115 с, 147 МБ RSS.</p>
+<h2>11. Фильтры и скоринг</h2>
+<p>После полного OOS варианта проверяются:</p>
+<ol><li><code>trades &gt;= minTrades</code>;</li><li>медиана OOS &gt; 0;</li><li><code>positiveFolds &gt;= minPositiveFolds</code>;</li><li>максимальная просадка ≤ 20%;</li><li>худший фолд ≥ −15%.</li></ol>
+<p>Policy score = медиана OOS − 0.5 × максимальная просадка. Это не «магическая формула», а способ поставить более устойчивый вариант выше более волатильного при равной доходности.</p>
+<p>Фильтры не ослабляются. «Мало сделок» — самый частый отказ; это нормально: стратегия, которая почти не торгует, не может доказать устойчивость.</p>
+<h2>12. Holdout</h2>
+<p>Holdout — последние 30 дней, отдельно от поиска. Сначала идёт warmup, затем оценка. К финальной проверке допускаются до <strong>50</strong> кандидатов: по одному лучшему от каждой стратегии, затем по второму и так далее (round-robin), остаток добирается по policy score. Так один trend-режим не занимает все слоты.</p>
+<p>Holdout делится на три блока по 10 дней. Отказ:</p>
+<ul><li>отрицательный общий holdout return;</li><li>holdout drawdown &gt; 20%;</li><li>меньше двух из трёх блоков неотрицательны;</li><li>последний 10-дневный блок отрицательный;</li><li>policy score ≤ 0 после holdout.</li></ul>
+<p>Почему не 5 дней: 120 часовых свечей минус warmup оставляют слишком мало сделок, результат становится шумом. 30-дневный holdout покрывает другой режим, а 10-дневные блоки проверяют устойчивость внутри него. Top-50 — компромисс: 50 проверок повышают multiple testing по сравнению с 10, поэтому блок-гейт и последний блок строже. Holdout не используется для выбора или ранжирования; near-miss показывает варианты, которые прошли OOS, но не прошли финальную проверку.</p>
+<h2>13. Исполнение на следующей свече</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 230" role="img" aria-label="Next-open execution">
+<rect x="40" y="70" width="220" height="70" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="150" y="98" text-anchor="middle" font-size="13" font-weight="700">close i</text>
+<text x="150" y="120" text-anchor="middle" font-size="11">сигнал стратегии</text>
+<rect x="340" y="70" width="220" height="70" rx="8" fill="#ecfdf5" stroke="#059669"/>
+<text x="450" y="98" text-anchor="middle" font-size="13" font-weight="700">open i+1</text>
+<text x="450" y="120" text-anchor="middle" font-size="11">fill с fee/slippage</text>
+<rect x="640" y="70" width="240" height="70" rx="8" fill="#fffbeb" stroke="#d97706"/>
+<text x="760" y="98" text-anchor="middle" font-size="13" font-weight="700">внутри свечи i+1</text>
+<text x="760" y="120" text-anchor="middle" font-size="11">SL/TP по low/high</text>
+<line x1="260" y1="105" x2="340" y2="105" stroke="#334155" stroke-width="2" marker-end="url(#a6)"/>
+<line x1="560" y1="105" x2="640" y2="105" stroke="#334155" stroke-width="2" marker-end="url(#a6)"/>
+<defs><marker id="a6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 8. Решение принимается по закрытию, но исполняется только на следующем открытии — без same-close look-ahead.</figcaption>
+</figure>
+<p>Audit H5 подтвердил look-ahead: решение и исполнение на одном close. Аблация на gap-фикстуре: 130.44% → 120.78%, DD 9.40 → 10.24, PF 10.92 → 9.62. На 1h-данных эффект меньше, но он односторонний.</p>
+<p>Модель:</p>
+<ul><li>сигнал на close <code>i</code> попадает в очередь;</li><li>fill на <code>open[i+1]</code> с теми же fee/slippage;</li><li>стоп/тейк остаются внутридневными;</li><li>pending исполняется до защитных проверок свечи;</li><li>решение на последней свече игнорируется, позиция закрывается в конце периода;</li><li>гейты <code>maxAdds</code>/наличие позиции перепроверяются при исполнении.</li></ul>
+<p>AI-поиск и holdout по умолчанию <code>next-open</code>. Бэктесты ручных стратегий/PDF пока остаются <code>same-close</code> до отдельной перебазировки. Откат: <code>AI_SEARCH_EXECUTION=same-close</code> или <code>execution: &quot;same-close&quot;</code> в запросе.</p>
+<h2>14. Рекомендации</h2>
+<p>Рекомендация содержит:</p>
+<ul><li>стратегию и параметры;</li><li>OOS median/mean/worst, DD, trades, positive folds, stability;</li><li>holdout return;</li><li>policy score;</li><li>suggested allocation;</li><li>invalidation rules;</li><li>TTL (срок жизни).</li></ul>
+<p>Владелец может принять рекомендацию, отклонить её или создать черновик робота. Черновик <strong>не запускается автоматически</strong>. AI не меняет бюджет, не останавливает роботов и не перераспределяет позиции.</p>
+<h2>15. Риск-слой</h2>
+<p>Перед созданием черновика проверяется:</p>
+<ul><li>свободные worker slots;</li><li>свободный AI-бюджет;</li><li>максимальная инвестированная доля;</li><li>per-bot allocation;</li><li>per-token exposure.</li></ul>
+<p>Если лимит не позволяет, черновик пропускается с причиной. Это не ошибка, а нормальная защита. Риск-слой не «дорисовывает» доходность и не ослабляет лимиты.</p>
+<h2>16. Paper-боты</h2>
+<figure class="diagram">
+<svg viewBox="0 0 920 260" role="img" aria-label="Paper bot runner">
+<rect x="20" y="40" width="170" height="70" rx="8" fill="#f8fafc" stroke="#64748b"/>
+<text x="105" y="68" text-anchor="middle" font-size="13" font-weight="700">Tick 60s</text>
+<text x="105" y="90" text-anchor="middle" font-size="11">advisory lock</text>
+<rect x="220" y="40" width="170" height="70" rx="8" fill="#eff6ff" stroke="#2563eb"/>
+<text x="305" y="68" text-anchor="middle" font-size="13" font-weight="700">Quote</text>
+<text x="305" y="90" text-anchor="middle" font-size="11">свежесть, цена</text>
+<rect x="420" y="40" width="170" height="70" rx="8" fill="#ecfdf5" stroke="#059669"/>
+<text x="505" y="68" text-anchor="middle" font-size="13" font-weight="700">Decision</text>
+<text x="505" y="90" text-anchor="middle" font-size="11">strategy evaluate</text>
+<rect x="620" y="40" width="170" height="70" rx="8" fill="#fffbeb" stroke="#d97706"/>
+<text x="705" y="68" text-anchor="middle" font-size="13" font-weight="700">Fill</text>
+<text x="705" y="90" text-anchor="middle" font-size="11">paper, fee/slippage</text>
+<rect x="220" y="150" width="570" height="70" rx="8" fill="#f5f3ff" stroke="#7c3aed"/>
+<text x="505" y="178" text-anchor="middle" font-size="13" font-weight="700">Position / equity snapshot / trade &amp; event journal</text>
+<text x="505" y="200" text-anchor="middle" font-size="11">owner-only start/stop; invalidation advisory</text>
+<line x1="190" y1="75" x2="220" y2="75" stroke="#334155" stroke-width="2" marker-end="url(#a7)"/>
+<line x1="390" y1="75" x2="420" y2="75" stroke="#334155" stroke-width="2" marker-end="url(#a7)"/>
+<line x1="590" y1="75" x2="620" y2="75" stroke="#334155" stroke-width="2" marker-end="url(#a7)"/>
+<line x1="505" y1="110" x2="505" y2="150" stroke="#334155" stroke-width="2" marker-end="url(#a7)"/>
+<defs><marker id="a7" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#334155"/></marker></defs>
+</svg>
+<figcaption>Рис. 9. Paper-бот живёт на виртуальных деньгах; реальные ключи и ledger не участвуют.</figcaption>
+</figure>
+<p>Бот тикает раз в 60 секунд под advisory lock. Он читает свежие котировки, вызывает стратегию, исполняет paper-fill, обновляет позицию и equity snapshot, пишет trade/event journal. Owner-only start/stop. Если рекомендация истекла или стратегия сломана, бот может быть остановлен/помечен, но автоматического перераспределения нет.</p>
+<h2>17. Инвалидация</h2>
+<p>Инвалидация — advisory-сигналы:</p>
+<ul><li>drawdown;</li><li>дневной убыток;</li><li>устаревшая котировка;</li><li>стоп/тейк;</li><li>истёкший горизонт;</li><li>отрицательный P&amp;L;</li><li>ошибка бота;</li><li>отсутствующая рекомендация.</li></ul>
+<p>Монитор не останавливает бота сам. Он показывает <code>review</code>/<code>stop</code> и причину; решение остаётся за владельцем.</p>
+<h2>18. Надёжность и безопасность</h2>
+<ul><li>Пул БД ограничен; долгие запросы не должны исчерпывать соединения.</li><li>Поиск и цикл можно отменить; stale recovery помечает зависшие шаги.</li><li><code>ai_jobs</code> — durable-очередь с heartbeat и <code>FOR UPDATE SKIP LOCKED</code>.</li><li><code>audit_log</code> append-only; приложение не имеет UPDATE/DELETE.</li><li>Бэкапы: PITR + ежедневный шифрованный дамп + off-site retention. RPO 1 час, RTO 4 часа.</li><li>Приватные ключи/seed никогда не на сервере; swap выше $500 требует step-up TOTP.</li><li>CSRF/Origin проверки; production отклоняет отсутствующий Origin/Referer.</li><li>AI-страницы и рекомендации owner-only.</li><li>Health-уведомления ботов имеют кулдаун 6 часов на бота и причину. Повторный <code>A → B → A</code> не присылает <code>A</code> снова; recovery отправляется только после реально отправленного stop. Живой статус при этом остаётся на странице AI и в read-only health endpoint (ADR 0079).</li><li>Удаление токена из вселенной и скрытие завершённого прогона не удаляют свечи, артефакты, кандидатов и рекомендации; действия пишутся в аудит (ADR 0080).</li></ul>
+<h2>19. Разобранные примеры</h2>
+<p><strong>Пример A: 0 рекомендаций.</strong> Токен падал последние 30 дней. Screen отсеял 810 из 5 000; полный OOS прошли 409; top-50 holdout все ушли в минус. Итог — 0. Это не сбой: политика сознательно консервативна. Near-miss показывает, что именно не прошло.</p>
+<p><strong>Пример B: near-miss.</strong> Сетка/докупка дали положительный OOS, но holdout −36% или DD &gt; 90%. Это типичный режимный провал; рекомендацией не становится.</p>
+<p><strong>Пример C: рекомендация.</strong> Вариант прошёл OOS median &gt; 0, 5+ положительных фолдов, DD ≤ 20%, worst ≥ −15%, затем holdout &gt; 0, 2 из 3 блоков неотрицательны, последний блок неотрицателен и policy &gt; 0. Создаётся кандидат с allocation и invalidation rules; черновик робота ждёт ручного старта.</p>
+<p><strong>Пример D: риск-лимит.</strong> Свободных worker slots нет или token exposure уже на максимуме. Черновик пропускается с причиной; это не ошибка поиска.</p>
+<p><strong>Пример E: масштаб.</strong> 50k вариантов: screen 27 716 за 32 с, full 8 folds 641 с на 4 воркерах, 1 597 OOS, 674 с total. На production 6 воркерах ~7.5 минуты. 100k: 59 110 выживших, 2 987 OOS, 21.5 мин full на 4 воркерах (~15 мин на 6). 200k: ровно 200 000 сгенерировано за 3.6 с, 118 213 прошли screen за 115 с; полный прогон ~30 мин на 6 воркерах.</p>
+<h2>20. Формулы и глоссарий</h2>
+<ul><li><strong>Return</strong> = (final equity − initial) / initial × 100.</li><li><strong>Max drawdown</strong> = max по equity curve от пика до впадины, %.</li><li><strong>Median OOS</strong> = медиана доходностей фолдов.</li><li><strong>Stability</strong> = positive folds / folds × 100.</li><li><strong>Policy score</strong> = median OOS − 0.5 × max drawdown.</li><li><strong>Fee</strong> = 25 bps на сторону; <strong>slippage</strong> = 10 bps на сторону.</li><li><strong>Allocation</strong> = min(worker allocation, token exposure cap, free budget).</li><li><strong>OOS</strong> — out-of-sample, 10-дневный фолд после train/purge.</li><li><strong>Holdout</strong> — последние 30 дней, финальная проверка.</li><li><strong>Near-miss</strong> — прошёл OOS, но не holdout/фильтр; не рекомендация.</li></ul>
+<h2>21. Приложение</h2>
+<p><strong>Ключевые файлы.</strong></p>
+<ul><li><code>apps/api/src/modules/ai-trading/ai-search.service.ts</code> — оркестрация поиска, воронка, holdout.</li><li><code>ai-search.evaluate.ts</code> — fold-агрегация и fast/Decimal dispatch.</li><li><code>ai-search.signals.ts</code> — native-индикаторы и signal screen.</li><li><code>ai-search.funnel.ts</code> — stage/control/recall.</li><li><code>ai-search.pool.ts</code>, <code>ai-search.worker.ts</code> — worker pool.</li><li><code>ai-fast-backtest.ts</code>, <code>ai-fast-strategies.ts</code>, <code>ai-fast-compare.ts</code> — native-движок.</li><li><code>apps/api/src/modules/trading-bots/backtest/backtest.engine.ts</code> — Decimal-движок.</li><li><code>apps/api/src/modules/trading-bots/strategies/index.ts</code> — реестр стратегий.</li><li><code>apps/web/src/features/ai-trading/ai-trading-page.tsx</code> — AI UI.</li></ul>
+<p><strong>Env.</strong></p>
+<ul><li><code>AI_SEARCH_WORKERS</code> — размер пула (production 6).</li><li><code>AI_SEARCH_PROBE_FOLDS</code> — 0 по умолчанию.</li><li><code>AI_SEARCH_FULL_BUDGET</code> — 0 (без лимита) по умолчанию.</li><li><code>AI_SEARCH_CONTROL_SAMPLE</code> — 50.</li><li><code>AI_SEARCH_FAST_ENGINE</code> — 0 отключает native.</li><li><code>AI_SEARCH_EXECUTION</code> — <code>next-open</code> по умолчанию, <code>same-close</code> откат.</li></ul>
+<p><strong>ADR.</strong> 0071–0081: AI control center, recommendation-only, Binance fallback, one-click cycle, worker pool, funnel, fast engine, next-open, health-notification cooldown, universe/history deletion, holdout top-50 and 10-day blocks.</p>
+<p><strong>Аудит.</strong> H1 (holdout warmup) исправлен; H4 (stateful warmup) исправлен; H5 (look-ahead) исправлен next-open; H2 (top-10) заменён диверсифицированным top-50 с 10-дневными блоками; H3/H6 (данные/наблюдаемость) — coverage/variantMetrics; H7/H8/H9 — арифметика/генерация/статистика проверены; H10 — 0 рекомендаций статистически правдоподобен. Пороги не ослаблялись.</p>
+<p><strong>Воспроизводимость.</strong> Пилоты: <code>scripts/ai-staged-pilot.mjs</code>, <code>scripts/ai-screen-pilot.mjs</code>; PDF: <code>node scripts/docs/build-ai-engineering-guide.mjs</code>. Секреты и production-данные не используются.</p>
+</body>
 </html>

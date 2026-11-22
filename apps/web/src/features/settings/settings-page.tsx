@@ -149,7 +149,7 @@ export function SettingsPage() {
             className="h-11 w-full border-emerald-500 bg-emerald-500 px-5 text-white shadow-sm hover:border-emerald-600 hover:bg-emerald-600 sm:w-auto"
           >
             <a
-              href="/docs/nexter-ai-system-engineering.pdf?v=2"
+              href="/docs/nexter-ai-system-engineering.pdf?v=3"
               download="nexter-ai-system-engineering.pdf"
             >
               <NavIcon name="download" className="h-4 w-4" />
