@@ -4,3 +4,4 @@ export * from './defaults';
 export * from './decimal';
 export * from './indicators';
 export * from './regime-classifier';
+export * from './strategies';
