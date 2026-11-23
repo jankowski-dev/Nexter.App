@@ -66,13 +66,26 @@ function randomFieldValue(
   return field.integer ? Math.round(value) : Number(value.toFixed(8));
 }
 
+export function strategyKeysForMode(
+  definitions: StrategyDefinition[],
+  mode: 'legacy' | 'adaptive',
+): string[] {
+  if (mode === 'adaptive') return ['adaptive_regime'];
+  return definitions
+    .filter((definition) => definition.key !== 'adaptive_regime' && definition.aiEligible !== false)
+    .map((definition) => definition.key);
+}
+
 export function generateSearchVariants(
   definitions: StrategyDefinition[],
   total: number,
   seed = 7,
+  strategyKeys?: string[],
 ): SearchVariant[] {
   const capped = Math.max(1, Math.min(200000, Math.floor(total)));
-  const eligible = definitions.filter((definition) => definition.aiEligible !== false);
+  const eligible = strategyKeys
+    ? definitions.filter((definition) => strategyKeys.includes(definition.key))
+    : definitions.filter((definition) => definition.aiEligible !== false);
   if (eligible.length === 0) return [];
   const perStrategy = Math.floor(capped / eligible.length);
   const remainder = capped % eligible.length;
@@ -166,14 +179,14 @@ export function buildSearchFolds(
     const oosStart = trainEnd + 2 * perDay;
     const oosEnd = oosStart + 10 * perDay;
     if (oosEnd > searchEnd) break;
-    const warmupCandles = Math.max(15 * perDay, 240);
-    const warmupStart = Math.max(trainStart, oosStart - warmupCandles);
+    const warmupCandles = Math.max(90 * perDay, 240);
+    const warmupStart = Math.max(0, oosStart - warmupCandles);
     folds.push({
       candles: use.slice(warmupStart, oosEnd),
       warmupCandles: oosStart - warmupStart,
     });
   }
-  const holdoutWarmupCandles = Math.min(searchEnd, Math.max(15 * perDay, 240));
+  const holdoutWarmupCandles = Math.min(searchEnd, Math.max(90 * perDay, 240));
   const settlementRanges = Array.from({ length: HOLD_OUT_CYCLES }, (_, index) => ({
     start: (index * HOLD_OUT_CYCLE_DAYS + HOLD_OUT_TEST_DAYS) * perDay,
     end: (index * HOLD_OUT_CYCLE_DAYS + HOLD_OUT_CYCLE_DAYS) * perDay,

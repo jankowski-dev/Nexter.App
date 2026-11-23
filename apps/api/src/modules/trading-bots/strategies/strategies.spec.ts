@@ -65,8 +65,8 @@ function flatDailyHistory(days: number, low = 1, high = 2): StrategySample[] {
 }
 
 describe('trading bot strategy registry', () => {
-  it('exposes thirteen templates with valid default params', () => {
-    expect(strategyDefinitions).toHaveLength(13);
+  it('exposes fourteen templates with valid default params', () => {
+    expect(strategyDefinitions).toHaveLength(14);
     expect(strategyTemplates().map((template) => template.key)).toEqual([
       'momentum_breakout',
       'mean_reversion',
@@ -80,10 +80,12 @@ describe('trading bot strategy registry', () => {
       'squeeze_breakout',
       'failed_breakout',
       'daily_average',
+      'adaptive_regime',
       'static_limit',
     ]);
 
     for (const definition of strategyDefinitions) {
+      expect(botStrategyKeySchema.safeParse(definition.key).success).toBe(true);
       expect(definition.parseParams(definition.defaultParams)).toEqual(definition.defaultParams);
       expect(definition.guide.length).toBeGreaterThan(0);
       expect(definition.bestFor.length).toBeGreaterThan(0);

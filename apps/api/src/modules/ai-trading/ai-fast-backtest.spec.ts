@@ -1,7 +1,7 @@
 import type { BotCandle } from '@nexter/contracts';
 import { describe, expect, it } from 'vitest';
 import { runBacktest } from '../trading-bots/backtest/backtest.engine';
-import { dailyAverage, strategyDefinitions } from '../trading-bots/strategies';
+import { adaptiveRegime, dailyAverage, strategyDefinitions } from '../trading-bots/strategies';
 import { createFastRuntime } from './ai-fast-strategies';
 import { aggregateVariant, buildSearchFolds, generateSearchVariants } from './ai-search.helpers';
 import { evaluateVariantFolds } from './ai-search.evaluate';
@@ -29,6 +29,28 @@ function seededCandles(): BotCandle[] {
       volumeUsd: '1000000',
     };
   });
+}
+
+function trendCandles(): BotCandle[] {
+  const start = Date.parse('2026-01-01T00:00:00Z');
+  const candles: BotCandle[] = [];
+  let price = 100;
+  for (let index = 0; index < 120 * 24; index += 1) {
+    const day = Math.floor(index / 24);
+    let drift = 0.004;
+    if (day >= 95 && day < 98) drift = -0.03;
+    if (day >= 100) drift = 0.003;
+    price = Math.max(1, price * (1 + drift + 0.001 * Math.sin(index / 7)));
+    candles.push({
+      date: new Date(start + index * 3_600_000).toISOString(),
+      openUsd: price.toFixed(8),
+      highUsd: (price * 1.003).toFixed(8),
+      lowUsd: (price * 0.997).toFixed(8),
+      closeUsd: price.toFixed(8),
+      volumeUsd: '1000000',
+    });
+  }
+  return candles;
 }
 
 describe('native AI search engine', () => {
@@ -73,6 +95,29 @@ describe('native AI search engine', () => {
       }
     }
   }, 180_000);
+
+  it('has a native runtime for adaptive_regime and matches the Decimal engine', () => {
+    const candles = trendCandles();
+    const fold = { candles, warmupCandles: 90 * 24 };
+    const variant = { strategyKey: 'adaptive_regime', params: adaptiveRegime.defaultParams };
+    expect(createFastRuntime(variant, fold.candles)).not.toBeNull();
+    for (const execution of ['same-close', 'next-open'] as const) {
+      const fast = evaluateVariantFolds(variant, [fold], '1h', execution);
+      const decimal = runBacktest(adaptiveRegime, variant.params, fold.candles, {
+        initialCapitalUsd: '1000',
+        feeBps: 25,
+        slippageBps: 10,
+        changeLookbackCandles: 24,
+        warmupCandles: fold.warmupCandles,
+        execution,
+      });
+      expect(decimal.stats.tradesCount).toBeGreaterThan(0);
+      expect({ execution, ...fast.aggregate }).toEqual({
+        execution,
+        ...aggregateVariant([decimal.stats]),
+      });
+    }
+  }, 120_000);
 
   it('has a native runtime for daily_average and matches the Decimal engine', () => {
     const candles = seededCandles().slice(0, 30 * 24);

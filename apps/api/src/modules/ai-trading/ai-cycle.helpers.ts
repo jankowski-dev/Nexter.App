@@ -28,6 +28,7 @@ export interface NormalizedCycle {
   draftsCreated: number;
   oosPassed: number;
   holdoutTested: number;
+  strategyMode: 'legacy' | 'adaptive';
   settlementDays: number;
   holdoutCycles: number;
   rejectionReasons: Record<string, number>;
@@ -137,6 +138,7 @@ export function normalizeCycle(run: CycleRunLike, summaryValue: unknown): Normal
     draftsCreated: nonNegativeInt(summary.draftsCreated),
     oosPassed: nonNegativeInt(summary.oosPassed),
     holdoutTested: nonNegativeInt(summary.holdoutTested),
+    strategyMode: summary.strategyMode === 'adaptive' ? 'adaptive' : 'legacy',
     settlementDays: nonNegativeInt(summary.settlementDays),
     holdoutCycles: nonNegativeInt(summary.holdoutCycles),
     rejectionReasons: normalizeReasons(summary.rejectionReasons),

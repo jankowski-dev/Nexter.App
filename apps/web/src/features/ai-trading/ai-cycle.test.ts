@@ -10,6 +10,7 @@ import {
   aiRecommendationSchema,
   aiSearchFunnelStageLabels,
   aiSearchNearMissSchema,
+  aiSearchRequestSchema,
   readAiCycleLimit,
   updateAiSettingsRequestSchema,
   withAiCycleLimit,
@@ -48,6 +49,16 @@ describe('AI cycle contracts', () => {
         maxDrafts: 11,
       }),
     ).toThrow();
+  });
+
+  it('defaults to legacy mode and accepts the adaptive-only mode', () => {
+    const assetId = '11111111-1111-4111-8111-111111111111';
+    expect(aiSearchRequestSchema.parse({ assetId }).strategyMode).toBe('legacy');
+    expect(aiCycleRequestSchema.parse({ assetId }).strategyMode).toBe('legacy');
+    expect(aiSearchRequestSchema.parse({ assetId, strategyMode: 'adaptive' }).strategyMode).toBe(
+      'adaptive',
+    );
+    expect(() => aiSearchRequestSchema.parse({ assetId, strategyMode: 'mixed' })).toThrow();
   });
 
   it('accepts the four ordered steps and rejects unknown keys', () => {

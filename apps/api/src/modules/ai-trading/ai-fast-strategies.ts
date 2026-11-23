@@ -620,6 +620,171 @@ export function createFastRuntime(
         },
       });
     }
+    case 'adaptive_regime': {
+      const fastDays = Math.max(1, Math.floor(num(params, 'trendFastDays', 7)));
+      const slowDays = Math.max(fastDays + 1, Math.floor(num(params, 'trendSlowDays', 30)));
+      const longDays = Math.max(slowDays, Math.floor(num(params, 'trendLongDays', 90)));
+      const pullback = num(params, 'pullbackPct', 3);
+      const atrMult = num(params, 'atrStopMult', 2.5);
+      const trailPct = num(params, 'trailPct', 4);
+      const crashDrawdown = num(params, 'crashDrawdownPct', 10);
+      const maxAdds = Math.max(1, Math.floor(num(params, 'maxAdds', 2)));
+      const dayKeys = candles.map((candle) => utcDayKey(candle.date));
+      const uniqueDays = [...new Set(dayKeys)].sort((left, right) => left.localeCompare(right));
+      const dayIndex = new Map(uniqueDays.map((day, index) => [day, index]));
+      const dailyCloses: number[] = [];
+      const dailyHighs: number[] = [];
+      const dailyLows: number[] = [];
+      for (const day of uniqueDays) {
+        let high = -Infinity;
+        let low = Infinity;
+        let close = 0;
+        for (let index = 0; index < candles.length; index += 1) {
+          if (dayKeys[index] !== day) continue;
+          const candle = candles[index] as BotCandle;
+          close = Number(candle.closeUsd);
+          const synthetic = candle.synthetic === true;
+          high = Math.max(high, synthetic ? close : Number(candle.highUsd));
+          low = Math.min(low, synthetic ? close : Number(candle.lowUsd));
+        }
+        dailyCloses.push(close);
+        dailyHighs.push(Number.isFinite(high) ? high : close);
+        dailyLows.push(Number.isFinite(low) ? low : close);
+      }
+      const smaBefore = (period: number): Array<number | null> => {
+        const result: Array<number | null> = [];
+        let sum = 0;
+        for (let index = 0; index < dailyCloses.length; index += 1) {
+          const value = dailyCloses[index - 1];
+          if (index > 0) sum += value as number;
+          if (index > period) sum -= dailyCloses[index - period - 1] as number;
+          result.push(index >= period ? sum / period : null);
+        }
+        return result;
+      };
+      const fastBefore = smaBefore(fastDays);
+      const slowBefore = smaBefore(slowDays);
+      const longBefore: Array<number | null> = [];
+      const atrBefore: number[] = [];
+      const trueRanges: number[] = [0];
+      for (let index = 1; index < dailyCloses.length; index += 1) {
+        const high = dailyHighs[index] as number;
+        const low = dailyLows[index] as number;
+        const previous = dailyCloses[index - 1] as number;
+        trueRanges.push(Math.max(high - low, Math.abs(high - previous), Math.abs(low - previous)));
+      }
+      for (let day = 0; day < dailyCloses.length; day += 1) {
+        if (day < longDays) {
+          longBefore.push(null);
+        } else {
+          const slice = dailyCloses.slice(0, day).slice(-longDays);
+          longBefore.push(slice.reduce((sum, value) => sum + value, 0) / slice.length);
+        }
+        if (day < 2) {
+          atrBefore.push(0.5);
+        } else {
+          const slice = trueRanges.slice(1, day).slice(-14);
+          const atr = slice.reduce((sum, value) => sum + value, 0) / slice.length;
+          const close = dailyCloses[day - 1] as number;
+          atrBefore.push(close > 0 ? Math.max((atr / close) * 100, 0.5) : 0.5);
+        }
+      }
+      const candleTimes = candles.map((candle) => new Date(candle.date).getTime());
+      let hwm = 0;
+      let trail: number | null = null;
+      let cooldownUntil = 0;
+      const reset = () => {
+        hwm = 0;
+        trail = null;
+        cooldownUntil = 0;
+      };
+      return build({
+        stateful: true,
+        maxAdds,
+        stopLossPct: null,
+        takeProfitPct: null,
+        warmup: () => reset(),
+        evaluate: (index, current, _change24h, position, buyCount) => {
+          const day = dayIndex.get(dayKeys[index] as string) ?? 0;
+          const fast = fastBefore[day] ?? null;
+          const slow = slowBefore[day] ?? null;
+          const long = longBefore[day] ?? null;
+          const atr = atrBefore[day] ?? 0.5;
+          const trendUp =
+            fast !== null &&
+            slow !== null &&
+            cmp.gt(fast, slow) &&
+            (long === null || cmp.gt(slow, long)) &&
+            cmp.gt(current, slow);
+          const inCooldown = cooldownUntil > (candleTimes[index] as number);
+          const cooldownNow = () => {
+            cooldownUntil = (candleTimes[index] as number) + 24 * 3_600_000;
+            hwm = current;
+            trail = null;
+          };
+          if (position) {
+            const avg = position.avgCostUsd;
+            hwm = hwm > 0 ? Math.max(hwm, current) : current;
+            if (cmp.lte(current, avg * (1 - (atrMult * atr) / 100))) {
+              cooldownNow();
+              return { action: 'sell', reason: 'atr stop' };
+            }
+            if (hwm > 0 && cmp.gte(((hwm - current) / hwm) * 100, crashDrawdown)) {
+              cooldownNow();
+              return { action: 'sell', reason: 'crash' };
+            }
+            if (fast !== null && slow !== null && cmp.lt(fast, slow)) {
+              cooldownUntil = 0;
+              hwm = current;
+              trail = null;
+              return { action: 'sell', reason: 'trend break' };
+            }
+            const trailActive = cmp.gte(current, avg * 1.08) || trail !== null;
+            if (trailActive) {
+              const candidate = hwm * (1 - trailPct / 100);
+              trail = trail === null ? candidate : Math.max(trail, candidate);
+              if (cmp.lte(current, trail)) {
+                cooldownNow();
+                return { action: 'sell', reason: 'trailing stop' };
+              }
+              if (
+                trendUp &&
+                buyCount < maxAdds &&
+                fast !== null &&
+                cmp.lte(current, fast * (1 - pullback / 100))
+              ) {
+                return { action: 'buy', reason: 'pullback add' };
+              }
+              return HOLD;
+            }
+            if (
+              trendUp &&
+              buyCount < maxAdds &&
+              fast !== null &&
+              cmp.lte(current, fast * (1 - pullback / 100))
+            ) {
+              return { action: 'buy', reason: 'pullback add' };
+            }
+            return HOLD;
+          }
+          if (inCooldown) return HOLD;
+          if (!trendUp) {
+            hwm = current;
+            trail = null;
+            return HOLD;
+          }
+          if (fast !== null && cmp.lte(current, fast * (1 - pullback / 100))) {
+            hwm = current;
+            trail = null;
+            cooldownUntil = 0;
+            return { action: 'buy', reason: 'pullback in trend' };
+          }
+          hwm = current;
+          trail = null;
+          return HOLD;
+        },
+      });
+    }
     default:
       // Unknown or intentionally unsupported strategies use the Decimal
       // engine; the search falls back per variant.

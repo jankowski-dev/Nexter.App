@@ -56,6 +56,7 @@ import {
   minTradesFor,
   selectHoldoutCandidates,
   stabilityPctFor,
+  strategyKeysForMode,
   searchWorkerCount,
   shuffleVariantsInPlace,
   MIN_SEARCH_DAYS,
@@ -104,6 +105,7 @@ interface SearchRunSummary {
   assetId: string;
   timeframe: AiSearchTimeframe;
   execution: AiSearchExecution;
+  strategyMode: 'legacy' | 'adaptive';
   variants: number;
   lookbackDays?: number;
   progress: SearchProgress;
@@ -195,7 +197,21 @@ export class AiSearchService {
     }
     const lookbackDays = Math.min(180, availableDays);
 
-    const variants = generateSearchVariants(strategyDefinitions, input.variants, input.seed ?? 7);
+    const strategyKeys =
+      input.strategyMode === 'adaptive'
+        ? ['adaptive_regime']
+        : strategyDefinitions
+            .filter(
+              (definition) =>
+                definition.key !== 'adaptive_regime' && definition.aiEligible !== false,
+            )
+            .map((definition) => definition.key);
+    const variants = generateSearchVariants(
+      strategyDefinitions,
+      input.variants,
+      input.seed ?? 7,
+      strategyKeys,
+    );
     if (variants.length === 0) {
       throw new BadRequestException({
         code: 'VALIDATION_ERROR',
@@ -215,6 +231,7 @@ export class AiSearchService {
             assetId: input.assetId,
             timeframe: input.timeframe,
             execution: this.executionFor(input),
+            strategyMode: input.strategyMode,
             variants: variants.length,
             lookbackDays,
             progress: { evaluated: 0, total: variants.length },
@@ -254,6 +271,7 @@ export class AiSearchService {
             assetId: input.assetId,
             timeframe: input.timeframe,
             execution: this.executionFor(input),
+            strategyMode: input.strategyMode,
             variants: variants.length,
             lookbackDays,
             progress: { evaluated: 0, total: variants.length },
@@ -308,6 +326,7 @@ export class AiSearchService {
                 assetId: input.assetId,
                 timeframe: input.timeframe,
                 execution: this.executionFor(input),
+                strategyMode: input.strategyMode,
                 variants: variantCount,
                 progress: { evaluated: 0, total: variantCount },
                 error: message,
@@ -374,7 +393,12 @@ export class AiSearchService {
       await this.failRun(userId, job.runId, input, 0, new Error(message));
       return;
     }
-    const variants = generateSearchVariants(strategyDefinitions, input.variants, input.seed ?? 7);
+    const variants = generateSearchVariants(
+      strategyDefinitions,
+      input.variants,
+      input.seed ?? 7,
+      strategyKeysForMode(strategyDefinitions, input.strategyMode),
+    );
     const lookbackDays = Math.min(180, availableDays);
     const control = { cancelled: false };
     this.active.set(job.runId, control);
@@ -480,6 +504,7 @@ export class AiSearchService {
             name: asset.name,
             timeframe: typeof summary.timeframe === 'string' ? summary.timeframe : '1h',
             execution: summary.execution ?? 'next-open',
+            strategyMode: summary.strategyMode ?? 'legacy',
             status: row.status as AiSearchStatus['status'],
             variants: summary.variants ?? summary.progress?.total ?? 0,
             recommended: summary.stats?.recommended ?? 0,
@@ -712,6 +737,10 @@ export class AiSearchService {
         (payload.execution as AiSearchExecution | undefined) ??
         (run.summary as Partial<SearchRunSummary>).execution ??
         'next-open',
+      strategyMode:
+        (payload.strategyMode as AiSearchResults['strategyMode'] | undefined) ??
+        (run.summary as Partial<SearchRunSummary>).strategyMode ??
+        'legacy',
       settlementDays:
         typeof payload.settlementDays === 'number'
           ? Math.max(0, Math.floor(payload.settlementDays))
@@ -1412,6 +1441,7 @@ export class AiSearchService {
       assetId: input.assetId,
       timeframe: input.timeframe,
       execution,
+      strategyMode: input.strategyMode,
       settlementDays: folds.settlementDays,
       holdoutCycles: folds.holdoutCycles,
       variants: variants.length,
@@ -1497,6 +1527,7 @@ export class AiSearchService {
             assetId: input.assetId,
             timeframe: input.timeframe,
             execution,
+            strategyMode: input.strategyMode,
             variants: variants.length,
             lookbackDays,
             progress: {
@@ -1589,6 +1620,7 @@ export class AiSearchService {
               assetId: input.assetId,
               timeframe: input.timeframe,
               execution: progress.execution ?? this.executionFor(input),
+              strategyMode: input.strategyMode,
               variants: progress.total,
               progress,
             } satisfies SearchRunSummary,

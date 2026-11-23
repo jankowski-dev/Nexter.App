@@ -14,6 +14,7 @@ export const botStrategyKeys = [
   'squeeze_breakout',
   'failed_breakout',
   'daily_average',
+  'adaptive_regime',
   'static_limit',
 ] as const;
 
