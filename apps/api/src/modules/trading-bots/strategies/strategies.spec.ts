@@ -85,6 +85,7 @@ describe('trading bot strategy registry', () => {
     ]);
 
     for (const definition of strategyDefinitions) {
+      expect(botStrategyKeySchema.safeParse(definition.key).success).toBe(true);
       expect(definition.parseParams(definition.defaultParams)).toEqual(definition.defaultParams);
       expect(definition.guide.length).toBeGreaterThan(0);
       expect(definition.bestFor.length).toBeGreaterThan(0);
