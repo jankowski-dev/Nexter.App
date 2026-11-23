@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Decimal } from 'decimal.js';
+import type { BotCandle } from '@nexter/contracts';
 import {
   bollingerBands,
   dailyAverageLevels,
@@ -967,6 +968,283 @@ function readStaticLimitPhase(state: Record<string, unknown> | undefined): 'arme
   return state?.phase === 'waiting' ? 'waiting' : 'armed';
 }
 
+const adaptiveRegimeParamsSchema = z
+  .object({
+    trendFastDays: z.number().int().min(3).max(14).default(7),
+    trendSlowDays: z.number().int().min(14).max(60).default(30),
+    trendLongDays: z.number().int().min(60).max(180).default(90),
+    pullbackPct: z.number().min(1).max(10).default(3),
+    atrStopMult: z.number().min(1).max(5).default(2.5),
+    trailPct: z.number().min(1).max(10).default(4),
+    crashDrawdownPct: z.number().min(5).max(20).default(10),
+    maxAdds: z.number().int().min(1).max(3).default(2),
+  })
+  .refine((value) => value.trendFastDays < value.trendSlowDays, {
+    message: 'trendFastDays must be less than trendSlowDays',
+    path: ['trendFastDays'],
+  })
+  .refine((value) => value.trendSlowDays <= value.trendLongDays, {
+    message: 'trendSlowDays must not exceed trendLongDays',
+    path: ['trendSlowDays'],
+  });
+
+interface DailyBar {
+  day: string;
+  high: Decimal;
+  low: Decimal;
+  close: Decimal;
+}
+
+function adaptiveDailyBars(ctx: {
+  candles?: BotCandle[];
+  history: Array<{ priceUsd: string; capturedAt: Date }>;
+  now: Date;
+}): DailyBar[] {
+  const today = ctx.now.toISOString().slice(0, 10);
+  const rows = new Map<string, { high: Decimal; low: Decimal; close: Decimal }>();
+  if (ctx.candles && ctx.candles.length > 0) {
+    for (const candle of ctx.candles) {
+      const day = new Date(candle.date).toISOString().slice(0, 10);
+      if (day >= today) continue;
+      const high = dec(candle.highUsd);
+      const low = dec(candle.lowUsd);
+      const close = dec(candle.closeUsd);
+      const row = rows.get(day);
+      if (!row) {
+        rows.set(day, { high, low, close });
+      } else {
+        row.high = Decimal.max(row.high, high);
+        row.low = Decimal.min(row.low, low);
+        row.close = close;
+      }
+    }
+  } else {
+    for (const sample of ctx.history) {
+      const day = sample.capturedAt.toISOString().slice(0, 10);
+      if (day >= today) continue;
+      const price = dec(sample.priceUsd);
+      const row = rows.get(day);
+      if (!row) {
+        rows.set(day, { high: price, low: price, close: price });
+      } else {
+        row.high = Decimal.max(row.high, price);
+        row.low = Decimal.min(row.low, price);
+        row.close = price;
+      }
+    }
+  }
+  return [...rows.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([day, row]) => ({ day, ...row }));
+}
+
+function adaptiveSma(values: Decimal[], period: number): Decimal | null {
+  if (values.length < period) return null;
+  const slice = values.slice(-period);
+  return slice.reduce((sum, value) => sum.plus(value), new Decimal(0)).div(period);
+}
+
+function adaptiveAtrPct(bars: DailyBar[], period = 14): Decimal {
+  if (bars.length < 2) return new Decimal(0);
+  const trueRanges: Decimal[] = [];
+  for (let index = 1; index < bars.length; index += 1) {
+    const bar = bars[index] as DailyBar;
+    const previous = bars[index - 1] as DailyBar;
+    const highLow = bar.high.minus(bar.low);
+    const highClose = bar.high.minus(previous.close).abs();
+    const lowClose = bar.low.minus(previous.close).abs();
+    trueRanges.push(Decimal.max(highLow, highClose, lowClose));
+  }
+  const slice = trueRanges.slice(-period);
+  if (slice.length === 0) return new Decimal(0);
+  const atr = slice.reduce((sum, value) => sum.plus(value), new Decimal(0)).div(slice.length);
+  const last = bars[bars.length - 1] as DailyBar;
+  return last.close.gt(0) ? atr.div(last.close).mul(100) : new Decimal(0);
+}
+
+export const adaptiveRegime: StrategyDefinition = {
+  key: 'adaptive_regime',
+  version: 1,
+  icon: 'layers',
+  kind: 'system',
+  stateful: true,
+  aiEligible: false,
+  historySampling: 'hourly',
+  candleTimeframe: '1d',
+  name: 'Адаптивный режим',
+  description:
+    'Меняет поведение по режиму: покупает откат в тренде, ведёт трейлингом, быстро выходит при обвале и пережидает в кэше.',
+  guide:
+    'Стратегия классифицирует дневной режим по трём средним (быстрая, медленная и длинная) и волатильности ATR. В устойчивом росте покупает откат к быстрой средней, добавляет по тренду и ведёт позицию трейлинг-стопом после активации. При падении от максимума выше порога crashDrawdownPct или при стопе по ATR выходит и уходит в cooldown на 24 часа. Если быстрая средняя ниже медленной, стратегия не входит и держит кэш. Recovery — ожидание подтверждения тренда после cooldown. Это long-only стратегия без shorting; она не предсказывает будущее, а реагирует на текущий режим.',
+  bestFor:
+    'Токены с чередованием трендов и откатов, где важно не ловить обвал и не торговать в боковике.',
+  risks:
+    'В резком развороте режим определяется с задержкой; crash-стоп ограничивает убыток, но не исключает гэп. При нехватке дневных свечей длинный фильтр ослабляется. Частые развороты могут вызывать серию небольших стопов, поэтому cooldown обязателен.',
+  paramFields: [
+    {
+      key: 'trendFastDays',
+      label: 'Быстрый тренд, дней',
+      min: 3,
+      max: 14,
+      step: 1,
+      integer: true,
+    },
+    {
+      key: 'trendSlowDays',
+      label: 'Медленный тренд, дней',
+      min: 14,
+      max: 60,
+      step: 1,
+      integer: true,
+    },
+    {
+      key: 'trendLongDays',
+      label: 'Длинный тренд, дней',
+      min: 60,
+      max: 180,
+      step: 5,
+      integer: true,
+    },
+    { key: 'pullbackPct', label: 'Глубина отката', min: 1, max: 10, step: 0.1, unit: '%' },
+    { key: 'atrStopMult', label: 'Стоп по ATR', min: 1, max: 5, step: 0.1, unit: '×' },
+    { key: 'trailPct', label: 'Трейлинг', min: 1, max: 10, step: 0.1, unit: '%' },
+    {
+      key: 'crashDrawdownPct',
+      label: 'Порог обвала',
+      min: 5,
+      max: 20,
+      step: 0.5,
+      unit: '%',
+    },
+    { key: 'maxAdds', label: 'Добавлений', min: 1, max: 3, step: 1, integer: true },
+  ],
+  defaultParams: adaptiveRegimeParamsSchema.parse({}),
+  parseParams: (value) => adaptiveRegimeParamsSchema.parse(value),
+  evaluate: (ctx) => {
+    const params = adaptiveRegimeParamsSchema.parse(ctx.params);
+    const price = dec(ctx.priceUsd);
+    const bars = adaptiveDailyBars(ctx);
+    const closes = bars.map((bar) => bar.close);
+    const fast = adaptiveSma(closes, params.trendFastDays);
+    const slow = adaptiveSma(closes, params.trendSlowDays);
+    const long = adaptiveSma(
+      closes,
+      Math.min(params.trendLongDays, Math.max(params.trendSlowDays, closes.length)),
+    );
+    const atrPct = Decimal.max(adaptiveAtrPct(bars), new Decimal('0.5'));
+    const state = (ctx.state ?? {}) as Record<string, unknown>;
+    const previousHwm = typeof state.hwm === 'string' ? dec(state.hwm) : null;
+    const previousTrail = typeof state.trailStop === 'string' ? dec(state.trailStop) : null;
+    const cooldownUntil =
+      typeof state.cooldownUntil === 'string' ? new Date(state.cooldownUntil) : null;
+    const inCooldown = cooldownUntil !== null && ctx.now.getTime() < cooldownUntil.getTime();
+    const trendUp =
+      fast !== null &&
+      slow !== null &&
+      fast.gt(slow) &&
+      (long === null || slow.gt(long)) &&
+      price.gt(slow);
+
+    const cooldownState = (): StrategyState => ({
+      phase: 'COOLDOWN',
+      cooldownUntil: new Date(ctx.now.getTime() + 24 * 3_600_000).toISOString(),
+      hwm: price.toFixed(18),
+    });
+    const sellAndCooldown = (reason: string) => sell(reason, cooldownState());
+
+    if (ctx.position) {
+      const avg = dec(ctx.position.avgCostUsd);
+      const hwm = previousHwm === null ? price : Decimal.max(previousHwm, price);
+      if (
+        price.lte(
+          avg.mul(new Decimal(1).minus(new Decimal(params.atrStopMult).mul(atrPct).div(100))),
+        )
+      ) {
+        return sellAndCooldown('стоп по ATR');
+      }
+      if (hwm.gt(0) && hwm.minus(price).div(hwm).mul(100).gte(params.crashDrawdownPct)) {
+        return sellAndCooldown('обвал');
+      }
+      if (fast !== null && slow !== null && fast.lt(slow)) {
+        return sellAndCooldown('слом тренда');
+      }
+      const trailActive = price.gte(avg.mul(1.08)) || previousTrail !== null;
+      if (trailActive) {
+        const candidateTrail = hwm.mul(1 - params.trailPct / 100);
+        const trail =
+          previousTrail === null ? candidateTrail : Decimal.max(previousTrail, candidateTrail);
+        if (price.lte(trail)) {
+          return sellAndCooldown('трейлинг-стоп');
+        }
+        if (
+          trendUp &&
+          ctx.buyCount < params.maxAdds &&
+          fast !== null &&
+          price.lte(fast.mul(1 - params.pullbackPct / 100))
+        ) {
+          return buy('добавление на откате', {
+            phase: 'PULLBACK',
+            hwm: hwm.toFixed(18),
+            trailStop: trail.toFixed(18),
+            cooldownUntil: null,
+          });
+        }
+        return hold('удержание тренда', {
+          phase: 'UPTREND',
+          hwm: hwm.toFixed(18),
+          trailStop: trail.toFixed(18),
+          cooldownUntil: null,
+        });
+      }
+      if (
+        trendUp &&
+        ctx.buyCount < params.maxAdds &&
+        fast !== null &&
+        price.lte(fast.mul(1 - params.pullbackPct / 100))
+      ) {
+        return buy('добавление на откате', {
+          phase: 'PULLBACK',
+          hwm: hwm.toFixed(18),
+          trailStop: null,
+          cooldownUntil: null,
+        });
+      }
+      return hold('удержание', {
+        phase: 'UPTREND',
+        hwm: hwm.toFixed(18),
+        trailStop: null,
+        cooldownUntil: null,
+      });
+    }
+
+    if (inCooldown) {
+      return hold('cooldown', { ...state, phase: 'COOLDOWN' });
+    }
+    if (!trendUp) {
+      return hold('нет тренда', {
+        phase: 'DORMANT',
+        hwm: price.toFixed(18),
+        trailStop: null,
+        cooldownUntil: null,
+      });
+    }
+    if (fast !== null && price.lte(fast.mul(1 - params.pullbackPct / 100))) {
+      return buy('откат в тренде', {
+        phase: 'UPTREND',
+        hwm: price.toFixed(18),
+        trailStop: null,
+        cooldownUntil: null,
+      });
+    }
+    return hold('ожидание отката', {
+      phase: 'DORMANT',
+      hwm: price.toFixed(18),
+      trailStop: null,
+      cooldownUntil: null,
+    });
+  },
+};
+
 export const staticLimit: StrategyDefinition = {
   stateful: true,
   key: 'static_limit',
@@ -1058,6 +1336,7 @@ export const strategyDefinitions = [
   squeezeBreakout,
   failedBreakout,
   dailyAverage,
+  adaptiveRegime,
   staticLimit,
 ];
 

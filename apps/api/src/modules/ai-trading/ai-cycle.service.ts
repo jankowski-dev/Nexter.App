@@ -73,6 +73,7 @@ interface CycleSummary {
   draftsCreated: number;
   oosPassed: number;
   holdoutTested: number;
+  strategyMode: 'legacy' | 'adaptive';
   settlementDays: number;
   holdoutCycles: number;
   rejectionReasons: Record<string, number>;
@@ -245,6 +246,7 @@ export class AiCycleService implements OnModuleInit {
       draftsCreated: 0,
       oosPassed: 0,
       holdoutTested: 0,
+      strategyMode: input.strategyMode,
       settlementDays: 0,
       holdoutCycles: 0,
       rejectionReasons: {},
@@ -353,6 +355,7 @@ export class AiCycleService implements OnModuleInit {
         draftsCreated: cycle.draftsCreated,
         oosPassed: cycle.oosPassed,
         holdoutTested: cycle.holdoutTested,
+        strategyMode: cycle.strategyMode,
         settlementDays: cycle.settlementDays,
         holdoutCycles: cycle.holdoutCycles,
         error: cycle.error,
@@ -470,6 +473,7 @@ export class AiCycleService implements OnModuleInit {
       draftsCreated: cycle.draftsCreated,
       oosPassed: cycle.oosPassed,
       holdoutTested: cycle.holdoutTested,
+      strategyMode: cycle.strategyMode,
       settlementDays: cycle.settlementDays,
       holdoutCycles: cycle.holdoutCycles,
       rejectionReasons: cycle.rejectionReasons,
@@ -591,6 +595,7 @@ export class AiCycleService implements OnModuleInit {
         horizonDays: input.horizonDays,
         variants: input.variants,
         execution: input.execution,
+        strategyMode: input.strategyMode,
       },
       meta,
     );

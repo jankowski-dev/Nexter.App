@@ -207,6 +207,7 @@ export function runBacktest(
         priceUsd: candle.closeUsd,
         change24hPct,
         history: samples,
+        candles,
         position: null,
         buyCount: 0,
         stopLossEnabled: options.useStopLoss !== false,

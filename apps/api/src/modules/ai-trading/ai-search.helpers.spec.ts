@@ -41,6 +41,20 @@ describe('AI search helpers', () => {
     }
   });
 
+  it('filters the adaptive strategy from legacy mode and includes only it in adaptive mode', () => {
+    const legacyKeys = strategyDefinitions
+      .filter(
+        (definition) => definition.key !== 'adaptive_regime' && definition.aiEligible !== false,
+      )
+      .map((definition) => definition.key);
+    const legacy = generateSearchVariants(strategyDefinitions, 120, 42, legacyKeys);
+    expect(legacy.some((variant) => variant.strategyKey === 'adaptive_regime')).toBe(false);
+    expect(new Set(legacy.map((variant) => variant.strategyKey)).size).toBe(12);
+    const adaptive = generateSearchVariants(strategyDefinitions, 120, 42, ['adaptive_regime']);
+    expect(adaptive.length).toBeGreaterThan(0);
+    expect(adaptive.every((variant) => variant.strategyKey === 'adaptive_regime')).toBe(true);
+  });
+
   it('shuffles variants deterministically with the same seed', () => {
     const first = generateSearchVariants(strategyDefinitions, 120, 42);
     const second = structuredClone(first);

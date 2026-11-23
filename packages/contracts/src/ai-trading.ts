@@ -291,6 +291,8 @@ export const aiSearchTimeframes = ['1h', '4h'] as const;
 export const aiSearchTimeframeSchema = z.enum(aiSearchTimeframes);
 export const aiSearchExecutions = ['same-close', 'next-open'] as const;
 export const aiSearchExecutionSchema = z.enum(aiSearchExecutions);
+export const aiSearchStrategyModes = ['legacy', 'adaptive'] as const;
+export const aiSearchStrategyModeSchema = z.enum(aiSearchStrategyModes);
 
 export const aiSearchRequestSchema = z.object({
   assetId: z.uuid(),
@@ -299,6 +301,7 @@ export const aiSearchRequestSchema = z.object({
   variants: z.number().int().min(100).max(200000).default(5000),
   seed: z.number().int().min(0).max(2_147_483_647).optional(),
   execution: aiSearchExecutionSchema.default('next-open'),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
 });
 
 export const aiRecommendationStatusSchema = z.enum([
@@ -375,6 +378,7 @@ export const aiCycleRequestSchema = z.object({
   variants: z.number().int().min(100).max(200000).default(5000),
   maxDrafts: z.number().int().min(0).max(10).default(3),
   execution: aiSearchExecutionSchema.default('next-open'),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
 });
 export const aiCycleStepSchema = z.object({
   key: z.enum(aiCycleStepKeys),
@@ -418,6 +422,7 @@ export const aiCycleStatusSchema = z.object({
   draftsCreated: z.number().int(),
   oosPassed: z.number().int().default(0),
   holdoutTested: z.number().int().default(0),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
   settlementDays: z.number().int().default(0),
   holdoutCycles: z.number().int().default(0),
   rejectionReasons: z.record(z.string(), z.number().int()).default({}),
@@ -439,6 +444,7 @@ export const aiCycleSummarySchema = z.object({
   draftsCreated: z.number().int(),
   oosPassed: z.number().int().default(0),
   holdoutTested: z.number().int().default(0),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
   settlementDays: z.number().int().default(0),
   holdoutCycles: z.number().int().default(0),
   error: z.string().nullable(),
@@ -576,6 +582,7 @@ export const aiSearchResultsSchema = z.object({
   runId: z.uuid(),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   execution: aiSearchExecutionSchema.default('next-open'),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
   settlementDays: z.number().int().default(0),
   holdoutCycles: z.number().int().default(0),
   stats: aiSearchStatsSchema,

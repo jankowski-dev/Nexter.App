@@ -1,7 +1,7 @@
 import type { BotCandle } from '@nexter/contracts';
 import { describe, expect, it } from 'vitest';
 import { runBacktest } from '../trading-bots/backtest/backtest.engine';
-import { dailyAverage, strategyDefinitions } from '../trading-bots/strategies';
+import { adaptiveRegime, dailyAverage, strategyDefinitions } from '../trading-bots/strategies';
 import { createFastRuntime } from './ai-fast-strategies';
 import { aggregateVariant, buildSearchFolds, generateSearchVariants } from './ai-search.helpers';
 import { evaluateVariantFolds } from './ai-search.evaluate';
@@ -73,6 +73,30 @@ describe('native AI search engine', () => {
       }
     }
   }, 180_000);
+
+  it('has a native runtime for adaptive_regime and matches the Decimal engine', () => {
+    const candles = seededCandles();
+    const folds = buildSearchFolds(candles, '1h');
+    const fold = folds.folds[0];
+    if (!fold) throw new Error('fold fixture missing');
+    const variant = { strategyKey: 'adaptive_regime', params: adaptiveRegime.defaultParams };
+    expect(createFastRuntime(variant, fold.candles)).not.toBeNull();
+    for (const execution of ['same-close', 'next-open'] as const) {
+      const fast = evaluateVariantFolds(variant, [fold], '1h', execution);
+      const decimal = runBacktest(adaptiveRegime, variant.params, fold.candles, {
+        initialCapitalUsd: '1000',
+        feeBps: 25,
+        slippageBps: 10,
+        changeLookbackCandles: 24,
+        warmupCandles: fold.warmupCandles,
+        execution,
+      });
+      expect({ execution, ...fast.aggregate }).toEqual({
+        execution,
+        ...aggregateVariant([decimal.stats]),
+      });
+    }
+  }, 120_000);
 
   it('has a native runtime for daily_average and matches the Decimal engine', () => {
     const candles = seededCandles().slice(0, 30 * 24);

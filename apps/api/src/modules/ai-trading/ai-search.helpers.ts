@@ -70,9 +70,12 @@ export function generateSearchVariants(
   definitions: StrategyDefinition[],
   total: number,
   seed = 7,
+  strategyKeys?: string[],
 ): SearchVariant[] {
   const capped = Math.max(1, Math.min(200000, Math.floor(total)));
-  const eligible = definitions.filter((definition) => definition.aiEligible !== false);
+  const eligible = strategyKeys
+    ? definitions.filter((definition) => strategyKeys.includes(definition.key))
+    : definitions.filter((definition) => definition.aiEligible !== false);
   if (eligible.length === 0) return [];
   const perStrategy = Math.floor(capped / eligible.length);
   const remainder = capped % eligible.length;

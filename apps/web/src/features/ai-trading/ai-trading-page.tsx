@@ -125,6 +125,7 @@ export function AiTradingPage() {
   const [timeframe, setTimeframe] = useState<AiSearchTimeframe>('1h');
   const [horizon, setHorizon] = useState('5');
   const [variants, setVariants] = useState('5000');
+  const [adaptiveOnly, setAdaptiveOnly] = useState(false);
   const [maxDrafts, setMaxDrafts] = useState('3');
   const [cycleId, setCycleId] = useState<string | null>(() => {
     try {
@@ -224,6 +225,7 @@ export function AiTradingPage() {
         timeframe,
         horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
         variants: Number(variants),
+        strategyMode: adaptiveOnly ? 'adaptive' : 'legacy',
         maxDrafts: Number(maxDrafts),
         execution: 'next-open',
       }),
@@ -411,6 +413,14 @@ export function AiTradingPage() {
               <option value="100000">100 000</option>
               <option value="200000">200 000</option>
             </Select>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-zinc-600">
+            <Switch
+              checked={adaptiveOnly}
+              onChange={setAdaptiveOnly}
+              label="Только адаптивная стратегия"
+            />
+            Только адаптивная
           </label>
           <label className="text-xs text-zinc-600">
             Черновиков
@@ -860,6 +870,7 @@ function AiCycleCard({
           {cycle.settlementDays > 0
             ? ` · holdout ${cycle.holdoutCycles}×15 (10+${cycle.settlementDays})`
             : ''}
+          {` · режим: ${cycle.strategyMode === 'adaptive' ? 'адаптивная' : '12 стратегий'}`}
         </div>
       ) : null}
       {cycle.status === 'succeeded' ? (
@@ -1747,6 +1758,7 @@ function SearchSection({
   const [timeframe, setTimeframe] = useState<AiSearchTimeframe>(timeframes[0] ?? '1h');
   const [variants, setVariants] = useState('5000');
   const [horizon, setHorizon] = useState('5');
+  const [adaptiveOnly, setAdaptiveOnly] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const [deleteRun, setDeleteRun] = useState<AiSearchRunSummary | null>(null);
   const [deleteRunError, setDeleteRunError] = useState<string | null>(null);
@@ -1787,6 +1799,7 @@ function SearchSection({
         timeframe,
         horizonDays: Number(horizon) as 1 | 3 | 5 | 10,
         variants: Number(variants),
+        strategyMode: adaptiveOnly ? 'adaptive' : 'legacy',
         execution: 'next-open',
       }),
     onMutate: () => {
@@ -1944,6 +1957,14 @@ function SearchSection({
                 <option value="100000">100 000</option>
                 <option value="200000">200 000</option>
               </Select>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-zinc-600">
+              <Switch
+                checked={adaptiveOnly}
+                onChange={setAdaptiveOnly}
+                label="Только адаптивная стратегия"
+              />
+              Только адаптивная
             </label>
             <Button
               disabled={!assetId || start.isPending || running || missingData}
@@ -2142,6 +2163,7 @@ function SearchSection({
                 {(currentResults?.settlementDays ?? 0) > 0
                   ? ` · holdout ${currentResults?.holdoutCycles ?? 0}×15 (10+${currentResults?.settlementDays ?? 0})`
                   : ''}
+                {` · режим: ${currentResults?.strategyMode === 'adaptive' ? 'адаптивная' : '12 стратегий'}`}
               </div>
             </>
           ) : null}
