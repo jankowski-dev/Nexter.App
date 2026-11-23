@@ -1,3 +1,4 @@
+import type { BotCandle } from '@nexter/contracts';
 import { Decimal, decimal } from '../../../shared/money/decimal';
 
 export interface StrategySample {
@@ -19,6 +20,8 @@ export interface StrategyContext {
   priceUsd: string;
   change24hPct: string | null;
   history: StrategySample[];
+  /** Optional OHLC context for multi-timeframe regime strategies. */
+  candles?: BotCandle[];
   position: StrategyPosition | null;
   buyCount: number;
   /** Defaults to true; backtests can disable protective exits. */
@@ -66,6 +69,8 @@ export interface StrategyDefinition {
    * for the retention window instead of the last 300 minute samples.
    */
   historySampling?: 'recent' | 'hourly';
+  /** Loaded by the bot runner for regime strategies; backtests pass their candles. */
+  candleTimeframe?: '1d' | '4h' | '1h';
   defaultParams: Record<string, unknown>;
   paramFields: StrategyParamField[];
   parseParams: (value: Record<string, unknown>) => Record<string, unknown>;

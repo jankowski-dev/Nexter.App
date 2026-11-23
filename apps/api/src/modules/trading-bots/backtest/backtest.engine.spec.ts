@@ -504,3 +504,18 @@ describe('settlement ranges', () => {
     expect(result.exposure[4]?.inPosition).toBe(false);
   });
 });
+
+describe('strategy candle context', () => {
+  it('passes the backtest candles to the strategy context', () => {
+    let seen = 0;
+    const spy: StrategyDefinition = {
+      ...meanReversion,
+      evaluate: (ctx) => {
+        seen = ctx.candles?.length ?? 0;
+        return { action: 'hold', reason: 'spy' };
+      },
+    };
+    runBacktest(spy, {}, series([100, 100, 100]));
+    expect(seen).toBe(3);
+  });
+});

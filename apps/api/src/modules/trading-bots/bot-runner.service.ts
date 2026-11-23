@@ -5,7 +5,7 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from '@nestjs/common';
-import { and, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lt, sql } from 'drizzle-orm';
 import {
   assets,
   botEquitySnapshots,
@@ -15,11 +15,13 @@ import {
   botSignals,
   botTokens,
   botTrades,
+  marketCandles,
   tradingBots,
   type Database,
   type TradingBotRecord,
 } from '@nexter/db';
 import type { Pool, PoolClient } from 'pg';
+import type { BotCandle } from '@nexter/contracts';
 import { env } from '../../shared/config/env';
 import { DB, DB_POOL } from '../../shared/db/db.module';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
@@ -289,6 +291,9 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
 
       await this.sampleQuote(asset.id, quote, now);
       const history = await this.loadHistory(asset.id, definition, now);
+      const candles = definition.candleTimeframe
+        ? await this.loadCandles(asset.id, definition.candleTimeframe, now)
+        : undefined;
       const position = positionByAsset.get(asset.id) ?? null;
       const buyCount = countBuysSinceLastSell(
         tradeRows.filter((trade) => trade.assetId === asset.id),
@@ -305,6 +310,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
           priceUsd: quote.priceUsd,
           change24hPct: quote.change24hPct,
           history,
+          candles,
           position: position
             ? {
                 amount: position.amount,
@@ -601,6 +607,42 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       .orderBy(desc(botQuoteSamples.capturedAt))
       .limit(HISTORY_LIMIT);
     return rows.reverse();
+  }
+
+  private async loadCandles(
+    assetId: string,
+    timeframe: '1d' | '4h' | '1h',
+    now: Date,
+  ): Promise<BotCandle[]> {
+    const perDay = timeframe === '1d' ? 1 : timeframe === '4h' ? 6 : 24;
+    const cutoff = new Date(now.getTime() - 180 * 86_400_000);
+    const rows = await this.db
+      .select({
+        openTime: marketCandles.openTime,
+        open: marketCandles.open,
+        high: marketCandles.high,
+        low: marketCandles.low,
+        close: marketCandles.close,
+        volumeUsd: marketCandles.volumeUsd,
+      })
+      .from(marketCandles)
+      .where(
+        and(
+          eq(marketCandles.assetId, assetId),
+          eq(marketCandles.timeframe, timeframe),
+          gte(marketCandles.openTime, cutoff),
+        ),
+      )
+      .orderBy(asc(marketCandles.openTime))
+      .limit(180 * perDay);
+    return rows.map((row) => ({
+      date: row.openTime.toISOString(),
+      openUsd: row.open,
+      highUsd: row.high,
+      lowUsd: row.low,
+      closeUsd: row.close,
+      volumeUsd: row.volumeUsd ?? '0',
+    }));
   }
 
   /**

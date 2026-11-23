@@ -310,6 +310,7 @@ export function runBacktest(
       priceUsd: candle.closeUsd,
       change24hPct,
       history: samples,
+      candles,
       position: postExitPosition
         ? {
             amount: amountString(postExitPosition.amount),
