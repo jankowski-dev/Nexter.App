@@ -16,3 +16,4 @@ design-auth/
 apps/api/public/*
 !apps/api/public/.gitkeep
 data/
+!packages/sandbox-core/src/data/
