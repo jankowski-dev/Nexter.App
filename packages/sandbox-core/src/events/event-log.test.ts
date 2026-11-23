@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryEventLog } from './memory-event-log';
-import type { SandboxEventInput } from './event-types';
+import type { SandboxDecision, SandboxEventInput } from './event-types';
 
 const base: SandboxEventInput = {
   runId: 'run-1',
@@ -11,6 +11,13 @@ const base: SandboxEventInput = {
   dataSnapshotId: 'snapshot-1',
   configVersion: 'config-1',
   seed: 7,
+};
+
+const decision: SandboxDecision = {
+  action: 'buy',
+  sizeUsd: '100',
+  reasonCode: 'TREND_UP',
+  reasonText: 'Trend filter passed',
 };
 
 describe('MemoryEventLog', () => {
@@ -50,7 +57,53 @@ describe('MemoryEventLog', () => {
   it('requires a reasonCode for decision-like events', async () => {
     const log = new MemoryEventLog();
     await expect(
-      log.append({ ...base, module: 'strategy', eventType: 'signal.rejected', severity: 'decision' }),
+      log.append({
+        ...base,
+        module: 'strategy',
+        eventType: 'signal.rejected',
+        severity: 'decision',
+      }),
     ).rejects.toThrow(/reasonCode/);
+  });
+
+  it('accepts decision-like events that carry a reasonCode', async () => {
+    const log = new MemoryEventLog();
+    const event = await log.append({
+      ...base,
+      module: 'strategy',
+      eventType: 'signal.accepted',
+      severity: 'decision',
+      reasonCode: 'TREND_UP',
+    });
+    expect(event.reasonCode).toBe('TREND_UP');
+  });
+
+  it('rejects a decision event without alternatives', async () => {
+    const log = new MemoryEventLog();
+    await expect(
+      log.append({
+        ...base,
+        module: 'strategy',
+        eventType: 'signal.decided',
+        severity: 'decision',
+        decision,
+        reasonCode: decision.reasonCode,
+      }),
+    ).rejects.toThrow(/alternative/);
+  });
+
+  it('accepts a decision event with one alternative and a reasonCode', async () => {
+    const log = new MemoryEventLog();
+    const event = await log.append({
+      ...base,
+      module: 'strategy',
+      eventType: 'signal.decided',
+      severity: 'decision',
+      decision,
+      reasonCode: decision.reasonCode,
+      alternatives: [{ action: 'hold', reasonCode: 'WAIT', whyNot: 'Entry confirmation missing' }],
+    });
+    expect(event.decision?.action).toBe('buy');
+    expect(event.alternatives).toHaveLength(1);
   });
 });

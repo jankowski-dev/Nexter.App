@@ -12,6 +12,21 @@ export class MemoryEventLog implements EventLog {
   private readonly entries: SandboxEvent[] = [];
 
   async append(input: SandboxEventInput): Promise<SandboxEvent> {
+    const event = this.buildEvent(input);
+    this.commitEvent(event);
+    return event;
+  }
+
+  events(): readonly SandboxEvent[] {
+    return [...this.entries];
+  }
+
+  hash(): string {
+    return this.entries.at(-1)?.hash ?? GENESIS_HASH;
+  }
+
+  /** Validates the input and computes the next chained event without storing it. */
+  protected buildEvent(input: SandboxEventInput): SandboxEvent {
     const parsed = sandboxEventInputSchema.parse(input);
     const prevHash = this.entries.at(-1)?.hash ?? GENESIS_HASH;
     const base = {
@@ -33,16 +48,11 @@ export class MemoryEventLog implements EventLog {
       recordedAt: new Date().toISOString(),
       prevHash,
     };
-    const event: SandboxEvent = { ...base, hash: eventHash(base) };
+    return { ...base, hash: eventHash(base) };
+  }
+
+  /** Appends an already built event to the in-memory chain. */
+  protected commitEvent(event: SandboxEvent): void {
     this.entries.push(event);
-    return event;
-  }
-
-  events(): readonly SandboxEvent[] {
-    return [...this.entries];
-  }
-
-  hash(): string {
-    return this.entries.at(-1)?.hash ?? GENESIS_HASH;
   }
 }

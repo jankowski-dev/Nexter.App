@@ -60,16 +60,23 @@ export const sandboxEventInputSchema = z
     reasonText: z.string().nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    const hasDecision = value.decision !== null && value.decision !== undefined;
     const needsReason =
-      value.decision !== null && value.decision !== undefined
-        ? true
-        : /^(signal|order|position|strategy|risk)\./.test(value.eventType) ||
-          value.eventType === 'run.failed';
+      hasDecision ||
+      /^(signal|order|position|strategy|risk)\./.test(value.eventType) ||
+      value.eventType === 'run.failed';
     if (needsReason && !value.reasonCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['reasonCode'],
         message: 'reasonCode is required for decision, rejection and failure events',
+      });
+    }
+    if (hasDecision && (value.alternatives?.length ?? 0) < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['alternatives'],
+        message: 'at least one alternative is required for decision events',
       });
     }
   }) satisfies z.ZodType<SandboxEventInput>;
