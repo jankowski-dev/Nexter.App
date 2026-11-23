@@ -9,3 +9,5 @@ export * from './opportunity-ranker';
 export * from './portfolio-allocator';
 export * from './risk-manager';
 export * from './token-state';
+export * from './decision-logger';
+export * from './decision-engine';
