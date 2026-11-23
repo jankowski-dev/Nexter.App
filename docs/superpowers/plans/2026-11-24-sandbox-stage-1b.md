@@ -1345,7 +1345,7 @@ Alternatives are deterministic:
 
 Throw `DecisionInputError` when:
 
-- `tokenIds` is empty, contains an empty/duplicate id, or `clockTime` is not a safe integer;
+- `tokenIds` contains an empty or duplicate id, or `clockTime` is not a safe integer; an empty `tokenIds` is allowed so an open position outside the universe can still be evaluated (a completely empty cycle is a valid no-op);
 - `market.snapshotId() !== dataSnapshotId`;
 - a decimal field is invalid (`equityUsd`, `cashUsd`, `dayStartEquityUsd`, `peakEquityUsd`, position `amount`/`avgCostUsd`/`marketValueUsd`/`stopLossPct`/`takeProfitPct`);
 - `equityUsd`, `dayStartEquityUsd` or `peakEquityUsd` is zero (percent-of-equity checks divide by it);
@@ -1395,7 +1395,7 @@ Cover:
 2. multi-token ranking: two candidates allocate in score order; a third is dropped by `ALLOC_MAX_POSITIONS`;
 3. open position in `CRASH` still evaluates its original strategy and emits a sell intent when the exit fires;
 4. a non-eligible regime produces `strategy.skipped`, no intent, `SLEEPING`/`BLOCKED` phase;
-5. a token with a position but absent from `tokenIds` is still evaluated;
+5. a token with a position but absent from `tokenIds` is still evaluated; an empty `tokenIds` with a position evaluates only that position, and an empty universe with no positions is a valid no-op;
 6. duplicate `tokenIds` or duplicate position tokens throw `DecisionInputError`;
 7. a snapshot mismatch throws `DecisionInputError`;
 8. `cooldown` and `BLOCKED` prevent a buy but never a sell;
