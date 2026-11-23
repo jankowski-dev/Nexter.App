@@ -858,6 +858,9 @@ export class AiSearchService {
     const execution = this.executionFor(input);
     const folds = buildSearchFolds(candles, input.timeframe, lookbackDays);
     const foldCount = folds.folds.length;
+    this.logger.log(
+      `AI search ${runId}: ${variants.length} variants, ${foldCount} folds, ${lookbackDays}d`,
+    );
     const minTrades = minTradesFor(foldCount);
     const minPositiveFolds = minPositiveFoldsFor(foldCount);
     const metrics: Array<SearchCandidate> = [];
@@ -1179,6 +1182,9 @@ export class AiSearchService {
     stageReport('full').output = metrics.length;
     stageReport('full').rejected = fullVariants.length - metrics.length;
     stageReport('full').durationMs = Date.now() - stageStarted;
+    this.logger.log(
+      `AI search ${runId}: full stage ${fullVariants.length} variants in ${stageReport('full').durationMs}ms, ${metrics.length} OOS passers`,
+    );
     await writeProgress(progressFor('full', fullVariants.length, fullVariants.length), true);
 
     // Stage: diagnostic control sample. Rejected variants are fully evaluated so
@@ -1270,6 +1276,7 @@ export class AiSearchService {
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
     stageStarted = Date.now();
     const top = selectHoldoutCandidates(metrics, 50);
+    this.logger.log(`AI search ${runId}: holdout ${top.length} candidates`);
     let holdoutDone = 0;
     for (const candidate of top) {
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -1279,6 +1286,7 @@ export class AiSearchService {
         await writeProgress(progressFor('holdout', holdoutDone, top.length));
         continue;
       }
+      const holdoutStarted = Date.now();
       try {
         const result = runBacktest(
           definition,
@@ -1296,6 +1304,9 @@ export class AiSearchService {
               end: range.end + folds.holdoutWarmupCandles,
             })),
           },
+        );
+        this.logger.log(
+          `AI search ${runId}: holdout ${holdoutDone + 1}/${top.length} ${candidate.variant.strategyKey} ${Date.now() - holdoutStarted}ms`,
         );
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
@@ -1404,6 +1415,9 @@ export class AiSearchService {
     stageReport('holdout').output = recommended.length;
     stageReport('holdout').rejected = top.length - recommended.length;
     stageReport('holdout').durationMs = Date.now() - stageStarted;
+    this.logger.log(
+      `AI search ${runId}: holdout done in ${stageReport('holdout').durationMs}ms, ${recommended.length} recommended`,
+    );
 
     const screenedOutCount = variants.length - screenSurvivors.length;
     const probeOutCount = probeRejected.length;
