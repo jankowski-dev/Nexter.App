@@ -901,6 +901,8 @@ export function eligibleStrategyFor(regime: Regime): StrategyKey | null;
 
 All prices come from `closes(candles)` and indicators. Every signal sets a non-empty `reasonText`. `stopLossPct` values are `formatPct(...)` output. Entry `takeProfitPct` is `null` in Stage 1B; exits are strategy-driven. No strategy may emit `buy` when `position !== null`. No-data and not-eligible branches must return `nextState` equal to the incoming state so a data gap cannot wipe trailing/confirmation memory; the one exception is recovery's not-eligible branch, which intentionally resets `aboveFastBars` to `0`.
 
+Strategy state may store native numbers for HWM and confirmation counters; these are rule inputs, never money, and never become order sizes. Price comparisons may convert `avgCostUsd`/`close` with `Number`; every persisted money value and every stop/take percentage stays a decimal string. No strategy computes a USD order size.
+
 - [ ] **Step 1: Trend pullback** (`version: 1`, eligible `['TREND_UP']`)
 
 Params from `DEFAULT_STRATEGY_SETTINGS.trendPullback`.
@@ -910,7 +912,7 @@ Params from `DEFAULT_STRATEGY_SETTINGS.trendPullback`.
   - regime not `TREND_UP` → `hold` + `STRATEGY_NOT_ELIGIBLE`;
   - `fast > slow && close > slow && close <= fast * (1 - pullbackPct/100)` → `buy` + `TREND_PULLBACK_ENTRY`, confidence `0.6`, riskWeight `1`, `stopLossPct = formatPct(atrStopMult * atrPct)`;
   - otherwise `hold` + `TREND_PULLBACK_HOLD`.
-  - `nextState = { hwm: String(close), trailActive: false }` for this branch.
+  - `nextState = { hwm: close, trailActive: false }` for this branch. Strategy state stores the native-number HWM (not money), so `numeric(state.hwm)` can read it back next bar.
 - In position (stop first, then trend break, then trail):
   - `hwm = max(numeric(state.hwm) ?? avgCost, close)`;
   - `trailActive = state.trailActive === true || hwm >= avgCost * (1 + trailActivationPct/100)`;
@@ -918,7 +920,7 @@ Params from `DEFAULT_STRATEGY_SETTINGS.trendPullback`.
   - trend break: `fast < slow` → `sell` + `TREND_PULLBACK_TREND_BREAK`;
   - trailing: `trailActive && close <= hwm * (1 - trailPct/100)` → `sell` + `TREND_PULLBACK_TRAIL`;
   - otherwise `hold` + `TREND_PULLBACK_HOLD`;
-  - `nextState = { hwm: String(hwm), trailActive }` for every in-position branch.
+  - `nextState = { hwm, trailActive }` for every in-position branch.
 
 - [ ] **Step 2: Range reversion** (`version: 1`, eligible `['RANGE']`)
 
