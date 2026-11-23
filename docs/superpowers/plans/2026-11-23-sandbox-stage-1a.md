@@ -21,7 +21,7 @@
 - `recordedAt` is wall-clock metadata and must not affect the event hash.
 - Every decision/rejection event must carry a stable `reasonCode`; every decision logs alternatives.
 - Replay must be deterministic: same data + same config + same seed = same event hash.
-- Look-ahead is forbidden: the handler must never see a candle with `openTime > clock.now()`.
+- Look-ahead is forbidden: a candle is visible only when `candleCloseTime(candle) <= clock.now()`; the handler must never see a candle before its close, and the next candle is not visible until its own close.
 - Stage 1A has no UI, no live data, no real money, no strategies, no portfolio, no execution.
 - Independent review gate after Stage 1A; do not start Stage 1B until it is signed off.
 - Run `npx pnpm@10.20.0` commands from the repo root.
