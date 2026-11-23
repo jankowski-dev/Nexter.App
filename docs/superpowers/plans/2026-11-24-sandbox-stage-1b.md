@@ -1352,6 +1352,7 @@ Throw `DecisionInputError` when:
 - positions contain duplicate token ids or an unknown strategy key;
 - settings have an unknown timeframe (`Object.hasOwn(TIMEFRAME_MS, timeframe)` is false), `maxPositions < 0`, or negative percentages;
 - any regime/strategy period is not a positive integer; `regimeDwellBars < 1`, `recoveryConfirmBars < 1`, `slowHours < fastHours`, or `minLiquidityUsd` is not a non-negative decimal string;
+- `settings.regime.atrPeriod` differs from `DEFAULT_REGIME_SETTINGS.atrPeriod` (Stage 1B strategies pin the ATR period at 14; the engine must reject a divergence instead of letting classifier and strategy use different volatilities);
 - a strategy stop or risk weight is invalid (`stopPct <= 0`, `atrStopMult <= 0`, `stopAtrMult <= 0`, `riskWeight <= 0`, `riskWeight > 1`).
 
 Do not silently repair input.
