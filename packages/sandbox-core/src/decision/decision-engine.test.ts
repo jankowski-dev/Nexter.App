@@ -279,6 +279,7 @@ describe('DecisionEngine single-token buy', () => {
     expect(events[0]?.eventType).toBe('decision.cycle');
     expect(events[0]?.inputs).toMatchObject({
       tokenIds: ['token'],
+      evaluatedTokenIds: ['token'],
       equityUsd: '10000',
       cashUsd: '10000',
       openPositions: [],
@@ -422,7 +423,8 @@ describe('DecisionEngine evaluated token set', () => {
 
     expect(result.state.tokens['outside']).toBeDefined();
     expect(result.state.tokens['universe']).toBeDefined();
-    expect(log.events()[0]?.inputs.tokenIds).toEqual(['outside', 'universe']);
+    expect(log.events()[0]?.inputs.tokenIds).toEqual(['universe']);
+    expect(log.events()[0]?.inputs.evaluatedTokenIds).toEqual(['outside', 'universe']);
     expect(log.events()[0]?.inputs.openPositions).toEqual(['outside']);
     expect(
       log
@@ -539,6 +541,32 @@ describe('DecisionEngine input validation', () => {
         }),
       ),
     ).rejects.toBeInstanceOf(DecisionInputError);
+  });
+
+  it('rejects a missing settings block with DecisionInputError instead of TypeError', async () => {
+    const engine = new DecisionEngine(new MemoryEventLog());
+    const malformedSettings: readonly SandboxDecisionSettings[] = [
+      { ...DEFAULT_SETTINGS, regime: undefined } as unknown as SandboxDecisionSettings,
+      { ...DEFAULT_SETTINGS, strategies: undefined } as unknown as SandboxDecisionSettings,
+      {
+        ...DEFAULT_SETTINGS,
+        strategies: { ...DEFAULT_SETTINGS.strategies, trendPullback: undefined },
+      } as unknown as SandboxDecisionSettings,
+      {
+        ...DEFAULT_SETTINGS,
+        strategies: { ...DEFAULT_SETTINGS.strategies, rangeReversion: null },
+      } as unknown as SandboxDecisionSettings,
+      {
+        ...DEFAULT_SETTINGS,
+        strategies: { ...DEFAULT_SETTINGS.strategies, recovery: null },
+      } as unknown as SandboxDecisionSettings,
+    ];
+
+    for (const settings of malformedSettings) {
+      await expect(
+        engine.decide(decisionInput({ candles: [], now: START, tokenIds: [], settings })),
+      ).rejects.toBeInstanceOf(DecisionInputError);
+    }
   });
 });
 
@@ -731,6 +759,42 @@ describe('DecisionEngine risk checks', () => {
       expect(riskIndex).toBeGreaterThanOrEqual(0);
       expect(intentIndex).toBeGreaterThan(riskIndex);
     }
+  });
+});
+
+describe('DecisionEngine failing sell risk', () => {
+  it('blocks a stale-data sell, logs two checks and keeps the position', async () => {
+    const candles = trendPullbackCandles({ tokenId: 'stale' });
+    const lastClose = candles[candles.length - 1]?.close;
+    if (lastClose === undefined) throw new Error('expected candles');
+    const now = lastCloseTime(candles) + HOUR;
+    const held = position('stale', {
+      avgCostUsd: '2',
+      marketPriceUsd: lastClose,
+      marketValueUsd: (100 * Number(lastClose)).toFixed(8),
+    });
+
+    const { log, result } = await decide({
+      candles,
+      now,
+      tokenIds: ['stale'],
+      portfolio: portfolio({ positions: [held] }),
+    });
+
+    expect(result.intents).toEqual([]);
+    expect(result.state.tokens['stale']?.regime.regime).toBe('ILLIQUID');
+
+    const risk = eventsOfType(log, 'risk.checked');
+    expect(risk).toHaveLength(1);
+    expect(risk[0]?.inputs.kind).toBe('sell');
+    expect(risk[0]?.decision?.action).toBe('block');
+    expect(risk[0]?.reasonCode).toBe(Reason.RISK_DATA_STALE);
+    expect(risk[0]?.riskChecks).toHaveLength(2);
+    expect(risk[0]?.alternatives.some((entry) => entry.reasonCode === Reason.RISK_HOLD)).toBe(true);
+    expect(eventsOfType(log, 'order.intent')).toHaveLength(0);
+    expect(result.tokenViews).toEqual([
+      { tokenId: 'stale', phase: 'IN_POSITION', reasonCode: Reason.TOKEN_IN_POSITION },
+    ]);
   });
 });
 

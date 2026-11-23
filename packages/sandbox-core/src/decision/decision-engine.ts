@@ -117,7 +117,14 @@ function validatePositions(snapshot: DecisionInput['portfolio']): void {
   }
 }
 
+function requireObject(value: unknown, label: string): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    invalid(`${label} must be an object`);
+  }
+}
+
 function validateRegimeSettings(settings: SandboxDecisionSettings): void {
+  requireObject(settings.regime, 'settings.regime');
   const regime = settings.regime;
   for (const key of [
     'fastHours',
@@ -153,7 +160,11 @@ function validateRegimeSettings(settings: SandboxDecisionSettings): void {
 }
 
 function validateStrategySettings(settings: SandboxDecisionSettings): void {
+  requireObject(settings.strategies, 'settings.strategies');
   const { trendPullback, rangeReversion, recovery } = settings.strategies;
+  requireObject(trendPullback, 'settings.strategies.trendPullback');
+  requireObject(rangeReversion, 'settings.strategies.rangeReversion');
+  requireObject(recovery, 'settings.strategies.recovery');
   requirePositiveInteger(trendPullback.fastPeriod, 'settings.strategies.trendPullback.fastPeriod');
   requirePositiveInteger(trendPullback.slowPeriod, 'settings.strategies.trendPullback.slowPeriod');
   requireNonNegativeNumber(
@@ -294,10 +305,12 @@ export class DecisionEngine {
     const evaluatedTokens = [
       ...new Set<string>([...input.tokenIds, ...positionByToken.keys()]),
     ].sort(compareCodeUnits);
+    const requestedTokens = [...input.tokenIds].sort(compareCodeUnits);
     const openPositionTokens = [...positionByToken.keys()].sort(compareCodeUnits);
 
     await logger.cycle({
-      tokenIds: evaluatedTokens,
+      tokenIds: requestedTokens,
+      evaluatedTokenIds: evaluatedTokens,
       settingsVersion: settingsVersion(settings),
       equityUsd: input.portfolio.equityUsd,
       cashUsd: input.portfolio.cashUsd,

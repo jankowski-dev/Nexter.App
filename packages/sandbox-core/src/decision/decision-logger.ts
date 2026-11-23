@@ -65,7 +65,10 @@ export interface RiskLogInput {
 }
 
 export interface CycleLogInput {
+  /** The caller's requested universe, sorted by code unit. */
   readonly tokenIds: readonly string[];
+  /** Requested universe plus position tokens, sorted by code unit. */
+  readonly evaluatedTokenIds: readonly string[];
   readonly settingsVersion: string;
   readonly equityUsd: string;
   readonly cashUsd: string;
@@ -140,13 +143,14 @@ export class DecisionLogger {
       severity: 'info',
       inputs: {
         tokenIds: [...input.tokenIds],
+        evaluatedTokenIds: [...input.evaluatedTokenIds],
         settingsVersion: input.settingsVersion,
         equityUsd: input.equityUsd,
         cashUsd: input.cashUsd,
         openPositions: [...input.openPositions],
       },
       reasonCode: Reason.DECISION_CYCLE,
-      reasonText: `Decision cycle started for ${input.tokenIds.length} token(s)`,
+      reasonText: `Decision cycle started for ${input.evaluatedTokenIds.length} evaluated token(s)`,
     });
   }
 
