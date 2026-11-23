@@ -773,7 +773,7 @@ export function classifyRegime(input: RegimeInput): RegimeEvaluation;
 
 - [ ] **Step 1: Compute features**
 
-Compute with small, configurable periods from `RegimeSettings`. `staleBars` is `floor((now - candleCloseTime(last)) / TIMEFRAME_MS[timeframe])`, clamped at 0; `0` when there are no candles. `longSma` may be `null` when history is shorter than `longHours` and must not block classification. Log-facing feature strings use `formatPct`/`formatUsd`; `bars` and `staleBars` are integers.
+Compute with small, configurable periods from `RegimeSettings`. `staleBars` is `floor((now - candleCloseTime(last)) / TIMEFRAME_MS[timeframe])`, clamped at 0; `0` when there are no candles. `longSma` may be `null` when history is shorter than `longHours` and must not block classification. `drawdownPct` uses `drawdownWindowHours = max(slowHours, rangeWindowHours)`, matching design §5.1. Log-facing feature strings use `formatPct`/`formatUsd`; `bars` and `staleBars` are integers.
 
 - [ ] **Step 2: Choose the raw regime in fixed priority order**
 
@@ -795,7 +795,7 @@ Compute with small, configurable periods from `RegimeSettings`. `staleBars` is `
 9. otherwise -> UNKNOWN / REGIME_UNKNOWN
 ```
 
-`minBars = max(atrPeriod + 1, slowHours + 1, liquidityWindowHours)`; fewer candles means insufficient history. Guard every division: if slowSma or lastClose is not positive, return `UNKNOWN` with `REGIME_UNKNOWN` and zero features rather than dividing by zero.
+`minBars = max(atrPeriod + 1, slowHours + 1, liquidityWindowHours, rangeWindowHours)`; fewer candles means insufficient history. Guard every division: if slowSma or lastClose is not positive, return `UNKNOWN` with `REGIME_UNKNOWN` and zero features rather than dividing by zero.
 
 - [ ] **Step 3: Apply hysteresis**
 
@@ -820,11 +820,12 @@ Cover:
 3. volume below `minLiquidityUsd` → `ILLIQUID` + `REGIME_LOW_LIQUIDITY`;
 4. strong linear uptrend with normal ATR → `TREND_UP`;
 5. crash fixture → `CRASH` adopted on the first crash bar even when dwell is 3;
-6. hysteresis: held `TREND_UP`, two range-like bars stay `TREND_UP` with `candidate='RANGE'`, third adopts `RANGE`;
-7. `CRASH` then rising recovery fixture → `RECOVERY` after confirmation, not before;
-8. downtrend → `TREND_DOWN`; flat wave → `RANGE`; contradictory/no-feature input → `UNKNOWN`;
-9. same input twice → identical state and features;
-10. first classification is `changed: true`.
+6. drawdown window: a high that is inside `drawdownWindowHours` but outside `rangeWindowHours` changes the drawdown/CRASH result; and a history shorter than `rangeWindowHours` is insufficient history even when other windows fit;
+7. hysteresis: held `TREND_UP`, two range-like bars stay `TREND_UP` with `candidate='RANGE'`, third adopts `RANGE`;
+8. `CRASH` then rising recovery fixture → `RECOVERY` after confirmation, not before;
+9. downtrend → `TREND_DOWN`; flat wave → `RANGE`; contradictory/no-feature input → `UNKNOWN`;
+10. same input twice → identical state and features;
+11. first classification is `changed: true`.
 
 - [ ] **Step 5: Verify and commit**
 
