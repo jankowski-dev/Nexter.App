@@ -398,6 +398,34 @@ describe('allocateOpportunities sequencing and output', () => {
     expect(input[1]).toBe(first);
   });
 
+  it('allocates a duplicate token only once and adds it to the held set', () => {
+    const result = allocateOpportunities(
+      [
+        ranked('shared', 1, { signal: signal({ stopLossPct: '10' }) }),
+        ranked('shared', 2, { strategyKey: 'recovery', signal: signal({ stopLossPct: '10' }) }),
+        ranked('other', 3, { signal: signal({ stopLossPct: '10' }) }),
+      ],
+      portfolio(),
+      settings({
+        ...OPEN_CAPS,
+        maxPositions: 2,
+        maxTokenExposurePct: 100,
+        maxStrategyExposurePct: 100,
+        cashBufferPct: 0,
+        perTradeRiskPct: 1,
+      }),
+    );
+
+    // Risk binds at 100 USD per candidate. Without the accepted-token guard
+    // the second `shared` candidate would allocate again and fill both slots,
+    // pushing `other` out with ALLOC_MAX_POSITIONS.
+    expect(result.allocations.map((entry) => entry.candidate.tokenId)).toEqual(['shared', 'other']);
+    expect(result.allocations.map((entry) => entry.sizeUsd)).toEqual(['100.00', '100.00']);
+    expect(result.drops).toHaveLength(1);
+    expect(result.drops[0]?.candidate.tokenId).toBe('shared');
+    expect(result.drops[0]?.reasonCode).toBe(Reason.ALLOC_EXISTING_POSITION);
+  });
+
   it('does not mutate the portfolio snapshot', () => {
     const snapshot = portfolio({ positions: [position('held')] });
     const before = JSON.parse(JSON.stringify(snapshot)) as PortfolioSnapshot;

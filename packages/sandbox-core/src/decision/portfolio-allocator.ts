@@ -89,6 +89,9 @@ function dropMessage(
  * Allocates USD sizes to ranked buy candidates, honouring existing positions,
  * open-position count, token/strategy exposure, the cash buffer, per-trade risk
  * and the liquidity cap. Inputs are never mutated.
+ *
+ * Expects buy candidates only; the engine guarantees that sells never reach
+ * the allocator, so no sell guard is required here.
  */
 export function allocateOpportunities(
   ranked: readonly RankedOpportunity[],
@@ -214,6 +217,9 @@ export function allocateOpportunities(
     });
 
     openPositions += 1;
+    // Accepting a buy makes the token held for the rest of this cycle, so a
+    // duplicate ranked candidate cannot buy the same token twice.
+    heldTokens.add(candidate.tokenId);
     tokenValues.set(
       candidate.tokenId,
       (tokenValues.get(candidate.tokenId) ?? new Decimal(0)).plus(size),
