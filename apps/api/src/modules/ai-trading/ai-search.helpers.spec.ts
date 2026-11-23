@@ -9,6 +9,7 @@ import {
   holdoutRejection,
   minPositiveFoldsFor,
   minTradesFor,
+  searchWorkerCount,
   selectHoldoutCandidates,
   shuffleVariantsInPlace,
   strategyKeysForMode,
@@ -71,6 +72,14 @@ describe('AI search helpers', () => {
     expect(first).toEqual(second);
     expect(first).not.toEqual(generateSearchVariants(strategyDefinitions, 120, 42));
     expect(new Set(first.map((variant) => JSON.stringify(variant))).size).toBe(first.length);
+  });
+
+  it('keeps at least two workers even on a single-CPU container', () => {
+    expect(searchWorkerCount({}, 1)).toBe(2);
+    expect(searchWorkerCount({ AI_SEARCH_WORKERS: '6' }, 1)).toBe(2);
+    expect(searchWorkerCount({}, 2)).toBe(2);
+    expect(searchWorkerCount({}, 4)).toBe(3);
+    expect(searchWorkerCount({ AI_SEARCH_WORKERS: '1' }, 4)).toBe(1);
   });
 
   it('builds seven OOS folds and a warmup-prefixed 45-day holdout', () => {
