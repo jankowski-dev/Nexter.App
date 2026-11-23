@@ -1128,16 +1128,23 @@ export const sandboxEventInputSchema = z
     reasonText: z.string().nullable().optional(),
   })
   .superRefine((value, ctx) => {
+    const hasDecision = value.decision !== null && value.decision !== undefined;
     const needsReason =
-      value.decision !== null && value.decision !== undefined
-        ? true
-        : /^(signal|order|position|strategy|risk)\./.test(value.eventType) ||
-          value.eventType === 'run.failed';
+      hasDecision ||
+      /^(signal|order|position|strategy|risk)\./.test(value.eventType) ||
+      value.eventType === 'run.failed';
     if (needsReason && !value.reasonCode) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['reasonCode'],
         message: 'reasonCode is required for decision, rejection and failure events',
+      });
+    }
+    if (hasDecision && (value.alternatives?.length ?? 0) < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['alternatives'],
+        message: 'at least one alternative is required for decision events',
       });
     }
   }) satisfies z.ZodType<SandboxEventInput>;
@@ -1165,7 +1172,7 @@ import { sandboxEventInputSchema } from './event-schema';
 import { GENESIS_HASH, type SandboxEvent, type SandboxEventInput } from './event-types';
 import type { EventLog } from './event-log';
 
-function eventHash(event: Omit<SandboxEvent, 'hash'>): string {
+export function eventHash(event: Omit<SandboxEvent, 'hash'>): string {
   const { recordedAt: _recordedAt, timing: _timing, ...hashable } = event;
   return sha256Hex(stableStringify(hashable));
 }
@@ -1174,6 +1181,21 @@ export class MemoryEventLog implements EventLog {
   private readonly entries: SandboxEvent[] = [];
 
   async append(input: SandboxEventInput): Promise<SandboxEvent> {
+    const event = this.buildEvent(input);
+    this.commitEvent(event);
+    return event;
+  }
+
+  events(): readonly SandboxEvent[] {
+    return [...this.entries];
+  }
+
+  hash(): string {
+    return this.entries.at(-1)?.hash ?? GENESIS_HASH;
+  }
+
+  /** Validates the input and computes the next chained event without storing it. */
+  protected buildEvent(input: SandboxEventInput): SandboxEvent {
     const parsed = sandboxEventInputSchema.parse(input);
     const prevHash = this.entries.at(-1)?.hash ?? GENESIS_HASH;
     const base = {
@@ -1195,17 +1217,12 @@ export class MemoryEventLog implements EventLog {
       recordedAt: new Date().toISOString(),
       prevHash,
     };
-    const event: SandboxEvent = { ...base, hash: eventHash(base) };
+    return { ...base, hash: eventHash(base) };
+  }
+
+  /** Appends an already built event to the in-memory chain. */
+  protected commitEvent(event: SandboxEvent): void {
     this.entries.push(event);
-    return event;
-  }
-
-  events(): readonly SandboxEvent[] {
-    return [...this.entries];
-  }
-
-  hash(): string {
-    return this.entries.at(-1)?.hash ?? GENESIS_HASH;
   }
 }
 ```
@@ -1215,34 +1232,71 @@ export class MemoryEventLog implements EventLog {
 `packages/sandbox-core/src/events/jsonl-event-log.ts`:
 
 ```ts
-import { appendFile, mkdir } from 'node:fs/promises';
+import { appendFile, mkdir, readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { stableStringify } from '../util/hash';
 import { MemoryEventLog } from './memory-event-log';
 import type { SandboxEvent, SandboxEventInput } from './event-types';
 
 export class JsonlEventLog extends MemoryEventLog {
+  private queue: Promise<void> = Promise.resolve();
+  private closed = false;
+
   private constructor(private readonly filePath: string) {
     super();
   }
 
   static async open(filePath: string): Promise<JsonlEventLog> {
     await mkdir(dirname(filePath), { recursive: true });
+    let existing: string | null = null;
+    try {
+      existing = await readFile(filePath, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (existing !== null && existing.trim().length > 0) {
+      throw new Error(`Event log already exists and is not empty: ${filePath}`);
+    }
     return new JsonlEventLog(filePath);
   }
 
-  override async append(input: SandboxEventInput): Promise<SandboxEvent> {
-    const event = await super.append(input);
-    await appendFile(this.filePath, `${JSON.stringify(event)}\n`, 'utf8');
-    return event;
+  override append(input: SandboxEventInput): Promise<SandboxEvent> {
+    const result = this.queue.then(() => this.appendQueued(input));
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   async close(): Promise<void> {
-    // appendFile opens/closes per write; close exists for future streaming.
+    await this.queue;
+    this.closed = true;
+  }
+
+  private async appendQueued(input: SandboxEventInput): Promise<SandboxEvent> {
+    if (this.closed) throw new Error(`Event log is closed: ${this.filePath}`);
+    const event = this.buildEvent(input);
+    // Persist the canonical form used for hashing so a replayed line hashes identically.
+    await appendFile(this.filePath, `${stableStringify(event)}\n`, 'utf8');
+    // Only advance seq/hash after the durable write succeeded.
+    this.commitEvent(event);
+    return event;
   }
 }
 ```
 
 Update `packages/sandbox-core/src/index.ts` to export `./events/event-types`, `./events/event-log`, `./events/memory-event-log` and `./events/jsonl-event-log`.
+
+Additional regression tests required after the event-log hardening (these pin the review findings):
+
+- a decision event without alternatives rejects; with one alternative and a `reasonCode` it is accepted;
+- `JsonlEventLog.open` rejects a non-empty existing file;
+- concurrent appends are serialized: `seq` 0 then 1, `prevHash` links to the first hash;
+- append after `close()` rejects;
+- persisted canonical line round-trips: parse it, strip `hash`, recompute with `eventHash`, and get the stored hash;
+- changing `inputs`, `seq` or `prevHash` changes the hash;
+- nested `undefined` in `inputs` is persisted as `null` and still round-trips.
 
 - [ ] **Step 7: Run the event tests and typecheck**
 
