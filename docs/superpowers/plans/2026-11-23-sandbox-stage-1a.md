@@ -22,6 +22,7 @@
 - Every decision/rejection event must carry a stable `reasonCode`; every decision logs alternatives.
 - Replay must be deterministic: same data + same config + same seed = same event hash.
 - Look-ahead is forbidden: a candle is visible only when `candleCloseTime(candle) <= clock.now()`; the handler must never see a candle before its close, and the next candle is not visible until its own close.
+- Handlers receive only a read-only clock view (`Pick<Clock, 'now'>`); only the replay engine may call `advanceTo`.
 - Stage 1A has no UI, no live data, no real money, no strategies, no portfolio, no execution.
 - Independent review gate after Stage 1A; do not start Stage 1B until it is signed off.
 - Run `npx pnpm@10.20.0` commands from the repo root.
@@ -1283,7 +1284,8 @@ import type { MarketView } from '../data/market-view';
 
 export interface SandboxContext {
   runId: string;
-  clock: Clock;
+  // Handlers may read simulated time but must never advance it.
+  clock: Pick<Clock, 'now'>;
   market: MarketView;
   log: EventLog;
   configVersion: string;
