@@ -389,8 +389,7 @@ git commit -m "feat(sandbox): add core package, clock and hash"
 - Create: `packages/sandbox-core/src/data/snapshot.ts`
 - Create: `packages/sandbox-core/src/data/market-view.ts`
 - Test: `packages/sandbox-core/src/timeframes.test.ts`
-- Test: `packages/sandbox-core/src/data/candles.test.ts`
-- Test: `packages/sandbox-core/src/data/array-candle-source.test.ts`
+- Test: `packages/sandbox-core/src/data/candles.test.ts` (also covers `ArrayCandleSource`)
 - Test: `packages/sandbox-core/src/data/jsonl-candles.test.ts`
 - Test: `packages/sandbox-core/src/data/market-view.test.ts`
 
