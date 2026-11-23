@@ -8,7 +8,9 @@ async function main(): Promise<void> {
   };
   const filePath = read('--file');
   if (!filePath) {
-    throw new Error('Usage: replay --file <candles.jsonl> [--out events.jsonl] [--run-id id] [--seed 7]');
+    throw new Error(
+      'Usage: replay --file <candles.jsonl> [--out events.jsonl] [--run-id id] [--seed 7]',
+    );
   }
   const runId = read('--run-id') ?? `sandbox-${Date.now()}`;
   const seed = Number(read('--seed') ?? 7);

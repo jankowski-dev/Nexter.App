@@ -58,5 +58,10 @@ export async function runReplayFromFile(
   });
   const summary = await runner.run();
   await log.close();
-  return { ...summary, outputPath: options.outputPath, configVersion: version, dataSnapshotId: snapshot.id };
+  return {
+    ...summary,
+    outputPath: options.outputPath,
+    configVersion: version,
+    dataSnapshotId: snapshot.id,
+  };
 }

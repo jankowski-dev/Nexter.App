@@ -128,14 +128,14 @@ Rejected for Stage 1. The product needs custom accounting, custom risk rules, an
 
 Stage 1 uses deterministic rules, not ML. Proposed regimes:
 
-| Regime | Rule sketch |
-|---|---|
-| `TREND_UP` | fast trend above slow, price above slow, volatility not extreme |
-| `TREND_DOWN` | fast trend below slow, price below slow |
-| `RANGE` | fast/slow close, price oscillates around mean, volatility moderate |
-| `CRASH` | sharp drawdown or volatility spike |
-| `RECOVERY` | after crash/downtrend, price reclaims fast, trend not yet confirmed |
-| `ILLIQUID` | liquidity/spread/data quality below threshold |
+| Regime       | Rule sketch                                                         |
+| ------------ | ------------------------------------------------------------------- |
+| `TREND_UP`   | fast trend above slow, price above slow, volatility not extreme     |
+| `TREND_DOWN` | fast trend below slow, price below slow                             |
+| `RANGE`      | fast/slow close, price oscillates around mean, volatility moderate  |
+| `CRASH`      | sharp drawdown or volatility spike                                  |
+| `RECOVERY`   | after crash/downtrend, price reclaims fast, trend not yet confirmed |
+| `ILLIQUID`   | liquidity/spread/data quality below threshold                       |
 
 Rules are versioned (`regimeRulesVersion`) and fixed at run start. Hysteresis/confirmation is required to avoid regime flapping.
 

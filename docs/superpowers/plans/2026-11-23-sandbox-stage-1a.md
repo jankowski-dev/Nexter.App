@@ -76,6 +76,7 @@ Tests are co-located as `*.test.ts` next to the code.
 ### Task 1: Package scaffold, types, clock, hash
 
 **Files:**
+
 - Create: `packages/sandbox-core/package.json`
 - Create: `packages/sandbox-core/tsconfig.json`
 - Create: `packages/sandbox-core/src/index.ts`
@@ -88,6 +89,7 @@ Tests are co-located as `*.test.ts` next to the code.
 - Test: `packages/sandbox-core/src/config.test.ts`
 
 **Interfaces:**
+
 - Produces: `Timestamp`, `Candle`, `RunConfig`, `Clock`, `SimulationClock`, `ClockBackwardsError`, `stableStringify`, `sha256Hex`, `configVersion`.
 
 - [ ] **Step 1: Create the package scaffold**
@@ -382,6 +384,7 @@ git commit -m "feat(sandbox): add core package, clock and hash"
 ### Task 2: Candle validation, JSONL source, snapshot and market view
 
 **Files:**
+
 - Create: `packages/sandbox-core/src/timeframes.ts`
 - Create: `packages/sandbox-core/src/data/candles.ts`
 - Create: `packages/sandbox-core/src/data/array-candle-source.ts`
@@ -394,6 +397,7 @@ git commit -m "feat(sandbox): add core package, clock and hash"
 - Test: `packages/sandbox-core/src/data/market-view.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Candle`, `Timestamp`, `Clock`, `sha256Hex`, `stableStringify`.
 - Produces: `TIMEFRAME_MS`, `candleCloseTime`, `CandleValidationError`, `sortAndValidateCandles`, `CandleSource`, `ArrayCandleSource`, `loadJsonlCandles`, `snapshotCandles`, `MarketView`, `ClockedMarketView`.
 
@@ -416,7 +420,9 @@ describe('timeframes', () => {
   });
 
   it('rejects an unknown timeframe instead of silently guessing', () => {
-    expect(() => candleCloseTime({ openTime: 1_000, timeframe: '2h' })).toThrow(/Unknown timeframe/);
+    expect(() => candleCloseTime({ openTime: 1_000, timeframe: '2h' })).toThrow(
+      /Unknown timeframe/,
+    );
   });
 });
 ```
@@ -455,9 +461,9 @@ describe('sortAndValidateCandles', () => {
   });
 
   it('rejects invalid OHLC and non-decimal prices', () => {
-    expect(() =>
-      sortAndValidateCandles([{ ...candle(1_000), high: '99', close: '100' }]),
-    ).toThrow(CandleValidationError);
+    expect(() => sortAndValidateCandles([{ ...candle(1_000), high: '99', close: '100' }])).toThrow(
+      CandleValidationError,
+    );
     expect(() => sortAndValidateCandles([{ ...candle(1_000), close: 'abc' }])).toThrow(
       CandleValidationError,
     );
@@ -665,9 +671,9 @@ import { sortAndValidateCandles } from './candles';
 const candleInputSchema = z.object({
   tokenId: z.string().min(1),
   timeframe: z.string().min(1),
-  openTime: z.union([z.number().int(), z.iso.datetime()]).transform((value) =>
-    typeof value === 'number' ? value : Date.parse(value),
-  ),
+  openTime: z
+    .union([z.number().int(), z.iso.datetime()])
+    .transform((value) => (typeof value === 'number' ? value : Date.parse(value))),
   open: z.string().min(1),
   high: z.string().min(1),
   low: z.string().min(1),
@@ -870,6 +876,7 @@ git commit -m "feat(sandbox): add candle validation, snapshot and clocked market
 ### Task 3: Event schema, hash-chained log and JSONL log
 
 **Files:**
+
 - Create: `packages/sandbox-core/src/events/event-types.ts`
 - Create: `packages/sandbox-core/src/events/event-schema.ts`
 - Create: `packages/sandbox-core/src/events/event-log.ts`
@@ -879,6 +886,7 @@ git commit -m "feat(sandbox): add candle validation, snapshot and clocked market
 - Test: `packages/sandbox-core/src/events/jsonl-event-log.test.ts`
 
 **Interfaces:**
+
 - Consumes: `stableStringify`, `sha256Hex`, `Timestamp`.
 - Produces: `SandboxEventInput`, `SandboxEvent`, `SandboxDecision`, `SandboxAlternative`, `SandboxRiskCheck`, `EventLog`, `MemoryEventLog`, `JsonlEventLog`, `GENESIS_HASH`.
 
@@ -1012,7 +1020,12 @@ describe('MemoryEventLog', () => {
   it('requires a reasonCode for decision-like events', async () => {
     const log = new MemoryEventLog();
     await expect(
-      log.append({ ...base, module: 'strategy', eventType: 'signal.rejected', severity: 'decision' }),
+      log.append({
+        ...base,
+        module: 'strategy',
+        eventType: 'signal.rejected',
+        severity: 'decision',
+      }),
     ).rejects.toThrow(/reasonCode/);
   });
 });
@@ -1321,11 +1334,13 @@ git commit -m "feat(sandbox): add deterministic hash-chained event log"
 ### Task 4: Replay runner
 
 **Files:**
+
 - Create: `packages/sandbox-core/src/runner/context.ts`
 - Create: `packages/sandbox-core/src/runner/replay-runner.ts`
 - Test: `packages/sandbox-core/src/runner/replay-runner.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Clock`, `Candle`, `CandleSource`, `MarketView`, `EventLog`, `TIMEFRAME_MS`, `candleCloseTime`.
 - Produces: `SandboxContext`, `ReplayRunnerOptions`, `ReplaySummary`, `ReplayRunner`, `DataSourceOrderError`.
 
@@ -1621,7 +1636,11 @@ export class ReplayRunner {
         const key = `${candle.tokenId}|${candle.timeframe}`;
         const previous = lastByKey.get(key);
         const expected = TIMEFRAME_MS[candle.timeframe];
-        if (previous !== undefined && expected !== undefined && candle.openTime - previous > expected) {
+        if (
+          previous !== undefined &&
+          expected !== undefined &&
+          candle.openTime - previous > expected
+        ) {
           gaps += 1;
           await eventLog.append({
             runId,
@@ -1706,7 +1725,12 @@ export class ReplayRunner {
       module: 'run',
       eventType: 'run.finished',
       severity: 'info',
-      inputs: { candles, firstTime: firstTime === null ? null : iso(firstTime), lastTime: lastTime === null ? null : iso(lastTime), gaps },
+      inputs: {
+        candles,
+        firstTime: firstTime === null ? null : iso(firstTime),
+        lastTime: lastTime === null ? null : iso(lastTime),
+        gaps,
+      },
       dataSnapshotId,
       configVersion,
       seed,
@@ -1751,12 +1775,14 @@ git commit -m "feat(sandbox): add chronological replay runner"
 ### Task 5: CLI replay driver and fixture
 
 **Files:**
+
 - Create: `packages/sandbox-core/src/cli/replay.ts`
 - Create: `packages/sandbox-core/src/cli/main.ts`
 - Create: `packages/sandbox-core/src/cli/replay.test.ts`
 - Create: `packages/sandbox-core/src/fixtures/candles-1h.jsonl`
 
 **Interfaces:**
+
 - Consumes: all previous modules.
 - Produces: `ReplayFromFileOptions`, `ReplayFromFileResult`, `runReplayFromFile`.
 
@@ -1772,9 +1798,36 @@ import { describe, expect, it } from 'vitest';
 import { runReplayFromFile } from './replay';
 
 const candles = [
-  { tokenId: 'btc', timeframe: '1h', openTime: '2026-01-01T00:00:00.000Z', open: '100', high: '101', low: '99', close: '100', volumeUsd: '10' },
-  { tokenId: 'btc', timeframe: '1h', openTime: '2026-01-01T01:00:00.000Z', open: '100', high: '102', low: '100', close: '101', volumeUsd: '11' },
-  { tokenId: 'btc', timeframe: '1h', openTime: '2026-01-01T02:00:00.000Z', open: '101', high: '103', low: '101', close: '102', volumeUsd: '12' },
+  {
+    tokenId: 'btc',
+    timeframe: '1h',
+    openTime: '2026-01-01T00:00:00.000Z',
+    open: '100',
+    high: '101',
+    low: '99',
+    close: '100',
+    volumeUsd: '10',
+  },
+  {
+    tokenId: 'btc',
+    timeframe: '1h',
+    openTime: '2026-01-01T01:00:00.000Z',
+    open: '100',
+    high: '102',
+    low: '100',
+    close: '101',
+    volumeUsd: '11',
+  },
+  {
+    tokenId: 'btc',
+    timeframe: '1h',
+    openTime: '2026-01-01T02:00:00.000Z',
+    open: '101',
+    high: '103',
+    low: '101',
+    close: '102',
+    volumeUsd: '12',
+  },
 ];
 
 describe('runReplayFromFile', () => {
@@ -1785,8 +1838,18 @@ describe('runReplayFromFile', () => {
     const output2 = join(dir, 'events-2.jsonl');
     await writeFile(input, candles.map((candle) => JSON.stringify(candle)).join('\n'));
 
-    const one = await runReplayFromFile({ filePath: input, outputPath: output1, runId: 'run-1', seed: 7 });
-    const two = await runReplayFromFile({ filePath: input, outputPath: output2, runId: 'run-1', seed: 7 });
+    const one = await runReplayFromFile({
+      filePath: input,
+      outputPath: output1,
+      runId: 'run-1',
+      seed: 7,
+    });
+    const two = await runReplayFromFile({
+      filePath: input,
+      outputPath: output2,
+      runId: 'run-1',
+      seed: 7,
+    });
 
     expect(one.candles).toBe(3);
     expect(one.eventCount).toBe(8);
@@ -1803,7 +1866,12 @@ describe('runReplayFromFile', () => {
     const input = join(dir, 'empty.jsonl');
     await writeFile(input, '');
     await expect(
-      runReplayFromFile({ filePath: input, outputPath: join(dir, 'events.jsonl'), runId: 'run-1', seed: 7 }),
+      runReplayFromFile({
+        filePath: input,
+        outputPath: join(dir, 'events.jsonl'),
+        runId: 'run-1',
+        seed: 7,
+      }),
     ).rejects.toThrow(/no candles/i);
   });
 });
@@ -1879,7 +1947,12 @@ export async function runReplayFromFile(
   });
   const summary = await runner.run();
   await log.close();
-  return { ...summary, outputPath: options.outputPath, configVersion: version, dataSnapshotId: snapshot.id };
+  return {
+    ...summary,
+    outputPath: options.outputPath,
+    configVersion: version,
+    dataSnapshotId: snapshot.id,
+  };
 }
 ```
 
@@ -1898,7 +1971,9 @@ async function main(): Promise<void> {
   };
   const filePath = read('--file');
   if (!filePath) {
-    throw new Error('Usage: replay --file <candles.jsonl> [--out events.jsonl] [--run-id id] [--seed 7]');
+    throw new Error(
+      'Usage: replay --file <candles.jsonl> [--out events.jsonl] [--run-id id] [--seed 7]',
+    );
   }
   const runId = read('--run-id') ?? `sandbox-${Date.now()}`;
   const seed = Number(read('--seed') ?? 7);
@@ -1947,10 +2022,12 @@ git commit -m "feat(sandbox): add historical replay CLI"
 ### Task 6: Stage 1A review packet and gate
 
 **Files:**
+
 - Create: `docs/reviews/2026-11-23-sandbox-stage-1a-review-request.md`
 - Optionally create: `docs/reviews/artifacts/sandbox-stage-1a-events.jsonl` (sample output, if small)
 
 **Interfaces:**
+
 - No code interfaces. This task prepares the independent review gate.
 
 - [ ] **Step 1: Run the full checks**
