@@ -779,7 +779,7 @@ Compute with small, configurable periods from `RegimeSettings`. `staleBars` is `
 
 ```text
 1. insufficient history  -> ILLIQUID / REGIME_INSUFFICIENT_HISTORY
-2. staleBars > 1         -> ILLIQUID / REGIME_STALE_DATA
+2. staleBars > 0         -> ILLIQUID / REGIME_STALE_DATA
 3. avgVolume < minLiquidityUsd -> ILLIQUID / REGIME_LOW_LIQUIDITY
 4. drawdown >= crashDrawdownPct OR atrPct >= crashAtrPct -> CRASH / REGIME_CRASH
 5. previous regime in {CRASH, TREND_DOWN}
@@ -816,7 +816,7 @@ Use `makeSeries` with small periods, e.g. `fastHours: 3`, `slowHours: 6`, `atrPe
 Cover:
 
 1. insufficient history → `ILLIQUID` + `REGIME_INSUFFICIENT_HISTORY`;
-2. stale data (now two bars after the last close) → `ILLIQUID` + `REGIME_STALE_DATA`;
+2. stale data (now one bar after the last close) → `ILLIQUID` + `REGIME_STALE_DATA`;
 3. volume below `minLiquidityUsd` → `ILLIQUID` + `REGIME_LOW_LIQUIDITY`;
 4. strong linear uptrend with normal ATR → `TREND_UP`;
 5. crash fixture → `CRASH` adopted on the first crash bar even when dwell is 3;
@@ -1217,7 +1217,7 @@ Always return all twelve checks in this order; each has decimal-string `value`/`
 | `max_drawdown`          | `max(0, (peak - equity)/peak*100)`         | `maxDrawdownPct`                            | `<=`            |
 | `per_trade_risk`        | `size * stopPct/100`                       | `equity * perTradeRiskPct/100 * riskWeight` | `<=`            |
 | `liquidity`             | `size`                                     | `avgVolume * liquidityCapPct/100`           | `<=`            |
-| `data_stale`            | `features.staleBars`                       | `1`                                         | `<=`            |
+| `data_stale`            | `features.staleBars`                       | `0`                                         | `<=`            |
 | `cooldown`              | `cooldown ISO` or `none`                   | `now ISO`                                   | `none` or `<=`  |
 | `token_blocked`         | phase                                      | `not_blocked`                               | `!== 'BLOCKED'` |
 | `size_too_small`        | `size`                                     | `minOrderUsd`                               | `>=`            |
@@ -1230,7 +1230,7 @@ Exactly two checks, same formatting:
 
 | name         | value      | limit                             | pass |
 | ------------ | ---------- | --------------------------------- | ---- |
-| `data_stale` | stale bars | `1`                               | `<=` |
+| `data_stale` | stale bars | `0`                               | `<=` |
 | `liquidity`  | `sizeUsd`  | `avgVolume * liquidityCapPct/100` | `<=` |
 
 Daily loss, drawdown, cooldown and token-blocked never block a sell. Test this explicitly with a portfolio that breaches both loss limits and a token in `BLOCKED`/cooldown.
@@ -1241,7 +1241,7 @@ Precedence:
 
 1. position exists → `IN_POSITION` / `TOKEN_IN_POSITION`;
 2. `cooldownUntil !== null && cooldownUntil > now` → `COOLDOWN` / `TOKEN_COOLDOWN`;
-3. regime `ILLIQUID` or `UNKNOWN` or `staleBars > 1` → `BLOCKED` / `TOKEN_BLOCKED`;
+3. regime `ILLIQUID` or `UNKNOWN` or `staleBars > 0` → `BLOCKED` / `TOKEN_BLOCKED`;
 4. `hasBuyIntent` → `ARMED` / `TOKEN_ARMED`;
 5. otherwise `SLEEPING` / `TOKEN_SLEEPING`.
 
