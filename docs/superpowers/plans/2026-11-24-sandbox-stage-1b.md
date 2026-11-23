@@ -1367,13 +1367,14 @@ Do not silently repair input.
    - else `eligibleStrategyFor(regime)`; if `null`, log `strategy.skipped` and continue with no signal;
    - else reason `STRATEGY_SELECTED_BY_REGIME`.
 5. Evaluate the strategy with `{now, tokenId, timeframe, regime, candles, position, state: previous.strategyState}`. Log `strategy.evaluated`. If a position exists and the signal is `buy`, replace it with `hold` + `STRATEGY_BUY_WITH_POSITION`, log `strategy.rejected`.
-6. Collect sell intents first (risk-reducing), in token code-unit order: for each position token with a `sell` signal, run `checkSellRisk`, log `risk.checked`; if passed, build and log `order.intent`.
-7. Collect buy candidates (`buy` signals without a position) and rank them. Log `opportunity.ranked` in rank order and `opportunity.dropped` in token code-unit order.
-8. Allocate. Log `portfolio.allocated` in allocation order and `portfolio.dropped` in ranked order.
-9. For each allocation in order: run `checkBuyRisk`, log `risk.checked`; if passed, build and log `order.intent`.
-10. Derive phases and build `nextState` for every evaluated token: regime state, phase, `cooldownUntil` unchanged from the previous state, `strategyState` = signal `nextState` when a signal was produced, otherwise the previous strategy state. Log `token.state_changed` when changed.
-11. Log `decision.completed` with `{intents, buys, sells, dropped, tokens}`.
-12. Return `{clockTime, intents, tokenViews, state, eventCount: log.events().length - before, eventHash: log.hash()}`.
+6. Build the risk context once: `phases` for every evaluated token (derive the preliminary phase with `hasBuyIntent: false`), `features` from each regime state, and `cooldowns` containing every non-null `cooldownUntil`. Always pass the cooldown map; the `'cooldown'` fallback value is a misconfiguration marker only.
+7. Collect sell intents first (risk-reducing), in token code-unit order: for each position token with a `sell` signal, run `checkSellRisk`, log `risk.checked`; if passed, build and log `order.intent`.
+8. Collect buy candidates (`buy` signals without a position) and rank them. Log `opportunity.ranked` in rank order and `opportunity.dropped` in token code-unit order.
+9. Allocate. Log `portfolio.allocated` in allocation order and `portfolio.dropped` in ranked order.
+10. For each allocation in order: run `checkBuyRisk`, log `risk.checked`; if passed, build and log `order.intent`.
+11. Derive phases and build `nextState` for every evaluated token: regime state, phase, `cooldownUntil` unchanged from the previous state, `strategyState` = signal `nextState` when a signal was produced, otherwise the previous strategy state. Log `token.state_changed` when changed.
+12. Log `decision.completed` with `{intents, buys, sells, dropped, tokens}`.
+13. Return `{clockTime, intents, tokenViews, state, eventCount: log.events().length - before, eventHash: log.hash()}`.
 
 Intent construction:
 
