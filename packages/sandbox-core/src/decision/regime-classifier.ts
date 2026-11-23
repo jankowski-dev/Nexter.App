@@ -56,6 +56,7 @@ interface RawFeatures {
   readonly avgVolumeUsd: number | null;
   readonly drawdownPct: number | null;
   readonly staleBars: number;
+  readonly futureCandle: boolean;
 }
 
 interface RawClassification {
@@ -88,14 +89,28 @@ function zeroFeatures(): RegimeFeatures {
   };
 }
 
-function staleBarsFor(candles: readonly Candle[], now: Timestamp): number {
+interface CandleTiming {
+  readonly staleBars: number;
+  /** True when the last candle closes after `now` (look-ahead data). */
+  readonly futureCandle: boolean;
+}
+
+function candleTiming(candles: readonly Candle[], now: Timestamp): CandleTiming {
   const last = candles[candles.length - 1];
-  if (last === undefined) return 0;
+  if (last === undefined) return { staleBars: 0, futureCandle: false };
   const timeframeMs = TIMEFRAME_MS[last.timeframe];
-  if (timeframeMs === undefined || timeframeMs <= 0) return 0;
+  if (timeframeMs === undefined || timeframeMs <= 0) {
+    return { staleBars: 0, futureCandle: false };
+  }
   const elapsed = now - candleCloseTime(last);
-  if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-  return Math.floor(elapsed / timeframeMs);
+  if (!Number.isFinite(elapsed)) return { staleBars: 0, futureCandle: false };
+  if (elapsed < 0) return { staleBars: 0, futureCandle: true };
+  return { staleBars: Math.floor(elapsed / timeframeMs), futureCandle: false };
+}
+
+/** Drawdown looks at the wider window so a crash outside the range window still counts. */
+function drawdownWindowHours(settings: RegimeSettings): number {
+  return Math.max(settings.slowHours, settings.rangeWindowHours);
 }
 
 function computeRawFeatures(
@@ -107,6 +122,7 @@ function computeRawFeatures(
   const closes = candleCloses(candles);
   const lastIndex = bars - 1;
   const lastClose = lastIndex >= 0 ? finiteOrNull(Number(candles[lastIndex]?.close)) : null;
+  const timing = candleTiming(candles, now);
 
   return {
     bars,
@@ -118,8 +134,9 @@ function computeRawFeatures(
     recentHigh: finiteOrNull(highestHigh(candles, settings.rangeWindowHours)),
     recentLow: finiteOrNull(lowestLow(candles, settings.rangeWindowHours)),
     avgVolumeUsd: finiteOrNull(computeAverageVolumeUsd(candles, settings.liquidityWindowHours)),
-    drawdownPct: finiteOrNull(computeDrawdownPct(candles, settings.rangeWindowHours)),
-    staleBars: staleBarsFor(candles, now),
+    drawdownPct: finiteOrNull(computeDrawdownPct(candles, drawdownWindowHours(settings))),
+    staleBars: timing.staleBars,
+    futureCandle: timing.futureCandle,
   };
 }
 
@@ -148,7 +165,12 @@ function toFeatures(raw: RawFeatures): RegimeFeatures {
 }
 
 function minimumBars(settings: RegimeSettings): number {
-  return Math.max(settings.atrPeriod + 1, settings.slowHours + 1, settings.liquidityWindowHours);
+  return Math.max(
+    settings.atrPeriod + 1,
+    settings.slowHours + 1,
+    settings.liquidityWindowHours,
+    settings.rangeWindowHours,
+  );
 }
 
 /** True when the fast SMA rose on each of the last `confirmBars` transitions. */
@@ -190,15 +212,19 @@ function evaluateRaw(
   const lastClose = raw.lastClose;
   const fastSma = raw.fastSma;
   const slowSma = raw.slowSma;
+  const features = toFeatures(raw);
   if (!isPositive(lastClose) || !isPositive(fastSma) || !isPositive(slowSma)) {
     // A non-positive price makes every ratio meaningless: report a clean
-    // UNKNOWN with zeroed features instead of leaking NaN/Infinity.
-    return { rawRegime: 'UNKNOWN', rawReason: Reason.REGIME_UNKNOWN, features: zeroFeatures() };
+    // UNKNOWN with zeroed features instead of leaking NaN/Infinity, but keep
+    // the bar counts so the log does not claim zero candles were supplied.
+    return {
+      rawRegime: 'UNKNOWN',
+      rawReason: Reason.REGIME_UNKNOWN,
+      features: { ...zeroFeatures(), bars: features.bars, staleBars: features.staleBars },
+    };
   }
 
-  const features = toFeatures(raw);
-
-  if (raw.staleBars > 0) {
+  if (raw.staleBars > 0 || raw.futureCandle) {
     return { rawRegime: 'ILLIQUID', rawReason: Reason.REGIME_STALE_DATA, features };
   }
 

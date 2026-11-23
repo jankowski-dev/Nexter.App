@@ -99,6 +99,19 @@ function manualCandle(index: number, price: string): Candle {
   };
 }
 
+function ohlcCandle(index: number, open: number, high: number, low: number, close: number): Candle {
+  return {
+    tokenId: 'token',
+    timeframe: '1h',
+    openTime: Date.UTC(2026, 0, 1) + index * HOUR,
+    open: open.toFixed(8),
+    high: high.toFixed(8),
+    low: low.toFixed(8),
+    close: close.toFixed(8),
+    volumeUsd: '100000',
+  };
+}
+
 /** Closes for a 20% crash, then a steady 2%-per-bar recovery. */
 function crashThenRecoveryCloses(): number[] {
   const closes: number[] = [];
@@ -143,10 +156,35 @@ describe('computeRegimeFeatures', () => {
     expect(features.slowSma).toBe(formatUsd(sma(closes, 6) as number));
     expect(features.longSma).toBe(formatUsd(sma(closes, 12) as number));
     expect(features.atrPct).toBe(formatPct(atrPct(candles, 3) as number));
-    expect(features.drawdownPct).toBe(formatPct(drawdownPct(candles, 4) as number));
+    expect(features.drawdownPct).toBe(
+      formatPct(
+        drawdownPct(candles, Math.max(SETTINGS.slowHours, SETTINGS.rangeWindowHours)) as number,
+      ),
+    );
     expect(features.avgVolumeUsd).toBe('100000.00');
     expect(Number.isInteger(features.bars)).toBe(true);
     expect(Number.isInteger(features.staleBars)).toBe(true);
+  });
+
+  it('computes a hand-checked drawdown over the wider window', () => {
+    // Last 6 bars (slowHours=6 > rangeWindowHours=4): highs 120, 125, 110, 105,
+    // 100, 80.5 with the last close at 80. Drawdown = (125 - 80) / 125 = 36%.
+    // The range window (4 bars) only sees highs 110, 105, 100, 80.5.
+    const candles = [
+      ohlcCandle(0, 100, 101, 99, 100),
+      ohlcCandle(1, 100, 120, 99, 100),
+      ohlcCandle(2, 100, 125, 99, 100),
+      ohlcCandle(3, 100, 110, 99, 100),
+      ohlcCandle(4, 100, 105, 99, 100),
+      ohlcCandle(5, 100, 100, 99, 100),
+      ohlcCandle(6, 100, 80.5, 79.5, 80),
+    ];
+    const features = computeRegimeFeatures(candles, closeTimeOf(candles), SETTINGS);
+
+    expect(features.recentHigh).toBe('110.00');
+    expect(features.drawdownPct).toBe('36.00');
+    expect(features.lastClose).toBe('80.00');
+    expect(features.fastSma).toBe('93.33');
   });
 
   it('leaves longSma null when history is shorter than longHours', () => {
@@ -189,6 +227,18 @@ describe('classifyRegime raw priority', () => {
     expect(result.state.features.longSma).toBeNull();
   });
 
+  it('requires the range window in minimum history', () => {
+    const settings: RegimeSettings = { ...SETTINGS, rangeWindowHours: 8 };
+    // Seven bars satisfy atrPeriod+1, slowHours+1 and liquidityWindowHours,
+    // but not the eight-bar range window.
+    const candles = makeSeries({ count: 7, startPrice: 100, stepPct: 1 });
+    const result = classifyAtEnd(candles, null, settings);
+
+    expect(result.rawRegime).toBe('ILLIQUID');
+    expect(result.state.reasonCode).toBe(Reason.REGIME_INSUFFICIENT_HISTORY);
+    expect(result.reasonCode).toBe(Reason.REGIME_INSUFFICIENT_HISTORY);
+  });
+
   it('treats one closed bar without a current candle as stale data', () => {
     const candles = makeSeries({ count: 20, startPrice: 100, stepPct: 1 });
     const result = classifyRegime({
@@ -206,6 +256,25 @@ describe('classifyRegime raw priority', () => {
     expect(result.state.features.staleBars).toBe(1);
     expect(result.changed).toBe(true);
     expect(result.state.since).toBe(closeTimeOf(candles) + HOUR);
+  });
+
+  it('treats a candle that closes after now as stale look-ahead data', () => {
+    const candles = makeSeries({ count: 20, startPrice: 100, stepPct: 1 });
+    const result = classifyRegime({
+      tokenId: 'token',
+      now: closeTimeOf(candles) - HOUR,
+      candles,
+      previous: heldState('TREND_UP'),
+      settings: SETTINGS,
+    });
+
+    expect(result.rawRegime).toBe('ILLIQUID');
+    expect(result.state.regime).toBe('ILLIQUID');
+    expect(result.state.reasonCode).toBe(Reason.REGIME_STALE_DATA);
+    expect(result.reasonCode).toBe(Reason.REGIME_STALE_DATA);
+    expect(result.state.features.staleBars).toBe(0);
+    expect(result.state.features.lastClose).not.toBeNull();
+    expect(result.changed).toBe(true);
   });
 
   it('flags illiquid volume and adopts it immediately', () => {
@@ -270,14 +339,33 @@ describe('classifyRegime raw priority', () => {
     expect(result.state.features.atrPct).not.toBeNull();
   });
 
-  it('returns UNKNOWN with zero features instead of dividing by a non-positive price', () => {
+  it('returns UNKNOWN with guarded features instead of dividing by a non-positive price', () => {
     const candles = Array.from({ length: 8 }, (_, index) => manualCandle(index, '0'));
     const result = classifyAtEnd(candles);
 
     expect(result.rawRegime).toBe('UNKNOWN');
     expect(result.state.regime).toBe('UNKNOWN');
     expect(result.state.reasonCode).toBe(Reason.REGIME_UNKNOWN);
-    expect(result.state.features).toEqual(emptyFeatures());
+    // The guard still reports how many bars arrived and how stale they are.
+    expect(result.state.features).toEqual({ ...emptyFeatures(), bars: 8 });
+  });
+
+  it('keeps bars and staleBars in the guarded feature snapshot', () => {
+    const candles = Array.from({ length: 8 }, (_, index) => manualCandle(index, '0'));
+    const result = classifyRegime({
+      tokenId: 'token',
+      now: closeTimeOf(candles) + 2 * HOUR,
+      candles,
+      previous: null,
+      settings: SETTINGS,
+    });
+
+    expect(result.rawRegime).toBe('UNKNOWN');
+    expect(result.state.features.bars).toBe(8);
+    expect(result.state.features.staleBars).toBe(2);
+    expect(result.state.features.lastClose).toBeNull();
+    expect(result.state.features.fastSma).toBeNull();
+    expect(result.state.features.atrPct).toBeNull();
   });
 
   it('keeps a short longSma from blocking classification', () => {
@@ -319,6 +407,21 @@ describe('classifyRegime crash and recovery', () => {
     expect(result.state.candidate).toBeNull();
     expect(result.state.candidateBars).toBe(0);
     expect(result.state.since).toBe(closeTimeOf(prefix));
+  });
+
+  it('measures crash drawdown over max(slowHours, rangeWindowHours)', () => {
+    // SETTINGS has slowHours=6 and rangeWindowHours=4. The 150 spike sits
+    // inside the six-bar drawdown window but outside the four-bar range window.
+    const candles = makeCandlesFromCloses([100, 100, 150, 100, 100, 100, 100, 100]);
+    const features = computeRegimeFeatures(candles, closeTimeOf(candles), SETTINGS);
+    expect(features.recentHigh).toBe('100.10');
+    expect(features.drawdownPct).toBe('33.40');
+
+    const result = classifyAtEnd(candles);
+    expect(result.rawRegime).toBe('CRASH');
+    expect(result.state.regime).toBe('CRASH');
+    expect(result.state.reasonCode).toBe(Reason.REGIME_CRASH);
+    expect(result.state.features.drawdownPct).toBe('33.40');
   });
 
   it('needs recovery confirmation and dwell before leaving CRASH', () => {
