@@ -1816,6 +1816,7 @@ export async function runReplayFromFile(
   await log.close();
   return { ...summary, outputPath: options.outputPath, configVersion: version, dataSnapshotId: snapshot.id };
 }
+```
 
 `src/cli/replay.ts` exports only `runReplayFromFile`; it has no side effects and is safe to import in tests.
 
