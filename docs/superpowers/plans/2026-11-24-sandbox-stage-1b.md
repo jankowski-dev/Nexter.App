@@ -1121,7 +1121,7 @@ Ranking:
 
 Allocation:
 
-- token cap binds (equity 1000, existing token 150, size capped at 50);
+- token cap binds with `maxTokenExposurePct: 5` (equity 1000, cap 50, no existing position); an existing position is a separate `ALLOC_EXISTING_POSITION` test, since an existing position never reaches the cap checks;
 - strategy cap binds;
 - cash buffer binds (cash 100, equity 1000, buffer 10%);
 - per-trade risk binds (`equity 1000`, risk 1%, stop 4% → 250);
@@ -1216,8 +1216,8 @@ Always return all twelve checks in this order; each has decimal-string `value`/`
 | `max_token_exposure`    | `(tokenValue + size) / equity * 100`       | `maxTokenExposurePct`                       | `<=`            |
 | `max_strategy_exposure` | `(strategyValue + size) / equity * 100`    | `maxStrategyExposurePct`                    | `<=`            |
 | `cash_buffer`           | `cash - size`                              | `equity * cashBufferPct/100`                | `>=`            |
-| `daily_loss_limit`      | `max(0, (dayStart - equity)/dayStart*100)` | `dailyLossLimitPct`                         | `<=`            |
-| `max_drawdown`          | `max(0, (peak - equity)/peak*100)`         | `maxDrawdownPct`                            | `<=`            |
+| `daily_loss_limit`      | `max(0, (dayStart - equity)/dayStart*100)` | `dailyLossLimitPct`                         | `<`             |
+| `max_drawdown`          | `max(0, (peak - equity)/peak*100)`         | `maxDrawdownPct`                            | `<`             |
 | `per_trade_risk`        | `size * stopPct/100`                       | `equity * perTradeRiskPct/100 * riskWeight` | `<=`            |
 | `liquidity`             | `size`                                     | `avgVolume * liquidityCapPct/100`           | `<=`            |
 | `data_stale`            | `features.staleBars`                       | `0`                                         | `<=`            |
@@ -1236,7 +1236,7 @@ Exactly two checks, same formatting:
 | `data_stale` | stale bars | `0`                               | `<=` |
 | `liquidity`  | `sizeUsd`  | `avgVolume * liquidityCapPct/100` | `<=` |
 
-Daily loss, drawdown, cooldown and token-blocked never block a sell. Test this explicitly with a portfolio that breaches both loss limits and a token in `BLOCKED`/cooldown.
+Daily loss and drawdown block at or above the limit (strictly below passes); exposure, cash-buffer, per-trade, liquidity and min-order checks pass at equality. Daily loss, drawdown, cooldown and token-blocked never block a sell. Test this explicitly with a portfolio that breaches both loss limits and a token in `BLOCKED`/cooldown, and with a portfolio exactly at each loss limit.
 
 - [ ] **Step 3: Derive token phase**
 
