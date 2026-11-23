@@ -63,7 +63,9 @@ export const sandboxEventInputSchema = z
     const hasDecision = value.decision !== null && value.decision !== undefined;
     const needsReason =
       hasDecision ||
-      /^(signal|order|position|strategy|risk)\./.test(value.eventType) ||
+      /^(signal|order|position|strategy|risk|regime|opportunity|portfolio|token|decision)\./.test(
+        value.eventType,
+      ) ||
       value.eventType === 'run.failed';
     if (needsReason && !value.reasonCode) {
       ctx.addIssue({

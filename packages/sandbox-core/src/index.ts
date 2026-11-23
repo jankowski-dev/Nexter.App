@@ -2,6 +2,7 @@ export * from './types';
 export * from './config';
 export * from './clock';
 export * from './util/hash';
+export * from './util/json-value';
 export * from './timeframes';
 export * from './data/candles';
 export * from './data/array-candle-source';

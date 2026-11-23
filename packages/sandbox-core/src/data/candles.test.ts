@@ -42,6 +42,50 @@ describe('sortAndValidateCandles', () => {
     );
   });
 
+  it.each(['open', 'high', 'low', 'close'] as const)(
+    'rejects a non-positive %s price',
+    (field) => {
+      expect(() => sortAndValidateCandles([{ ...candle(1_000), [field]: '-1' }])).toThrow(
+        /positive decimal string/,
+      );
+      expect(() => sortAndValidateCandles([{ ...candle(1_000), [field]: '0' }])).toThrow(
+        /positive decimal string/,
+      );
+      expect(() => sortAndValidateCandles([{ ...candle(1_000), [field]: '0.0' }])).toThrow(
+        /positive decimal string/,
+      );
+    },
+  );
+
+  it('accepts a zero volume but rejects a negative volume', () => {
+    expect(sortAndValidateCandles([{ ...candle(1_000), volumeUsd: '0' }])[0]?.volumeUsd).toBe('0');
+    expect(() => sortAndValidateCandles([{ ...candle(1_000), volumeUsd: '-0.1' }])).toThrow(
+      /volumeUsd must be a non-negative decimal string/,
+    );
+    expect(() => sortAndValidateCandles([{ ...candle(1_000), volumeUsd: '-1' }])).toThrow(
+      CandleValidationError,
+    );
+  });
+
+  it('rejects zero and negative prices in every OHLC field', () => {
+    expect(() =>
+      sortAndValidateCandles([
+        { ...candle(1_000), open: '0', high: '0', low: '0', close: '0' },
+      ]),
+    ).toThrow(CandleValidationError);
+    expect(() =>
+      sortAndValidateCandles([
+        { ...candle(1_000), open: '-5', high: '-4', low: '-6', close: '-5' },
+      ]),
+    ).toThrow(CandleValidationError);
+  });
+
+  it('rejects a negative zero price', () => {
+    expect(() => sortAndValidateCandles([{ ...candle(1_000), open: '-0.0' }])).toThrow(
+      /positive decimal string/,
+    );
+  });
+
   it('rejects an unknown timeframe', () => {
     expect(() => sortAndValidateCandles([{ ...candle(1_000), timeframe: '2h' }])).toThrow(
       CandleValidationError,

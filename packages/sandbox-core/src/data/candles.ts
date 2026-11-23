@@ -8,10 +8,18 @@ export class CandleValidationError extends Error {
   }
 }
 
-const DECIMAL = /^-?\d+(\.\d+)?$/;
+const NON_NEGATIVE_DECIMAL = /^\d+(\.\d+)?$/;
 
-function assertDecimal(value: string, field: string): void {
-  if (!DECIMAL.test(value)) throw new CandleValidationError(`${field} is not a decimal string`);
+function assertPrice(value: string, field: string): void {
+  if (!NON_NEGATIVE_DECIMAL.test(value) || Number(value) <= 0) {
+    throw new CandleValidationError(`${field} must be a positive decimal string`);
+  }
+}
+
+function assertVolume(value: string): void {
+  if (!NON_NEGATIVE_DECIMAL.test(value)) {
+    throw new CandleValidationError('volumeUsd must be a non-negative decimal string');
+  }
 }
 
 /**
@@ -45,9 +53,10 @@ export function sortAndValidateCandles(candles: readonly Candle[]): Candle[] {
     if (!Number.isSafeInteger(candle.openTime)) {
       throw new CandleValidationError('openTime must be a safe integer timestamp');
     }
-    for (const field of ['open', 'high', 'low', 'close', 'volumeUsd'] as const) {
-      assertDecimal(candle[field], field);
+    for (const field of ['open', 'high', 'low', 'close'] as const) {
+      assertPrice(candle[field], field);
     }
+    assertVolume(candle.volumeUsd);
     const open = Number(candle.open);
     const high = Number(candle.high);
     const low = Number(candle.low);

@@ -1,4 +1,5 @@
 import { sha256Hex, stableStringify } from '../util/hash';
+import { assertJsonValue } from '../util/json-value';
 import { sandboxEventInputSchema } from './event-schema';
 import { GENESIS_HASH, type SandboxEvent, type SandboxEventInput } from './event-types';
 import type { EventLog } from './event-log';
@@ -28,6 +29,11 @@ export class MemoryEventLog implements EventLog {
   /** Validates the input and computes the next chained event without storing it. */
   protected buildEvent(input: SandboxEventInput): SandboxEvent {
     const parsed = sandboxEventInputSchema.parse(input);
+    // Hash payloads must survive a JSON round-trip unchanged.
+    assertJsonValue(parsed.inputs ?? {}, 'inputs');
+    assertJsonValue(parsed.stateBefore, 'stateBefore');
+    assertJsonValue(parsed.stateAfter, 'stateAfter');
+    assertJsonValue(parsed.timing, 'timing');
     const prevHash = this.entries.at(-1)?.hash ?? GENESIS_HASH;
     const base = {
       ...parsed,
