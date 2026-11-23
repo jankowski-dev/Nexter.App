@@ -14,6 +14,7 @@
     "replay": "tsx src/cli/main.ts"
   },
   "dependencies": {
+    "decimal.js": "10.6.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
