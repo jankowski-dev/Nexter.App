@@ -12,3 +12,5 @@ export * from './events/event-types';
 export * from './events/event-log';
 export * from './events/memory-event-log';
 export * from './events/jsonl-event-log';
+export * from './runner/context';
+export * from './runner/replay-runner';
