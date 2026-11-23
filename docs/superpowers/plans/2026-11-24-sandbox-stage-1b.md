@@ -1348,9 +1348,11 @@ Throw `DecisionInputError` when:
 - `tokenIds` is empty, contains an empty/duplicate id, or `clockTime` is not a safe integer;
 - `market.snapshotId() !== dataSnapshotId`;
 - a decimal field is invalid (`equityUsd`, `cashUsd`, `dayStartEquityUsd`, `peakEquityUsd`, position `amount`/`avgCostUsd`/`marketValueUsd`/`stopLossPct`/`takeProfitPct`);
-- `dayStartEquityUsd` or `peakEquityUsd` is zero;
+- `equityUsd`, `dayStartEquityUsd` or `peakEquityUsd` is zero (percent-of-equity checks divide by it);
 - positions contain duplicate token ids or an unknown strategy key;
-- settings have an unknown timeframe (`Object.hasOwn(TIMEFRAME_MS, timeframe)` is false), `maxPositions < 0`, or negative percentages.
+- settings have an unknown timeframe (`Object.hasOwn(TIMEFRAME_MS, timeframe)` is false), `maxPositions < 0`, or negative percentages;
+- any regime/strategy period is not a positive integer; `regimeDwellBars < 1`, `recoveryConfirmBars < 1`, `slowHours < fastHours`, or `minLiquidityUsd` is not a non-negative decimal string;
+- a strategy stop or risk weight is invalid (`stopPct <= 0`, `atrStopMult <= 0`, `stopAtrMult <= 0`, `riskWeight <= 0`, `riskWeight > 1`).
 
 Do not silently repair input.
 
