@@ -711,9 +711,9 @@ export function makeCandlesFromCloses(
 Rules:
 
 - `openTime = start + index * TIMEFRAME_MS[timeframe]`, default start `Date.UTC(2026, 0, 1)`, default timeframe `'1h'`.
-- linear: close grows by `stepPct` per bar (default `0.1`).
+- linear: close compounds by `stepPct` per bar (default `0.1`); the implementer's compound reading is the canonical one.
 - flat: constant price.
-- wave: sine wave ±`stepPct`% around `startPrice`.
+- wave: one full sine period over `count` bars, ±`stepPct`% around `startPrice`.
 - crash-recovery: first 60% linear up, next 15% drop 20%, rest linear up.
 - Each candle has `open = previous close` (first open = startPrice), `high = max(open, close) * 1.001`, `low = min(open, close) * 0.999`, all `toFixed(8)`; volume default `100000`.
 - Builders must produce valid candles for `sortAndValidateCandles` and be fully deterministic (no `Math.random`, no `Date.now`).
