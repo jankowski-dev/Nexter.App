@@ -271,8 +271,10 @@ export function searchWorkerCount(
   env: Record<string, string | undefined> = process.env,
   cpus = availableParallelism(),
 ): number {
-  const maxWorkers = Math.max(1, Math.min(8, cpus - 1 || 1));
-  const fallback = Math.max(1, Math.min(4, maxWorkers));
+  // A single-CPU container must still use workers: inline search blocks the
+  // entire API event loop and health checks time out.
+  const maxWorkers = Math.max(2, Math.min(8, cpus - 1 || 2));
+  const fallback = Math.max(2, Math.min(4, maxWorkers));
   const raw = env.AI_SEARCH_WORKERS;
   if (raw === undefined || raw === '') return fallback;
   const value = Number(raw);

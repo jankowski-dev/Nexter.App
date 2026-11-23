@@ -160,7 +160,9 @@ export function AiTradingPage() {
     queryKey: ['ai-coverage'],
     queryFn: fetchAiCoverage,
     enabled: drawer === 'data' || drawer === 'search',
-    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 120_000,
+    retry: 1,
   });
   const botHealth = useQuery({
     queryKey: ['ai-bot-health'],
@@ -1745,6 +1747,7 @@ function SearchSection({
   coverage: AiCoverage | undefined;
   onChanged: () => void;
 }) {
+  const queryClient = useQueryClient();
   const searchable = tokens.filter(
     (token) =>
       token.enabled &&
@@ -1809,7 +1812,9 @@ function SearchSection({
     onSuccess: (result) => {
       setRunId(result.runId);
       setError(null);
-      onChanged();
+      // Starting a search does not change candle coverage; refetching it here
+      // used to run the heaviest query in the app right as the search began.
+      void queryClient.invalidateQueries({ queryKey: ['ai-search-runs'] });
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось запустить поиск')),
   });

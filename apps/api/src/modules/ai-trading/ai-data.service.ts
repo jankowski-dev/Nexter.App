@@ -1,5 +1,5 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { marketCandles, watchlist, type Database, type DbExecutor } from '@nexter/db';
 import {
   aiTimeframes,
@@ -67,8 +67,20 @@ export function expectedCandles(timeframe: AiTimeframe): number {
   );
 }
 
+interface CoveragePairRow {
+  assetId: string;
+  timeframe: string;
+  candles: number;
+  firstOpenTime: string | Date | null;
+  lastOpenTime: string | Date | null;
+  syntheticCandles: number;
+  maxGapCandles: number;
+}
+
 @Injectable()
 export class AiDataService {
+  private readonly logger = new Logger(AiDataService.name);
+
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly aiTrading: AiTradingService,
@@ -83,58 +95,73 @@ export class AiDataService {
     const generatedAt = new Date().toISOString();
     if (tokens.length === 0) return { generatedAt, tokens: [] };
 
-    const rows = await this.db
-      .select({
-        assetId: marketCandles.assetId,
-        timeframe: marketCandles.timeframe,
-        openTime: marketCandles.openTime,
-        quality: marketCandles.quality,
-      })
-      .from(marketCandles)
-      .where(
-        inArray(
-          marketCandles.assetId,
-          tokens.map((token) => token.asset.id),
-        ),
-      )
-      .orderBy(
-        asc(marketCandles.assetId),
-        asc(marketCandles.timeframe),
-        asc(marketCandles.openTime),
-      );
+    const assetIds = tokens.map((token) => token.asset.id);
+    const timeframes = [...new Set(tokens.flatMap((token) => token.timeframes))];
+    const startedAt = Date.now();
+    // Aggregate in Postgres instead of streaming every candle row into Node.
+    // The old select+sort could exceed the 15s statement timeout and stall the
+    // whole DB pool while the search drawer was open.
+    const result =
+      timeframes.length === 0
+        ? { rows: [] as unknown[] }
+        : await this.db.execute(sql`
+            with scoped as (
+              select asset_id, timeframe, open_time, quality
+              from market_candles
+              where ${inArray(marketCandles.assetId, assetIds)}
+                and ${inArray(marketCandles.timeframe, timeframes)}
+            ),
+            steps(timeframe, step_ms) as (
+              values
+                ('1d', 86400000),
+                ('4h', 14400000),
+                ('1h', 3600000),
+                ('15m', 900000),
+                ('5m', 300000)
+            ),
+            pairs as (
+              select
+                scoped.asset_id,
+                scoped.timeframe,
+                scoped.open_time,
+                scoped.quality,
+                greatest(
+                  0,
+                  round(
+                    (
+                      extract(
+                        epoch from (
+                          scoped.open_time - lag(scoped.open_time) over (
+                            partition by scoped.asset_id, scoped.timeframe
+                            order by scoped.open_time
+                          )
+                        )
+                      ) * 1000
+                    ) / steps.step_ms
+                  ) - 1
+                ) as gap_candles
+              from scoped
+              inner join steps on steps.timeframe = scoped.timeframe
+            )
+            select
+              asset_id as "assetId",
+              timeframe,
+              count(*)::int as "candles",
+              min(open_time) as "firstOpenTime",
+              max(open_time) as "lastOpenTime",
+              count(*) filter (where quality = 'synthetic')::int as "syntheticCandles",
+              coalesce(max(gap_candles), 0)::int as "maxGapCandles"
+            from pairs
+            group by asset_id, timeframe
+          `);
+    const rows = result.rows as CoveragePairRow[];
+    this.logger.log(
+      `AI coverage: ${tokens.length} tokens, ${rows.length} pairs in ${Date.now() - startedAt}ms`,
+    );
 
-    const byPair = new Map<
-      string,
-      {
-        candles: number;
-        firstOpenTime: Date;
-        lastOpenTime: Date;
-        syntheticCandles: number;
-        maxGapCandles: number;
-      }
-    >();
+    const byPair = new Map<string, CoveragePairRow>();
     for (const row of rows) {
-      const key = `${row.assetId}:${row.timeframe}`;
-      const step = TIMEFRAME_MS[row.timeframe as AiTimeframe] ?? 1;
-      const current = byPair.get(key);
-      if (!current) {
-        byPair.set(key, {
-          candles: 1,
-          firstOpenTime: row.openTime,
-          lastOpenTime: row.openTime,
-          syntheticCandles: row.quality === 'synthetic' ? 1 : 0,
-          maxGapCandles: 0,
-        });
-        continue;
-      }
-      const gap = Math.max(
-        0,
-        Math.round((row.openTime.getTime() - current.lastOpenTime.getTime()) / step) - 1,
-      );
-      current.candles += 1;
-      current.lastOpenTime = row.openTime;
-      current.syntheticCandles += row.quality === 'synthetic' ? 1 : 0;
-      current.maxGapCandles = Math.max(current.maxGapCandles, gap);
+      byPair.set(`${row.assetId}:${row.timeframe}`, row);
     }
 
     return {
