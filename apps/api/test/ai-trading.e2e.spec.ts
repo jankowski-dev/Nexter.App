@@ -195,6 +195,27 @@ describe.runIf(canRun)('AI trading control center API', () => {
       .send({ timeframes: ['1h', '1d'] })
       .expect(200);
 
+    const coverageAfter = await agent.get('/api/v1/ai-trading/coverage').expect(200);
+    const covered = coverageAfter.body.tokens[0].timeframes as Array<{
+      timeframe: string;
+      candles: number;
+      syntheticCandles: number;
+      maxGapCandles: number;
+      status: string;
+    }>;
+    expect(covered.find((item) => item.timeframe === '1h')).toMatchObject({
+      candles: 4320,
+      syntheticCandles: 0,
+      maxGapCandles: 0,
+      status: 'ok',
+    });
+    expect(covered.find((item) => item.timeframe === '1d')).toMatchObject({
+      candles: 120,
+      syntheticCandles: 0,
+      maxGapCandles: 0,
+      status: 'ok',
+    });
+
     const search = await agent
       .post('/api/v1/ai-trading/search')
       .set('x-csrf-token', owner.csrf)

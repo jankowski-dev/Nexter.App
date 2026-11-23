@@ -6,9 +6,12 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { availableParallelism } from 'node:os';
 import { eq, sql } from 'drizzle-orm';
 import { aiJobs, type Database } from '@nexter/db';
 import { DB } from '../../shared/db/db.module';
+import { searchWorkerCount } from './ai-search.helpers';
+import { workerFileExists } from './ai-search.pool';
 import { AiSearchService } from './ai-search.service';
 
 interface QueuedJob {
@@ -32,9 +35,11 @@ export class AiSearchWorkerService implements OnModuleInit, OnApplicationShutdow
   ) {}
 
   onModuleInit(): void {
-    if (process.env.NODE_ENV === 'test' || process.env.AI_SEARCH_WORKER_DISABLED === '1') {
-      return;
-    }
+    if (process.env.NODE_ENV === 'test') return;
+    this.logger.log(
+      `AI search runtime: cpus=${availableParallelism()} workers=${searchWorkerCount()} workerFile=${workerFileExists()} inline=${process.env.AI_SEARCH_INLINE === '1'}`,
+    );
+    if (process.env.AI_SEARCH_WORKER_DISABLED === '1') return;
     void this.recoverStaleJobs();
     this.initialTimer = setTimeout(() => void this.tick(), 1_000);
     this.initialTimer.unref();
