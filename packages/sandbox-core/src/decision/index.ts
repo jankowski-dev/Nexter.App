@@ -7,3 +7,5 @@ export * from './regime-classifier';
 export * from './strategies';
 export * from './opportunity-ranker';
 export * from './portfolio-allocator';
+export * from './risk-manager';
+export * from './token-state';
