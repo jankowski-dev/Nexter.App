@@ -16,4 +16,11 @@ describe('timeframes', () => {
       /Unknown timeframe/,
     );
   });
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'rejects the inherited object key %s instead of returning a string',
+    (timeframe) => {
+      expect(() => candleCloseTime({ openTime: 1_000, timeframe })).toThrow(/Unknown timeframe/);
+    },
+  );
 });

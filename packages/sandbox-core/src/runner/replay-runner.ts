@@ -13,6 +13,13 @@ export class DataSourceOrderError extends Error {
   }
 }
 
+export class SnapshotMismatchError extends Error {
+  constructor(expected: string, actual: string) {
+    super(`market snapshot ${actual} does not match replay data snapshot ${expected}`);
+    this.name = 'SnapshotMismatchError';
+  }
+}
+
 export interface ReplayRunnerOptions {
   runId: string;
   seed: number;
@@ -41,6 +48,28 @@ export class ReplayRunner {
     let lastTime: number | null = null;
     let gaps = 0;
     const lastByKey = new Map<string, number>();
+
+    const marketSnapshotId = market.snapshotId();
+    if (marketSnapshotId !== dataSnapshotId) {
+      await eventLog.append({
+        runId,
+        clockTime: iso(clock.now()),
+        module: 'run',
+        eventType: 'run.failed',
+        severity: 'error',
+        inputs: {
+          candles: 0,
+          expectedSnapshotId: dataSnapshotId,
+          actualSnapshotId: marketSnapshotId,
+        },
+        dataSnapshotId,
+        configVersion,
+        seed,
+        reasonCode: 'SNAPSHOT_MISMATCH',
+        reasonText: 'market view snapshot does not match the replay data snapshot',
+      });
+      throw new SnapshotMismatchError(dataSnapshotId, marketSnapshotId);
+    }
 
     await eventLog.append({
       runId,

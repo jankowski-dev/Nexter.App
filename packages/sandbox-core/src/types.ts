@@ -1,14 +1,14 @@
 export type Timestamp = number;
 
 export interface Candle {
-  tokenId: string;
-  timeframe: string;
-  openTime: Timestamp;
-  open: string;
-  high: string;
-  low: string;
-  close: string;
-  volumeUsd: string;
+  readonly tokenId: string;
+  readonly timeframe: string;
+  readonly openTime: Timestamp;
+  readonly open: string;
+  readonly high: string;
+  readonly low: string;
+  readonly close: string;
+  readonly volumeUsd: string;
 }
 
 export interface RunConfig {

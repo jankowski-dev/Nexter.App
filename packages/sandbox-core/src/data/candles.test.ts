@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Candle } from '../types';
 import { ArrayCandleSource } from './array-candle-source';
 import { CandleValidationError, sortAndValidateCandles } from './candles';
+import { snapshotCandles } from './snapshot';
 
 function candle(openTime: number, close = '100'): Candle {
   return {
@@ -14,6 +15,10 @@ function candle(openTime: number, close = '100'): Candle {
     close,
     volumeUsd: '1000',
   };
+}
+
+function tokenCandle(tokenId: string, openTime = 1_000): Candle {
+  return { ...candle(openTime), tokenId };
 }
 
 describe('sortAndValidateCandles', () => {
@@ -41,6 +46,35 @@ describe('sortAndValidateCandles', () => {
     expect(() => sortAndValidateCandles([{ ...candle(1_000), timeframe: '2h' }])).toThrow(
       CandleValidationError,
     );
+  });
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'rejects the inherited timeframe key %s',
+    (timeframe) => {
+      expect(() => sortAndValidateCandles([{ ...candle(1_000), timeframe }])).toThrow(
+        CandleValidationError,
+      );
+    },
+  );
+
+  it('orders equal-time candles by code unit, not locale, for a stable snapshot id', () => {
+    const input = [tokenCandle('token-1'), tokenCandle('token-10'), tokenCandle('Token-1')];
+    const sorted = sortAndValidateCandles(input);
+    // Code-unit order: 'T' (0x54) sorts before 't' (0x74); the shorter prefix first.
+    expect(sorted.map((item) => item.tokenId)).toEqual(['Token-1', 'token-1', 'token-10']);
+    expect(snapshotCandles(input).id).toBe(
+      '07dee3ba511e34eee60997e4e6dcf812f0be594ebf4efd33f07404a6bf68ccff',
+    );
+  });
+
+  it('returns frozen candles and a frozen array', () => {
+    const sorted = sortAndValidateCandles([candle(1_000)]);
+    expect(Object.isFrozen(sorted)).toBe(true);
+    expect(Object.isFrozen(sorted[0])).toBe(true);
+    expect(() => {
+      (sorted[0] as { close: string }).close = '999';
+    }).toThrow(TypeError);
+    expect(sorted[0]?.close).toBe('100');
   });
 });
 

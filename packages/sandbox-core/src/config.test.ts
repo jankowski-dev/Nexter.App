@@ -22,4 +22,10 @@ describe('configVersion', () => {
     expect(configVersion({ ...base, initialCapitalUsd: '2000' })).not.toBe(configVersion(base));
     expect(configVersion({ ...base, tokenIds: ['btc'] })).not.toBe(configVersion(base));
   });
+
+  it('matches the pinned golden digest', () => {
+    expect(configVersion(base)).toBe(
+      '10ac283f655240e0ef515d7ee3969a45f8b56920a65f418473b2afc1bad8a507',
+    );
+  });
 });

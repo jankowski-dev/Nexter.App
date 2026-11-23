@@ -6,7 +6,7 @@ import { ClockedMarketView } from '../data/market-view';
 import { snapshotCandles } from '../data/snapshot';
 import { MemoryEventLog } from '../events/memory-event-log';
 import { candleCloseTime } from '../timeframes';
-import { DataSourceOrderError, ReplayRunner } from './replay-runner';
+import { DataSourceOrderError, ReplayRunner, SnapshotMismatchError } from './replay-runner';
 
 function candle(openTime: number, close = '100'): Candle {
   return {
@@ -148,5 +148,29 @@ describe('ReplayRunner', () => {
     const summary = await runner.run();
     expect(summary.candles).toBe(0);
     expect(log.events().map((e) => e.eventType)).toEqual(['run.started', 'run.finished']);
+  });
+
+  it('fails fast when the market snapshot does not match the data snapshot', async () => {
+    const { clock, source, log, snapshot } = setup([candle(1_000)]);
+    const market = new ClockedMarketView(snapshot.candles, clock, 'other-snapshot');
+    const runner = new ReplayRunner({
+      runId: 'run-1',
+      seed: 7,
+      configVersion: 'config-1',
+      dataSnapshotId: snapshot.id,
+      clock,
+      source,
+      market,
+      eventLog: log,
+    });
+    await expect(runner.run()).rejects.toThrow(SnapshotMismatchError);
+    expect(log.events()).toHaveLength(1);
+    const failed = log.events().at(-1);
+    expect(failed?.eventType).toBe('run.failed');
+    expect(failed?.reasonCode).toBe('SNAPSHOT_MISMATCH');
+    expect(failed?.inputs).toMatchObject({
+      expectedSnapshotId: snapshot.id,
+      actualSnapshotId: 'other-snapshot',
+    });
   });
 });

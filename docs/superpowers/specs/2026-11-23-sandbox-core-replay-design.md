@@ -1,7 +1,7 @@
 # Sandbox core + historical replay — design (Stage 1)
 
 Date: 2026-11-23
-Status: **draft for owner approval; no code until approved**
+Status: **approved; Stage 1A implemented; final review gate**
 Section name: **Песочница**
 Scope: Stage 1 only — headless decision core + historical replay. No UI, no live data, no real money.
 
@@ -364,7 +364,7 @@ Every run produces:
 
 ### 9.2 Logging completeness
 
-- Every decision/rejection has a reason code and at least one alternative or a documented "no alternative".
+- Every decision/rejection has a reason code. An event that carries a `decision` object also logs at least one alternative; decision-like notifications without a `decision` object require only a `reasonCode`.
 - Every risk check is logged.
 - Every strategy switch has `from`, `to`, reason, and triggering features.
 - No silent drops: a test scans the log for decisions without reason codes.
@@ -491,7 +491,7 @@ Stage 1 is successful when:
 1. The engine is deterministic and replayable from the log.
 2. No look-ahead is possible; tests prove it.
 3. Accounting reconciles exactly.
-4. Every decision/rejection has a reason code and alternatives.
+4. Every decision/rejection has a reason code; an event carrying a `decision` object also logs at least one alternative, while decision-like notifications without a `decision` object need only a `reasonCode`.
 5. The historical replay runs on 5–10 tokens × 3 windows × 180 days.
 6. Results are explainable from the journal, not just numerically plausible.
 7. Independent reviews 1A/1B/1C are closed.

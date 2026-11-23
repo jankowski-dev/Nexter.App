@@ -17,4 +17,10 @@ describe('stableStringify', () => {
   it('produces a 64-character sha256 hex hash', () => {
     expect(sha256Hex('abc')).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  it('matches the published SHA-256 vector for "abc"', () => {
+    expect(sha256Hex('abc')).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
+  });
 });

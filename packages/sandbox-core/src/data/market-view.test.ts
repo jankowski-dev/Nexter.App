@@ -54,4 +54,17 @@ describe('ClockedMarketView', () => {
     expect(visible.map((item) => item.openTime)).toEqual([3_601_000, 7_201_000]);
     expect(view.snapshotId()).toBe('snapshot-1');
   });
+
+  it('returns frozen candles that cannot rewrite history', () => {
+    const candles = sortAndValidateCandles([candle(1_000, '100')]);
+    const clock = new SimulationClock(3_601_000);
+    const view = new ClockedMarketView(candles, clock, 'snapshot-1');
+    const latest = view.latest('btc', '1h');
+    expect(latest).not.toBeNull();
+    expect(Object.isFrozen(latest)).toBe(true);
+    expect(() => {
+      (latest as unknown as { close: string }).close = '999';
+    }).toThrow(TypeError);
+    expect(view.latest('btc', '1h')?.close).toBe('100');
+  });
 });

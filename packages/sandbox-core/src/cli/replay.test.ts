@@ -1,8 +1,11 @@
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { runReplayFromFile } from './replay';
+
+const fixturePath = fileURLToPath(new URL('../fixtures/candles-1h.jsonl', import.meta.url));
 
 const candles = [
   {
@@ -80,5 +83,35 @@ describe('runReplayFromFile', () => {
         seed: 7,
       }),
     ).rejects.toThrow(/no candles/i);
+  });
+
+  it('pins the golden determinism values for the committed fixture', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'sandbox-golden-'));
+    const one = await runReplayFromFile({
+      filePath: fixturePath,
+      outputPath: join(dir, 'events-1.jsonl'),
+      runId: 'stage1a-golden',
+      seed: 7,
+    });
+    expect(one.candles).toBe(3);
+    expect(one.eventCount).toBe(8);
+    expect(one.configVersion).toBe(
+      '6082bbcf4407b31bb56c54ef65672dd1a87e624e8b58f90c8ac217dad8c50dcd',
+    );
+    expect(one.dataSnapshotId).toBe(
+      '4d62f7195b100cd88d33896545038526decac00c03208447a155d212996c1a99',
+    );
+    expect(one.eventHash).toBe('1e762672c2a3deb11e6395d3e10b4a91aa4f9e58b474d86e01cc5232109105c9');
+
+    const two = await runReplayFromFile({
+      filePath: fixturePath,
+      outputPath: join(dir, 'events-2.jsonl'),
+      runId: 'stage1a-golden',
+      seed: 7,
+    });
+    expect(two.eventHash).toBe(one.eventHash);
+    expect((await readFile(join(dir, 'events-1.jsonl'), 'utf8')).trim().split('\n')).toHaveLength(
+      8,
+    );
   });
 });

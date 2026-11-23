@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-11-23-sandbox-core-replay-design.md`
 
-**Status:** ready for owner review; do not start execution until approved.
+**Status:** approved; Stage 1A implemented; final review gate.
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 - TypeScript strict; no `any` in public APIs.
 - Prices and volumes are decimal strings; never JS floats for money.
 - `recordedAt` is wall-clock metadata and must not affect the event hash.
-- Every decision/rejection event must carry a stable `reasonCode`; every decision logs alternatives.
+- Every decision/rejection event must carry a stable `reasonCode`. An event that carries a `decision` object must also log at least one alternative; decision-like notifications without a `decision` object require only a `reasonCode`.
 - Replay must be deterministic: same data + same config + same seed = same event hash.
 - Look-ahead is forbidden: a candle is visible only when `candleCloseTime(candle) <= clock.now()`; the handler must never see a candle before its close, and the next candle is not visible until its own close.
 - Handlers receive only a read-only clock view (`Pick<Clock, 'now'>`); only the replay engine may call `advanceTo`.
@@ -34,7 +34,7 @@ These are the failure modes most likely to make the replay untrustworthy. Each h
 1. **Future data visible to the handler** — a handler at 10:00 must not see the 11:00 candle. Tested in Task 4.
 2. **Clock/order violations** — backwards clock, duplicate candle, out-of-order source, empty source. Tested in Tasks 1, 2, 4.
 3. **Gaps and timestamps** — a missing hour must produce `data.gap`; no synthetic fill; epoch-ms/UTC handling. Tested in Task 4.
-4. **Incomplete or non-deterministic logs** — decision events without `reasonCode`, wall-clock `recordedAt` changing the hash, JSONL round-trip mismatch. Tested in Task 3.
+4. **Incomplete or non-deterministic logs** — decision-like events without `reasonCode`, an event carrying a `decision` object without an alternative, wall-clock `recordedAt` changing the hash, JSONL round-trip mismatch. Tested in Task 3.
 5. **Failure and partial logs** — handler/source error emits `run.failed`; CLI rejects an empty file. Tested in Tasks 4, 5.
 
 ---

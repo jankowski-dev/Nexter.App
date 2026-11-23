@@ -9,7 +9,10 @@ export const TIMEFRAME_MS: Record<string, number> = {
 };
 
 export function candleCloseTime(candle: Pick<Candle, 'openTime' | 'timeframe'>): Timestamp {
-  const step = TIMEFRAME_MS[candle.timeframe];
-  if (step === undefined) throw new Error(`Unknown timeframe: ${candle.timeframe}`);
-  return candle.openTime + step;
+  // `Object.hasOwn` ignores inherited keys such as `constructor`, `toString`
+  // and `__proto__`, which would otherwise resolve to functions/objects.
+  if (!Object.hasOwn(TIMEFRAME_MS, candle.timeframe)) {
+    throw new Error(`Unknown timeframe: ${candle.timeframe}`);
+  }
+  return candle.openTime + TIMEFRAME_MS[candle.timeframe];
 }

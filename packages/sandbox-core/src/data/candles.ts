@@ -14,18 +14,32 @@ function assertDecimal(value: string, field: string): void {
   if (!DECIMAL.test(value)) throw new CandleValidationError(`${field} is not a decimal string`);
 }
 
+/**
+ * Locale-independent string comparison by UTF-16 code unit.
+ *
+ * `String.prototype.localeCompare` honours the host ICU locale, so equal-time
+ * candles for different tokens could be ordered differently across
+ * environments, changing the snapshot id, config version and event hash.
+ */
+function compareCodeUnits(left: string, right: string): number {
+  if (left < right) return -1;
+  if (left > right) return 1;
+  return 0;
+}
+
 export function sortAndValidateCandles(candles: readonly Candle[]): Candle[] {
   const sorted = [...candles].sort(
     (left, right) =>
       left.openTime - right.openTime ||
-      left.tokenId.localeCompare(right.tokenId) ||
-      left.timeframe.localeCompare(right.timeframe),
+      compareCodeUnits(left.tokenId, right.tokenId) ||
+      compareCodeUnits(left.timeframe, right.timeframe),
   );
   const seen = new Set<string>();
+  const frozen: Candle[] = [];
   for (const candle of sorted) {
     if (!candle.tokenId) throw new CandleValidationError('tokenId is required');
     if (!candle.timeframe) throw new CandleValidationError('timeframe is required');
-    if (TIMEFRAME_MS[candle.timeframe] === undefined) {
+    if (!Object.hasOwn(TIMEFRAME_MS, candle.timeframe)) {
       throw new CandleValidationError(`unknown timeframe: ${candle.timeframe}`);
     }
     if (!Number.isSafeInteger(candle.openTime)) {
@@ -47,6 +61,8 @@ export function sortAndValidateCandles(candles: readonly Candle[]): Candle[] {
     const key = `${candle.tokenId}|${candle.timeframe}|${candle.openTime}`;
     if (seen.has(key)) throw new CandleValidationError(`duplicate candle: ${key}`);
     seen.add(key);
+    // Freeze a copy so callers cannot rewrite validated history.
+    frozen.push(Object.freeze({ ...candle }));
   }
-  return sorted;
+  return Object.freeze(frozen) as Candle[];
 }
