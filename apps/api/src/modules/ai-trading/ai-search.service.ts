@@ -1270,9 +1270,15 @@ export class AiSearchService {
     metrics.sort((left, right) => Number(right.policyScore) - Number(left.policyScore));
     stageStarted = Date.now();
     const top = selectHoldoutCandidates(metrics, 50);
+    let holdoutDone = 0;
     for (const candidate of top) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
       const definition = strategyByKey.get(candidate.variant.strategyKey);
-      if (!definition) continue;
+      if (!definition) {
+        holdoutDone += 1;
+        await writeProgress(progressFor('holdout', holdoutDone, top.length));
+        continue;
+      }
       try {
         const result = runBacktest(
           definition,
@@ -1378,6 +1384,8 @@ export class AiSearchService {
           null,
         );
       }
+      holdoutDone += 1;
+      await writeProgress(progressFor('holdout', holdoutDone, top.length));
     }
 
     const recommended = top.filter(
