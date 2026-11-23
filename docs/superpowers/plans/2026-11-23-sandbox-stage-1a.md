@@ -624,7 +624,10 @@ describe('loadJsonlCandles', () => {
   it('reports the line number on invalid JSON', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'sandbox-'));
     const file = join(dir, 'bad.jsonl');
-    await writeFile(file, '{"tokenId":"btc"}\nnot-json\n');
+    await writeFile(
+      file,
+      '{"tokenId":"btc","timeframe":"1h","openTime":"2026-01-01T00:00:00.000Z","open":"100","high":"101","low":"99","close":"100","volumeUsd":"10"}\nnot-json\n',
+    );
     await expect(loadJsonlCandles(file)).rejects.toThrow(/line 2/);
   });
 });
