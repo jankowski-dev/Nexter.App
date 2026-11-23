@@ -624,6 +624,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         low: marketCandles.low,
         close: marketCandles.close,
         volumeUsd: marketCandles.volumeUsd,
+        quality: marketCandles.quality,
       })
       .from(marketCandles)
       .where(
@@ -642,6 +643,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
       lowUsd: row.low,
       closeUsd: row.close,
       volumeUsd: row.volumeUsd ?? '0',
+      synthetic: row.quality !== 'ok',
     }));
   }
 

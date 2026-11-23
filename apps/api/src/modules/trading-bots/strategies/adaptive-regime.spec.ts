@@ -90,6 +90,36 @@ describe('adaptiveRegime', () => {
     expect(decision.nextState?.cooldownUntil).toBeTypeOf('string');
   });
 
+  it('uses the 30-day fallback when the long filter has no data', () => {
+    const closes = Array.from({ length: 30 }, (_, index) => 100 + index);
+    const candles = dailySeries(closes);
+    const decision = adaptiveRegime.evaluate(context(candles, 126));
+    expect(decision.action).toBe('buy');
+  });
+
+  it('exits on a trend break without a cooldown', () => {
+    const candles = dailySeries(Array.from({ length: 30 }, (_, index) => 130 - index));
+    const decision = adaptiveRegime.evaluate(
+      context(candles, 99, {
+        params: adaptiveRegime.parseParams({
+          trendFastDays: 3,
+          trendSlowDays: 14,
+          trendLongDays: 60,
+          pullbackPct: 1,
+          atrStopMult: 5,
+          trailPct: 4,
+          crashDrawdownPct: 20,
+          maxAdds: 2,
+        }),
+        position: { amount: '5', avgCostUsd: '100', costBasisUsd: '500' },
+        state: { hwm: '100', phase: 'UPTREND' },
+      }),
+    );
+    expect(decision.action).toBe('sell');
+    expect(decision.reason).toContain('слом тренда');
+    expect(decision.nextState?.cooldownUntil ?? null).toBeNull();
+  });
+
   it('does not buy during cooldown', () => {
     const candles = dailySeries(Array.from({ length: 90 }, (_, index) => 100 + index * 1.1));
     const decision = adaptiveRegime.evaluate(

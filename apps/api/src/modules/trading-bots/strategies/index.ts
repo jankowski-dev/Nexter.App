@@ -1006,9 +1006,10 @@ function adaptiveDailyBars(ctx: {
     for (const candle of ctx.candles) {
       const day = new Date(candle.date).toISOString().slice(0, 10);
       if (day >= today) continue;
-      const high = dec(candle.highUsd);
-      const low = dec(candle.lowUsd);
       const close = dec(candle.closeUsd);
+      const synthetic = candle.synthetic === true;
+      const high = synthetic ? close : dec(candle.highUsd);
+      const low = synthetic ? close : dec(candle.lowUsd);
       const row = rows.get(day);
       if (!row) {
         rows.set(day, { high, low, close });
@@ -1127,11 +1128,9 @@ export const adaptiveRegime: StrategyDefinition = {
     const closes = bars.map((bar) => bar.close);
     const fast = adaptiveSma(closes, params.trendFastDays);
     const slow = adaptiveSma(closes, params.trendSlowDays);
-    const long = adaptiveSma(
-      closes,
-      Math.min(params.trendLongDays, Math.max(params.trendSlowDays, closes.length)),
-    );
-    const atrPct = Decimal.max(adaptiveAtrPct(bars), new Decimal('0.5'));
+    const long =
+      closes.length >= params.trendLongDays ? adaptiveSma(closes, params.trendLongDays) : null;
+    const atrPct = bars.length >= 2 ? Decimal.max(adaptiveAtrPct(bars), new Decimal('0.5')) : null;
     const state = (ctx.state ?? {}) as Record<string, unknown>;
     const previousHwm = typeof state.hwm === 'string' ? dec(state.hwm) : null;
     const previousTrail = typeof state.trailStop === 'string' ? dec(state.trailStop) : null;
@@ -1156,6 +1155,7 @@ export const adaptiveRegime: StrategyDefinition = {
       const avg = dec(ctx.position.avgCostUsd);
       const hwm = previousHwm === null ? price : Decimal.max(previousHwm, price);
       if (
+        atrPct !== null &&
         price.lte(
           avg.mul(new Decimal(1).minus(new Decimal(params.atrStopMult).mul(atrPct).div(100))),
         )
@@ -1166,7 +1166,12 @@ export const adaptiveRegime: StrategyDefinition = {
         return sellAndCooldown('обвал');
       }
       if (fast !== null && slow !== null && fast.lt(slow)) {
-        return sellAndCooldown('слом тренда');
+        return sell('слом тренда', {
+          phase: 'DORMANT',
+          hwm: price.toFixed(18),
+          trailStop: null,
+          cooldownUntil: null,
+        });
       }
       const trailActive = price.gte(avg.mul(1.08)) || previousTrail !== null;
       if (trailActive) {
@@ -1230,14 +1235,14 @@ export const adaptiveRegime: StrategyDefinition = {
     }
     if (fast !== null && price.lte(fast.mul(1 - params.pullbackPct / 100))) {
       return buy('откат в тренде', {
-        phase: 'UPTREND',
+        phase: 'PULLBACK',
         hwm: price.toFixed(18),
         trailStop: null,
         cooldownUntil: null,
       });
     }
     return hold('ожидание отката', {
-      phase: 'DORMANT',
+      phase: 'UPTREND',
       hwm: price.toFixed(18),
       trailStop: null,
       cooldownUntil: null,

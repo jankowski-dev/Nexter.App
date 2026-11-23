@@ -31,6 +31,28 @@ function seededCandles(): BotCandle[] {
   });
 }
 
+function trendCandles(): BotCandle[] {
+  const start = Date.parse('2026-01-01T00:00:00Z');
+  const candles: BotCandle[] = [];
+  let price = 100;
+  for (let index = 0; index < 120 * 24; index += 1) {
+    const day = Math.floor(index / 24);
+    let drift = 0.004;
+    if (day >= 95 && day < 98) drift = -0.03;
+    if (day >= 100) drift = 0.003;
+    price = Math.max(1, price * (1 + drift + 0.001 * Math.sin(index / 7)));
+    candles.push({
+      date: new Date(start + index * 3_600_000).toISOString(),
+      openUsd: price.toFixed(8),
+      highUsd: (price * 1.003).toFixed(8),
+      lowUsd: (price * 0.997).toFixed(8),
+      closeUsd: price.toFixed(8),
+      volumeUsd: '1000000',
+    });
+  }
+  return candles;
+}
+
 describe('native AI search engine', () => {
   it('matches the Decimal engine for every strategy after the ambiguity fallback', () => {
     const candles = seededCandles();
@@ -75,10 +97,8 @@ describe('native AI search engine', () => {
   }, 180_000);
 
   it('has a native runtime for adaptive_regime and matches the Decimal engine', () => {
-    const candles = seededCandles();
-    const folds = buildSearchFolds(candles, '1h');
-    const fold = folds.folds[0];
-    if (!fold) throw new Error('fold fixture missing');
+    const candles = trendCandles();
+    const fold = { candles, warmupCandles: 90 * 24 };
     const variant = { strategyKey: 'adaptive_regime', params: adaptiveRegime.defaultParams };
     expect(createFastRuntime(variant, fold.candles)).not.toBeNull();
     for (const execution of ['same-close', 'next-open'] as const) {
@@ -91,6 +111,7 @@ describe('native AI search engine', () => {
         warmupCandles: fold.warmupCandles,
         execution,
       });
+      expect(decimal.stats.tradesCount).toBeGreaterThan(0);
       expect({ execution, ...fast.aggregate }).toEqual({
         execution,
         ...aggregateVariant([decimal.stats]),

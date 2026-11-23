@@ -17,12 +17,12 @@ an exclusive toggle: adaptive-only or the existing 12.
 
 1. **Add `adaptive_regime` («Адаптивный режим»).**
    - Long-only, stateful.
-   - States: `DORMANT`, `UPTREND`, `PULLBACK`, `CRASH`, `COOLDOWN`, `RECOVERY`.
+   - States: `DORMANT`, `UPTREND`, `PULLBACK`, `COOLDOWN`; `CRASH` is an exit event that writes `COOLDOWN`, and `RECOVERY` is the post-cooldown wait.
    - Daily SMA fast/slow/long trend, ATR(14), high-water mark.
    - Entry: pullback to the fast average in a confirmed uptrend; adds up to
      `maxAdds`.
    - Exit: ATR hard stop, crash drawdown, trend break, or trailing stop after
-     +8%.
+     +8%; exits use the current close/spot (no intrabar wick fills).
    - Crash/stop exits enter a 24-hour cooldown; no entries during cooldown.
    - Parameters: `trendFastDays`, `trendSlowDays`, `trendLongDays`,
      `pullbackPct`, `atrStopMult`, `trailPct`, `crashDrawdownPct`, `maxAdds`.

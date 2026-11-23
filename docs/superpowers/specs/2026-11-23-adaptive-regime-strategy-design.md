@@ -54,9 +54,12 @@ days) with fallback to `ctx.history` when candles are missing:
 - Buy when price is at or below `fast * (1 - pullbackPct / 100)`.
 - Adds are allowed up to `maxAdds` while the uptrend remains valid and price is
   still below the fast average.
-- No entries during cooldown or while the regime is `DORMANT`/`CRASH`.
+- No entries during cooldown or while the regime is `DORMANT`.
 
 ### Exit
+
+Exits use the current close/spot. Intrabar wicks are not used for adaptive
+stops/trailing; the generic engine stop is not configured for this strategy.
 
 - Hard stop: `avgCost * (1 - atrStopMult * atrPct / 100)`.
 - Trailing: after price reaches `avgCost * 1.08`, trail at

@@ -2065,7 +2065,8 @@ function SearchSection({
                           {run.status}
                         </Badge>
                         <span className="text-zinc-500">
-                          {run.variants} вариантов · {run.recommended} рекомендаций
+                          {run.variants} вариантов · {run.recommended} рекомендаций ·{' '}
+                          {run.strategyMode === 'adaptive' ? 'адаптивная' : '12 стратегий'}
                         </span>
                       </span>
                       <span className="text-zinc-400">{formatDateTime(run.createdAt)}</span>

@@ -11,6 +11,7 @@ import {
   minTradesFor,
   selectHoldoutCandidates,
   shuffleVariantsInPlace,
+  strategyKeysForMode,
   stabilityPctFor,
 } from './ai-search.helpers';
 import type { BotCandle } from '@nexter/contracts';
@@ -39,6 +40,13 @@ describe('AI search helpers', () => {
       expect(definition).toBeDefined();
       expect(() => definition?.parseParams(variant.params)).not.toThrow();
     }
+  });
+
+  it('derives exclusive strategy keys for the queued and inline paths', () => {
+    expect(strategyKeysForMode(strategyDefinitions, 'adaptive')).toEqual(['adaptive_regime']);
+    const legacy = strategyKeysForMode(strategyDefinitions, 'legacy');
+    expect(legacy).not.toContain('adaptive_regime');
+    expect(legacy).toHaveLength(12);
   });
 
   it('filters the adaptive strategy from legacy mode and includes only it in adaptive mode', () => {
@@ -76,8 +84,8 @@ describe('AI search helpers', () => {
       holdoutWarmupCandles,
     } = buildSearchFolds(hourlyCandles(180), '1h');
     expect(folds).toHaveLength(7);
-    expect(folds[0]?.warmupCandles).toBe(360);
-    expect(folds[0]?.candles).toHaveLength(600);
+    expect(folds[0]?.warmupCandles).toBe(1488);
+    expect(folds[0]?.candles).toHaveLength(1728);
     expect(holdout).toHaveLength(1080);
     expect(settlementDays).toBe(5);
     expect(holdoutCycles).toBe(3);
@@ -86,8 +94,8 @@ describe('AI search helpers', () => {
       { start: 600, end: 720 },
       { start: 960, end: 1080 },
     ]);
-    expect(holdoutWarmup).toHaveLength(360);
-    expect(holdoutWarmupCandles).toBe(360);
+    expect(holdoutWarmup).toHaveLength(2160);
+    expect(holdoutWarmupCandles).toBe(2160);
     expect((holdoutWarmup.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);
     const lastFold = folds.at(-1);
     expect(lastFold?.candles.at(-1)?.date).not.toBe(holdout[0]?.date);

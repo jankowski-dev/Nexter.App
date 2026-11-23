@@ -524,6 +524,7 @@ export const aiSearchRunSummarySchema = z.object({
   name: z.string(),
   timeframe: z.string(),
   execution: aiSearchExecutionSchema.default('next-open'),
+  strategyMode: aiSearchStrategyModeSchema.default('legacy'),
   status: z.enum(['queued', 'running', 'succeeded', 'failed', 'cancelled']),
   variants: z.number().int(),
   recommended: z.number().int(),
