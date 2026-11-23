@@ -1,8 +1,8 @@
 # Nexter AI: как устроен исследовательский контур
 
-**Инженерное руководство. Версия 1.3 — 23 ноября 2026.**
+**Инженерное руководство. Версия 1.4 — 23 ноября 2026.**
 
-Версия 1.3 добавляет settlement после каждого 10-дневного цикла: holdout 45 дней, три цикла по 15 дней, активные и положительные блоки.
+Версия 1.4 добавляет адаптивную режимную стратегию, candle-контекст и эксклюзивный режим поиска «только адаптивная».
 
 Это не руководство пользователя и не описание дашборда. Цель — объяснить, как работает внутренний механизм: откуда берутся свечи, как строится walk-forward, как считается P&L, почему поиск отсеивает варианты, что такое OOS и holdout, как появляется рекомендация и как её проверяет paper-бот. Аналогия — «как устроен двигатель внутреннего сгорания», а не «как выглядит приборная панель».
 
@@ -169,7 +169,7 @@ AI-профиль задаёт бюджет, лимиты и расписани�
 
 ## 5. Генерация вариантов
 
-Вариант — это пара `(strategyKey, params)`. Реестр стратегий содержит 12 AI-eligible стратегий; `static_limit` исключён, потому что он ручной и привязан к абсолютным ценам.
+Вариант — это пара `(strategyKey, params)`. Legacy-режим содержит 12 AI-eligible стратегий; `static_limit` исключён, потому что он ручной и привязан к абсолютным ценам, а `adaptive_regime` вынесена в отдельный режим. Adaptive-режим генерирует варианты только для `adaptive_regime`; режимы не смешиваются.
 
 Генератор:
 
@@ -257,22 +257,23 @@ Holdout — отдельные 45 дней с собственным warmup-пр
 
 ## 8. Стратегии и индикаторы
 
-В реестре 12 AI-eligible стратегий:
+В реестре 13 стратегий: 12 legacy AI-eligible и адаптивная `adaptive_regime` (ручная или adaptive-режим):
 
-| Стратегия           | Ключ                   | Идея                | Вход                              | Выход                        |
-| ------------------- | ---------------------- | ------------------- | --------------------------------- | ---------------------------- |
-| Импульсный пробой   | `momentum_breakout`    | SMA + 24ч импульс   | fast > slow и рост ≥ порога       | TP/SL или fast < slow        |
-| Возврат к среднему  | `mean_reversion`       | отклонение от SMA   | цена ниже SMA на %                | возврат к SMA, TP/SL         |
-| Сетка в диапазоне   | `grid_range`           | ступени ниже якоря  | цена ниже rolling high на шаг     | TP/SL или ступень вверх      |
-| Откат в тренде      | `trend_pullback`       | тренд + откат       | fast > slow и откат к fast        | TP/SL или слом тренда        |
-| Докупка на просадке | `dca_dip`              | усреднение          | просадка от якоря                 | TP/SL                        |
-| Трейлинг-стоп       | `trailing_stop`        | пробой + трейлинг   | пробой rolling high               | hard stop / trailing         |
-| Защитная сетка      | `crash_protected_grid` | сетка + crash-режим | ступени ниже HWM                  | TP/SL / crash close / resume |
-| Пробой Дончиана     | `donchian_breakout`    | канал               | пробой верхнего канала            | нижний канал, TP/SL          |
-| Возврат к Bollinger | `bollinger_reversion`  | полосы              | ниже нижней полосы                | средняя, TP/SL               |
-| Выход из сжатия     | `squeeze_breakout`     | сжатие + пробой     | bandwidth ≤ порога и пробой upper | средняя, TP/SL               |
-| Неудавшийся пробой  | `failed_breakout`      | ложный пробой       | возврат выше пробитой поддержки   | TP/SL                        |
-| Дневная средняя     | `daily_average`        | дневные low/high    | цена ≤ среднего low − буфер       | средний high + буфер, TP/SL  |
+| Стратегия           | Ключ                   | Идея                | Вход                              | Выход                               |
+| ------------------- | ---------------------- | ------------------- | --------------------------------- | ----------------------------------- |
+| Импульсный пробой   | `momentum_breakout`    | SMA + 24ч импульс   | fast > slow и рост ≥ порога       | TP/SL или fast < slow               |
+| Возврат к среднему  | `mean_reversion`       | отклонение от SMA   | цена ниже SMA на %                | возврат к SMA, TP/SL                |
+| Сетка в диапазоне   | `grid_range`           | ступени ниже якоря  | цена ниже rolling high на шаг     | TP/SL или ступень вверх             |
+| Откат в тренде      | `trend_pullback`       | тренд + откат       | fast > slow и откат к fast        | TP/SL или слом тренда               |
+| Докупка на просадке | `dca_dip`              | усреднение          | просадка от якоря                 | TP/SL                               |
+| Трейлинг-стоп       | `trailing_stop`        | пробой + трейлинг   | пробой rolling high               | hard stop / trailing                |
+| Защитная сетка      | `crash_protected_grid` | сетка + crash-режим | ступени ниже HWM                  | TP/SL / crash close / resume        |
+| Пробой Дончиана     | `donchian_breakout`    | канал               | пробой верхнего канала            | нижний канал, TP/SL                 |
+| Возврат к Bollinger | `bollinger_reversion`  | полосы              | ниже нижней полосы                | средняя, TP/SL                      |
+| Выход из сжатия     | `squeeze_breakout`     | сжатие + пробой     | bandwidth ≤ порога и пробой upper | средняя, TP/SL                      |
+| Неудавшийся пробой  | `failed_breakout`      | ложный пробой       | возврат выше пробитой поддержки   | TP/SL                               |
+| Дневная средняя     | `daily_average`        | дневные low/high    | цена ≤ среднего low − буфер       | средний high + буфер, TP/SL         |
+| Адаптивный режим    | `adaptive_regime`      | режим + тренд       | откат к быстрой SMA в тренде      | ATR-стоп, crash, трейлинг, cooldown |
 
 Stateful-стратегии (`trailing_stop`, `crash_protected_grid`, `failed_breakout`) прогревают состояние на warmup-свечах без сделок. Иначе HWM/peak/breakdown начинались бы с нуля и первый фолд был бы нечестным.
 
@@ -337,7 +338,7 @@ CPU-профиль показал, что 85–90% времени старого
 
 Ключевые решения:
 
-- Все 12 стратегий имеют native-реализацию входа/выхода/состояния.
+- Все 12 legacy-стратегий и `adaptive_regime` имеют native-реализацию входа/выхода/состояния.
 - Cash, позиция, amount, cost basis и fill считаются в Decimal — иначе полная покупка на весь кэш может «сломаться» на одном ulp.
 - Стоп/тейк используют тот же Decimal-коэффициент, что и эталон (`avgCost.mul(1 ± pct / 100)`).
 - Сравнение в пределах `1e-11` относительно помечается как спорное; пересчитывается только этот фолд.
@@ -542,7 +543,7 @@ AI-поиск и holdout по умолчанию `next-open`. Бэктесты �
 - `AI_SEARCH_FAST_ENGINE` — 0 отключает native.
 - `AI_SEARCH_EXECUTION` — `next-open` по умолчанию, `same-close` откат.
 
-**ADR.** 0071–0082: AI control center, recommendation-only, Binance fallback, one-click cycle, worker pool, funnel, fast engine, next-open, health-notification cooldown, universe/history deletion, holdout top-50 and 10-day blocks, settlement per cycle and active blocks.
+**ADR.** 0071–0083: AI control center, recommendation-only, Binance fallback, one-click cycle, worker pool, funnel, fast engine, next-open, health-notification cooldown, universe/history deletion, holdout top-50 and 10-day blocks, settlement per cycle and active blocks, adaptive regime strategy and exclusive search mode.
 
 **Аудит.** H1 (holdout warmup) исправлен; H4 (stateful warmup) исправлен; H5 (look-ahead) исправлен next-open; H2 (top-10) заменён диверсифицированным top-50; H2b (граница holdout) исправлен settlement-циклами и active-block gate; H3/H6 (данные/наблюдаемость) — coverage/variantMetrics; H7/H8/H9 — арифметика/генерация/статистика проверены; H10 — 0 рекомендаций статистически правдоподобен. Пороги не ослаблялись.
 
