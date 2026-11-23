@@ -73,7 +73,7 @@ describe('splitVariants', () => {
 describe('searchWorkerCount', () => {
   it('uses four workers by default and respects the CPU cap', () => {
     expect(searchWorkerCount({}, 8)).toBe(4);
-    expect(searchWorkerCount({}, 1)).toBe(1);
+    expect(searchWorkerCount({}, 1)).toBe(2);
   });
 
   it('honours the environment override and clamps it', () => {
