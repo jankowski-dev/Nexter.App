@@ -995,43 +995,63 @@ interface DailyBar {
   close: Decimal;
 }
 
+const adaptiveDayCache = new WeakMap<readonly BotCandle[], DailyBar[]>();
+
+/**
+ * Builds all daily bars for a candle array once. Backtests call the strategy
+ * for every hourly candle; rebuilding this map on each call made the holdout
+ * O(N²) and blocked the API for ~52s per candidate.
+ */
+function buildAdaptiveDayBars(candles: readonly BotCandle[]): DailyBar[] {
+  const rows = new Map<string, { high: Decimal; low: Decimal; close: Decimal }>();
+  for (const candle of candles) {
+    const day = new Date(candle.date).toISOString().slice(0, 10);
+    const close = dec(candle.closeUsd);
+    const synthetic = candle.synthetic === true;
+    const high = synthetic ? close : dec(candle.highUsd);
+    const low = synthetic ? close : dec(candle.lowUsd);
+    const row = rows.get(day);
+    if (!row) {
+      rows.set(day, { high, low, close });
+    } else {
+      row.high = Decimal.max(row.high, high);
+      row.low = Decimal.min(row.low, low);
+      row.close = close;
+    }
+  }
+  return [...rows.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([day, row]) => ({ day, ...row }));
+}
+
 function adaptiveDailyBars(ctx: {
   candles?: BotCandle[];
   history: Array<{ priceUsd: string; capturedAt: Date }>;
   now: Date;
 }): DailyBar[] {
   const today = ctx.now.toISOString().slice(0, 10);
-  const rows = new Map<string, { high: Decimal; low: Decimal; close: Decimal }>();
   if (ctx.candles && ctx.candles.length > 0) {
-    for (const candle of ctx.candles) {
-      const day = new Date(candle.date).toISOString().slice(0, 10);
-      if (day >= today) continue;
-      const close = dec(candle.closeUsd);
-      const synthetic = candle.synthetic === true;
-      const high = synthetic ? close : dec(candle.highUsd);
-      const low = synthetic ? close : dec(candle.lowUsd);
-      const row = rows.get(day);
-      if (!row) {
-        rows.set(day, { high, low, close });
-      } else {
-        row.high = Decimal.max(row.high, high);
-        row.low = Decimal.min(row.low, low);
-        row.close = close;
-      }
+    let days = adaptiveDayCache.get(ctx.candles);
+    if (!days) {
+      days = buildAdaptiveDayBars(ctx.candles);
+      adaptiveDayCache.set(ctx.candles, days);
     }
-  } else {
-    for (const sample of ctx.history) {
-      const day = sample.capturedAt.toISOString().slice(0, 10);
-      if (day >= today) continue;
-      const price = dec(sample.priceUsd);
-      const row = rows.get(day);
-      if (!row) {
-        rows.set(day, { high: price, low: price, close: price });
-      } else {
-        row.high = Decimal.max(row.high, price);
-        row.low = Decimal.min(row.low, price);
-        row.close = price;
-      }
+    const cutoff = days.findIndex((bar) => bar.day >= today);
+    return cutoff < 0 ? days.slice() : days.slice(0, cutoff);
+  }
+
+  const rows = new Map<string, { high: Decimal; low: Decimal; close: Decimal }>();
+  for (const sample of ctx.history) {
+    const day = sample.capturedAt.toISOString().slice(0, 10);
+    if (day >= today) continue;
+    const price = dec(sample.priceUsd);
+    const row = rows.get(day);
+    if (!row) {
+      rows.set(day, { high: price, low: price, close: price });
+    } else {
+      row.high = Decimal.max(row.high, price);
+      row.low = Decimal.min(row.low, price);
+      row.close = price;
     }
   }
   return [...rows.entries()]

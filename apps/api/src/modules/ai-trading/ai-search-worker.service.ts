@@ -126,39 +126,31 @@ export class AiSearchWorkerService implements OnModuleInit, OnApplicationShutdow
         attempts: number;
         max_attempts: number;
       }>) {
-        if (Number(row.attempts) >= Number(row.max_attempts)) {
-          await this.db
-            .update(aiJobs)
-            .set({
-              status: 'failed',
-              error: 'AI_SEARCH_STALE',
-              lockedBy: null,
-              lockedAt: null,
-              updatedAt: new Date(),
-            })
-            .where(eq(aiJobs.id, row.id));
-          await this.db.execute(sql`
-            update ai_pipeline_runs
-            set status = 'failed',
-                finished_at = now(),
-                summary = coalesce(summary, '{}'::jsonb) || jsonb_build_object('error', 'AI_SEARCH_STALE')
-            where id = ${row.run_id} and status in ('queued', 'running')
-          `);
-          this.logger.warn(`AI search job ${row.id} exceeded attempts and was failed`);
-          continue;
-        }
+        // A search job is expensive and can block the API for minutes. Never
+        // restart it automatically after a crash or deploy: mark it failed and
+        // let the owner rerun it explicitly.
+        const error =
+          Number(row.attempts) >= Number(row.max_attempts)
+            ? 'AI_SEARCH_STALE'
+            : 'AI_SEARCH_INTERRUPTED';
         await this.db
           .update(aiJobs)
           .set({
-            status: 'queued',
+            status: 'failed',
+            error,
             lockedBy: null,
             lockedAt: null,
-            heartbeatAt: null,
-            runAt: new Date(),
             updatedAt: new Date(),
           })
           .where(eq(aiJobs.id, row.id));
-        this.logger.warn(`Requeued stale AI search job ${row.id}`);
+        await this.db.execute(sql`
+          update ai_pipeline_runs
+          set status = 'failed',
+              finished_at = now(),
+              summary = coalesce(summary, '{}'::jsonb) || jsonb_build_object('error', ${error})
+          where id = ${row.run_id} and status in ('queued', 'running')
+        `);
+        this.logger.warn(`AI search job ${row.id} was interrupted and marked failed`);
       }
     } catch (error) {
       this.logger.warn(
