@@ -73,6 +73,8 @@ interface CycleSummary {
   draftsCreated: number;
   oosPassed: number;
   holdoutTested: number;
+  settlementDays: number;
+  holdoutCycles: number;
   rejectionReasons: Record<string, number>;
   nearMisses: AiSearchNearMiss[];
   error?: string | null;
@@ -243,6 +245,8 @@ export class AiCycleService implements OnModuleInit {
       draftsCreated: 0,
       oosPassed: 0,
       holdoutTested: 0,
+      settlementDays: 0,
+      holdoutCycles: 0,
       rejectionReasons: {},
       nearMisses: [],
       error: null,
@@ -349,6 +353,8 @@ export class AiCycleService implements OnModuleInit {
         draftsCreated: cycle.draftsCreated,
         oosPassed: cycle.oosPassed,
         holdoutTested: cycle.holdoutTested,
+        settlementDays: cycle.settlementDays,
+        holdoutCycles: cycle.holdoutCycles,
         error: cycle.error,
         createdAt: cycle.createdAt,
         finishedAt: cycle.finishedAt,
@@ -464,6 +470,8 @@ export class AiCycleService implements OnModuleInit {
       draftsCreated: cycle.draftsCreated,
       oosPassed: cycle.oosPassed,
       holdoutTested: cycle.holdoutTested,
+      settlementDays: cycle.settlementDays,
+      holdoutCycles: cycle.holdoutCycles,
       rejectionReasons: cycle.rejectionReasons,
       nearMisses: cycle.nearMisses,
       error: cycle.error,
@@ -699,6 +707,8 @@ export class AiCycleService implements OnModuleInit {
       summary.recommended = recommended.length;
       summary.oosPassed = results.stats?.oosPassed ?? 0;
       summary.holdoutTested = results.stats?.holdoutTested ?? 0;
+      summary.settlementDays = results.settlementDays;
+      summary.holdoutCycles = results.holdoutCycles;
       summary.rejectionReasons = results.rejectionReasons;
       summary.nearMisses = results.nearMisses.slice(0, 5);
     });

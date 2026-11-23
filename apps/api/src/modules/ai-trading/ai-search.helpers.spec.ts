@@ -51,15 +51,27 @@ describe('AI search helpers', () => {
     expect(new Set(first.map((variant) => JSON.stringify(variant))).size).toBe(first.length);
   });
 
-  it('builds eight non-overlapping OOS folds and a warmup-prefixed 30-day holdout', () => {
-    const { folds, holdout, holdoutWarmup, holdoutWarmupCandles } = buildSearchFolds(
-      hourlyCandles(180),
-      '1h',
-    );
-    expect(folds).toHaveLength(8);
+  it('builds seven OOS folds and a warmup-prefixed 45-day holdout', () => {
+    const {
+      folds,
+      holdout,
+      settlementRanges,
+      settlementDays,
+      holdoutCycles,
+      holdoutWarmup,
+      holdoutWarmupCandles,
+    } = buildSearchFolds(hourlyCandles(180), '1h');
+    expect(folds).toHaveLength(7);
     expect(folds[0]?.warmupCandles).toBe(360);
     expect(folds[0]?.candles).toHaveLength(600);
-    expect(holdout).toHaveLength(720);
+    expect(holdout).toHaveLength(1080);
+    expect(settlementDays).toBe(5);
+    expect(holdoutCycles).toBe(3);
+    expect(settlementRanges).toEqual([
+      { start: 240, end: 360 },
+      { start: 600, end: 720 },
+      { start: 960, end: 1080 },
+    ]);
     expect(holdoutWarmup).toHaveLength(360);
     expect(holdoutWarmupCandles).toBe(360);
     expect((holdoutWarmup.at(-1)?.date ?? '') < (holdout[0]?.date ?? '')).toBe(true);
@@ -122,16 +134,32 @@ describe('holdout selection', () => {
 });
 
 describe('holdout blocks', () => {
-  it('splits the holdout equity curve into three 10-day block returns', () => {
+  it('splits the holdout equity curve into three equal blocks', () => {
     const curve = [100, 110, 120, 100, 90, 80, 90, 100, 110].map((equity) => ({
       equityUsd: String(equity),
     }));
-    const stats = holdoutBlockStats(curve, 3);
+    const stats = holdoutBlockStats(curve, 3, {
+      exposure: [true, true, true, false, false, false, true, true, true],
+    });
     expect(stats).not.toBeNull();
     expect(stats?.returnsPct).toEqual(['20.00', '-33.33', '37.50']);
+    expect(stats?.positive).toBe(2);
     expect(stats?.nonNegative).toBe(2);
+    expect(stats?.traded).toBe(2);
     expect(stats?.total).toBe(3);
     expect(stats?.lastNegative).toBe(false);
+  });
+
+  it('handles a 45-point curve and requires at least two points per block', () => {
+    const curve = Array.from({ length: 45 }, (_, index) => ({ equityUsd: String(100 + index) }));
+    const exposure = Array.from({ length: 45 }, (_, index) => index < 15 || index >= 30);
+    const stats = holdoutBlockStats(curve, 3, { exposure });
+    expect(stats?.total).toBe(3);
+    expect(stats?.returnsPct).toHaveLength(3);
+    expect(stats?.traded).toBe(2);
+    expect(
+      holdoutBlockStats([{ equityUsd: '100' }, { equityUsd: '110' }, { equityUsd: '120' }], 3),
+    ).toBeNull();
   });
 
   it('flags a negative last block and an unusable curve', () => {
@@ -140,8 +168,10 @@ describe('holdout blocks', () => {
         equityUsd: String(equity),
       })),
       3,
+      { exposure: [true, true, true, true, true, true, true, true, true] },
     );
-    expect(lastNegative?.nonNegative).toBe(2);
+    expect(lastNegative?.positive).toBe(2);
+    expect(lastNegative?.traded).toBe(3);
     expect(lastNegative?.lastNegative).toBe(true);
     expect(holdoutBlockStats([{ equityUsd: '100' }, { equityUsd: '110' }], 3)).toBeNull();
   });
@@ -151,9 +181,11 @@ describe('partial history windows', () => {
   it('counts available days and fits fewer folds into a 146-day window', () => {
     const candles = hourlyCandles(146);
     expect(historyDaysFor(candles, '1h')).toBe(146);
-    const { folds, holdout } = buildSearchFolds(candles, '1h', 146);
-    expect(folds).toHaveLength(5);
-    expect(holdout).toHaveLength(720);
+    const { folds, holdout, settlementDays, holdoutCycles } = buildSearchFolds(candles, '1h', 146);
+    expect(folds).toHaveLength(3);
+    expect(holdout).toHaveLength(1080);
+    expect(settlementDays).toBe(5);
+    expect(holdoutCycles).toBe(3);
     expect(folds.at(-1)?.candles.at(-1)?.date).not.toBe(holdout[0]?.date);
   });
 
@@ -171,7 +203,9 @@ describe('partial history windows', () => {
 
 const passingBlocks = {
   returnsPct: ['1.00', '2.00', '3.00'],
+  positive: 3,
   nonNegative: 3,
+  traded: 3,
   total: 3,
   lastNegative: false,
 };
@@ -190,13 +224,16 @@ describe('holdoutRejection', () => {
     expect(holdoutRejection(108.78, 21, 20, passingBlocks)).toBe('holdout drawdown too high');
   });
 
-  it('rejects an unstable block set, a negative last block, and missing blocks', () => {
-    expect(holdoutRejection(5, 10, 20, { ...passingBlocks, nonNegative: 1 })).toBe(
+  it('rejects unstable/active/last blocks and missing blocks', () => {
+    expect(holdoutRejection(5, 10, 20, { ...passingBlocks, positive: 1 })).toBe(
       'holdout blocks unstable',
     );
-    expect(
-      holdoutRejection(5, 10, 20, { ...passingBlocks, nonNegative: 2, lastNegative: true }),
-    ).toBe('holdout recent block negative');
+    expect(holdoutRejection(5, 10, 20, { ...passingBlocks, traded: 1 })).toBe(
+      'holdout too few active blocks',
+    );
+    expect(holdoutRejection(5, 10, 20, { ...passingBlocks, positive: 2, lastNegative: true })).toBe(
+      'holdout recent block negative',
+    );
     expect(holdoutRejection(5, 10, 20, null)).toBe('holdout blocks unavailable');
   });
 });

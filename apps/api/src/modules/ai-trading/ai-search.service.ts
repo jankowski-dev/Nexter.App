@@ -114,9 +114,12 @@ interface SearchRunSummary {
 
 interface SearchCandidate extends VariantMetrics {
   variant: SearchVariant;
+  foldCount: number;
   holdoutReturnPct: string | null;
   holdoutBlockReturnsPct: string[];
+  holdoutBlocksPositive: number;
   holdoutBlocksNonNegative: number;
+  holdoutBlocksTraded: number;
   holdoutBlocksTotal: number;
 }
 
@@ -576,6 +579,9 @@ export class AiSearchService {
           trades: typeof metrics.trades === 'number' ? metrics.trades : 0,
           positiveFolds: typeof metrics.positiveFolds === 'number' ? metrics.positiveFolds : 0,
           stabilityPct: value('stabilityPct', '0'),
+          foldCount: typeof metrics.foldCount === 'number' ? metrics.foldCount : 8,
+          settlementDays: typeof metrics.settlementDays === 'number' ? metrics.settlementDays : 0,
+          holdoutCycles: typeof metrics.holdoutCycles === 'number' ? metrics.holdoutCycles : 0,
           holdoutReturnPct:
             typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
           policyScore: candidate.policyScore ?? '0',
@@ -584,10 +590,14 @@ export class AiSearchService {
                 (value): value is string => typeof value === 'string',
               )
             : [],
+          holdoutBlocksPositive:
+            typeof metrics.holdoutBlocksPositive === 'number' ? metrics.holdoutBlocksPositive : 0,
           holdoutBlocksNonNegative:
             typeof metrics.holdoutBlocksNonNegative === 'number'
               ? metrics.holdoutBlocksNonNegative
               : 0,
+          holdoutBlocksTraded:
+            typeof metrics.holdoutBlocksTraded === 'number' ? metrics.holdoutBlocksTraded : 0,
           holdoutBlocksTotal:
             typeof metrics.holdoutBlocksTotal === 'number' ? metrics.holdoutBlocksTotal : 0,
           suggestedAllocationUsd: allocation,
@@ -702,6 +712,14 @@ export class AiSearchService {
         (payload.execution as AiSearchExecution | undefined) ??
         (run.summary as Partial<SearchRunSummary>).execution ??
         'next-open',
+      settlementDays:
+        typeof payload.settlementDays === 'number'
+          ? Math.max(0, Math.floor(payload.settlementDays))
+          : 0,
+      holdoutCycles:
+        typeof payload.holdoutCycles === 'number'
+          ? Math.max(0, Math.floor(payload.holdoutCycles))
+          : 0,
       stats: (payload.stats as AiSearchStats | undefined) ?? {
         total: 0,
         evaluated: 0,
@@ -722,6 +740,7 @@ export class AiSearchService {
         medianOosReturnPct: '0',
         worstOosReturnPct: '0',
         stabilityPct: '0',
+        foldCount: 8,
         holdoutReturnPct: null,
         histogram: [],
       },
@@ -902,7 +921,9 @@ export class AiSearchService {
       holdoutReturnPct: string | null = null,
       holdoutDrawdownPct: string | null = null,
       holdoutBlockReturnsPct: string[] = [],
+      holdoutBlocksPositive = 0,
       holdoutBlocksNonNegative = 0,
+      holdoutBlocksTraded = 0,
       holdoutBlocksTotal = 0,
     ) => {
       if (aggregate.trades <= 0 || Number(aggregate.oosMedianReturnPct) <= 0) return;
@@ -922,7 +943,9 @@ export class AiSearchService {
         policyScore: aggregate.policyScore,
         reasons,
         holdoutBlockReturnsPct,
+        holdoutBlocksPositive,
         holdoutBlocksNonNegative,
+        holdoutBlocksTraded,
         holdoutBlocksTotal,
       });
     };
@@ -982,9 +1005,12 @@ export class AiSearchService {
       metrics.push({
         ...aggregate,
         variant,
+        foldCount: folds.folds.length,
         holdoutReturnPct: null,
         holdoutBlockReturnsPct: [],
+        holdoutBlocksPositive: 0,
         holdoutBlocksNonNegative: 0,
+        holdoutBlocksTraded: 0,
         holdoutBlocksTotal: 0,
       });
     };
@@ -1230,14 +1256,22 @@ export class AiSearchService {
             changeLookbackCandles: candlesPerDay(input.timeframe),
             warmupCandles: folds.holdoutWarmupCandles,
             execution,
+            settlementRanges: folds.settlementRanges.map((range) => ({
+              start: range.start + folds.holdoutWarmupCandles,
+              end: range.end + folds.holdoutWarmupCandles,
+            })),
           },
         );
         const returnPct = Number(result.stats.totalReturnPct);
         const drawdown = Number(result.stats.maxDrawdownPct);
-        const blocks: HoldoutBlockStats | null = holdoutBlockStats(result.equityCurve);
+        const blocks: HoldoutBlockStats | null = holdoutBlockStats(result.equityCurve, 3, {
+          exposure: result.exposure.map((point) => point.inPosition),
+        });
         candidate.holdoutReturnPct = result.stats.totalReturnPct;
         candidate.holdoutBlockReturnsPct = blocks?.returnsPct ?? [];
+        candidate.holdoutBlocksPositive = blocks?.positive ?? 0;
         candidate.holdoutBlocksNonNegative = blocks?.nonNegative ?? 0;
+        candidate.holdoutBlocksTraded = blocks?.traded ?? 0;
         candidate.holdoutBlocksTotal = blocks?.total ?? 0;
         const rejection = holdoutRejection(returnPct, drawdown, FULL_MAX_DRAWDOWN_PCT, blocks);
         if (rejection !== null) {
@@ -1259,7 +1293,9 @@ export class AiSearchService {
             candidate.holdoutReturnPct,
             result.stats.maxDrawdownPct,
             blocks?.returnsPct ?? [],
+            blocks?.positive ?? 0,
             blocks?.nonNegative ?? 0,
+            blocks?.traded ?? 0,
             blocks?.total ?? 0,
           );
         } else if (Number(candidate.policyScore) <= 0) {
@@ -1280,7 +1316,9 @@ export class AiSearchService {
             candidate.holdoutReturnPct,
             result.stats.maxDrawdownPct,
             blocks?.returnsPct ?? [],
+            blocks?.positive ?? 0,
             blocks?.nonNegative ?? 0,
+            blocks?.traded ?? 0,
             blocks?.total ?? 0,
           );
           candidate.policyScore = '0';
@@ -1288,7 +1326,9 @@ export class AiSearchService {
       } catch {
         candidate.holdoutReturnPct = null;
         candidate.holdoutBlockReturnsPct = [];
+        candidate.holdoutBlocksPositive = 0;
         candidate.holdoutBlocksNonNegative = 0;
+        candidate.holdoutBlocksTraded = 0;
         candidate.holdoutBlocksTotal = 0;
         candidate.policyScore = '0';
         reject('holdout failed');
@@ -1319,7 +1359,8 @@ export class AiSearchService {
     );
     recommended.sort(
       (left, right) =>
-        right.holdoutBlocksNonNegative - left.holdoutBlocksNonNegative ||
+        right.holdoutBlocksPositive - left.holdoutBlocksPositive ||
+        right.holdoutBlocksTraded - left.holdoutBlocksTraded ||
         Number(right.policyScore) - Number(left.policyScore),
     );
     stageReport('holdout').input = top.length;
@@ -1353,6 +1394,7 @@ export class AiSearchService {
       item.reasons.includes('negative holdout') ||
       item.reasons.includes('holdout drawdown too high') ||
       item.reasons.includes('holdout blocks unstable') ||
+      item.reasons.includes('holdout too few active blocks') ||
       item.reasons.includes('holdout recent block negative') ||
       item.reasons.includes('holdout blocks unavailable') ||
       item.reasons.includes('holdout failed');
@@ -1370,6 +1412,8 @@ export class AiSearchService {
       assetId: input.assetId,
       timeframe: input.timeframe,
       execution,
+      settlementDays: folds.settlementDays,
+      holdoutCycles: folds.holdoutCycles,
       variants: variants.length,
       stats,
       funnel,
@@ -1427,8 +1471,13 @@ export class AiSearchService {
               positiveFolds: candidate.positiveFolds,
               stabilityPct: candidate.stabilityPct,
               holdoutReturnPct: candidate.holdoutReturnPct,
+              foldCount: candidate.foldCount,
+              settlementDays: folds.settlementDays,
+              holdoutCycles: folds.holdoutCycles,
               holdoutBlockReturnsPct: candidate.holdoutBlockReturnsPct,
+              holdoutBlocksPositive: candidate.holdoutBlocksPositive,
               holdoutBlocksNonNegative: candidate.holdoutBlocksNonNegative,
+              holdoutBlocksTraded: candidate.holdoutBlocksTraded,
               holdoutBlocksTotal: candidate.holdoutBlocksTotal,
               policyScore: candidate.policyScore,
               horizonDays: input.horizonDays,
@@ -1615,6 +1664,7 @@ export class AiSearchService {
             )
           : '0.00',
       holdoutReturnPct: recommended[0]?.holdoutReturnPct ?? null,
+      foldCount,
       histogram: histogramRanges.map((range) => ({
         label: range.label,
         count: returns.filter(range.test).length,
@@ -1643,6 +1693,9 @@ export class AiSearchService {
       trades: typeof metrics.trades === 'number' ? metrics.trades : 0,
       positiveFolds: typeof metrics.positiveFolds === 'number' ? metrics.positiveFolds : 0,
       stabilityPct: value('stabilityPct', '0'),
+      foldCount: typeof metrics.foldCount === 'number' ? metrics.foldCount : 8,
+      settlementDays: typeof metrics.settlementDays === 'number' ? metrics.settlementDays : 0,
+      holdoutCycles: typeof metrics.holdoutCycles === 'number' ? metrics.holdoutCycles : 0,
       holdoutReturnPct:
         typeof metrics.holdoutReturnPct === 'string' ? metrics.holdoutReturnPct : null,
       policyScore: row.policyScore ?? '0',
@@ -1651,8 +1704,12 @@ export class AiSearchService {
             (value): value is string => typeof value === 'string',
           )
         : [],
+      holdoutBlocksPositive:
+        typeof metrics.holdoutBlocksPositive === 'number' ? metrics.holdoutBlocksPositive : 0,
       holdoutBlocksNonNegative:
         typeof metrics.holdoutBlocksNonNegative === 'number' ? metrics.holdoutBlocksNonNegative : 0,
+      holdoutBlocksTraded:
+        typeof metrics.holdoutBlocksTraded === 'number' ? metrics.holdoutBlocksTraded : 0,
       holdoutBlocksTotal:
         typeof metrics.holdoutBlocksTotal === 'number' ? metrics.holdoutBlocksTotal : 0,
     };

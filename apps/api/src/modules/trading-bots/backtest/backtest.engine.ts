@@ -35,12 +35,18 @@ export interface BacktestOptions {
   execution?: 'same-close' | 'next-open';
   /** Candles used only to warm up indicators; scoring starts after them. */
   warmupCandles?: number;
+  /**
+   * Absolute candle ranges where new entries are disabled. Open positions may
+   * still exit; each range end force-closes the position.
+   */
+  settlementRanges?: Array<{ start: number; end: number }>;
 }
 
 export interface BacktestResult {
   stats: BotBacktestStats;
   trades: BotBacktestTrade[];
   equityCurve: BotBacktestEquityPoint[];
+  exposure: Array<{ date: string; inPosition: boolean }>;
 }
 
 interface OpenPosition {
@@ -77,6 +83,7 @@ export function runBacktest(
 
   const trades: BotBacktestTrade[] = [];
   const equityCurve: BotBacktestEquityPoint[] = [];
+  const exposure: Array<{ date: string; inPosition: boolean }> = [];
   const samples: StrategySample[] = [];
   let strategyState: Record<string, unknown> = {};
   let pendingOrder: { action: 'buy' | 'sell'; reason: string } | null = null;
@@ -91,6 +98,7 @@ export function runBacktest(
       : new Decimal(0);
     maxDrawdownPct = Decimal.max(maxDrawdownPct, drawdown);
     equityCurve.push({ date, equityUsd: usdString(equity) });
+    exposure.push({ date, inPosition: position !== null });
   };
 
   const executeBuy = (date: string, close: Decimal, reason: string) => {
@@ -168,6 +176,12 @@ export function runBacktest(
     });
     return true;
   };
+
+  const settlementRanges = options.settlementRanges ?? [];
+  const inSettlement = (index: number) =>
+    settlementRanges.some((range) => index >= range.start && index < range.end);
+  const isSettlementEnd = (index: number) =>
+    settlementRanges.some((range) => index === range.end - 1);
 
   const warmup = Math.min(candles.length - 1, Math.max(0, Math.floor(options.warmupCandles ?? 0)));
   for (let index = 0; index < warmup; index += 1) {
@@ -311,11 +325,17 @@ export function runBacktest(
     strategyState = decision.nextState ?? strategyState;
 
     if (execution === 'next-open') {
-      if (!protectiveExit && index < candles.length - 1 && decision.action !== 'hold') {
+      const buyBlockedBySettlement = decision.action === 'buy' && inSettlement(index + 1);
+      if (
+        !protectiveExit &&
+        !buyBlockedBySettlement &&
+        index < candles.length - 1 &&
+        decision.action !== 'hold'
+      ) {
         pendingOrder = { action: decision.action, reason: decision.reason };
       }
     } else if (!protectiveExit) {
-      if (decision.action === 'buy' && (!position || buyCount < maxAdds)) {
+      if (decision.action === 'buy' && !inSettlement(index) && (!position || buyCount < maxAdds)) {
         executeBuy(candle.date, close, decision.reason);
       } else if (decision.action === 'sell' && position) {
         executeSell(candle.date, close, decision.reason);
@@ -323,6 +343,13 @@ export function runBacktest(
     }
 
     pushEquity(candle.date, close);
+    if (isSettlementEnd(index) && position) {
+      executeSell(candle.date, close, 'закрытие settlement');
+      const lastEquityPoint = equityCurve[equityCurve.length - 1];
+      if (lastEquityPoint) lastEquityPoint.equityUsd = usdString(cash);
+      const lastExposurePoint = exposure[exposure.length - 1];
+      if (lastExposurePoint) lastExposurePoint.inPosition = false;
+    }
   }
 
   const last = candles[candles.length - 1] as BotCandle;
@@ -330,6 +357,8 @@ export function runBacktest(
     executeSell(last.date, decimal(last.closeUsd), 'закрытие в конце периода');
     const lastPoint = equityCurve[equityCurve.length - 1];
     if (lastPoint) lastPoint.equityUsd = usdString(cash);
+    const lastExposurePoint = exposure[exposure.length - 1];
+    if (lastExposurePoint) lastExposurePoint.inPosition = false;
   }
 
   peakEquity = new Decimal(0);
@@ -352,6 +381,7 @@ export function runBacktest(
   const decided = wins + losses;
 
   return {
+    exposure,
     stats: {
       initialCapitalUsd: usdString(initialCapital),
       finalEquityUsd: usdString(finalEquity),
