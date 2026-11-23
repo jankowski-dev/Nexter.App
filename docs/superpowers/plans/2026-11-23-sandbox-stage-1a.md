@@ -1589,7 +1589,11 @@ export class ReplayRunner {
       for (;;) {
         const candle = source.next();
         if (!candle) break;
-        if (candle.openTime < clock.now()) {
+        const closeTime = candleCloseTime(candle);
+        // The clock starts at the first candle's close, so an out-of-order
+        // candle is one whose close is already in the past. Comparing
+        // openTime here would reject the first candle.
+        if (closeTime < clock.now()) {
           await eventLog.append({
             runId,
             clockTime: iso(clock.now()),
@@ -1597,7 +1601,11 @@ export class ReplayRunner {
             eventType: 'data.out_of_order',
             severity: 'error',
             tokenId: candle.tokenId,
-            inputs: { candleOpenTime: iso(candle.openTime), clockTime: iso(clock.now()) },
+            inputs: {
+              candleOpenTime: iso(candle.openTime),
+              candleCloseTime: iso(closeTime),
+              clockTime: iso(clock.now()),
+            },
             dataSnapshotId,
             configVersion,
             seed,
@@ -1606,7 +1614,6 @@ export class ReplayRunner {
           });
           throw new DataSourceOrderError();
         }
-        const closeTime = candleCloseTime(candle);
         clock.advanceTo(closeTime);
         firstTime ??= candle.openTime;
         lastTime = candle.openTime;
@@ -1716,6 +1723,8 @@ export class ReplayRunner {
   }
 }
 ```
+
+Stage 1A assumes one timeframe per run. A mixed-timeframe source must be replayed per timeframe or sorted by `(closeTime, openTime)` in a later stage; sorting only by `openTime` can make a shorter candle look out-of-order after a longer one.
 
 Update `packages/sandbox-core/src/index.ts` to export `./runner/context` and `./runner/replay-runner`.
 
