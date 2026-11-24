@@ -1,7 +1,7 @@
 # Sandbox Stage 1C — paper execution, ledger and report design
 
 Date: 2026-11-24
-Status: **approved in principle under owner pre-approval; Stage 1B signed off and deployed**
+Status: **Stage 1C implemented; independent review gate**
 Scope: Stage 1C only. No live data, UI, HTTP, DB/schema, wallets, real money or real execution. Stage 2 stays blocked until Stage 1C is signed off.
 
 Base: Stage 1B design `docs/superpowers/specs/2026-11-24-sandbox-stage-1b-decision-engine-design.md` (signed off; merged as `ef2f342`).

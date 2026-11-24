@@ -10,6 +10,8 @@
 
 **Design:** `docs/superpowers/specs/2026-11-24-sandbox-stage-1c-paper-execution-design.md`
 
+**Status:** Stage 1C implemented; independent review gate.
+
 **Base:** Stage 1B merged as `ef2f342`; Stage 1B design is signed off.
 
 **Status:** approved in principle under owner pre-approval; implementation not started.
