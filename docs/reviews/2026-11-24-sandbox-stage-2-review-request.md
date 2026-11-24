@@ -96,8 +96,9 @@ real database execution.
 | `05082b6` | [run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183) | **success**: one-off live smoke (CAKE strict, Binance skipped)                                 |
 | `cd31bca` | [run 45463903353](https://github.com/jankowski-dev/Nexter.App/actions/runs/45463903353) | **success**: one-off live smoke repeated; CAKE 4320/4320, fill, report, stop                   |
 | `b4b1e03` | [run 45466287752](https://github.com/jankowski-dev/Nexter.App/actions/runs/45466287752) | **success**: final code head, temporary one-off step removed (output-only CI; DB suites green) |
-| `8983bde` | [run 45468500668](https://github.com/jankowski-dev/Nexter.App/actions/runs/45468500668) | **success**: final docs-only head (this packet)                                                |
+| `8983bde` | [run 45468500668](https://github.com/jankowski-dev/Nexter.App/actions/runs/45468500668) | **success**: interim docs head (superseded)                                                    |
 | `4acc900` | [run 45479363737](https://github.com/jankowski-dev/Nexter.App/actions/runs/45479363737) | **success**: Stage 2 review fixes; app role provisioned, grant suite runs, API 621 passed      |
+| `4422dbe` | [run 45481336585](https://github.com/jankowski-dev/Nexter.App/actions/runs/45481336585) | **success**: docs/packet head before this final head correction                                |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
