@@ -1105,8 +1105,8 @@ For each candidate:
 9. `liquidityCap = avgVolumeUsd * liquidityCapPct/100`.
 10. If any of the five caps is `<= 0`, drop with the matching reason in fixed order: token, strategy, cash, risk, liquidity.
 11. `size = min(tokenCap, strategyCap, cashAvailable, sizeByRisk, liquidityCap)`.
-12. If `size < minOrderUsd` → drop `ALLOC_SIZE_TOO_SMALL`.
-13. Otherwise accept: `sizeUsd = moneyDown(size)` (floor to cents so an emitted order can never exceed a cap after rounding), run the minimum-order check against the floored size, set `bindingConstraint` to the exact constraint equal to the minimum (first in the fixed order), then increment open positions, token value, strategy value and decrement cash available by the floored emitted size, not the unrounded one.
+12. `sizeUsd = moneyDown(size)` (floor to cents so an emitted order can never exceed a cap after rounding). If `sizeUsd < minOrderUsd` → drop `ALLOC_SIZE_TOO_SMALL`.
+13. Otherwise accept: set `bindingConstraint` to the exact constraint equal to the minimum (first in the fixed order), then increment open positions, token value, strategy value and decrement cash available by the floored emitted size, not the unrounded one.
 
 Sells never enter this function.
 

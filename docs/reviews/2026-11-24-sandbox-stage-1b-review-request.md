@@ -378,8 +378,8 @@ midpoint exit, recovery entry) plus all three exit reasons that matter here
   alternative;
 - the first classification of every token is ILLIQUID /
   `REGIME_INSUFFICIENT_HISTORY`;
-- CRASH is adopted for AAA and CCC on the raw-regime CRASH change event
-  (dwell bypassed);
+- CRASH is adopted for AAA and CCC on the raw-regime CRASH change event;
+  immediate adoption despite dwell is proven by the classifier unit test;
 - every non-CRASH/ILLIQUID regime change had at least `regimeDwellBars` (3)
   confirmations;
 - every RECOVERY change follows a CRASH or TREND_DOWN;
@@ -798,8 +798,9 @@ entries and made entry availability depend on cent parity.
   `portfolio-allocator.test.ts` (equity 992.14 / 20% cap → `198.42`, allocation
   accepted, and a following `checkBuyRisk` passes all twelve checks; equity
   100.04 / 10% cap → exact `10.004`, floored `10.00` below `minOrderUsd 10.004`
-  → `ALLOC_SIZE_TOO_SMALL`; two 20% caps on equity 1000.03 emit `200.00` each and
-  account with the floored value).
+  → `ALLOC_SIZE_TOO_SMALL`; equity 1000.02 / cash 210 / no buffer: the first 20%
+  cap emits `200.00` and the second candidate gets the remaining `10.00` and is
+  kept, while exact-size accounting would leave `9.996 → 9.99` and drop it).
 - The golden replay now pins zero risk vetoes (`risk.checked` with
   `decision.action: block`), which fails if this seam regresses.
 
