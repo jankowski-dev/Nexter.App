@@ -92,6 +92,15 @@ export const trendPullbackStrategy: StrategyDefinition<TrendPullbackParams> = {
     }
 
     const avgCost = Number(position.avgCostUsd);
+    if (!Number.isFinite(avgCost) || avgCost <= 0) {
+      return signal(
+        'hold',
+        Reason.STRATEGY_NO_DATA,
+        'Trend pullback: position average cost (avgCostUsd) is not a finite positive number',
+        ctx.state,
+      );
+    }
+
     const hwm = Math.max(numeric(ctx.state.hwm) ?? avgCost, close);
     const trailActive =
       ctx.state.trailActive === true || hwm >= avgCost * (1 + params.trailActivationPct / 100);

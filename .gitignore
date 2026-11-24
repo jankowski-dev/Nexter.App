@@ -17,4 +17,5 @@ apps/api/public/*
 !apps/api/public/.gitkeep
 data/
 !packages/sandbox-core/src/data/
+/out/
 packages/sandbox-core/out/

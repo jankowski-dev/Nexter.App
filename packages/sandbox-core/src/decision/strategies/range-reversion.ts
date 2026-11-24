@@ -90,6 +90,15 @@ export const rangeReversionStrategy: StrategyDefinition<RangeReversionParams> = 
     }
 
     const avgCost = Number(position.avgCostUsd);
+    if (!Number.isFinite(avgCost) || avgCost <= 0) {
+      return signal(
+        'hold',
+        Reason.STRATEGY_NO_DATA,
+        'Range reversion: position average cost (avgCostUsd) is not a finite positive number',
+        ctx.state,
+      );
+    }
+
     const stopLevel = avgCost * (1 - (params.stopAtrMult * atr) / 100);
     if (close <= stopLevel) {
       return signal(

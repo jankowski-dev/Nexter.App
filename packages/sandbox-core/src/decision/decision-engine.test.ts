@@ -5,7 +5,7 @@ import { MemoryEventLog } from '../events/memory-event-log';
 import type { SandboxEvent } from '../events/event-types';
 import { TIMEFRAME_MS, candleCloseTime } from '../timeframes';
 import type { Candle, Timestamp } from '../types';
-import { DecisionEngine, DecisionInputError } from './decision-engine';
+import { DecisionEngine, DecisionInputError, rankingDropReasonForPhase } from './decision-engine';
 import { DecisionLogger } from './decision-logger';
 import { DEFAULT_SETTINGS, REGIME_RULES_VERSION, settingsVersion } from './defaults';
 import { makeCandlesFromCloses, makeSeries } from './fixtures.test-helpers';
@@ -571,7 +571,7 @@ describe('DecisionEngine input validation', () => {
 });
 
 describe('DecisionEngine cooldowns and phases', () => {
-  it('blocks a cooled-down buy but still allows a sell, and leaves a blocked token alone', async () => {
+  it('drops a cooled-down buy before ranking but still allows its sell, leaving a blocked token alone', async () => {
     const hot = trendPullbackCandles({ tokenId: 'hot' });
     const heldCandles = trendPullbackCandles({ tokenId: 'held' });
     const thin = makeSeries({
@@ -617,17 +617,113 @@ describe('DecisionEngine cooldowns and phases', () => {
     expect(views.get('thin')?.phase).toBe('BLOCKED');
     expect(result.state.tokens['hot']?.cooldownUntil).toBe(now + HOUR);
 
+    // The strategy still evaluates the cooled-down token; only ranking and
+    // allocation are skipped, so the signal cannot consume a position slot.
+    expect(eventsOfType(log, 'strategy.evaluated').some((event) => event.tokenId === 'hot')).toBe(
+      true,
+    );
+    const hotDrops = eventsOfType(log, 'opportunity.dropped').filter(
+      (event) => event.tokenId === 'hot',
+    );
+    expect(hotDrops).toHaveLength(1);
+    expect(hotDrops[0]?.reasonCode).toBe(Reason.RANK_COOLDOWN);
+    expect(hotDrops[0]?.decision?.action).toBe('block');
+    expect(eventsOfType(log, 'opportunity.ranked').some((event) => event.tokenId === 'hot')).toBe(
+      false,
+    );
+    expect(eventsOfType(log, 'portfolio.allocated').some((event) => event.tokenId === 'hot')).toBe(
+      false,
+    );
+    expect(eventsOfType(log, 'order.intent').some((event) => event.tokenId === 'hot')).toBe(false);
+
     const risk = eventsOfType(log, 'risk.checked');
-    const hotRisk = risk.find((event) => event.tokenId === 'hot');
+    expect(risk.some((event) => event.tokenId === 'hot')).toBe(false);
     const heldRisk = risk.find((event) => event.tokenId === 'held');
-    expect(hotRisk?.reasonCode).toBe(Reason.RISK_COOLDOWN);
-    expect(hotRisk?.riskChecks).toHaveLength(12);
     expect(heldRisk?.reasonCode).toBe(Reason.RISK_PASSED);
     expect(heldRisk?.riskChecks).toHaveLength(2);
     expect(heldRisk?.inputs.kind).toBe('sell');
-    expect(
-      log.events().some((event) => event.eventType === 'order.intent' && event.tokenId === 'hot'),
-    ).toBe(false);
+
+    // A blocked market has no eligible strategy, so it never becomes a drop.
+    expect(eventsOfType(log, 'opportunity.dropped').some((event) => event.tokenId === 'thin')).toBe(
+      false,
+    );
+  });
+
+  it('frees the slot for a lower-ranked valid token when the top candidate is cooling down', async () => {
+    const cooled = trendPullbackCandles({ tokenId: 'cooled', volumeUsd: 200_000 });
+    const valid = trendPullbackCandles({ tokenId: 'valid', volumeUsd: 60_000 });
+    const candles = [...cooled, ...valid];
+    const now = lastCloseTime(candles);
+    const state = engineState([
+      tokenState('cooled', 'TREND_UP', { phase: 'COOLDOWN', cooldownUntil: now + HOUR }),
+    ]);
+    const settings: SandboxDecisionSettings = { ...DEFAULT_SETTINGS, maxPositions: 1 };
+
+    const { log, result } = await decide({
+      candles,
+      now,
+      tokenIds: ['valid', 'cooled'],
+      state,
+      settings,
+    });
+
+    expect(result.intents).toHaveLength(1);
+    expect(result.intents[0]?.tokenId).toBe('valid');
+    expect(eventsOfType(log, 'opportunity.ranked').map((event) => event.tokenId)).toEqual([
+      'valid',
+    ]);
+    const drops = eventsOfType(log, 'opportunity.dropped');
+    expect(drops).toHaveLength(1);
+    expect(drops[0]?.tokenId).toBe('cooled');
+    expect(drops[0]?.reasonCode).toBe(Reason.RANK_COOLDOWN);
+  });
+
+  it('maps defensively blocked buy phases to RANK_BLOCKED before ranking', () => {
+    expect(rankingDropReasonForPhase('COOLDOWN')).toBe(Reason.RANK_COOLDOWN);
+    expect(rankingDropReasonForPhase('BLOCKED')).toBe(Reason.RANK_BLOCKED);
+    expect(rankingDropReasonForPhase('SLEEPING')).toBeNull();
+    expect(rankingDropReasonForPhase('ARMED')).toBeNull();
+    expect(rankingDropReasonForPhase('IN_POSITION')).toBeNull();
+  });
+
+  it('logs a defensively blocked buy drop as a complete decision event', async () => {
+    const log = new MemoryEventLog();
+    const logger = new DecisionLogger(log, {
+      runId: RUN_ID,
+      seed: SEED,
+      configVersion: CONFIG_VERSION,
+      dataSnapshotId: SNAPSHOT_ID,
+      clockTime: new Date(START).toISOString(),
+    });
+
+    await logger.opportunityDropped({
+      drop: {
+        candidate: {
+          tokenId: 'blocked',
+          strategyKey: 'trend_pullback',
+          signal: {
+            action: 'buy',
+            reasonCode: Reason.TREND_PULLBACK_ENTRY,
+            reasonText: 'pullback entry',
+            confidence: 0.6,
+            riskWeight: 1,
+            stopLossPct: '3.00',
+            takeProfitPct: null,
+            nextState: {},
+          },
+          atrPct: '1.00',
+          avgVolumeUsd: '100000.00',
+        },
+        reasonCode: Reason.RANK_BLOCKED,
+        reasonText: 'blocked token dropped before ranking',
+      },
+    });
+
+    const event = log.events()[0];
+    expect(event?.eventType).toBe('opportunity.dropped');
+    expect(event?.reasonCode).toBe(Reason.RANK_BLOCKED);
+    expect(event?.decision?.action).toBe('block');
+    expect(event?.alternatives).toHaveLength(1);
   });
 });
 

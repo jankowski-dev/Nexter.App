@@ -13,6 +13,18 @@ import { trendPullbackStrategy } from './trend-pullback';
 
 export { rangeReversionStrategy, recoveryStrategy, trendPullbackStrategy };
 
+/**
+ * Single source of truth for the strategy registry keys, sorted by UTF-16 code
+ * unit. The decision engine validates positions against this list, so adding a
+ * strategy only requires updating the registry and this list together; the
+ * `STRATEGY_KEYS` sync test fails if they drift.
+ */
+export const STRATEGY_KEYS: readonly StrategyKey[] = Object.freeze([
+  'range_reversion',
+  'recovery',
+  'trend_pullback',
+]);
+
 /** Everything a strategy may read for one token bar. */
 export interface StrategyContext {
   readonly now: Timestamp;

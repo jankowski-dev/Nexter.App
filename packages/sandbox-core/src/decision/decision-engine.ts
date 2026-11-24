@@ -4,13 +4,14 @@ import type { Candle, Timestamp } from '../types';
 import { DEFAULT_REGIME_SETTINGS, settingsVersion } from './defaults';
 import { DecisionLogger } from './decision-logger';
 import { rankOpportunities } from './opportunity-ranker';
-import type { OpportunityCandidate } from './opportunity-ranker';
+import type { OpportunityCandidate, RankingDrop } from './opportunity-ranker';
 import { allocateOpportunities } from './portfolio-allocator';
 import { Reason } from './reason-codes';
+import type { ReasonCode } from './reason-codes';
 import { classifyRegime } from './regime-classifier';
 import { checkBuyRisk, checkSellRisk } from './risk-manager';
 import type { RiskContext } from './risk-manager';
-import { createStrategySet, eligibleStrategyFor } from './strategies';
+import { STRATEGY_KEYS, createStrategySet, eligibleStrategyFor } from './strategies';
 import type { StrategyRuntime, StrategySignal } from './strategies';
 import { deriveTokenPhase } from './token-state';
 import type {
@@ -52,10 +53,23 @@ export class DecisionInputError extends Error {
 
 const DECIMAL_PATTERN = /^\d+(\.\d+)?$/;
 const ZERO_PATTERN = /^0+(\.0+)?$/;
-const STRATEGY_KEYS: readonly StrategyKey[] = ['trend_pullback', 'range_reversion', 'recovery'];
 
 function invalid(message: string): never {
   throw new DecisionInputError(message);
+}
+
+/**
+ * Reason code for a buy candidate that must be dropped before ranking because
+ * of its preliminary token phase, or `null` when it may be ranked.
+ *
+ * `COOLDOWN` and `BLOCKED` candidates never reach ranking or allocation, so a
+ * cooled-down or blocked signal cannot consume a position slot or produce a
+ * misleading `ALLOC_MAX_POSITIONS` drop.
+ */
+export function rankingDropReasonForPhase(phase: TokenPhase): ReasonCode | null {
+  if (phase === 'COOLDOWN') return Reason.RANK_COOLDOWN;
+  if (phase === 'BLOCKED') return Reason.RANK_BLOCKED;
+  return null;
 }
 
 function compareCodeUnits(left: string, right: string): number {
@@ -506,21 +520,39 @@ export class DecisionEngine {
       });
     }
 
-    // Buys: rank every eligible signal, size the survivors, then veto by risk.
+    // Buys: drive out phase-blocked signals first, then rank every eligible
+    // survivor, size it, and veto by risk.
     const candidates: OpportunityCandidate[] = [];
+    const phaseDrops: RankingDrop[] = [];
     for (const pass of passes) {
       if (pass.position !== null) continue;
       if (pass.signal === null || pass.signal.action !== 'buy') continue;
       if (pass.strategyKey === null) continue;
-      candidates.push({
+      const candidate: OpportunityCandidate = {
         tokenId: pass.tokenId,
         strategyKey: pass.strategyKey,
         signal: pass.signal,
         atrPct: pass.regime.features.atrPct,
         avgVolumeUsd: pass.regime.features.avgVolumeUsd,
-      });
+      };
+      const dropReason = rankingDropReasonForPhase(phases[pass.tokenId]);
+      if (dropReason !== null) {
+        phaseDrops.push({
+          candidate,
+          reasonCode: dropReason,
+          reasonText:
+            dropReason === Reason.RANK_COOLDOWN
+              ? `${pass.tokenId} is cooling down and is dropped before ranking`
+              : `${pass.tokenId} is blocked and is dropped before ranking`,
+        });
+        continue;
+      }
+      candidates.push(candidate);
     }
 
+    for (const drop of phaseDrops) {
+      await logger.opportunityDropped({ drop });
+    }
     const ranking = rankOpportunities(candidates, settings);
     for (const [index, ranked] of ranking.ranked.entries()) {
       await logger.opportunityRanked({
@@ -649,7 +681,8 @@ export class DecisionEngine {
       intents: intents.length,
       buys,
       sells,
-      dropped: ranking.dropped.length + allocationResult.drops.length + riskBlocked,
+      dropped:
+        phaseDrops.length + ranking.dropped.length + allocationResult.drops.length + riskBlocked,
       tokens: passes.length,
     });
 

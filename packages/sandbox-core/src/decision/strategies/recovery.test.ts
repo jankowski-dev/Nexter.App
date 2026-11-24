@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candleCloseTime } from '../../timeframes';
+import { TIMEFRAME_MS, candleCloseTime } from '../../timeframes';
 import type { Candle } from '../../types';
 import { makeCandlesFromCloses, makeSeries } from '../fixtures.test-helpers';
 import { Reason } from '../reason-codes';
@@ -13,6 +13,24 @@ const PARAMS: RecoveryParams = {
   stopPct: 3,
   riskWeight: 0.5,
 };
+
+const START = Date.UTC(2026, 0, 1);
+const HOUR = TIMEFRAME_MS['1h'] as number;
+
+/** Candles whose close parses to `Infinity`, so the fast SMA is not finite. */
+function nonFiniteFastCandles(): Candle[] {
+  const huge = '9'.repeat(400);
+  return [0, 1, 2, 3].map((index) => ({
+    tokenId: 'token',
+    timeframe: '1h',
+    openTime: START + index * HOUR,
+    open: huge,
+    high: huge,
+    low: huge,
+    close: huge,
+    volumeUsd: '1000',
+  }));
+}
 
 function position(avgCostUsd: string): PortfolioPosition {
   return {
@@ -107,6 +125,32 @@ describe('recovery strategy', () => {
   it('returns NO_DATA and preserves confirmation memory on a data gap', () => {
     const state = { aboveFastBars: 2 };
     const result = evaluate(makeSeries({ count: 2, startPrice: 100 }), { state });
+
+    expect(result.action).toBe('hold');
+    expect(result.reasonCode).toBe(Reason.STRATEGY_NO_DATA);
+    expect(result.nextState).toEqual(state);
+  });
+
+  it('holds with NO_DATA and keeps state when the position average cost is invalid', () => {
+    const state = { aboveFastBars: 2 };
+
+    for (const avgCostUsd of ['not-a-number', '9'.repeat(400)]) {
+      expect(Number.isFinite(Number(avgCostUsd))).toBe(false);
+      const result = evaluate(makeCandlesFromCloses([100, 100, 100, 92]), {
+        position: position(avgCostUsd),
+        state,
+      });
+
+      expect(result.action).toBe('hold');
+      expect(result.reasonCode).toBe(Reason.STRATEGY_NO_DATA);
+      expect(result.nextState).toEqual(state);
+      expect(result.reasonText).toMatch(/average cost/);
+    }
+  });
+
+  it('holds with NO_DATA when the fast SMA is not finite', () => {
+    const state = { aboveFastBars: 2 };
+    const result = evaluate(nonFiniteFastCandles(), { state });
 
     expect(result.action).toBe('hold');
     expect(result.reasonCode).toBe(Reason.STRATEGY_NO_DATA);

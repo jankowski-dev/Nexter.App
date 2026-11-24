@@ -350,6 +350,10 @@ export class DecisionLogger {
             ),
           ]
         : [
+            // Accepted Stage 1B label: `ALLOC_NO_ALTERNATIVE` is reused here for
+            // "a lower-ranked candidate did not receive an allocation". Renaming
+            // it would re-pin the Stage 1B golden; revisit on the next logger
+            // contract touch rather than as a silent label fix.
             alternative(
               'buy',
               Reason.ALLOC_NO_ALTERNATIVE,

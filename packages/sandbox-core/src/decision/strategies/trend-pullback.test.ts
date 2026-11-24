@@ -113,6 +113,20 @@ describe('trend pullback strategy', () => {
     expect(result.nextState).toEqual(state);
   });
 
+  it('holds with NO_DATA and keeps state when the position average cost is invalid', () => {
+    const state = { hwm: 42, trailActive: true };
+
+    for (const avgCostUsd of ['not-a-number', '9'.repeat(400)]) {
+      expect(Number.isFinite(Number(avgCostUsd))).toBe(false);
+      const result = evaluate(flatThenLast(94), { position: position(avgCostUsd), state });
+
+      expect(result.action).toBe('hold');
+      expect(result.reasonCode).toBe(Reason.STRATEGY_NO_DATA);
+      expect(result.nextState).toEqual(state);
+      expect(result.reasonText).toMatch(/average cost/);
+    }
+  });
+
   it('holds without a position and records the current close as HWM', () => {
     const candles = makeSeries({ count: 20, startPrice: 100, pattern: 'flat' });
     const result = evaluate(candles);

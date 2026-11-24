@@ -123,6 +123,20 @@ describe('range reversion strategy', () => {
     expect(result.nextState).toEqual(state);
   });
 
+  it('holds with NO_DATA and keeps state when the position average cost is invalid', () => {
+    const state = { hwm: 10 };
+
+    for (const avgCostUsd of ['not-a-number', '9'.repeat(400)]) {
+      expect(Number.isFinite(Number(avgCostUsd))).toBe(false);
+      const result = evaluate(flatThenLast(90), { position: position(avgCostUsd), state });
+
+      expect(result.action).toBe('hold');
+      expect(result.reasonCode).toBe(Reason.STRATEGY_NO_DATA);
+      expect(result.nextState).toEqual(state);
+      expect(result.reasonText).toMatch(/average cost/);
+    }
+  });
+
   it('sells at the hard stop first', () => {
     const candles = flatThenLast(90);
     const result = evaluate(candles, { position: position('100') });
