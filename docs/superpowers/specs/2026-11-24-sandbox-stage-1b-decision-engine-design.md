@@ -1,7 +1,7 @@
 # Sandbox Stage 1B — decision engine (regime, strategies, portfolio, risk) design
 
 Date: 2026-11-24
-Status: **approved in principle under owner pre-approval; Stage 1A signed off**
+Status: **Stage 1B implemented; independent review gate**
 Scope: Stage 1B only. No fills, ledger, P&L report, UI, live data, real money or execution. Stage 1C stays blocked until Stage 1B is signed off.
 
 Base: Stage 1A design `docs/superpowers/specs/2026-11-23-sandbox-core-replay-design.md` (signed off; merged as `28176d1`).

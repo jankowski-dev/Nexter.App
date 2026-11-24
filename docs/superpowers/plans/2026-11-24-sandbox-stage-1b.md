@@ -12,7 +12,7 @@
 
 **Base:** Stage 1A merged as `28176d1`; Stage 1A design `docs/superpowers/specs/2026-11-23-sandbox-core-replay-design.md` is signed off.
 
-**Status:** approved in principle under owner pre-approval; implementation not started.
+**Status:** Stage 1B implemented; independent review gate.
 
 ## Global Constraints
 
@@ -1426,7 +1426,7 @@ git commit -m "feat(sandbox): add decision engine and audit log"
 - Modify: `docs/superpowers/specs/2026-11-24-sandbox-stage-1b-decision-engine-design.md` (status)
 - Modify: this plan (status + completed checkboxes)
 
-- [ ] **Step 1: Golden multi-bar scenario**
+- [x] **Step 1: Golden multi-bar scenario**
 
 Build a deterministic 3-token, >= 260-bar scenario with the fixtures:
 
@@ -1452,7 +1452,7 @@ Assert:
 
 If the golden hash changes during implementation for any reason other than a deliberate contract change, stop and report it — do not silently re-pin it.
 
-- [ ] **Step 2: Run the full gate**
+- [x] **Step 2: Run the full gate**
 
 ```bash
 npx pnpm@10.20.0 --filter @nexter/sandbox-core test
@@ -1470,7 +1470,7 @@ npx pnpm@10.20.0 --filter @nexter/sandbox-core replay -- --file src/fixtures/can
 
 Expected: 3 candles, 8 events, 64-char hash. Delete the artifact after capturing the output.
 
-- [ ] **Step 3: Write the review packet**
+- [x] **Step 3: Write the review packet**
 
 `docs/reviews/2026-11-24-sandbox-stage-1b-review-request.md` must contain:
 
@@ -1483,7 +1483,7 @@ Expected: 3 candles, 8 events, 64-char hash. Delete the artifact after capturing
 - deferred items (if any) with severity;
 - the explicit gate: **Stage 1C must not start until this review is signed off.**
 
-- [ ] **Step 4: Update status and commit**
+- [x] **Step 4: Update status and commit**
 
 Set the design and plan status to `Stage 1B implemented; independent review gate`.
 
@@ -1492,7 +1492,7 @@ git add docs/reviews docs/superpowers packages/sandbox-core
 git commit -m "docs(sandbox): add stage 1b review request"
 ```
 
-- [ ] **Step 5: Stop for independent review**
+- [x] **Step 5: Stop for independent review**
 
 Do not start Stage 1C. Hand the packet to an independent reviewer (agent and/or owner). Fix critical/major findings and re-run the gate before Stage 1C.
 
