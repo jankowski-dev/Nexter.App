@@ -169,8 +169,10 @@ days), to]`. The store's 180-day window is the maximum.
   traded, or included in the report period.
 - `PaperRunner` gains an optional `evaluateFrom` (additive; default undefined
   keeps the current behavior and goldens). The market view still receives the
-  full candle set; the loop starts at the first bar close at/after
-  `evaluateFrom`, and `runStarted`/period/equity/trades begin there.
+  full candle set; the loop starts at the first bar whose **open** is at/after
+  `evaluateFrom`, and `runStarted`/period/equity/trades begin there. A 30/90/180
+  day window therefore evaluates exactly 720/2160/4320 bars; `from_time` is the
+  first evaluated candle open, never the report period's first close.
 - For 30 and 90 days the prefix is large (150/90 days when the full store is
   available); for 180 days there is no prefix because the store is exactly 180
   days. The 180-day run's first ~169 bars are natural engine warmup; its last
