@@ -1,3 +1,4 @@
+import Decimal from 'decimal.js';
 import { loadJsonlCandles } from '../data/jsonl-candles';
 import { snapshotCandles } from '../data/snapshot';
 import { DEFAULT_SETTINGS, settingsVersion } from '../decision/defaults';
@@ -12,7 +13,7 @@ import { markPortfolio } from '../paper/ledger';
 import { computeMetrics } from '../paper/metrics';
 import { PaperRunner } from '../paper/paper-runner';
 import { analyzeRejectedBuys } from '../paper/counterfactual';
-import { buildReport, writePaperArtifacts } from '../paper/report';
+import { assertFreshOutputDirectory, buildReport, writePaperArtifacts } from '../paper/report';
 import type {
   PaperArtifactPaths,
   PaperRunConfig,
@@ -82,6 +83,16 @@ export interface PaperFromFilesResult {
 
 const REASON_CODES: ReadonlySet<string> = new Set<string>(Object.values(Reason));
 
+/**
+ * Blocked reasons that are structurally not missed buys.
+ *
+ * `ALLOC_EXISTING_POSITION` means the token is already held and the sandbox
+ * never adds to a position, so there is no omitted entry to replay.
+ */
+const NON_COUNTERFACTUAL_REASONS: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
+  Reason.ALLOC_EXISTING_POSITION,
+]);
+
 function toReasonCode(value: unknown): ReasonCode | null {
   return typeof value === 'string' && REASON_CODES.has(value) ? (value as ReasonCode) : null;
 }
@@ -98,11 +109,15 @@ function readSafeInteger(value: string): number {
   return parsed;
 }
 
-function readMoney(value: string): string {
+/**
+ * Validates a positive USD string with at most two decimals and returns the
+ * canonical two-decimal form, so `1000` and `1000.00` hash identically.
+ */
+function canonicalInitialCapital(value: string): string {
   if (!/^\d+(\.\d{1,2})?$/.test(value) || /^0+(\.0{1,2})?$/.test(value)) {
     throw new Error(PAPER_USAGE);
   }
-  return value;
+  return new Decimal(value).toFixed(2);
 }
 
 function readBps(value: string): number {
@@ -158,7 +173,7 @@ export function parsePaperArgs(argv: readonly string[]): PaperArgs {
     initialCapitalUsd:
       flags.get('--initial-capital') === undefined
         ? DEFAULT_INITIAL_CAPITAL_USD
-        : readMoney(flags.get('--initial-capital') as string),
+        : canonicalInitialCapital(flags.get('--initial-capital') as string),
     feeBps:
       flags.get('--fee-bps') === undefined
         ? DEFAULT_FEE_BPS
@@ -217,6 +232,9 @@ function compareCodeUnits(left: string, right: string): number {
  * `risk.checked` events; the analyzer deduplicates them.
  */
 export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFilesResult> {
+  // Fail before the costly load/run if the destination is already occupied.
+  await assertFreshOutputDirectory(args.outputDir);
+
   const loaded: Candle[] = [];
   for (const file of args.files) {
     loaded.push(...(await loadJsonlCandles(file)));
@@ -227,12 +245,16 @@ export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFiles
   if (timeframes.length > 1) {
     throw new Error(`Mixed timeframes are not supported: ${timeframes.join(', ')}`);
   }
+  const timeframe = timeframes[0] as string;
+  if (timeframe !== '1h') {
+    throw new Error(`Unsupported timeframe "${timeframe}": Stage 1C paper runs support 1h only`);
+  }
 
   const snapshot = snapshotCandles(loaded);
-  const timeframe = timeframes[0] as string;
   const tokenIds = [...new Set(snapshot.candles.map((candle) => candle.tokenId))].sort(
     compareCodeUnits,
   );
+  const initialCapitalUsd = canonicalInitialCapital(args.initialCapitalUsd);
 
   const paper: PaperRunSettings = {
     feeBps: args.feeBps,
@@ -247,7 +269,7 @@ export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFiles
     seed: args.seed,
     timeframe,
     tokenIds,
-    initialCapitalUsd: args.initialCapitalUsd,
+    initialCapitalUsd,
     ...paper,
   };
   const configVersion = paperConfigVersion(config);
@@ -332,8 +354,8 @@ function lastMarkAtOrBefore(
  * intents; their event clock is the decision bar close, matching the runner's
  * intent stamp. The analyzer deduplicates identical rows.
  */
-function collectRejectedBuys(
-  result: PaperRunResult,
+export function collectRejectedBuys(
+  result: Pick<PaperRunResult, 'intents'>,
   events: readonly SandboxEvent[],
 ): RejectedBuy[] {
   const rejected: RejectedBuy[] = [];
@@ -365,6 +387,7 @@ function collectRejectedBuys(
     if (reasonCode === null) {
       throw new Error(`Blocked ${event.eventType} event has an unknown reason code`);
     }
+    if (NON_COUNTERFACTUAL_REASONS.has(reasonCode)) continue;
     rejected.push({ tokenId, decisionTime, reasonCode });
   }
 

@@ -1,3 +1,6 @@
+import { mkdtemp, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../decision/defaults';
 import { Reason } from '../decision/reason-codes';
@@ -8,7 +11,13 @@ import { planBuyFill, planSellFill } from './execution';
 import { makeCandle, makeIntent, makePaperConfig } from './fixtures.test-helpers';
 import { applyBuyFill, applySellFill, createLedger, markPortfolio } from './ledger';
 import { buildEquityCurve } from './metrics';
-import { buildReport, renderMarkdown, reportHash } from './report';
+import {
+  PaperReportError,
+  buildReport,
+  renderMarkdown,
+  reportHash,
+  writePaperArtifacts,
+} from './report';
 import type {
   BuildReportInput,
   CounterfactualRecord,
@@ -206,6 +215,37 @@ function reverseKeys<T>(value: T): T {
   return value;
 }
 
+/** Minimal valid event row for audit-mismatch tests. */
+function makeEvent(hash: string): SandboxEvent {
+  return {
+    runId: 'run-1',
+    clockTime: new Date(T0).toISOString(),
+    module: 'run',
+    eventType: 'paper.run_started',
+    severity: 'info',
+    tokenId: null,
+    strategyId: null,
+    regime: null,
+    stateBefore: null,
+    stateAfter: null,
+    inputs: {},
+    timing: null,
+    decision: null,
+    alternatives: [],
+    riskChecks: [],
+    dataSnapshotId: 'snapshot-1',
+    configVersion: 'config-1',
+    seed: 7,
+    correlationId: null,
+    reasonCode: Reason.PAPER_RUN_STARTED,
+    reasonText: 'started',
+    seq: 0,
+    recordedAt: new Date(T0).toISOString(),
+    prevHash: GENESIS_HASH,
+    hash,
+  };
+}
+
 describe('buildReport', () => {
   it('builds a JSON-safe report with identity, period, metrics and reconciliation', () => {
     const input = makeInput();
@@ -260,6 +300,32 @@ describe('buildReport', () => {
     expect(report.reconciliationOk).toBe(false);
     expect(renderMarkdown(report)).toContain('| Reconciliation ok | false |');
   });
+
+  it('rejects an empty equity curve', () => {
+    const input = makeInput();
+    expect(() => buildReport({ ...input, result: { ...input.result, equityCurve: [] } })).toThrow(
+      PaperReportError,
+    );
+  });
+
+  it('rejects a journal that disagrees with the run audit', async () => {
+    const input = makeInput();
+    expect(() => buildReport({ ...input, events: [makeEvent('a'.repeat(64))] })).toThrow(
+      PaperReportError,
+    );
+
+    const report = buildReport(input);
+    const outputDir = join(await mkdtemp(join(tmpdir(), 'paper-report-')), 'out');
+    await expect(
+      writePaperArtifacts({
+        outputDir,
+        report,
+        events: [makeEvent('a'.repeat(64))],
+      }),
+    ).rejects.toThrow(/does not match/);
+    // Validation happens before the directory is created, so no partial output.
+    await expect(readdir(outputDir)).rejects.toThrow();
+  });
 });
 
 describe('renderMarkdown', () => {
@@ -270,6 +336,7 @@ describe('renderMarkdown', () => {
     for (const heading of [
       '# Paper run report',
       '## Summary',
+      '## Equity',
       '## Configuration',
       '### Period',
       '## Open positions (1)',
@@ -282,6 +349,8 @@ describe('renderMarkdown', () => {
     ]) {
       expect(markdown).toContain(heading);
     }
+
+    expect(markdown).toContain('reconstructible from `ledger.entry` events');
 
     expect(markdown).toContain('Hindsight only');
     expect(markdown).toContain('hindsight: true');

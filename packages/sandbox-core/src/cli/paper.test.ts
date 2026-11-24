@@ -2,10 +2,14 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { Reason } from '../decision/reason-codes';
+import type { ReasonCode } from '../decision/reason-codes';
+import type { SandboxEvent } from '../events/event-types';
+import { paperConfigVersion } from '../paper/defaults';
 import { makeCandles } from '../paper/fixtures.test-helpers';
 import type { Candle } from '../types';
 import { stableStringify } from '../util/hash';
-import { PAPER_USAGE, parsePaperArgs, runPaperFromFiles } from './paper';
+import { PAPER_USAGE, collectRejectedBuys, parsePaperArgs, runPaperFromFiles } from './paper';
 
 const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 0, 1);
@@ -48,6 +52,10 @@ describe('parsePaperArgs', () => {
     expect(args.liquidityCapPct).toBe(1);
     expect(args.cooldownHoursAfterStop).toBe(24);
     expect(args.counterfactualHorizonHours).toBe(24);
+    expect(
+      parsePaperArgs(['--file', 'a', '--out', 'out', '--initial-capital', '1000'])
+        .initialCapitalUsd,
+    ).toBe('1000.00');
   });
 
   it('accepts every explicit flag and a repeated --file', () => {
@@ -164,6 +172,63 @@ describe('runPaperFromFiles', () => {
     expect(markdown).toContain(run.report.reportHash);
   });
 
+  it('canonicalises the initial capital so 1000 and 1000.00 hash identically', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'paper-cli-'));
+    const file = await writeCandles(dir, 'candles.jsonl', makeCandles(closes(240), { start: T0 }));
+
+    const one = await runPaperFromFiles({
+      ...baseArgs,
+      initialCapitalUsd: '1000',
+      files: [file],
+      outputDir: join(dir, 'out-one'),
+    });
+    const two = await runPaperFromFiles({
+      ...baseArgs,
+      initialCapitalUsd: '1000.00',
+      files: [file],
+      outputDir: join(dir, 'out-two'),
+    });
+
+    expect(one.report.config).toEqual(two.report.config);
+    expect(one.report.config.initialCapitalUsd).toBe('1000.00');
+    expect(one.report.configVersion).toBe(two.report.configVersion);
+    expect(one.report.reportHash).toBe(two.report.reportHash);
+    expect(one.report.eventHash).toBe(two.report.eventHash);
+    expect(paperConfigVersion(one.report.config)).toBe(one.report.configVersion);
+  });
+
+  it('rejects a non-1h timeframe', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'paper-cli-'));
+    const fourHourly = await writeCandles(
+      dir,
+      'four-hourly.jsonl',
+      makeCandles(closes(10), { timeframe: '4h', start: T0 }),
+    );
+
+    await expect(
+      runPaperFromFiles({
+        ...baseArgs,
+        files: [fourHourly],
+        outputDir: join(dir, 'out'),
+      }),
+    ).rejects.toThrow(/Stage 1C paper runs support 1h only/);
+  });
+
+  it('refuses an occupied output directory before loading the candles', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'paper-cli-'));
+    const outputDir = join(dir, 'out');
+    await mkdir(outputDir);
+    await writeFile(join(outputDir, 'existing.txt'), 'occupied');
+
+    await expect(
+      runPaperFromFiles({
+        ...baseArgs,
+        files: [join(dir, 'missing.jsonl')],
+        outputDir,
+      }),
+    ).rejects.toThrow(/not empty/);
+  });
+
   it('combines multiple files for different tokens', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'paper-cli-'));
     const one = await writeCandles(
@@ -228,5 +293,70 @@ describe('runPaperFromFiles', () => {
     await expect(runPaperFromFiles({ ...baseArgs, files: [file], outputDir })).rejects.toThrow(
       /not empty/,
     );
+  });
+});
+
+type BlockedEventType = 'opportunity.dropped' | 'portfolio.dropped' | 'risk.checked';
+
+function blockedEvent(
+  eventType: BlockedEventType,
+  reasonCode: ReasonCode,
+  options: { action?: 'block' | 'buy'; kind?: 'buy' | 'sell'; tokenId?: string } = {},
+): SandboxEvent {
+  return {
+    runId: 'paper-test',
+    clockTime: new Date(T0).toISOString(),
+    module:
+      eventType === 'risk.checked'
+        ? 'risk'
+        : eventType === 'opportunity.dropped'
+          ? 'strategy'
+          : 'portfolio',
+    eventType,
+    severity: 'decision',
+    tokenId: options.tokenId ?? 'token-a',
+    strategyId: 'trend_pullback',
+    regime: null,
+    stateBefore: null,
+    stateAfter: null,
+    inputs: eventType === 'risk.checked' ? { kind: options.kind ?? 'buy' } : {},
+    timing: null,
+    decision: {
+      action: options.action ?? 'block',
+      sizeUsd: null,
+      reasonCode,
+      reasonText: 'blocked',
+    },
+    alternatives: [{ action: 'hold', reasonCode: Reason.RISK_HOLD, whyNot: 'hold' }],
+    riskChecks: [],
+    dataSnapshotId: 'snapshot-1',
+    configVersion: 'config-1',
+    seed: 7,
+    correlationId: null,
+    reasonCode,
+    reasonText: 'blocked',
+    seq: 0,
+    recordedAt: new Date(T0).toISOString(),
+    prevHash: '0'.repeat(64),
+    hash: 'a'.repeat(64),
+  };
+}
+
+describe('collectRejectedBuys', () => {
+  it('excludes existing-position drops and non-buy blocks', () => {
+    const rejected = collectRejectedBuys({ intents: [] }, [
+      blockedEvent('portfolio.dropped', Reason.ALLOC_EXISTING_POSITION),
+      blockedEvent('opportunity.dropped', Reason.RANK_COOLDOWN, { tokenId: 'token-b' }),
+      blockedEvent('portfolio.dropped', Reason.ALLOC_MAX_POSITIONS),
+      blockedEvent('risk.checked', Reason.RISK_CASH_BUFFER, { kind: 'buy' }),
+      blockedEvent('risk.checked', Reason.RISK_TOKEN_EXPOSURE, { kind: 'sell' }),
+      blockedEvent('risk.checked', Reason.RISK_PASSED, { action: 'buy', kind: 'buy' }),
+    ]);
+
+    expect(rejected).toEqual([
+      { tokenId: 'token-b', decisionTime: T0, reasonCode: Reason.RANK_COOLDOWN },
+      { tokenId: 'token-a', decisionTime: T0, reasonCode: Reason.ALLOC_MAX_POSITIONS },
+      { tokenId: 'token-a', decisionTime: T0, reasonCode: Reason.RISK_CASH_BUFFER },
+    ]);
   });
 });

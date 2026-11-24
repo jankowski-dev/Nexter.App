@@ -94,8 +94,11 @@ export function reportHash(report: RunReport | Omit<RunReport, 'reportHash'>): s
 export function buildReport(input: BuildReportInput): RunReport {
   const { result } = input;
   const equityCurve = result.equityCurve;
-  const firstBar = equityCurve[0]?.clockTime ?? null;
-  const lastBar = equityCurve[equityCurve.length - 1]?.clockTime ?? null;
+  const firstBar = equityCurve[0]?.clockTime;
+  const lastBar = equityCurve[equityCurve.length - 1]?.clockTime;
+  if (firstBar === undefined || lastBar === undefined) {
+    throw new PaperReportError('A report needs at least one equity point');
+  }
 
   const metrics =
     input.metrics ??
@@ -186,6 +189,23 @@ export function renderMarkdown(report: RunReport): string {
         ['Average loss, USD', metrics.averageLossUsd ?? '-'],
         ['Time in market, %', metrics.timeInMarketPct],
         ['Average exposure, %', metrics.averageExposurePct],
+      ],
+    ),
+    '',
+  );
+
+  lines.push('## Equity', '');
+  lines.push(
+    table(
+      ['First equity, USD', 'Last equity, USD', 'Peak, USD', 'Max drawdown, %', 'Bars'],
+      [
+        [
+          report.equityCurve[0]?.equityUsd ?? '-',
+          report.equityCurve[report.equityCurve.length - 1]?.equityUsd ?? '-',
+          metrics.peakEquityUsd,
+          metrics.maxDrawdownPct,
+          String(report.period.bars),
+        ],
       ],
     ),
     '',
@@ -389,6 +409,10 @@ export function renderMarkdown(report: RunReport): string {
     ),
     '',
   );
+  lines.push(
+    `The append-only ledger has ${report.ledgerEntries} entries; they are reconstructible from \`ledger.entry\` events in the event journal.`,
+    '',
+  );
 
   lines.push('## Hashes', '');
   lines.push(
@@ -407,7 +431,7 @@ export function renderMarkdown(report: RunReport): string {
 }
 
 /** Creates the output directory, refusing an existing one that already has entries. */
-async function prepareOutputDirectory(outputDir: string): Promise<void> {
+export async function assertFreshOutputDirectory(outputDir: string): Promise<void> {
   try {
     const entries = await readdir(outputDir);
     if (entries.length > 0) {
@@ -443,7 +467,10 @@ export async function writePaperArtifacts(
     );
   }
 
-  await prepareOutputDirectory(outputDir);
+  // Render first: a render failure must not leave a partially populated directory.
+  const markdown = renderMarkdown(report);
+
+  await assertFreshOutputDirectory(outputDir);
   const eventsPath = join(outputDir, 'events.jsonl');
   const reportJsonPath = join(outputDir, 'report.json');
   const reportMarkdownPath = join(outputDir, 'report.md');
@@ -454,7 +481,7 @@ export async function writePaperArtifacts(
     'utf8',
   );
   await writeFile(reportJsonPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-  await writeFile(reportMarkdownPath, renderMarkdown(report), 'utf8');
+  await writeFile(reportMarkdownPath, markdown, 'utf8');
 
   return { outputDir, eventsPath, reportJsonPath, reportMarkdownPath };
 }

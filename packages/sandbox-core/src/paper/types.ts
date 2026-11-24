@@ -442,10 +442,10 @@ export interface PaperRunResult {
   readonly eventHash: string;
 }
 
-/** Marked period of one paper run; `null` when the run produced no bar. */
+/** Marked period of one paper run. */
 export interface ReportPeriod {
-  readonly firstBar: Timestamp | null;
-  readonly lastBar: Timestamp | null;
+  readonly firstBar: Timestamp;
+  readonly lastBar: Timestamp;
   readonly bars: number;
   readonly tokens: readonly string[];
 }
