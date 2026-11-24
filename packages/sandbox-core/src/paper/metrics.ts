@@ -54,14 +54,15 @@ function parseSigned(value: string, label: string): Decimal {
   return new Decimal(value);
 }
 
-/** Formats money, normalising a signed zero so `-0` never reaches a report. */
-function signedMoney(value: Decimal): string {
-  return money(value.isZero() ? ZERO : value);
-}
-
-/** Formats a percentage, normalising a signed zero. */
-function signedPercent(value: Decimal): string {
-  return percent(value.isZero() ? ZERO : value);
+/**
+ * Formats a signed money or percentage value with two decimals.
+ *
+ * The value is rounded half-up first, so a tiny loss such as -0.004 formats as
+ * `0.00` rather than `-0.00`. A rounded zero and an exact zero are the same.
+ */
+function formatSigned(value: Decimal): string {
+  const rounded = value.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+  return rounded.isZero() ? '0.00' : rounded.toFixed(2);
 }
 
 /** Locale-independent code-unit ordering used by every deterministic sort. */
@@ -78,7 +79,12 @@ interface DrawdownSummary {
   readonly max: Decimal;
 }
 
-/** Replays the equity series in order and returns peak and max drawdown. */
+/**
+ * Replays the equity series in order and returns peak and max drawdown.
+ *
+ * The final equity is observed even when the curve is empty (or ends earlier),
+ * so a run that finishes below its starting balance still reports a drawdown.
+ */
 function summarizeDrawdown(
   initialCapital: Decimal,
   curve: readonly EquityPoint[],
@@ -127,7 +133,8 @@ function accumulate(bucket: TradeBucket, realizedPnl: Decimal): void {
   bucket.count += 1;
   bucket.realized = bucket.realized.plus(realizedPnl);
   if (realizedPnl.greaterThan(0)) bucket.wins += 1;
-  else if (realizedPnl.isNegative()) bucket.losses += 1;
+  // `lessThan(0)` rather than `isNegative()`: `-0.00` is signed but is not a loss.
+  else if (realizedPnl.lessThan(0)) bucket.losses += 1;
 }
 
 function bucketWinRate(bucket: TradeBucket): string | null {
@@ -143,7 +150,7 @@ function toStrategyMetrics(buckets: ReadonlyMap<StrategyKey, TradeBucket>): Stra
       tradeCount: bucket.count,
       wins: bucket.wins,
       losses: bucket.losses,
-      realizedPnlUsd: signedMoney(bucket.realized),
+      realizedPnlUsd: formatSigned(bucket.realized),
       winRatePct: bucketWinRate(bucket),
     }));
 }
@@ -156,7 +163,7 @@ function toTokenMetrics(buckets: ReadonlyMap<string, TradeBucket>): TokenMetric[
       tradeCount: bucket.count,
       wins: bucket.wins,
       losses: bucket.losses,
-      realizedPnlUsd: signedMoney(bucket.realized),
+      realizedPnlUsd: formatSigned(bucket.realized),
       winRatePct: bucketWinRate(bucket),
     }));
 }
@@ -167,10 +174,14 @@ function toTokenMetrics(buckets: ReadonlyMap<string, TradeBucket>): TokenMetric[
  * The initial capital seeds the peak, so a first bar that is already below the
  * starting balance reports a positive drawdown. Drawdown is
  * `(peak - equity) / peak * 100`, clamped at zero; a run with no points returns
- * an empty curve. Money is normalised to two decimals.
+ * an empty curve. Money is normalised to two decimals. The initial capital must
+ * be positive, matching `computeMetrics`.
  */
 export function buildEquityCurve(input: BuildEquityCurveInput): EquityPoint[] {
   const initialCapital = parse(input.initialCapitalUsd, 'initialCapitalUsd');
+  if (!initialCapital.greaterThan(0)) {
+    throw new PaperMetricsError('initialCapitalUsd must be positive');
+  }
   let peak = initialCapital;
   const curve: EquityPoint[] = [];
 
@@ -239,7 +250,7 @@ export function computeMetrics(input: MetricsInput): RunMetrics {
     if (realizedPnl.greaterThan(0)) {
       wins += 1;
       grossProfit = grossProfit.plus(realizedPnl);
-    } else if (realizedPnl.isNegative()) {
+    } else if (realizedPnl.lessThan(0)) {
       losses += 1;
       grossLoss = grossLoss.plus(realizedPnl.abs());
     }
@@ -270,8 +281,8 @@ export function computeMetrics(input: MetricsInput): RunMetrics {
   const winRatePct =
     tradeCount === 0 ? null : percent(new Decimal(wins).div(tradeCount).times(100));
   const profitFactor = grossLoss.greaterThan(0) ? percent(grossProfit.div(grossLoss)) : null;
-  const averageWinUsd = wins > 0 ? signedMoney(grossProfit.div(wins)) : null;
-  const averageLossUsd = losses > 0 ? signedMoney(grossLoss.div(losses).negated()) : null;
+  const averageWinUsd = wins > 0 ? formatSigned(grossProfit.div(wins)) : null;
+  const averageLossUsd = losses > 0 ? formatSigned(grossLoss.div(losses).negated()) : null;
   const timeInMarketPct =
     bars === 0 ? '0.00' : percent(new Decimal(barsInMarket).div(bars).times(100));
   const averageExposurePct = exposureBars === 0 ? '0.00' : percent(exposureSum.div(exposureBars));
@@ -279,13 +290,13 @@ export function computeMetrics(input: MetricsInput): RunMetrics {
   return {
     initialCapitalUsd: money(initial),
     finalEquityUsd: money(finalEquity),
-    totalReturnPct: signedPercent(totalReturn),
+    totalReturnPct: formatSigned(totalReturn),
     maxDrawdownPct: percent(drawdown.max),
     peakEquityUsd: money(drawdown.peak),
     finalCashUsd: money(cash),
     finalPositionsValueUsd: money(finalPositions),
-    realizedPnlUsd: signedMoney(realized),
-    unrealizedPnlUsd: signedMoney(unrealized),
+    realizedPnlUsd: formatSigned(realized),
+    unrealizedPnlUsd: formatSigned(unrealized),
     feesPaidUsd: money(fees),
     tradeCount,
     wins,

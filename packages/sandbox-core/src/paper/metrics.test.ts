@@ -143,6 +143,15 @@ describe('buildEquityCurve', () => {
     expect(buildEquityCurve({ initialCapitalUsd: '1000.00', points: [] })).toEqual([]);
   });
 
+  it('rejects a non-positive initial capital like computeMetrics', () => {
+    expect(() => buildEquityCurve({ initialCapitalUsd: '0.00', points: [] })).toThrow(
+      PaperMetricsError,
+    );
+    expect(() => buildEquityCurve({ initialCapitalUsd: '-1.00', points: [] })).toThrow(
+      PaperMetricsError,
+    );
+  });
+
   it('does not mutate its input', () => {
     const input = deepFreeze({
       initialCapitalUsd: '1000.00',
@@ -325,6 +334,34 @@ describe('computeMetrics', () => {
     expect(metrics.losses).toBe(0);
     expect(metrics.winRatePct).toBe('50.00');
     expect(metrics.profitFactor).toBeNull();
+    expect(metrics.perStrategy).toEqual([
+      {
+        strategyKey: 'trend_pullback',
+        tradeCount: 2,
+        wins: 1,
+        losses: 0,
+        realizedPnlUsd: '10.00',
+        winRatePct: '50.00',
+      },
+    ]);
+    expect(metrics.perToken).toEqual([
+      {
+        tokenId: 'alpha',
+        tradeCount: 1,
+        wins: 1,
+        losses: 0,
+        realizedPnlUsd: '10.00',
+        winRatePct: '100.00',
+      },
+      {
+        tokenId: 'beta',
+        tradeCount: 1,
+        wins: 0,
+        losses: 0,
+        realizedPnlUsd: '0.00',
+        winRatePct: '0.00',
+      },
+    ]);
   });
 
   it('aggregates per strategy and per token in code-unit order', () => {
@@ -410,6 +447,93 @@ describe('computeMetrics', () => {
     expect(metrics.profitFactor).toBeNull();
     expect(metrics.averageWinUsd).toBeNull();
     expect(metrics.averageLossUsd).toBeNull();
+  });
+
+  it('normalises a sub-cent loss to 0.00 instead of -0.00', () => {
+    const metrics = computeMetrics(
+      makeInput({
+        finalEquityUsd: '999.99',
+        ledger: makeLedger({ cashUsd: '999.99' }),
+      }),
+    );
+
+    expect(metrics.totalReturnPct).toBe('0.00');
+    expect(metrics.maxDrawdownPct).toBe('0.00');
+  });
+
+  it('keeps a real negative return at -0.01', () => {
+    const metrics = computeMetrics(
+      makeInput({
+        finalEquityUsd: '999.90',
+        ledger: makeLedger({ cashUsd: '999.90' }),
+      }),
+    );
+
+    expect(metrics.totalReturnPct).toBe('-0.01');
+  });
+
+  it('observes the final equity for drawdown when the curve is empty', () => {
+    const metrics = computeMetrics(
+      makeInput({
+        finalEquityUsd: '900.00',
+        ledger: makeLedger({ cashUsd: '900.00' }),
+        equityCurve: [],
+      }),
+    );
+
+    expect(metrics.maxDrawdownPct).toBe('10.00');
+    expect(metrics.peakEquityUsd).toBe('1000.00');
+  });
+
+  it('does not classify a signed-zero P&L as a loss', () => {
+    const trades = [
+      makeTrade({
+        tradeId: 'trade-zero',
+        tokenId: 'alpha',
+        strategyKey: 'trend_pullback',
+        realizedPnlUsd: '-0.00',
+      }),
+      makeTrade({
+        tradeId: 'trade-loss',
+        tokenId: 'alpha',
+        strategyKey: 'trend_pullback',
+        realizedPnlUsd: '-10.00',
+      }),
+    ];
+    const metrics = computeMetrics(
+      makeInput({
+        finalEquityUsd: '990.00',
+        unrealizedPnlUsd: '-0.00',
+        ledger: makeLedger({ cashUsd: '990.00', realizedPnlUsd: '-10.00' }),
+        closedTrades: trades,
+      }),
+    );
+
+    expect(metrics.unrealizedPnlUsd).toBe('0.00');
+    expect(metrics.tradeCount).toBe(2);
+    expect(metrics.wins).toBe(0);
+    expect(metrics.losses).toBe(1);
+    expect(metrics.averageLossUsd).toBe('-10.00');
+    expect(metrics.perStrategy).toEqual([
+      {
+        strategyKey: 'trend_pullback',
+        tradeCount: 2,
+        wins: 0,
+        losses: 1,
+        realizedPnlUsd: '-10.00',
+        winRatePct: '0.00',
+      },
+    ]);
+    expect(metrics.perToken).toEqual([
+      {
+        tokenId: 'alpha',
+        tradeCount: 2,
+        wins: 0,
+        losses: 1,
+        realizedPnlUsd: '-10.00',
+        winRatePct: '0.00',
+      },
+    ]);
   });
 
   it('recomputes drawdown from equity rather than trusting a stale curve field', () => {
