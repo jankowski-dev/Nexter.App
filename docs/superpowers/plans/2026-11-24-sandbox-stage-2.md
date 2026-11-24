@@ -14,7 +14,7 @@
 
 **Base:** Stage 1C merged as `3771b67`; owner accepted the Stage 1 report on 2026-11-24.
 
-**Status:** Stage 2 independently signed off; owner acceptance pending. Final code head `2e631c4`, final docs head `2d100b0`; report `docs/reviews/2026-11-25-sandbox-stage-2-report.md`.
+**Status:** Stage 2 accepted by the owner and deployed on 2026-11-25 (`3a6f94a`; deployment `ad0b0b73-2df2-46bd-a403-f83074c598c5`; migration `0052` applied). Owner report `docs/reviews/2026-11-25-sandbox-stage-2-report.md`.
 
 ## Global Constraints
 
