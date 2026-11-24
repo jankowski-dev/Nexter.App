@@ -113,7 +113,10 @@ export interface PaperPosition {
 
 /**
  * One round trip: opened by a buy fill and closed when the position reaches
- * zero. Partial sells aggregate into the open trade until then.
+ * zero. Partial sells aggregate into the open trade until then: amounts,
+ * notional, fee and realised P&L sum; `exitAt`, `exitIntentId` and
+ * `exitReasonCode` are last-writer-wins (the most recent sell); `exitPriceUsd`
+ * is the amount-weighted average of the exits.
  *
  * Entry/exit amounts are 8-decimal token amounts; USD strings have two
  * decimals. `realizedPnlUsd` is the sum of the sell fills' realized P&L.

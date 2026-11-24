@@ -93,6 +93,22 @@ function boughtLedger(): PaperLedgerState {
   return applyBuyFill(createLedger('1000.00'), buyPlan(), makeIntent({ sizeUsd: '200' }), T1).state;
 }
 
+/** Buys 200 USD, then sells half at 120 with no slippage. */
+function partiallySoldLedger(): PaperLedgerState {
+  const opened = boughtLedger();
+  return applySellFill(
+    opened,
+    sellPlan('1.99800200', '0.99900100'),
+    makeIntent({
+      intentId: 'intent-sell',
+      side: 'sell',
+      amount: '0.99900100',
+      sizeUsd: '0',
+    }),
+    T1,
+  ).state;
+}
+
 function deepFreeze<T>(value: T): T {
   if (value !== null && typeof value === 'object') {
     for (const key of Object.keys(value)) {
@@ -125,6 +141,11 @@ describe('createLedger', () => {
   it('rejects an invalid initial capital', () => {
     expect(() => createLedger('not money')).toThrow(PaperLedgerError);
     expect(() => createLedger('-1')).toThrow(PaperLedgerError);
+  });
+
+  it('rejects an initial capital with more than two decimals', () => {
+    expect(() => createLedger('1000.001')).toThrow(/two decimals/);
+    expect(createLedger('1000.1').cashUsd).toBe('1000.10');
   });
 });
 
@@ -578,6 +599,39 @@ describe('applySellFill', () => {
     expect(reconcileLedger(second.state, {})).toEqual({ ok: true, discrepancies: [] });
   });
 
+  it('refuses a clamp larger than the 1e-8 display edge', () => {
+    const opened = applyBuyFill(
+      createLedger('1000.00'),
+      manualBuyPlan(),
+      makeIntent({ intentId: 'intent-buy', sizeUsd: '100' }),
+      T1,
+    );
+
+    // The plan fills two 1e-8 units more than the ledger holds: more than a
+    // display round-off, so the ledger must refuse instead of silently booking
+    // the plan's full proceeds against a smaller position.
+    expect(() =>
+      applySellFill(
+        opened.state,
+        manualSellPlan({ filledAmount: '1.00000002' }),
+        makeIntent({ intentId: 'intent-sell', side: 'sell', amount: '1.00000002', sizeUsd: '0' }),
+        T2,
+      ),
+    ).toThrow(/more than the .* position/);
+  });
+
+  it('refuses a zero-notional sell plan with a positive amount', () => {
+    const opened = boughtLedger();
+    expect(() =>
+      applySellFill(
+        opened,
+        manualSellPlan({ notionalUsd: '0.00', feeUsd: '0.00', proceedsUsd: '0.00' }),
+        makeIntent({ intentId: 'intent-sell', side: 'sell', amount: '1', sizeUsd: '0' }),
+        T1,
+      ),
+    ).toThrow(/non-positive notional/);
+  });
+
   it('does not mutate the input state', () => {
     const opened = deepFreeze(boughtLedger());
     const before = JSON.stringify(opened);
@@ -786,6 +840,95 @@ describe('reconcileLedger', () => {
     expect(closed.realizedPnlUsd).toBe('19.44');
     expect(closed.cashUsd).toBe('1019.44');
     expect(reconcileLedger(closed, {})).toEqual({ ok: true, discrepancies: [] });
+  });
+
+  it('reports a duplicate entry id', () => {
+    const opened = boughtLedger();
+    const state: PaperLedgerState = {
+      ...opened,
+      entries: [opened.entries[0]!, { ...opened.entries[0]!, sequence: 2 }],
+    };
+    const result = reconcileLedger(state, { token: '110' });
+    expect(result.ok).toBe(false);
+    expect(result.discrepancies.join('\n')).toMatch(/duplicates the entry id/);
+  });
+
+  it('reports a tampered positionAmountAfter trail', () => {
+    const opened = boughtLedger();
+    const state: PaperLedgerState = {
+      ...opened,
+      entries: [{ ...opened.entries[0]!, positionAmountAfter: '2.00000000' }],
+    };
+    const result = reconcileLedger(state, { token: '110' });
+    expect(result.ok).toBe(false);
+    expect(result.discrepancies.join('\n')).toMatch(/positionAmountAfter/);
+  });
+
+  it('reports an entry clock time that moves backwards', () => {
+    const closed = applySellFill(
+      partiallySoldLedger(),
+      sellPlan('0.99900100', '0.99900100', {
+        intent: makeIntent({
+          intentId: 'intent-sell-2',
+          side: 'sell',
+          amount: '0.99900100',
+          sizeUsd: '0',
+        }),
+      }),
+      makeIntent({
+        intentId: 'intent-sell-2',
+        side: 'sell',
+        amount: '0.99900100',
+        sizeUsd: '0',
+      }),
+      T2,
+    ).state;
+    const state: PaperLedgerState = {
+      ...closed,
+      entries: [closed.entries[0]!, { ...closed.entries[1]!, clockTime: T1 - 1 }],
+    };
+    const result = reconcileLedger(state, {});
+    expect(result.ok).toBe(false);
+    expect(result.discrepancies.join('\n')).toMatch(/clockTime/);
+  });
+
+  it('reports tampered trade aggregates for an open and a closed trade', () => {
+    const partial = partiallySoldLedger();
+    const badOpen: PaperLedgerState = {
+      ...partial,
+      openTrades: {
+        token: { ...partial.openTrades.token!, exitNotionalUsd: '999.00' },
+      },
+    };
+    const openResult = reconcileLedger(badOpen, { token: '110' });
+    expect(openResult.ok).toBe(false);
+    expect(openResult.discrepancies.join('\n')).toMatch(/trade exit notional/);
+
+    const closed = applySellFill(
+      partial,
+      sellPlan('0.99900100', '0.99900100', {
+        intent: makeIntent({
+          intentId: 'intent-sell-2',
+          side: 'sell',
+          amount: '0.99900100',
+          sizeUsd: '0',
+        }),
+      }),
+      makeIntent({
+        intentId: 'intent-sell-2',
+        side: 'sell',
+        amount: '0.99900100',
+        sizeUsd: '0',
+      }),
+      T2,
+    ).state;
+    const badClosed: PaperLedgerState = {
+      ...closed,
+      closedTrades: [{ ...closed.closedTrades[0]!, realizedPnlUsd: '99.99' }],
+    };
+    const closedResult = reconcileLedger(badClosed, {});
+    expect(closedResult.ok).toBe(false);
+    expect(closedResult.discrepancies.join('\n')).toMatch(/trade realized P&L/);
   });
 
   it('reports a position without its open trade', () => {

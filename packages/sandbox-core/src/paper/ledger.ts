@@ -107,6 +107,11 @@ function assertFillPlan(
 /** Opens an empty ledger with the given starting cash. */
 export function createLedger(initialCapitalUsd: string): PaperLedgerState {
   const initial = parseUsd(initialCapitalUsd, 'initialCapitalUsd');
+  if (!initial.times(100).isInteger()) {
+    throw new PaperLedgerError(
+      `initialCapitalUsd must have at most two decimals, received ${initialCapitalUsd}`,
+    );
+  }
   return {
     cashUsd: money(initial),
     initialCapitalUsd: money(initial),
@@ -248,7 +253,9 @@ export function applyBuyFill(
  * ledger holds. The plan's booked `notionalUsd`, `feeUsd` and `proceedsUsd`
  * are used as-is, so `notional - fee = proceeds` and the cash trail keep their
  * exact cents. A partial sell aggregates into the open trade; the trade closes
- * and moves to `closedTrades` when the position reaches zero.
+ * and moves to `closedTrades` when the position reaches zero. `exitAt`,
+ * `exitIntentId` and `exitReasonCode` are last-writer-wins across partial exits;
+ * the exit price is the amount-weighted average of the fill prices.
  */
 export function applySellFill(
   state: PaperLedgerState,
@@ -303,8 +310,15 @@ export function applySellFill(
   }
 
   // Clamp for the 1e-8 edge: the fill plan may emit a hair more than the ledger
-  // holds because it compares displayed amounts.
+  // holds because it compares displayed amounts. Anything larger is a plan or
+  // state out of sync, not a display rounding difference.
   const appliedAmount = minDecimal(planAmount, positionAmount);
+  const overshoot = planAmount.minus(appliedAmount);
+  if (overshoot.greaterThan('0.00000001')) {
+    throw new PaperLedgerError(
+      `Sell plan for ${plan.tokenId} (${plan.intentId}) fills ${plan.filledAmount}, more than the ${position.amount} position by ${units(overshoot)}; only a 1e-8 display edge may be clamped`,
+    );
+  }
   const remainingAmount = positionAmount.minus(appliedAmount);
   const avgCostUsd = parseUnits(position.avgCostUsd, `position ${plan.tokenId}.avgCostUsd`);
   const realizedUsd = money(proceedsUsd.minus(appliedAmount.times(avgCostUsd)));
@@ -676,18 +690,45 @@ export function reconcileLedger(
   const totals = scanEntries(state.entries, discrepancies);
 
   // Rebuild the token and intent indexes independently of the cash trail, so a
-  // malformed initial balance does not hide position-level findings.
+  // malformed initial balance does not hide position-level findings. The same
+  // pass re-derives `positionAmountAfter` from the entries and checks that clock
+  // time never moves backwards (the ledger is append-only and chronological).
   const positionsByToken = new Map<string, Decimal>();
   const buyEntriesByIntent = new Map<string, LedgerEntry>();
-  for (const entry of state.entries) {
+  const runningAmounts = new Map<string, Decimal>();
+  let previousClock: Timestamp | null = null;
+  for (let index = 0; index < state.entries.length; index += 1) {
+    const entry = state.entries[index];
+    if (entry === undefined) continue;
+    const label = `entry[${index}] (${entry.entryId})`;
+    if (previousClock !== null && entry.clockTime < previousClock) {
+      discrepancies.push(
+        `${label} clockTime ${entry.clockTime} is earlier than the previous entry clockTime ${previousClock}`,
+      );
+    }
+    previousClock = entry.clockTime;
+
     if (entry.side !== 'buy' && entry.side !== 'sell') continue;
-    const amount = readDecimal(entry.amount, `entry ${entry.entryId}.amount`, []);
-    if (amount !== null) {
-      positionsByToken.set(
-        entry.tokenId,
-        (positionsByToken.get(entry.tokenId) ?? ZERO).plus(
-          entry.side === 'buy' ? amount : amount.negated(),
-        ),
+    const amount = readDecimal(entry.amount, `${label}.amount`, discrepancies);
+    if (amount === null) continue;
+    const amountAfter = (runningAmounts.get(entry.tokenId) ?? ZERO).plus(
+      entry.side === 'buy' ? amount : amount.negated(),
+    );
+    runningAmounts.set(entry.tokenId, amountAfter);
+    positionsByToken.set(entry.tokenId, amountAfter);
+    if (amountAfter.isNegative()) {
+      discrepancies.push(
+        `${label} drives the ${entry.tokenId} position negative (${units(amountAfter)})`,
+      );
+    }
+    const recordedAmountAfter = readDecimal(
+      entry.positionAmountAfter,
+      `${label}.positionAmountAfter`,
+      discrepancies,
+    );
+    if (recordedAmountAfter !== null && !recordedAmountAfter.equals(amountAfter)) {
+      discrepancies.push(
+        `${label} records positionAmountAfter ${entry.positionAmountAfter} for ${entry.tokenId}, expected ${units(amountAfter)}`,
       );
     }
     if (entry.side === 'buy') buyEntriesByIntent.set(entry.intentId, entry);
@@ -701,8 +742,8 @@ export function reconcileLedger(
       if (entry === undefined) continue;
       const label = `entry[${index}] (${entry.entryId})`;
       if (entry.side !== 'buy' && entry.side !== 'sell') continue;
-      const notional = readDecimal(entry.notionalUsd, `${label}.notionalUsd`, []);
-      const fee = readDecimal(entry.feeUsd, `${label}.feeUsd`, []);
+      const notional = readDecimal(entry.notionalUsd, `${label}.notionalUsd`, discrepancies);
+      const fee = readDecimal(entry.feeUsd, `${label}.feeUsd`, discrepancies);
       const cashAfter = readDecimal(entry.cashAfterUsd, `${label}.cashAfterUsd`, discrepancies);
       if (notional === null || fee === null) continue;
       runningCash =
@@ -796,7 +837,11 @@ export function reconcileLedger(
           `position ${tokenId} entry intent ${position.entryIntentId} belongs to ${buyEntry.tokenId}`,
         );
       }
-      const entryFee = readDecimal(buyEntry.feeUsd, `entry ${buyEntry.entryId}.feeUsd`, []);
+      const entryFee = readDecimal(
+        buyEntry.feeUsd,
+        `entry ${buyEntry.entryId}.feeUsd`,
+        discrepancies,
+      );
       if (positionFees !== null && entryFee !== null && !positionFees.equals(entryFee)) {
         discrepancies.push(
           `position ${tokenId} feesPaidUsd ${position.feesPaidUsd} does not equal its buy fee ${buyEntry.feeUsd}`,

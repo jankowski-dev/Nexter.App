@@ -398,6 +398,18 @@ export function planSellFill(input: SellFillInput): SellFillPlan {
   // would break `notional - fee = proceeds` by a cent in the report/ledger.
   const bookedNotionalStr = usd(fillAmount.times(pricing.fillPrice));
   const bookedNotional = new Decimal(bookedNotionalStr);
+  // Mirror the buy-side zero guard: a sub-cent position can have a positive
+  // 8-decimal amount whose booked notional rounds to zero. Booking that would
+  // hand the ledger a `filled` plan with zero cents, so reject it as dust.
+  if (bookedNotional.lessThanOrEqualTo(ZERO)) {
+    return rejectSell(
+      input,
+      positiveRequested,
+      pricing,
+      Reason.FILL_LIQUIDITY,
+      `Sell rejected: the booked notional for ${input.intent.tokenId} rounds to zero; the position is dust`,
+    );
+  }
   const bookedFeeStr = usd(bookedNotional.times(input.settings.feeBps).div(BPS));
   const bookedFee = new Decimal(bookedFeeStr);
   const bookedProceeds = bookedNotional.minus(bookedFee);

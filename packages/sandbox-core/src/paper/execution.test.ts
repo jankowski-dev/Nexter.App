@@ -420,6 +420,31 @@ describe('planSellFill', () => {
     });
   });
 
+  it('rejects a dust position whose booked notional rounds to zero', () => {
+    // Regression: a positive 8-decimal amount can still book zero cents. The
+    // ledger refuses a zero-notional sell, so the fill model must reject it as
+    // dust instead of emitting a `filled` plan.
+    const plan = planSellFill(
+      sellInput({
+        intent: makeIntent({ side: 'sell', amount: '0.00000001', sizeUsd: '0' }),
+        candle: makeCandle({ open: '100', close: '100' }),
+        positionAmount: '0.00000001',
+        settings: makeSettings({ slippageBps: 0 }),
+      }),
+    );
+    expect(plan).toMatchObject({
+      status: 'rejected',
+      requestedAmount: '0.00000001',
+      filledAmount: '0.00000000',
+      unfilledAmount: '0.00000001',
+      notionalUsd: '0.00',
+      feeUsd: '0.00',
+      proceedsUsd: '0.00',
+      reasonCode: Reason.FILL_LIQUIDITY,
+    });
+    expect(plan.reasonText).toMatch(/dust/);
+  });
+
   it('ignores the buy size when selling', () => {
     const plan = planSellFill(
       sellInput({ intent: makeIntent({ side: 'sell', amount: '1', sizeUsd: '999999' }) }),
