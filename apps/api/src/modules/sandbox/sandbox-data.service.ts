@@ -54,6 +54,8 @@ export interface SandboxLivePrice {
   tokenId: string;
   priceUsd: string;
   volumeUsd: string;
+  /** Open time of the quoted raw bar; the fill freshness guard compares it. */
+  barOpenTime: Date;
   asOf: Date;
 }
 
@@ -162,6 +164,7 @@ export class SandboxDataService {
       tokenId: token.tokenKey,
       priceUsd: priceString(newestClose),
       volumeUsd: volume.toFixed(18),
+      barOpenTime: newest.openTime,
       asOf: now,
     };
   }

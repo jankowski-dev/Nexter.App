@@ -44,6 +44,9 @@ import {
   type SandboxTickSummary,
 } from './sandbox.types';
 
+/** 180 days of 1h bars plus one, the bounded per-token read window. */
+export const SANDBOX_CANDLE_READ_LIMIT = 4321;
+
 export interface SandboxCandleUpsertOptions {
   /**
    * Synthetic (CoinGecko) data may only replace rows that are already
@@ -115,6 +118,8 @@ export interface SandboxPendingIntent {
   readonly requestedUsd: string | null;
   readonly requestedAmount: string | null;
   readonly priceUsd: string | null;
+  readonly stopLossPct: string | null;
+  readonly takeProfitPct: string | null;
   readonly strategyReasonCode: string;
   readonly reasonText: string;
   readonly decisionTime: Date;
@@ -561,49 +566,52 @@ export class SandboxRepository {
       .where(and(eq(sandboxRuns.id, runId), eq(sandboxRuns.status, 'running')));
   }
 
-  /** Loads the closed 1h candle series for the run universe. */
+  /**
+   * Loads the closed 1h candle series for the run universe.
+   *
+   * Each token is read newest-first with a bounded `LIMIT`, then reversed to the
+   * ascending order the core expects. This avoids reading the whole retained
+   * history into memory; the default window is 180 days plus one bar.
+   */
   async loadCandles(
     tokenKeys: readonly string[],
     timeframe: string = SANDBOX_TIMEFRAME,
-    limitPerToken = 5000,
+    limitPerToken = SANDBOX_CANDLE_READ_LIMIT,
   ): Promise<Candle[]> {
     const unique = [...new Set(tokenKeys)];
     if (unique.length === 0) return [];
 
-    const rows = await this.db
-      .select({
-        tokenKey: sandboxCandles.tokenKey,
-        openTime: sandboxCandles.openTime,
-        open: sandboxCandles.open,
-        high: sandboxCandles.high,
-        low: sandboxCandles.low,
-        close: sandboxCandles.close,
-        volumeUsd: sandboxCandles.volumeUsd,
-      })
-      .from(sandboxCandles)
-      .where(and(eq(sandboxCandles.timeframe, timeframe), inArray(sandboxCandles.tokenKey, unique)))
-      .orderBy(asc(sandboxCandles.tokenKey), asc(sandboxCandles.openTime));
+    const candles: Candle[] = [];
+    for (const tokenKey of unique) {
+      const rows = await this.db
+        .select({
+          openTime: sandboxCandles.openTime,
+          open: sandboxCandles.open,
+          high: sandboxCandles.high,
+          low: sandboxCandles.low,
+          close: sandboxCandles.close,
+          volumeUsd: sandboxCandles.volumeUsd,
+        })
+        .from(sandboxCandles)
+        .where(and(eq(sandboxCandles.timeframe, timeframe), eq(sandboxCandles.tokenKey, tokenKey)))
+        .orderBy(desc(sandboxCandles.openTime))
+        .limit(limitPerToken);
 
-    const byToken = new Map<string, Candle[]>();
-    for (const row of rows) {
-      const list = byToken.get(row.tokenKey) ?? [];
-      list.push({
-        tokenId: row.tokenKey,
-        timeframe,
-        openTime: row.openTime.getTime(),
-        open: row.open,
-        high: row.high,
-        low: row.low,
-        close: row.close,
-        volumeUsd: row.volumeUsd,
-      });
-      byToken.set(row.tokenKey, list);
+      for (const row of rows.reverse()) {
+        candles.push({
+          tokenId: tokenKey,
+          timeframe,
+          openTime: row.openTime.getTime(),
+          open: row.open,
+          high: row.high,
+          low: row.low,
+          close: row.close,
+          volumeUsd: row.volumeUsd,
+        });
+      }
     }
 
-    return unique.flatMap((tokenKey) => {
-      const list = byToken.get(tokenKey) ?? [];
-      return list.slice(Math.max(0, list.length - limitPerToken));
-    });
+    return candles;
   }
 
   /** Pending live-paper intents for one run, oldest first. */
@@ -627,6 +635,8 @@ export class SandboxRepository {
       requestedUsd: row.requestedUsd,
       requestedAmount: row.requestedAmount,
       priceUsd: row.priceUsd,
+      stopLossPct: row.stopLossPct,
+      takeProfitPct: row.takeProfitPct,
       strategyReasonCode: row.strategyReasonCode ?? Reason.INTENT_PENDING,
       reasonText: row.reasonText,
       decisionTime: row.decisionTime,
@@ -644,7 +654,7 @@ export class SandboxRepository {
   ): Promise<number> {
     if (intents.length === 0) return 0;
 
-    await executor
+    const rows = await executor
       .insert(sandboxIntents)
       .values(
         intents.map((intent) => ({
@@ -660,6 +670,8 @@ export class SandboxRepository {
           filledUsd: '0.00',
           filledAmount: '0.00000000',
           priceUsd: intent.decisionPriceUsd,
+          stopLossPct: intent.stopLossPct,
+          takeProfitPct: intent.takeProfitPct,
           feeUsd: '0.00',
           reasonCode: Reason.INTENT_PENDING,
           strategyReasonCode: intent.reasonCode,
@@ -668,9 +680,12 @@ export class SandboxRepository {
           fillTime: null,
         })),
       )
-      .onConflictDoNothing({ target: [sandboxIntents.runId, sandboxIntents.intentId] });
+      // The partial unique index on pending (run, token, side) is the last guard
+      // against a duplicate close or a second pending intent for the same side.
+      .onConflictDoNothing()
+      .returning({ intentId: sandboxIntents.intentId });
 
-    return intents.length;
+    return rows.length;
   }
 
   /** True when a manual or strategy sell is already queued for the token. */
@@ -691,9 +706,14 @@ export class SandboxRepository {
     return row !== undefined;
   }
 
-  /** Inserts one owner-requested manual close as a pending sell intent. */
-  async insertManualCloseIntent(runId: string, intent: OrderIntent): Promise<void> {
-    await this.db
+  /**
+   * Inserts one owner-requested manual close as a pending sell intent.
+   *
+   * Returns `false` when the pending partial unique index rejects it, so a
+   * concurrent second close cannot queue a duplicate.
+   */
+  async insertManualCloseIntent(runId: string, intent: OrderIntent): Promise<boolean> {
+    const rows = await this.db
       .insert(sandboxIntents)
       .values({
         runId,
@@ -708,6 +728,8 @@ export class SandboxRepository {
         filledUsd: '0.00',
         filledAmount: '0.00000000',
         priceUsd: null,
+        stopLossPct: null,
+        takeProfitPct: null,
         feeUsd: '0.00',
         reasonCode: Reason.INTENT_PENDING,
         strategyReasonCode: Reason.MANUAL_CLOSE,
@@ -715,7 +737,34 @@ export class SandboxRepository {
         decisionTime: new Date(intent.clockTime),
         fillTime: null,
       })
-      .onConflictDoNothing({ target: [sandboxIntents.runId, sandboxIntents.intentId] });
+      .onConflictDoNothing()
+      .returning({ intentId: sandboxIntents.intentId });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Terminates every still-pending intent for a run when it stops, fails or is
+   * archived, so the journal never keeps a stale `pending` row. The row itself is
+   * the terminal journal record; no DELETE occurs.
+   */
+  async expirePendingIntents(
+    runId: string,
+    reasonText: string,
+    at: Date = new Date(),
+  ): Promise<number> {
+    const rows = await this.db
+      .update(sandboxIntents)
+      .set({
+        status: 'expired',
+        reasonCode: Reason.FILL_EXPIRED,
+        reasonText,
+        fillTime: at,
+      })
+      .where(and(eq(sandboxIntents.runId, runId), eq(sandboxIntents.status, 'pending')))
+      .returning({ intentId: sandboxIntents.intentId });
+
+    return rows.length;
   }
 
   /**

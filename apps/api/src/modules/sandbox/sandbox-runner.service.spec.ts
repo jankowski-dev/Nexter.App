@@ -119,6 +119,7 @@ function harness(options: { locked?: boolean; commitError?: Error } = {}) {
       archivedAt: run.archivedAt,
       lastBarClose: run.lastBarClose,
     })),
+    expirePendingIntents: vi.fn(async () => 0),
     listPendingIntents: vi.fn(async () => pending),
     insertPendingIntents: vi.fn(
       async (
@@ -147,6 +148,8 @@ function harness(options: { locked?: boolean; commitError?: Error } = {}) {
           requestedUsd: intent.side === 'buy' ? intent.sizeUsd : null,
           requestedAmount: intent.side === 'sell' ? intent.amount : null,
           priceUsd: intent.decisionPriceUsd,
+          stopLossPct: null,
+          takeProfitPct: null,
           strategyReasonCode: intent.reasonCode,
           reasonText: 'queued',
           decisionTime: new Date(intent.clockTime),
@@ -214,6 +217,7 @@ function harness(options: { locked?: boolean; commitError?: Error } = {}) {
       tokenId: TOKEN,
       priceUsd: '100.00000000',
       volumeUsd: '100000.00000000',
+      barOpenTime: new Date(lastClose(series)),
       asOf: new Date(),
     })),
   };
@@ -258,14 +262,15 @@ describe('SandboxRunnerService', () => {
     expect(h.client.release).toHaveBeenCalled();
   });
 
-  it('only updates last_tick_at when no new closed bar exists', async () => {
+  it('only updates last_tick_at and skips provider calls before the next bar', async () => {
     const h = harness();
     h.setRun(runSnapshot({ lastBarClose: new Date(lastClose(h.series)) }));
 
-    await h.service.runOnce(new Date(START));
+    await h.service.runOnce(new Date(lastClose(h.series) + 30 * 60_000));
 
     expect(h.repo.touchRunTick).toHaveBeenCalledWith(RUN, expect.any(Date));
     expect(h.repo.commitTick).not.toHaveBeenCalled();
+    expect(h.data.latestPrice).not.toHaveBeenCalled();
   });
 
   it('advances one run on a new bar and does not double-tick it', async () => {

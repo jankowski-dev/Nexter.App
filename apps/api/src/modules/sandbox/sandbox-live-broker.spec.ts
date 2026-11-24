@@ -29,6 +29,7 @@ function quote(overrides: Partial<SandboxLiveQuote> = {}): SandboxLiveQuote {
     tokenId: TOKEN,
     priceUsd: '100.00000000',
     volumeUsd: '100000.00000000',
+    barOpenTime: AT + HOUR,
     asOf: new Date(AT),
     ...overrides,
   };
@@ -63,6 +64,8 @@ function pending(overrides: Partial<SandboxPendingIntent> = {}): SandboxPendingI
     requestedUsd: '200.00',
     requestedAmount: null,
     priceUsd: '99.00000000',
+    stopLossPct: '3.00',
+    takeProfitPct: null,
     strategyReasonCode: Reason.TREND_PULLBACK_ENTRY,
     reasonText: 'queued',
     decisionTime: new Date(AT),
@@ -233,6 +236,8 @@ describe('sandbox live broker', () => {
       side: 'buy',
       reasonCode: Reason.TREND_PULLBACK_ENTRY,
       sizeUsd: '200.00',
+      stopLossPct: '3.00',
+      takeProfitPct: null,
       decisionPriceUsd: '99.00000000',
       clockTime: AT,
     });

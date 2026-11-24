@@ -37,6 +37,8 @@ export interface SandboxLiveQuote {
   readonly priceUsd: string;
   /** USD volume of the last closed 1h bar (fill liquidity cap base). */
   readonly volumeUsd: string;
+  /** Open time of the quoted bar; used to reject the decision bar's own close. */
+  readonly barOpenTime: Timestamp;
   readonly asOf: Date;
 }
 
@@ -197,11 +199,8 @@ export function pendingIntentToOrderIntent(pending: SandboxPendingIntent): Order
     reasonCode: asReasonCode(pending.strategyReasonCode),
     sizeUsd: pending.requestedUsd ?? ZERO_USD,
     amount: pending.requestedAmount,
-    // Pending rows intentionally store the decision payload in the journal, not
-    // the full position-protection object; live fills reconstruct no stop/take
-    // here and the strategy keeps managing the position on subsequent bars.
-    stopLossPct: null,
-    takeProfitPct: null,
+    stopLossPct: pending.stopLossPct,
+    takeProfitPct: pending.takeProfitPct,
     decisionPriceUsd: pending.priceUsd ?? ZERO_PRICE,
     clockTime: pending.decisionTime.getTime(),
   };

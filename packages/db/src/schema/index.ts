@@ -2076,6 +2076,8 @@ export const sandboxIntents = pgTable(
     filledUsd: numeric('filled_usd', { precision: 18, scale: 2 }).notNull().default('0'),
     filledAmount: numeric('filled_amount', { precision: 38, scale: 8 }).notNull().default('0'),
     priceUsd: numeric('price_usd', { precision: 30, scale: 18 }),
+    stopLossPct: numeric('stop_loss_pct', { precision: 9, scale: 4 }),
+    takeProfitPct: numeric('take_profit_pct', { precision: 9, scale: 4 }),
     feeUsd: numeric('fee_usd', { precision: 18, scale: 2 }).notNull().default('0'),
     reasonCode: text('reason_code').notNull(),
     strategyReasonCode: text('strategy_reason_code'),
@@ -2087,6 +2089,9 @@ export const sandboxIntents = pgTable(
   (table) => [
     primaryKey({ name: 'sandbox_intents_pk', columns: [table.runId, table.intentId] }),
     index('sandbox_intents_run_decision_idx').on(table.runId, table.decisionTime),
+    uniqueIndex('sandbox_intents_pending_token_side_unique')
+      .on(table.runId, table.tokenId, table.side)
+      .where(sql`${table.status} = 'pending'`),
   ],
 );
 

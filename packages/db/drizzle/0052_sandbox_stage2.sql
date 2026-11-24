@@ -52,6 +52,8 @@ CREATE TABLE "sandbox_intents" (
 	"filled_usd" numeric(18, 2) DEFAULT '0' NOT NULL,
 	"filled_amount" numeric(38, 8) DEFAULT '0' NOT NULL,
 	"price_usd" numeric(30, 18),
+	"stop_loss_pct" numeric(9, 4),
+	"take_profit_pct" numeric(9, 4),
 	"fee_usd" numeric(18, 2) DEFAULT '0' NOT NULL,
 	"reason_code" text NOT NULL,
 	"strategy_reason_code" text,
@@ -203,6 +205,7 @@ ALTER TABLE "sandbox_trades" ADD CONSTRAINT "sandbox_trades_run_id_sandbox_runs_
 CREATE INDEX "sandbox_candles_token_time_idx" ON "sandbox_candles" USING btree ("token_key","open_time");--> statement-breakpoint
 CREATE INDEX "sandbox_events_run_clock_idx" ON "sandbox_events" USING btree ("run_id","clock_time");--> statement-breakpoint
 CREATE INDEX "sandbox_intents_run_decision_idx" ON "sandbox_intents" USING btree ("run_id","decision_time");--> statement-breakpoint
+CREATE UNIQUE INDEX "sandbox_intents_pending_token_side_unique" ON "sandbox_intents" USING btree ("run_id","token_id","side") WHERE "sandbox_intents"."status" = 'pending';--> statement-breakpoint
 CREATE UNIQUE INDEX "sandbox_ledger_entries_run_entry_unique" ON "sandbox_ledger_entries" USING btree ("run_id","entry_id");--> statement-breakpoint
 CREATE INDEX "sandbox_runs_user_status_archived_idx" ON "sandbox_runs" USING btree ("user_id","status","archived_at");--> statement-breakpoint
 CREATE INDEX "sandbox_runs_status_idx" ON "sandbox_runs" USING btree ("status");--> statement-breakpoint

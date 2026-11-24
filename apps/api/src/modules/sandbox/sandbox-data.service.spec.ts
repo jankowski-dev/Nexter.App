@@ -249,6 +249,7 @@ describe('SandboxDataService', () => {
       tokenId: key,
       priceUsd: '1.950000000000000000',
       volumeUsd: '80000.000000000000000000',
+      barOpenTime: new Date('2026-11-24T12:00:00.000Z'),
     });
     expect(h.batches[0]?.map((row) => row.openTime.toISOString())).toEqual([
       '2026-11-24T10:00:00.000Z',

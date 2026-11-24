@@ -7457,6 +7457,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "stop_loss_pct": {
+          "name": "stop_loss_pct",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "take_profit_pct": {
+          "name": "take_profit_pct",
+          "type": "numeric(9, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "fee_usd": {
           "name": "fee_usd",
           "type": "numeric(18, 2)",
@@ -7504,6 +7516,34 @@
         }
       },
       "indexes": {
+        "sandbox_intents_pending_token_side_unique": {
+          "name": "sandbox_intents_pending_token_side_unique",
+          "columns": [
+            {
+              "expression": "run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "token_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "side",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"sandbox_intents\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "sandbox_intents_run_decision_idx": {
           "name": "sandbox_intents_run_decision_idx",
           "columns": [

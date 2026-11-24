@@ -19,7 +19,7 @@ Stage 1C proved the core on a 180-day deterministic historical run: report `cabf
    - `sandbox_events` (append-only hash chain);
    - `sandbox_positions`, `sandbox_trades`, `sandbox_ledger_entries`, `sandbox_equity_points`, `sandbox_intents`;
    - optional `sandbox_reports`.
-     Migration `0052_sandbox_stage2.sql` is additive; the API role gets SELECT/INSERT/UPDATE on the mutable tables and SELECT/INSERT only on `sandbox_events`; no DELETE.
+     Migration `0052_sandbox_stage2.sql` is additive; the API role gets SELECT/INSERT/UPDATE on the mutable tables and SELECT/INSERT only on `sandbox_events`; no DELETE. `sandbox_intents` stores nullable decision stop/take percentages and a partial unique index on pending `(run_id, token_id, side)`, so a live fill preserves protection and a token can have only one pending sell.
 3. **Add a new `apps/api` `sandbox` module** that imports `@nexter/sandbox-core` (workspace) and the existing market-data HTTP clients. It does not import the old AI, trading-bot, search or legacy modules and does not read `market_candles`/`ai_*` tables.
 4. **Add a live paper runner**: a 60-second interval under an advisory lock; at each new closed 1h bar it fetches/upserts candles, fills pending intents at the first quote after the close (Stage 1C fees/slippage/liquidity), calls the Stage 1B engine, persists state/events/projections and reconciles. No real execution.
 5. **Owner controls:** create draft, start, pause, resume, stop, archive, close one trade. No manual buy/add/override. Settings are editable only in draft; the run config is frozen on start.

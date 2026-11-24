@@ -145,8 +145,14 @@ function runSnapshot(
   };
 }
 
-function quote(priceUsd = '100.00000000', volumeUsd = '100000.00000000'): SandboxLiveQuote {
-  return { tokenId: TOKEN, priceUsd, volumeUsd, asOf: new Date(START) };
+const DEFAULT_QUOTE_BAR_OPEN = START + 220 * HOUR;
+
+function quote(
+  priceUsd = '100.00000000',
+  volumeUsd = '100000.00000000',
+  barOpenTime = DEFAULT_QUOTE_BAR_OPEN,
+): SandboxLiveQuote {
+  return { tokenId: TOKEN, priceUsd, volumeUsd, barOpenTime, asOf: new Date(START) };
 }
 
 function pending(overrides: Partial<SandboxPendingIntent> = {}): SandboxPendingIntent {
@@ -160,6 +166,8 @@ function pending(overrides: Partial<SandboxPendingIntent> = {}): SandboxPendingI
     requestedUsd: '200.00',
     requestedAmount: null,
     priceUsd: '99.00000000',
+    stopLossPct: '3.00',
+    takeProfitPct: null,
     strategyReasonCode: Reason.TREND_PULLBACK_ENTRY,
     reasonText: 'queued',
     decisionTime: new Date(START),
@@ -226,8 +234,8 @@ describe('runSandboxLiveTick', () => {
       run: runSnapshot(),
       config: config(),
       candles: series,
-      pending: [pending({ decisionTime: new Date(clockTime - HOUR) })],
-      quotes: new Map([[TOKEN, quote()]]),
+      pending: [pending({ decisionTime: new Date(clockTime - HOUR), takeProfitPct: '9.00' })],
+      quotes: new Map([[TOKEN, quote('105.00000000')]]),
       clockTime,
       now: new Date(clockTime),
       eventLog: log,
@@ -238,9 +246,15 @@ describe('runSandboxLiveTick', () => {
       intentId: 'intent-buy',
       status: 'filled',
       filledUsd: '200.00',
+      priceUsd: '105.10500000',
       reasonCode: Reason.FILL_FILLED,
     });
-    expect(result.tick.ledgerState.positions[TOKEN]).toBeDefined();
+    // The live fill uses the quote, never the decision bar's own close (100).
+    expect(result.resolvedIntents[0]?.priceUsd).not.toBe('100.00000000');
+    expect(result.tick.ledgerState.positions[TOKEN]).toMatchObject({
+      stopLossPct: '3.00',
+      takeProfitPct: '9.00',
+    });
     expect(result.tick.cashUsd).toBe('799.50');
     expect(result.tick.lastBarClose.getTime()).toBe(clockTime);
     expect(log.events().some((event) => event.eventType === 'execution.filled')).toBe(true);
@@ -255,6 +269,25 @@ describe('runSandboxLiveTick', () => {
       candles: series,
       pending: [pending({ decisionTime: new Date(clockTime - HOUR) })],
       quotes: new Map(),
+      clockTime,
+      now: new Date(clockTime),
+      eventLog: new MemoryEventLog(),
+    });
+
+    expect(result.resolvedIntents).toHaveLength(0);
+    expect(result.tick.ledgerState.positions[TOKEN]).toBeUndefined();
+  });
+
+  it('keeps an intent pending when the quote bar is the decision bar itself', async () => {
+    const series = candles();
+    const clockTime = clockFor(series);
+    const result = await runSandboxLiveTick({
+      run: runSnapshot(),
+      config: config(),
+      candles: series,
+      pending: [pending({ decisionTime: new Date(clockTime - HOUR) })],
+      // The newest bar is the decision bar (open 218h), not the next bar.
+      quotes: new Map([[TOKEN, quote('100.00000000', '100000.00000000', START + 218 * HOUR)]]),
       clockTime,
       now: new Date(clockTime),
       eventLog: new MemoryEventLog(),
@@ -302,7 +335,7 @@ describe('runSandboxLiveTick', () => {
           requestedUsd: null,
           requestedAmount: position.amount,
           strategyReasonCode: Reason.MANUAL_CLOSE,
-          decisionTime: new Date(clockTime - HOUR),
+          decisionTime: new Date(clockTime - 3 * HOUR),
         }),
       ],
       quotes: new Map([[TOKEN, quote('110.00000000')]]),
@@ -317,6 +350,37 @@ describe('runSandboxLiveTick', () => {
     });
     expect(result.tick.ledgerState.positions[TOKEN]).toBeUndefined();
     expect(result.tick.ledgerState.closedTrades).toHaveLength(1);
+  });
+
+  it('keeps a manual close pending at a stale quote instead of selling at the old price', async () => {
+    const ledger = openedLedger();
+    const position = ledger.positions[TOKEN];
+    if (!position) throw new Error('fixture has no position');
+    const series = candles();
+    const clockTime = clockFor(series);
+    const result = await runSandboxLiveTick({
+      run: runSnapshot({ ledger, engineState: tokenStateState() }),
+      config: config(),
+      candles: series,
+      pending: [
+        pending({
+          intentId: 'manual-close-stale',
+          side: 'sell',
+          requestedUsd: null,
+          requestedAmount: position.amount,
+          strategyReasonCode: Reason.MANUAL_CLOSE,
+          decisionTime: new Date(clockTime - 3 * HOUR),
+        }),
+      ],
+      // Older than the request's bar: must not fill.
+      quotes: new Map([[TOKEN, quote('110.00000000', '100000.00000000', START + 216 * HOUR)]]),
+      clockTime,
+      now: new Date(clockTime),
+      eventLog: new MemoryEventLog(),
+    });
+
+    expect(result.resolvedIntents.some((record) => record.status === 'filled')).toBe(false);
+    expect(result.tick.ledgerState.positions[TOKEN]).toBeDefined();
   });
 
   it('arms a cooldown after a stop sell fill without mutating the input state', async () => {
@@ -406,6 +470,8 @@ describe('runSandboxLiveTick', () => {
         requestedUsd: intent.side === 'buy' ? intent.sizeUsd : null,
         requestedAmount: intent.side === 'sell' ? intent.amount : null,
         priceUsd: intent.decisionPriceUsd,
+        stopLossPct: intent.stopLossPct,
+        takeProfitPct: intent.takeProfitPct,
         strategyReasonCode: intent.reasonCode,
         reasonText: 'queued',
         decisionTime: new Date(intent.clockTime),

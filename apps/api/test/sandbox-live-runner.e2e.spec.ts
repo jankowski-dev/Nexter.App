@@ -43,6 +43,7 @@ function fakeDataService() {
       tokenId: SANDBOX_TEST_TOKEN,
       priceUsd: '100.00000000',
       volumeUsd: '100000.00000000',
+      barOpenTime: new Date(SANDBOX_TEST_AT + 219 * HOUR),
       asOf: new Date(SANDBOX_TEST_AT),
     }),
   };

@@ -69,6 +69,15 @@ describe('sandbox stage 2 migration', () => {
   it('does not touch old AI or legacy tables', () => {
     expect(migrationSql).not.toMatch(/market_candles|\bai_[a-z_]+|trading_bots/);
   });
+
+  it('stores pending decision protection and prevents duplicate pending sides', () => {
+    expect(migrationSql).toContain('"stop_loss_pct" numeric(9, 4)');
+    expect(migrationSql).toContain('"take_profit_pct" numeric(9, 4)');
+    expect(migrationSql).toContain(
+      'CREATE UNIQUE INDEX "sandbox_intents_pending_token_side_unique"',
+    );
+    expect(migrationSql).toContain('WHERE "sandbox_intents"."status" = \'pending\'');
+  });
 });
 
 describe('app-role provisioning keeps sandbox append-only', () => {

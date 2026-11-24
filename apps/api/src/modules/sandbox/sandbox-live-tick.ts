@@ -1,11 +1,15 @@
 import Decimal from 'decimal.js';
 import {
+  applyCooldowns,
   candleCloseTime,
   ClockedMarketView,
   DecisionEngine,
   markPortfolio,
+  maxUsd,
   PaperLogger,
+  Reason,
   reconcileLedger,
+  resolveDayStartEquity,
   sha256Hex,
   SimulationClock,
   stableStringify,
@@ -17,7 +21,6 @@ import {
   type OrderIntent,
   type PaperLedgerState,
   type Timestamp,
-  type TokenRuntimeState,
 } from '@nexter/sandbox-core';
 import {
   duplicateIntentRecord,
@@ -155,8 +158,12 @@ export async function runSandboxLiveTick(
   for (const pending of input.pending) {
     const intent = pendingIntentToOrderIntent(pending);
     const bars = pendingBars(intent.clockTime, clockTime);
+    const manualClose = intent.reasonCode === Reason.MANUAL_CLOSE;
 
-    if (bars > config.paper.maxPendingBars) {
+    // Strategy IOC intents expire after one bar. A manual close is owner intent,
+    // not an IOC quote order, and must survive pause/resume and data gaps until
+    // the first tick with a valid, fresh quote.
+    if (!manualClose && bars > config.paper.maxPendingBars) {
       const record = expiredIntentRecord(intent, clockTime, bars);
       resolved.push(record);
       await logger.expired({
@@ -170,8 +177,19 @@ export async function runSandboxLiveTick(
 
     const quote = input.quotes.get(intent.tokenId);
     if (quote === undefined) {
-      // No live quote for this token: keep the IOC intent for the next tick; the
-      // next new bar expires it if a quote never arrives.
+      // No live quote for this token: keep the intent for the next tick. A
+      // strategy intent expires on the next bar; a manual close waits.
+      stillPending.push(pending);
+      continue;
+    }
+
+    // The quote bar must be strictly newer than the decision bar (or the bar
+    // containing the manual request); the decision bar's own close is already
+    // historical and must never price a live fill.
+    const requiredBarOpen = manualClose
+      ? Math.floor(intent.clockTime / HOUR_MS) * HOUR_MS
+      : intent.clockTime;
+    if (quote.barOpenTime < requiredBarOpen) {
       stillPending.push(pending);
       continue;
     }
@@ -239,7 +257,12 @@ export async function runSandboxLiveTick(
   }
 
   const marked = markPortfolio(ledger, marks);
-  const dayStartEquityUsd = resolveDayStart(run, marked.equityUsd, clockTime);
+  const dayStartEquityUsd = resolveDayStartEquity({
+    lastBarClose: run.lastBarClose === null ? null : run.lastBarClose.getTime(),
+    dayStartEquityUsd: run.dayStartEquityUsd,
+    equityUsd: marked.equityUsd,
+    clockTime,
+  });
   const peakEquityUsd = maxUsd(run.peakEquityUsd, marked.equityUsd);
   state = applyCooldowns(state, cooldowns, clockTime);
 
@@ -390,56 +413,4 @@ function lastClosedMarks(
     marks[candle.tokenId] = candle.close;
   }
   return marks;
-}
-
-function resolveDayStart(run: SandboxRunSnapshot, equityUsd: string, clockTime: Timestamp): string {
-  const current = new Decimal(run.dayStartEquityUsd);
-  if (run.lastBarClose === null) {
-    return current.greaterThan(0) ? run.dayStartEquityUsd : equityUsd;
-  }
-  if (utcDateKey(run.lastBarClose.getTime()) !== utcDateKey(clockTime)) {
-    return equityUsd;
-  }
-  return current.greaterThan(0) ? run.dayStartEquityUsd : equityUsd;
-}
-
-function maxUsd(left: string, right: string): string {
-  return new Decimal(left).greaterThanOrEqualTo(right) ? left : right;
-}
-
-function utcDateKey(timestamp: Timestamp): string {
-  const date = new Date(timestamp);
-  const year = String(date.getUTCFullYear()).padStart(4, '0');
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-/** Clears expired cooldowns and applies the stop sells booked on this tick. */
-function applyCooldowns(
-  state: EngineState,
-  active: ReadonlyMap<string, Timestamp>,
-  now: Timestamp,
-): EngineState {
-  const tokens: Record<string, TokenRuntimeState> = { ...state.tokens };
-  let changed = false;
-
-  for (const tokenId of Object.keys(tokens)) {
-    const token = tokens[tokenId];
-    if (token === undefined) continue;
-    if (token.cooldownUntil !== null && token.cooldownUntil <= now && !active.has(tokenId)) {
-      tokens[tokenId] = { ...token, cooldownUntil: null };
-      changed = true;
-    }
-  }
-  for (const [tokenId, until] of active) {
-    if (until <= now) continue;
-    const token = tokens[tokenId];
-    if (token === undefined) continue;
-    if (token.cooldownUntil !== null && token.cooldownUntil >= until) continue;
-    tokens[tokenId] = { ...token, cooldownUntil: until };
-    changed = true;
-  }
-
-  return changed ? { tokens } : state;
 }

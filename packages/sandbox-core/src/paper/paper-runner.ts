@@ -182,7 +182,7 @@ function validateRunSettings(input: PaperRunInput): RunSettings {
  * removed from the token state, so `result.state` never carries a stale
  * cooldown.
  */
-function applyCooldowns(
+export function applyCooldowns(
   state: EngineState,
   cooldowns: ReadonlyMap<string, Timestamp>,
   now: Timestamp,
@@ -209,8 +209,31 @@ function applyCooldowns(
   return changed ? { tokens } : state;
 }
 
-function maxUsd(left: string, right: string): string {
+export function maxUsd(left: string, right: string): string {
   return new Decimal(left).greaterThanOrEqualTo(right) ? left : right;
+}
+
+/**
+ * Resolves the day-start equity at a bar close.
+ *
+ * The first bar keeps the configured/initial day start, a UTC date change resets
+ * it to the current marked equity, and a non-positive persisted value falls back
+ * to the current equity so the decision engine never receives zero.
+ */
+export function resolveDayStartEquity(input: {
+  readonly lastBarClose: Timestamp | null;
+  readonly dayStartEquityUsd: string;
+  readonly equityUsd: string;
+  readonly clockTime: Timestamp;
+}): string {
+  const current = new Decimal(input.dayStartEquityUsd);
+  if (input.lastBarClose === null) {
+    return current.greaterThan(0) ? input.dayStartEquityUsd : input.equityUsd;
+  }
+  if (utcDateKey(input.lastBarClose) !== utcDateKey(input.clockTime)) {
+    return input.equityUsd;
+  }
+  return current.greaterThan(0) ? input.dayStartEquityUsd : input.equityUsd;
 }
 
 function priceOrNull(value: string): string | null {

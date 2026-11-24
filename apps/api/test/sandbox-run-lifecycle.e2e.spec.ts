@@ -30,6 +30,10 @@ const tokensService = {
   preflight: async () => ({ status: 'ok' as const, warnings: [], coverage: [] }),
 };
 
+const dataService = {
+  refreshToken: async () => ({ fetched: 4320, upserted: 4320, source: 'test', synthetic: false }),
+};
+
 describe.runIf(canRun)('sandbox run lifecycle persistence', () => {
   let created: ReturnType<typeof createDb>;
   let repository: SandboxRepository;
@@ -41,6 +45,7 @@ describe.runIf(canRun)('sandbox run lifecycle persistence', () => {
     service = new SandboxRunService(
       repository,
       tokensService as never,
+      dataService as never,
       new AuditService(created.db),
     );
   });
@@ -142,5 +147,13 @@ describe.runIf(canRun)('sandbox run lifecycle persistence', () => {
     await expect(
       service.requestClose(owner.userId, owner.runId, SANDBOX_TEST_TOKEN, {}),
     ).rejects.toBeInstanceOf(ConflictException);
+
+    await service.stop(owner.userId, owner.runId, {});
+    const [stoppedIntent] = await created.db
+      .select()
+      .from(sandboxIntents)
+      .where(eq(sandboxIntents.runId, owner.runId));
+    expect(stoppedIntent?.status).toBe('expired');
+    expect(stoppedIntent?.reasonCode).toBe('FILL_EXPIRED');
   });
 });

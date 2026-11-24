@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -23,6 +24,7 @@ import {
 } from '@nexter/sandbox-core';
 import Decimal from 'decimal.js';
 import { AuditService } from '../../shared/audit/audit.service';
+import { SandboxDataService } from './sandbox-data.service';
 import { SandboxRepository, type SandboxTokenRecord } from './sandbox.repository';
 import { SandboxTokensService, type SandboxAuditMeta } from './sandbox-tokens.service';
 import {
@@ -43,9 +45,12 @@ import {
  */
 @Injectable()
 export class SandboxRunService {
+  private readonly logger = new Logger(SandboxRunService.name);
+
   constructor(
     private readonly repository: SandboxRepository,
     private readonly tokens: SandboxTokensService,
+    private readonly data: SandboxDataService,
     private readonly audit: AuditService,
   ) {}
 
@@ -162,6 +167,7 @@ export class SandboxRunService {
     runId: string,
     input: SandboxRunStartRequest,
     meta: SandboxAuditMeta,
+    now: Date = new Date(),
   ): Promise<SandboxRun> {
     const run = await this.requireRun(userId, runId);
     if (run.status !== 'draft') {
@@ -183,7 +189,11 @@ export class SandboxRunService {
     }
 
     const universe = await this.requireUniverse(userId, [...config.tokenKeys], true);
-    const preflight = await this.tokens.preflight(userId, [...config.tokenKeys]);
+    // Design §5.2: warm up the run tokens before start. Provider failures are
+    // logged and still subject to the coverage gate below, so an already-covered
+    // token is not blocked by a transient refresh error.
+    await this.warmupTokens(universe, config.tokenKeys, now);
+    const preflight = await this.tokens.preflight(userId, [...config.tokenKeys], now);
     if (preflight.status === 'missing') {
       throw new ConflictException({
         code: 'SANDBOX_COVERAGE_MISSING',
@@ -292,7 +302,13 @@ export class SandboxRunService {
     });
     if (!stopped) throw stateChanged('stop');
 
-    await this.auditTransition(userId, runId, 'sandbox.run_stopped', run.status, 'stopped', meta);
+    const expiredIntents = await this.repository.expirePendingIntents(
+      runId,
+      'Run stopped before the pending intent could fill',
+    );
+    await this.auditTransition(userId, runId, 'sandbox.run_stopped', run.status, 'stopped', meta, {
+      expiredIntents,
+    });
     return toRunContract(await this.requireRun(userId, runId));
   }
 
@@ -308,13 +324,17 @@ export class SandboxRunService {
     const archived = await this.repository.archiveRun(userId, runId);
     if (!archived) throw stateChanged('archive');
 
+    const expiredIntents = await this.repository.expirePendingIntents(
+      runId,
+      'Run archived before the pending intent could fill',
+    );
     await this.audit.log({
       userId,
       action: 'sandbox.run_archived',
       entityType: 'sandbox_run',
       entityId: runId,
       before: { status: run.status, archivedAt: null },
-      after: { status: run.status, archivedAt: new Date().toISOString() },
+      after: { status: run.status, archivedAt: new Date().toISOString(), expiredIntents },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });
@@ -383,7 +403,13 @@ export class SandboxRunService {
       decisionPriceUsd: '0.00000000',
       clockTime: Date.now(),
     };
-    await this.repository.insertManualCloseIntent(runId, intent);
+    const inserted = await this.repository.insertManualCloseIntent(runId, intent);
+    if (!inserted) {
+      throw new ConflictException({
+        code: 'SANDBOX_CLOSE_ALREADY_PENDING',
+        message: 'A close for this token is already queued',
+      });
+    }
 
     await this.audit.log({
       userId,
@@ -412,6 +438,25 @@ export class SandboxRunService {
       });
     }
     return run;
+  }
+
+  private async warmupTokens(
+    universe: Map<string, SandboxTokenRecord>,
+    tokenKeys: readonly string[],
+    now: Date,
+  ): Promise<void> {
+    for (const tokenKey of tokenKeys) {
+      const token = universe.get(tokenKey);
+      if (token === undefined) continue;
+      try {
+        await this.data.refreshToken(token, { now });
+      } catch (error) {
+        this.logger.warn(
+          `Sandbox start warmup failed for ${tokenKey}: ` +
+            `${error instanceof Error ? error.message : 'unknown'}`,
+        );
+      }
+    }
   }
 
   private async requireUniverse(
@@ -449,6 +494,7 @@ export class SandboxRunService {
     before: SandboxRunStatus,
     after: SandboxRunStatus,
     meta: SandboxAuditMeta,
+    extra: Record<string, unknown> = {},
   ): Promise<void> {
     await this.audit.log({
       userId,
@@ -456,7 +502,7 @@ export class SandboxRunService {
       entityType: 'sandbox_run',
       entityId: runId,
       before: { status: before },
-      after: { status: after },
+      after: { status: after, ...extra },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });

@@ -23,6 +23,7 @@ import {
 
 const RUNNER_LOCK_KEY = 'nexter:sandbox-runner';
 const RUNNER_INTERVAL_MS = 60_000;
+const HOUR_MS = 3_600_000;
 
 /** Internal control flow: a scheduled tick decided not to advance the run. */
 class SandboxTickSkip extends Error {
@@ -123,6 +124,14 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
       return;
     }
 
+    const nextBarClose =
+      before.lastBarClose === null ? null : before.lastBarClose.getTime() + HOUR_MS;
+    if (nextBarClose !== null && now.getTime() < nextBarClose) {
+      // No new bar can exist yet: do not spend provider calls on a no-op tick.
+      await this.repository.touchRunTick(runId, now);
+      return;
+    }
+
     const config = resolveSandboxRunConfig(
       before.settings,
       before.tokens.map((token) => token.tokenKey),
@@ -194,7 +203,15 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
       };
       try {
         const quote = await this.data.latestPrice(source, { now });
-        if (quote !== null) quotes.set(tokenKey, quote);
+        if (quote !== null) {
+          quotes.set(tokenKey, {
+            tokenId: quote.tokenId,
+            priceUsd: quote.priceUsd,
+            volumeUsd: quote.volumeUsd,
+            barOpenTime: quote.barOpenTime.getTime(),
+            asOf: quote.asOf,
+          });
+        }
       } catch (error) {
         this.logger.warn(
           `Sandbox quote refresh failed for ${tokenKey}: ` +
@@ -213,12 +230,16 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
 
     try {
       await this.repository.markRunFailed(runId, message);
+      const expiredIntents = await this.repository.expirePendingIntents(
+        runId,
+        'Run failed before the pending intent could fill',
+      );
       await this.audit.log({
         userId,
         action: 'sandbox.run_failed',
         entityType: 'sandbox_run',
         entityId: runId,
-        after: { error: message, executionMode: 'live-paper' },
+        after: { error: message, expiredIntents, executionMode: 'live-paper' },
       });
     } catch (auditError) {
       this.logger.error(

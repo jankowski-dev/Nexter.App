@@ -190,7 +190,8 @@ function harness(initial: SandboxRunSnapshot = makeRun()) {
       return true;
     }),
     hasPendingSell: vi.fn(async () => pendingSell),
-    insertManualCloseIntent: vi.fn(async () => undefined),
+    insertManualCloseIntent: vi.fn(async () => true),
+    expirePendingIntents: vi.fn(async () => 0),
   };
   const preflight = vi.fn(
     async (): Promise<{
@@ -204,13 +205,27 @@ function harness(initial: SandboxRunSnapshot = makeRun()) {
     }),
   );
   const tokens = { preflight };
+  const data = {
+    refreshToken: vi.fn(async () => ({
+      fetched: 4320,
+      upserted: 4320,
+      source: 'geckoterminal',
+      synthetic: false,
+    })),
+  };
   const audit = { log: vi.fn(async (_input: { action: string }) => undefined) };
-  const service = new SandboxRunService(repo as never, tokens as never, audit as never);
+  const service = new SandboxRunService(
+    repo as never,
+    tokens as never,
+    data as never,
+    audit as never,
+  );
 
   return {
     service,
     repo,
     preflight,
+    data,
     audit,
     getRun: () => run,
     setRun: (next: SandboxRunSnapshot) => {
@@ -295,6 +310,10 @@ describe('SandboxRunService lifecycle', () => {
     });
     const started = await h.service.start(USER, RUN, { allowPartial: true }, {});
     expect(started.status).toBe('running');
+    expect(h.data.refreshToken).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenKey: TOKEN }),
+      expect.objectContaining({ now: expect.any(Date) }),
+    );
     expect(h.repo.startRun).toHaveBeenCalledWith(
       USER,
       RUN,
@@ -321,6 +340,10 @@ describe('SandboxRunService lifecycle', () => {
     expect((await h.service.resume(USER, RUN, {})).status).toBe('running');
     expect((await h.service.stop(USER, RUN, {})).status).toBe('stopped');
 
+    expect(h.repo.expirePendingIntents).toHaveBeenCalledWith(
+      RUN,
+      'Run stopped before the pending intent could fill',
+    );
     expect(h.audit.log.mock.calls.map((call) => call[0].action)).toEqual([
       'sandbox.run_paused',
       'sandbox.run_resumed',
@@ -344,6 +367,10 @@ describe('SandboxRunService lifecycle', () => {
     const h = harness(makeRun({ status: 'stopped' }));
     const archived = await h.service.archive(USER, RUN, {});
     expect(archived.archivedAt).not.toBeNull();
+    expect(h.repo.expirePendingIntents).toHaveBeenCalledWith(
+      RUN,
+      'Run archived before the pending intent could fill',
+    );
     expect(h.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'sandbox.run_archived' }),
     );
@@ -374,6 +401,15 @@ describe('SandboxRunService close trade', () => {
     );
     expect(h.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'sandbox.trade_close_requested' }),
+    );
+  });
+
+  it('returns 409 when the pending index rejects a duplicate close during the insert', async () => {
+    const h = harness(makeRun({ status: 'running', ledgerState: ledgerWithPosition() }));
+    h.repo.insertManualCloseIntent.mockResolvedValueOnce(false);
+
+    await expect(h.service.requestClose(USER, RUN, TOKEN, {})).rejects.toBeInstanceOf(
+      ConflictException,
     );
   });
 
