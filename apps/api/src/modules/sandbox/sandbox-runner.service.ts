@@ -7,11 +7,23 @@ import {
 } from '@nestjs/common';
 import type { Pool, PoolClient } from 'pg';
 import { parseSandboxTokenKey } from '@nexter/contracts';
+import {
+  CandleValidationError,
+  ClockBackwardsError,
+  DecimalInputError,
+  DecisionInputError,
+  EventChainError,
+  NonJsonValueError,
+  PaperExecutionInputError,
+  PaperLedgerError,
+  PaperRunError,
+} from '@nexter/sandbox-core';
+import { ZodError } from 'zod';
 import { env } from '../../shared/config/env';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB_POOL } from '../../shared/db/db.module';
 import { SandboxDataService, type SandboxDataSourceToken } from './sandbox-data.service';
-import { type SandboxLiveQuote } from './sandbox-live-broker';
+import { type SandboxLiveQuote, SandboxLiveBrokerError } from './sandbox-live-broker';
 import { findNewBarClose, runSandboxLiveTick, SandboxLiveTickError } from './sandbox-live-tick';
 import { SandboxRepository } from './sandbox.repository';
 import {
@@ -46,9 +58,11 @@ const TERMINAL_TICK_CODES: ReadonlySet<SandboxLiveTickError['code']> = new Set([
 ]);
 
 /**
- * True for errors that mean the run must stop permanently. Everything else
- * (pool timeout/reset, provider/DB blip, unknown infrastructure) is transient:
- * the run stays `running` and is retried on the next 60-second pass.
+ * True for errors that mean the run must stop permanently. This includes
+ * deterministic engine/ledger/event/validation failures as well as fail-closed
+ * persistence/tick codes. Everything else (pool timeout/reset, provider/DB
+ * blip, unknown infrastructure) is transient: the run stays `running` and is
+ * retried on the next 60-second pass.
  */
 export function isTerminalSandboxError(error: unknown): boolean {
   if (error instanceof SandboxPersistenceError) {
@@ -57,7 +71,19 @@ export function isTerminalSandboxError(error: unknown): boolean {
   if (error instanceof SandboxLiveTickError) {
     return TERMINAL_TICK_CODES.has(error.code);
   }
-  return false;
+  return (
+    error instanceof SandboxLiveBrokerError ||
+    error instanceof PaperLedgerError ||
+    error instanceof PaperExecutionInputError ||
+    error instanceof PaperRunError ||
+    error instanceof CandleValidationError ||
+    error instanceof ClockBackwardsError ||
+    error instanceof EventChainError ||
+    error instanceof NonJsonValueError ||
+    error instanceof DecisionInputError ||
+    error instanceof DecimalInputError ||
+    error instanceof ZodError
+  );
 }
 
 /** Internal control flow: a scheduled tick decided not to advance the run. */

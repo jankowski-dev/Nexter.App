@@ -3,9 +3,13 @@ import {
   createLedger,
   DEFAULT_PAPER_SETTINGS,
   DEFAULT_SETTINGS,
+  EventChainError,
   MemoryEventLog,
+  NonJsonValueError,
+  PaperLedgerError,
   type Candle,
 } from '@nexter/sandbox-core';
+import { ZodError } from 'zod';
 import { SandboxRunnerService, isTerminalSandboxError } from './sandbox-runner.service';
 import type { SandboxPendingIntent, SandboxTokenRecord } from './sandbox.repository';
 import { SandboxLiveTickError } from './sandbox-live-tick';
@@ -304,6 +308,11 @@ describe('SandboxRunnerService', () => {
     expect(
       isTerminalSandboxError(new SandboxLiveTickError('SANDBOX_LIVE_RECONCILIATION_FAILED', 'bad')),
     ).toBe(true);
+    // Deterministic core failures must fail closed, not retry forever.
+    expect(isTerminalSandboxError(new PaperLedgerError('invalid mark'))).toBe(true);
+    expect(isTerminalSandboxError(new NonJsonValueError('$', 'Date'))).toBe(true);
+    expect(isTerminalSandboxError(new EventChainError(0, 'bad chain'))).toBe(true);
+    expect(isTerminalSandboxError(new ZodError([]))).toBe(true);
     // A vanished run and any unknown/infrastructure error are retryable.
     expect(
       isTerminalSandboxError(new SandboxPersistenceError('SANDBOX_RUN_NOT_FOUND', 'gone')),
@@ -380,6 +389,33 @@ describe('SandboxRunnerService', () => {
     expect(h.repo.markRunFailed).toHaveBeenCalledWith(RUN, 'corrupt ledger state');
     expect(h.repo.expirePendingIntents).toHaveBeenCalled();
     expect(h.getRun().status).toBe('failed');
+  });
+
+  it('fails the run when an event input is invalid (typed payload error)', async () => {
+    const h = harness({
+      commitError: new SandboxPersistenceError(
+        'SANDBOX_EVENT_PAYLOAD_INVALID',
+        'event input is invalid',
+      ),
+    });
+
+    await h.service.runOnce(new Date(lastClose(h.series)));
+
+    expect(h.repo.markRunFailed).toHaveBeenCalledWith(RUN, 'event input is invalid');
+    expect(h.repo.expirePendingIntents).toHaveBeenCalled();
+    expect(h.getRun().status).toBe('failed');
+    expect(h.repo.touchRunTick).not.toHaveBeenCalled();
+  });
+
+  it('fails the run on a deterministic PaperLedgerError from the tick', async () => {
+    const h = harness({ commitError: new PaperLedgerError('invalid position mark') });
+
+    await h.service.runOnce(new Date(lastClose(h.series)));
+
+    expect(h.repo.markRunFailed).toHaveBeenCalledWith(RUN, 'invalid position mark');
+    expect(h.repo.expirePendingIntents).toHaveBeenCalled();
+    expect(h.getRun().status).toBe('failed');
+    expect(h.repo.touchRunTick).not.toHaveBeenCalled();
   });
 
   it('does not fail the run when the quote provider is unavailable', async () => {

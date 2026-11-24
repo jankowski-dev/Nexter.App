@@ -104,7 +104,20 @@ export class SandboxEventLog extends MemoryEventLog {
     }
 
     // Validates the Stage 1A schema and chains onto the verified in-memory head.
-    const event = this.buildEvent(input);
+    // A deterministic schema/JSON failure must surface as a typed persistence
+    // error so the runner fails the run instead of retrying forever.
+    let event: SandboxEvent;
+    try {
+      event = this.buildEvent(input);
+    } catch (error) {
+      if (error instanceof SandboxPersistenceError) throw error;
+      throw new SandboxPersistenceError(
+        'SANDBOX_EVENT_PAYLOAD_INVALID',
+        `Sandbox run ${this.runId} event input is invalid: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     const head = await this.readRunHead();
     const expectedSeq = this.events().length;
     if (head.eventSeq !== expectedSeq || head.eventHash !== this.hash()) {

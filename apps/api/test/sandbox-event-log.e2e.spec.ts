@@ -84,6 +84,31 @@ describe.runIf(canRun)('sandbox db event log', () => {
     expect(rows[2]?.hash).toBe(events[2]?.hash);
   });
 
+  it('wraps invalid event input as a typed persistence error without advancing the chain', async () => {
+    const { runId } = await seedSandboxRun(db);
+
+    await withLog(runId, async (log) => {
+      await expect(
+        log.append({ ...eventInput(runId, 'run.started'), clockTime: 'not-an-iso-time' }),
+      ).rejects.toMatchObject({ code: 'SANDBOX_EVENT_PAYLOAD_INVALID' });
+
+      await expect(
+        log.append({ ...eventInput(runId, 'run.started'), inputs: { when: new Date() } }),
+      ).rejects.toMatchObject({ code: 'SANDBOX_EVENT_PAYLOAD_INVALID' });
+
+      expect(log.events()).toEqual([]);
+      expect(log.hash()).toBe(GENESIS_HASH);
+    });
+
+    const rows = await db.select().from(sandboxEvents);
+    expect(rows).toHaveLength(0);
+    const [run] = await db
+      .select({ eventSeq: sandboxRuns.eventSeq, eventHash: sandboxRuns.eventHash })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId));
+    expect(run).toEqual({ eventSeq: 0, eventHash: GENESIS_HASH });
+  });
+
   it('reloads a committed chain, verifies it and continues from its head', async () => {
     const { runId } = await seedSandboxRun(db);
     const original = await withLog(runId, async (log) => [

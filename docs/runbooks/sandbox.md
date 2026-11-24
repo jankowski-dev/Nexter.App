@@ -109,6 +109,13 @@ the owner asks for it.
   at most once per closed 1h bar (`last_bar_close`).
 - Ticks persist events, engine/ledger state, projections and the equity point in
   one transaction. A reconciliation failure marks the run `failed` and stops it.
+- Deterministic engine/event/persistence failures mark the run `failed` and
+  expire pending intents: invalid persisted state/JSONB, a broken or invalid
+  event chain/payload, `PaperLedgerError`/`PaperRunError`/execution/clock/candle
+  validation errors and event-schema/JSON validation errors. Transient DB/pool
+  errors and unknown infrastructure failures log a warning, keep the run
+  `running` and retry on the next 60-second pass (no intent expiry, no terminal
+  error).
 - `sandbox_events` is append-only (`SELECT/INSERT` only). No code path deletes
   sandbox rows; closed positions are zero tombstones.
 - The event log replays the full chain per tick/report. Long forward runs make
