@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "replay": "tsx src/cli/main.ts"
+    "replay": "tsx src/cli/main.ts",
+    "paper": "tsx src/cli/paper-main.ts"
   },
   "dependencies": {
     "decimal.js": "10.6.0",

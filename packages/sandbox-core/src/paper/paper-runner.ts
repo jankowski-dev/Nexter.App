@@ -644,6 +644,8 @@ export class PaperRunner {
 
     return {
       config,
+      configVersion,
+      dataSnapshotId,
       ledger,
       state,
       intents,

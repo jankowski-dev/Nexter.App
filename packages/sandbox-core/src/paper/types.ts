@@ -1,5 +1,11 @@
 import type { ReasonCode } from '../decision/reason-codes';
-import type { EngineState, SandboxDecisionSettings, StrategyKey } from '../decision/types';
+import type {
+  EngineState,
+  PortfolioPosition,
+  SandboxDecisionSettings,
+  StrategyKey,
+} from '../decision/types';
+import type { SandboxEvent } from '../events/event-types';
 import type { Candle, Timestamp } from '../types';
 
 /**
@@ -426,10 +432,90 @@ export interface PaperRunInput {
  */
 export interface PaperRunResult {
   readonly config: PaperRunConfig;
+  readonly configVersion: string;
+  readonly dataSnapshotId: string;
   readonly ledger: PaperLedgerState;
   readonly state: EngineState;
   readonly intents: readonly IntentRecord[];
   readonly equityCurve: readonly EquityPoint[];
   readonly eventCount: number;
   readonly eventHash: string;
+}
+
+/** Marked period of one paper run; `null` when the run produced no bar. */
+export interface ReportPeriod {
+  readonly firstBar: Timestamp | null;
+  readonly lastBar: Timestamp | null;
+  readonly bars: number;
+  readonly tokens: readonly string[];
+}
+
+/**
+ * Deterministic JSON/Markdown report for one finished paper run.
+ *
+ * The report intentionally contains no wall clock (`generatedAt`) so the same
+ * run always produces the same `reportHash`. Hashes and counts let a reviewer
+ * tie the JSON summary back to the persisted event journal.
+ */
+export interface RunReport {
+  readonly paperVersion: string;
+  readonly runId: string;
+  readonly seed: number;
+  readonly configVersion: string;
+  readonly dataSnapshotId: string;
+  readonly settingsVersion: string;
+  readonly config: PaperRunConfig;
+  readonly period: ReportPeriod;
+  readonly metrics: RunMetrics;
+  readonly equityCurve: readonly EquityPoint[];
+  readonly positions: readonly PortfolioPosition[];
+  readonly trades: readonly PaperTrade[];
+  readonly intentJournal: readonly IntentRecord[];
+  readonly counterfactuals: readonly CounterfactualRecord[];
+  readonly eventCount: number;
+  readonly eventHash: string;
+  readonly ledgerEntries: number;
+  readonly reconciliationOk: boolean;
+  readonly reportHash: string;
+}
+
+/** Final marked projection supplied by `markPortfolio`. */
+export interface FinalMarkProjection {
+  readonly equityUsd: string;
+  readonly positionsValueUsd: string;
+  readonly unrealizedPnlUsd: string;
+  readonly positions: readonly PortfolioPosition[];
+}
+
+/**
+ * Input to `buildReport`.
+ *
+ * `marks` are the final per-token marks used for reconciliation; `events` are
+ * the persisted journal rows (the report keeps only their count/hash). Metrics
+ * may be supplied by a caller that already computed them, otherwise the report
+ * derives them from the ledger and the final marks.
+ */
+export interface BuildReportInput {
+  readonly result: PaperRunResult;
+  readonly finalMark: FinalMarkProjection;
+  readonly marks: Readonly<Record<string, string>>;
+  readonly events: readonly SandboxEvent[];
+  readonly counterfactuals: readonly CounterfactualRecord[];
+  readonly settingsVersion: string;
+  readonly metrics?: RunMetrics;
+}
+
+/** Artifact paths written by `writePaperArtifacts`. */
+export interface PaperArtifactPaths {
+  readonly outputDir: string;
+  readonly eventsPath: string;
+  readonly reportJsonPath: string;
+  readonly reportMarkdownPath: string;
+}
+
+/** Input to `writePaperArtifacts`. */
+export interface WritePaperArtifactsInput {
+  readonly outputDir: string;
+  readonly report: RunReport;
+  readonly events: readonly SandboxEvent[];
 }
