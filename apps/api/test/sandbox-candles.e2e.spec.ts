@@ -38,14 +38,18 @@ function token(): SandboxTokenRecord {
 }
 
 function candleRow(overrides: Partial<SandboxCandleInput> = {}): SandboxCandleInput {
+  const open = overrides.open ?? '1';
+  const close = overrides.close ?? '1.5';
   return {
     tokenKey: key,
     timeframe: '1h',
     openTime: firstOpen,
-    open: '1',
-    high: '2',
-    low: '0.5',
-    close: '1.5',
+    open,
+    // Keep the fixture OHLC self-consistent so a stored row can never fail the
+    // market-view validation in a later suite that shares the candle table.
+    high: String(Math.max(Number(open), Number(close), 2)),
+    low: String(Math.min(Number(open), Number(close), 0.5)),
+    close,
     volumeUsd: '100',
     source: 'geckoterminal',
     fetchedAt: now,
@@ -54,12 +58,14 @@ function candleRow(overrides: Partial<SandboxCandleInput> = {}): SandboxCandleIn
 }
 
 function providerCandle(overrides: Partial<RawCandle> = {}): RawCandle {
+  const open = overrides.open ?? '1';
+  const close = overrides.close ?? '1.05';
   return {
     openTime: secondOpen,
-    open: '1',
-    high: '1.1',
-    low: '0.9',
-    close: '1.05',
+    open,
+    high: String(Math.max(Number(open), Number(close), 1.1)),
+    low: String(Math.min(Number(open), Number(close), 0.9)),
+    close,
     volumeUsd: '50',
     source: 'coingecko',
     quality: 'synthetic',
@@ -96,6 +102,9 @@ describe.runIf(canRun)('sandbox candle storage (db)', () => {
   });
 
   afterAll(async () => {
+    // Candle rows are shared market data with no owner FK; never leak fixtures
+    // into later suites (the live runner loads every row for a token key).
+    await db.execute(sql`truncate table sandbox_candles`);
     await pool.end();
   });
 

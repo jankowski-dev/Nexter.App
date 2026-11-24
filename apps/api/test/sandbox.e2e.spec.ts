@@ -253,7 +253,11 @@ describe('Sandbox live-paper fake-clock e2e', () => {
   }, 30_000);
 
   beforeEach(async () => {
-    if (db) await db.execute(sql`truncate table users restart identity cascade`);
+    if (!db) return;
+    // Candle rows are shared market data (no owner FK); isolate this suite from
+    // fixtures left by other sandbox specs.
+    await db.execute(sql`truncate table sandbox_candles`);
+    await db.execute(sql`truncate table users restart identity cascade`);
   });
 
   afterAll(async () => {

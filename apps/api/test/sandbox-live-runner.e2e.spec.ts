@@ -67,6 +67,9 @@ describe.runIf(canRun)('sandbox live runner persistence', () => {
   });
 
   beforeEach(async () => {
+    // Candle rows are global market data without an owner FK, so every suite
+    // that reads or seeds them must clear them explicitly.
+    await created.db.execute(sql`truncate table sandbox_candles`);
     await created.db.execute(sql`truncate table users restart identity cascade`);
   });
 

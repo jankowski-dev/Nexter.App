@@ -208,8 +208,9 @@ describe('Sandbox read API (e2e)', () => {
 
     const positions = await agent.get(`/api/v1/sandbox/runs/${runId}/positions`).expect(200);
     const parsedPositions = sandboxPositionsResponseSchema.parse(positions.body);
+    const expectedPosition = makeOpenLedger().ledger.positions[SANDBOX_TEST_TOKEN];
     expect(parsedPositions.positions).toHaveLength(1);
-    expect(parsedPositions.positions[0]?.amount).toBe('1.99500000');
+    expect(parsedPositions.positions[0]?.amount).toBe(expectedPosition?.amount);
     expect(parsedPositions.positions[0]?.marketPriceUsd).toBe('105.00000000');
 
     const trades = await agent.get(`/api/v1/sandbox/runs/${runId}/trades`).expect(200);

@@ -187,31 +187,26 @@ describe.runIf(canRun)('sandbox run store', () => {
     const goodTick = makeTick(open.ledger, open.marked, open.intents);
     await repository.persistTick(runId, goodTick);
 
-    const realPosition = open.ledger.positions[SANDBOX_TEST_TOKEN];
-    const realMark = open.marked.positions[0];
-    if (realPosition === undefined || realMark === undefined) {
-      throw new Error('fixture is missing its position');
-    }
-    // Postgres rejects a NUL byte in text, so this row fails after the run
-    // update and must roll the whole tick back.
-    const badTokenId = 'bad\u0000token';
-    // Keep the tick identities consistent so the failure comes from Postgres,
-    // not from the pre-write consistency guard.
+    // Projection-only failure: the run update and JSONB ledger accept this
+    // value, but `sandbox_trades.realized_pnl_usd` is numeric(18,2), so the
+    // trade projection insert overflows and must roll the whole tick back.
+    const overflowTrade = open.ledger.openTrades[SANDBOX_TEST_TOKEN];
+    if (overflowTrade === undefined) throw new Error('fixture is missing its open trade');
     const badLedger = {
       ...open.ledger,
-      positions: { [badTokenId]: { ...realPosition, tokenId: badTokenId } },
+      openTrades: {
+        ...open.ledger.openTrades,
+        [SANDBOX_TEST_TOKEN]: { ...overflowTrade, realizedPnlUsd: '999999999999999999999.00' },
+      },
     };
-    const badMarked = {
-      ...open.marked,
-      positions: [{ ...realMark, tokenId: badTokenId }],
-    };
-    const badTick = makeTick(badLedger, badMarked, open.intents, {
+    const badTick = makeTick(badLedger, open.marked, open.intents, {
       engineState: makeEngineState(),
       lastBarClose: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+      lastTickAt: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
     });
 
     await expect(repository.persistTick(runId, badTick)).rejects.toThrow(
-      /invalid byte sequence|0x00/i,
+      /sandbox_trades|numeric field overflow/i,
     );
 
     const run = await repository.loadRun(runId);
@@ -219,8 +214,11 @@ describe.runIf(canRun)('sandbox run store', () => {
       cashUsd: goodTick.cashUsd,
       equityUsd: goodTick.equityUsd,
       eventSeq: 0,
+      lastBarClose: goodTick.lastBarClose,
+      lastTickAt: goodTick.lastTickAt,
     });
     expect(run?.engineState).toEqual(goodTick.engineState);
+    expect(run?.ledgerState).toEqual(goodTick.ledgerState);
     expect(await db.select().from(sandboxPositions)).toHaveLength(1);
     expect(await db.select().from(sandboxEquityPoints)).toHaveLength(1);
   });
@@ -245,32 +243,35 @@ describe.runIf(canRun)('sandbox run store', () => {
   it('rolls back appended events, state and projections when the projection fails', async () => {
     const { runId } = await seedSandboxRun(db);
     const open = makeOpenLedger();
-    const realPosition = open.ledger.positions[SANDBOX_TEST_TOKEN];
-    const realMark = open.marked.positions[0];
-    if (realPosition === undefined || realMark === undefined) {
-      throw new Error('fixture is missing its position');
-    }
-    const badTokenId = 'bad\u0000token';
+    const overflowTrade = open.ledger.openTrades[SANDBOX_TEST_TOKEN];
+    if (overflowTrade === undefined) throw new Error('fixture is missing its open trade');
     const badLedger = {
       ...open.ledger,
-      positions: { [badTokenId]: { ...realPosition, tokenId: badTokenId } },
+      openTrades: {
+        ...open.ledger.openTrades,
+        [SANDBOX_TEST_TOKEN]: { ...overflowTrade, realizedPnlUsd: '999999999999999999999.00' },
+      },
     };
-    const badMarked = {
-      ...open.marked,
-      positions: [{ ...realMark, tokenId: badTokenId }],
-    };
-    const badTick = makeTick(badLedger, badMarked, open.intents);
+    const badTick = makeTick(badLedger, open.marked, open.intents, {
+      lastBarClose: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+      lastTickAt: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+    });
 
     await expect(
       repository.commitTick(runId, async ({ eventLog }) => {
         await eventLog.append(eventInput(runId, 'run.started'));
         return badTick;
       }),
-    ).rejects.toThrow(/invalid byte sequence|0x00/i);
+    ).rejects.toThrow(/sandbox_trades|numeric field overflow/i);
 
     expect(await db.select().from(sandboxEvents)).toHaveLength(0);
     const run = await repository.loadRun(runId);
-    expect(run).toMatchObject({ eventSeq: 0, eventHash: GENESIS_HASH, status: 'running' });
+    expect(run).toMatchObject({
+      eventSeq: 0,
+      eventHash: GENESIS_HASH,
+      status: 'running',
+      lastBarClose: null,
+    });
     expect(await db.select().from(sandboxPositions)).toHaveLength(0);
     expect(await db.select().from(sandboxEquityPoints)).toHaveLength(0);
   });

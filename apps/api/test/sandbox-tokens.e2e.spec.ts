@@ -55,21 +55,22 @@ describe('Sandbox tokens and coverage (e2e)', () => {
         password,
       })
       .expect(201);
-    const csrf = csrfFrom(setup);
+    const setupCsrf = csrfFrom(setup);
 
     const totpSetup = await agent
       .post('/api/v1/auth/2fa/setup')
-      .set('x-csrf-token', csrf)
+      .set('x-csrf-token', setupCsrf)
       .expect(200);
     const secret = totpSetup.body.secret as string;
 
-    await agent
+    const enabled = await agent
       .post('/api/v1/auth/2fa/enable')
-      .set('x-csrf-token', csrf)
+      .set('x-csrf-token', setupCsrf)
       .send({ code: generateSync({ secret }) })
       .expect(200);
 
-    return csrf;
+    // Enabling 2FA rotates the session CSRF token; later mutations must use it.
+    return csrfFrom(enabled);
   }
 
   beforeAll(async () => {
