@@ -4,6 +4,8 @@ import { MarketDataCoreModule } from '../market-data/market-data-core.module';
 import { SandboxController } from './sandbox.controller';
 import { SandboxDataService } from './sandbox-data.service';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
+import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReportService } from './sandbox-report.service';
 import { SandboxRepository } from './sandbox.repository';
 import { SandboxRunnerService } from './sandbox-runner.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -19,6 +21,8 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxTokensService,
     SandboxRunService,
     SandboxRunnerService,
+    SandboxReadService,
+    SandboxReportService,
     SandboxEnabledGuard,
     { provide: SANDBOX_ENABLED, useValue: env.SANDBOX_ENABLED },
   ],
@@ -28,6 +32,8 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxTokensService,
     SandboxRunService,
     SandboxRunnerService,
+    SandboxReadService,
+    SandboxReportService,
   ],
 })
 export class SandboxModule {}

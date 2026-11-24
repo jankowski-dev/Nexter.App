@@ -13,6 +13,10 @@ import {
   type Database,
   type DbExecutor,
   type DbTransaction,
+  type SandboxEquityPointRecord,
+  type SandboxIntentRecord,
+  type SandboxPositionRecord,
+  type SandboxTradeRecord,
 } from '@nexter/db';
 import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
 import {
@@ -23,7 +27,7 @@ import {
   type StrategyKey,
 } from '@nexter/sandbox-core';
 import { DB } from '../../shared/db/db.module';
-import { listSandboxEvents, SandboxEventLog } from './sandbox-event-log';
+import { listAllSandboxEvents, listSandboxEvents, SandboxEventLog } from './sandbox-event-log';
 import {
   assertSandboxTickConsistency,
   assertSandboxTickInput,
@@ -40,6 +44,7 @@ import {
   parsePaperLedgerState,
   SandboxPersistenceError,
   type SandboxRunSnapshot,
+  type SandboxRunStatus,
   type SandboxTickInput,
   type SandboxTickSummary,
 } from './sandbox.types';
@@ -151,6 +156,45 @@ export interface SandboxRunStartInput {
   engineState: Record<string, unknown>;
   ledgerState: Record<string, unknown>;
   tokens: readonly SandboxTokenSnapshotInput[];
+}
+
+/** Lightweight run row for the owner read list/overview (no JSONB state). */
+export interface SandboxRunSummaryRow {
+  readonly id: string;
+  readonly name: string;
+  readonly status: SandboxRunStatus;
+  readonly initialCapitalUsd: string;
+  readonly cashUsd: string;
+  readonly equityUsd: string;
+  readonly peakEquityUsd: string;
+  readonly lastBarClose: Date | null;
+  readonly lastTickAt: Date | null;
+  readonly error: string | null;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly startedAt: Date | null;
+  readonly stoppedAt: Date | null;
+  readonly archivedAt: Date | null;
+  readonly tokenCount: number;
+}
+
+export interface SandboxRunListOptions {
+  status?: SandboxRunStatus;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SandboxPageOptions {
+  limit?: number;
+  offset?: number;
+}
+
+/** Grouped run counts for the overview; `archived` is not part of `total`. */
+export interface SandboxRunStatusCount {
+  readonly status: SandboxRunStatus;
+  readonly archived: boolean;
+  readonly count: number;
 }
 
 export interface SandboxTokenSnapshotInput {
@@ -350,6 +394,222 @@ export class SandboxRepository {
     options: { afterSeq?: number; limit?: number } = {},
   ): Promise<SandboxEvent[]> {
     return listSandboxEvents(this.db, runId, options);
+  }
+
+  /**
+   * Reads every persisted event for one run.
+   *
+   * Report generation needs the complete chain to reproduce the Stage 1C
+   * `eventCount`/`eventHash` audit check; the journal endpoint keeps using the
+   * bounded `listEvents`. The event rows are append-only and validated by the
+   * report service before any report is produced.
+   */
+  async listAllEvents(runId: string): Promise<SandboxEvent[]> {
+    return listAllSandboxEvents(this.db, runId);
+  }
+
+  /** Owner-scoped run list without loading the JSONB state. */
+  async listRuns(
+    userId: string,
+    options: SandboxRunListOptions = {},
+  ): Promise<SandboxRunSummaryRow[]> {
+    const conditions = [eq(sandboxRuns.userId, userId)];
+    if (!options.includeArchived) conditions.push(isNull(sandboxRuns.archivedAt));
+    if (options.status !== undefined) conditions.push(eq(sandboxRuns.status, options.status));
+
+    const rows = await this.db
+      .select({
+        id: sandboxRuns.id,
+        name: sandboxRuns.name,
+        status: sandboxRuns.status,
+        initialCapitalUsd: sandboxRuns.initialCapitalUsd,
+        cashUsd: sandboxRuns.cashUsd,
+        equityUsd: sandboxRuns.equityUsd,
+        peakEquityUsd: sandboxRuns.peakEquityUsd,
+        lastBarClose: sandboxRuns.lastBarClose,
+        lastTickAt: sandboxRuns.lastTickAt,
+        error: sandboxRuns.error,
+        createdAt: sandboxRuns.createdAt,
+        updatedAt: sandboxRuns.updatedAt,
+        startedAt: sandboxRuns.startedAt,
+        stoppedAt: sandboxRuns.stoppedAt,
+        archivedAt: sandboxRuns.archivedAt,
+        tokenCount: sql<number>`(
+          select count(*) from ${sandboxRunTokens}
+          where ${sandboxRunTokens.runId} = ${sandboxRuns.id}
+        )::int`,
+      })
+      .from(sandboxRuns)
+      .where(and(...conditions))
+      .orderBy(desc(sandboxRuns.updatedAt), asc(sandboxRuns.id))
+      .limit(options.limit ?? 50)
+      .offset(options.offset ?? 0);
+
+    return rows.map((row) => ({
+      ...row,
+      status: assertRunStatus(row.status, row.id),
+      tokenCount: Number(row.tokenCount ?? 0),
+    }));
+  }
+
+  async countRuns(
+    userId: string,
+    options: { status?: SandboxRunStatus; includeArchived?: boolean } = {},
+  ): Promise<number> {
+    const conditions = [eq(sandboxRuns.userId, userId)];
+    if (!options.includeArchived) conditions.push(isNull(sandboxRuns.archivedAt));
+    if (options.status !== undefined) conditions.push(eq(sandboxRuns.status, options.status));
+
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxRuns)
+      .where(and(...conditions));
+
+    return Number(row?.count ?? 0);
+  }
+
+  /** Counts every run by status and archived flag for the overview. */
+  async runStatusCounts(userId: string): Promise<SandboxRunStatusCount[]> {
+    const archived = sql<boolean>`${sandboxRuns.archivedAt} is not null`;
+    const rows = await this.db
+      .select({
+        status: sandboxRuns.status,
+        archived,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.userId, userId))
+      .groupBy(sandboxRuns.status, archived);
+
+    return rows.map((row) => ({
+      status: assertRunStatus(row.status, 'grouped'),
+      archived: row.archived,
+      count: Number(row.count ?? 0),
+    }));
+  }
+
+  /** Newest tick across the owner's non-archived runs. */
+  async lastTickAt(userId: string): Promise<Date | null> {
+    const [row] = await this.db
+      .select({ lastTickAt: sql<Date | null>`max(${sandboxRuns.lastTickAt})` })
+      .from(sandboxRuns)
+      .where(and(eq(sandboxRuns.userId, userId), isNull(sandboxRuns.archivedAt)));
+
+    return row?.lastTickAt ? new Date(row.lastTickAt) : null;
+  }
+
+  /** All position projection rows, including closed zero tombstones. */
+  async listPositions(runId: string): Promise<SandboxPositionRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxPositions)
+      .where(eq(sandboxPositions.runId, runId))
+      .orderBy(asc(sandboxPositions.tokenId));
+  }
+
+  async listTrades(runId: string, options: SandboxPageOptions = {}): Promise<SandboxTradeRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxTrades)
+      .where(eq(sandboxTrades.runId, runId))
+      .orderBy(desc(sandboxTrades.entryAt), asc(sandboxTrades.tradeId))
+      .limit(options.limit ?? 100)
+      .offset(options.offset ?? 0);
+  }
+
+  async countTrades(runId: string, status?: 'open' | 'closed'): Promise<number> {
+    const conditions = [eq(sandboxTrades.runId, runId)];
+    if (status !== undefined) conditions.push(eq(sandboxTrades.status, status));
+
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxTrades)
+      .where(and(...conditions));
+
+    return Number(row?.count ?? 0);
+  }
+
+  async listIntents(
+    runId: string,
+    options: SandboxPageOptions = {},
+  ): Promise<SandboxIntentRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxIntents)
+      .where(eq(sandboxIntents.runId, runId))
+      .orderBy(desc(sandboxIntents.decisionTime), asc(sandboxIntents.intentId))
+      .limit(options.limit ?? 100)
+      .offset(options.offset ?? 0);
+  }
+
+  async countIntents(runId: string, status?: string): Promise<number> {
+    const conditions = [eq(sandboxIntents.runId, runId)];
+    if (status !== undefined) conditions.push(eq(sandboxIntents.status, status));
+
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxIntents)
+      .where(and(...conditions));
+
+    return Number(row?.count ?? 0);
+  }
+
+  /**
+   * Terminal intent journal in emission order for the report. Pending intents
+   * are not terminal records and are intentionally excluded; the journal
+   * endpoint exposes them while a run is live.
+   */
+  async listTerminalIntents(runId: string): Promise<SandboxIntentRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxIntents)
+      .where(
+        and(
+          eq(sandboxIntents.runId, runId),
+          inArray(sandboxIntents.status, ['filled', 'partial', 'rejected', 'expired']),
+        ),
+      )
+      .orderBy(asc(sandboxIntents.decisionTime), asc(sandboxIntents.intentId));
+  }
+
+  async listEquityPoints(
+    runId: string,
+    options: SandboxPageOptions = {},
+  ): Promise<SandboxEquityPointRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxEquityPoints)
+      .where(eq(sandboxEquityPoints.runId, runId))
+      .orderBy(asc(sandboxEquityPoints.clockTime))
+      .limit(options.limit ?? 500)
+      .offset(options.offset ?? 0);
+  }
+
+  /** Every equity point in clock order, used by the deterministic report. */
+  async listAllEquityPoints(runId: string): Promise<SandboxEquityPointRecord[]> {
+    return this.db
+      .select()
+      .from(sandboxEquityPoints)
+      .where(eq(sandboxEquityPoints.runId, runId))
+      .orderBy(asc(sandboxEquityPoints.clockTime));
+  }
+
+  async countEquityPoints(runId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxEquityPoints)
+      .where(eq(sandboxEquityPoints.runId, runId));
+
+    return Number(row?.count ?? 0);
+  }
+
+  async countLedgerEntries(runId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxLedgerEntries)
+      .where(eq(sandboxLedgerEntries.runId, runId));
+
+    return Number(row?.count ?? 0);
   }
 
   /** Inserts a draft run. The token snapshot is frozen only at start. */
@@ -1042,4 +1302,15 @@ export interface SandboxTickSession {
  */
 function jsonObject(value: object): Record<string, unknown> {
   return value as unknown as Record<string, unknown>;
+}
+
+/** Rejects an unknown persisted run status instead of presenting it as valid. */
+function assertRunStatus(value: string, runId: string): SandboxRunStatus {
+  if (!isSandboxRunStatus(value)) {
+    throw new SandboxPersistenceError(
+      'SANDBOX_STATE_INVALID',
+      `Sandbox run ${runId} has an unknown status "${value}"`,
+    );
+  }
+  return value;
 }

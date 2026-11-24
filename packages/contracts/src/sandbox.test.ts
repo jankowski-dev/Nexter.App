@@ -4,16 +4,30 @@ import {
   sandboxCoverageQuerySchema,
   sandboxCoverageResponseSchema,
   sandboxCoverageSchema,
+  sandboxEquityQuerySchema,
+  sandboxEquityResponseSchema,
+  sandboxEventsQuerySchema,
+  sandboxEventsResponseSchema,
+  sandboxIntentSchema,
+  sandboxOverviewSchema,
+  sandboxPageQuerySchema,
+  sandboxPositionSchema,
+  sandboxReportResponseSchema,
   sandboxRunConfigSchema,
   sandboxRunCreateRequestSchema,
+  sandboxRunDetailSchema,
   sandboxRunSchema,
   sandboxRunStartRequestSchema,
+  sandboxRunSummarySchema,
   sandboxRunUpdateRequestSchema,
+  sandboxRunsQuerySchema,
+  sandboxRunsResponseSchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenKeySchema,
   sandboxTokenRefreshResponseSchema,
   sandboxTokenSchema,
   sandboxTokenUpdateRequestSchema,
+  sandboxTradeSchema,
 } from './sandbox';
 
 const bscKey = 'bsc:0x1111111111111111111111111111111111111111';
@@ -324,5 +338,351 @@ describe('sandbox run contracts', () => {
       archivedAt: null,
     };
     expect(sandboxRunSchema.parse(run).status).toBe('running');
+  });
+});
+
+const runId = '11111111-1111-4111-8111-111111111111';
+const hash = 'a'.repeat(64);
+
+const runSummary = {
+  id: runId,
+  name: 'My sandbox',
+  status: 'running',
+  initialCapitalUsd: '1000.00',
+  cashUsd: '799.50',
+  equityUsd: '857.85',
+  peakEquityUsd: '1000.00',
+  returnPct: '-14.22',
+  drawdownPct: '14.2150',
+  tokenCount: 1,
+  lastBarClose: '2026-11-24T00:00:00.000Z',
+  lastTickAt: '2026-11-24T00:00:05.000Z',
+  startedAt: '2026-11-24T00:00:00.000Z',
+  stoppedAt: null,
+  archivedAt: null,
+  error: null,
+  createdAt: '2026-11-24T00:00:00.000Z',
+  updatedAt: '2026-11-24T00:00:05.000Z',
+};
+
+const position = {
+  tokenId: bscKey,
+  strategyKey: 'trend_pullback',
+  strategyVersion: 1,
+  amount: '1.99500000',
+  avgCostUsd: '100.25000000',
+  costBasisUsd: '200.00',
+  marketPriceUsd: '105.00000000',
+  marketValueUsd: '209.48',
+  openedAt: '2026-11-24T00:00:00.000Z',
+  stopLossPct: '3.0000',
+  takeProfitPct: null,
+  entryIntentId: 'intent-1',
+  feesPaidUsd: '0.50',
+  updatedAt: '2026-11-24T00:00:05.000Z',
+};
+
+const trade = {
+  tradeId: 'trade-1',
+  tokenId: bscKey,
+  strategyKey: 'trend_pullback',
+  strategyVersion: 1,
+  entryAt: '2026-11-24T00:00:00.000Z',
+  entryPriceUsd: '100.00000000',
+  entryAmount: '1.99500000',
+  entryNotionalUsd: '199.50',
+  entryFeeUsd: '0.50',
+  entryCostBasisUsd: '200.00',
+  entryIntentId: 'intent-1',
+  exitAt: null,
+  exitPriceUsd: null,
+  exitAmount: '0.00000000',
+  exitNotionalUsd: '0.00',
+  exitFeeUsd: '0.00',
+  exitReasonCode: null,
+  exitIntentId: null,
+  realizedPnlUsd: '0.00',
+  status: 'open',
+  updatedAt: '2026-11-24T00:00:05.000Z',
+};
+
+const intent = {
+  intentId: 'intent-1',
+  tokenId: bscKey,
+  side: 'buy',
+  strategyKey: 'trend_pullback',
+  strategyVersion: 1,
+  status: 'filled',
+  requestedUsd: '200.00',
+  requestedAmount: null,
+  filledUsd: '199.50',
+  filledAmount: '1.99500000',
+  priceUsd: '100.00000000',
+  stopLossPct: '3.0000',
+  takeProfitPct: null,
+  feeUsd: '0.50',
+  reasonCode: 'FILL_FILLED',
+  strategyReasonCode: 'TREND_PULLBACK_ENTRY',
+  reasonText: 'filled',
+  decisionTime: '2026-11-24T00:00:00.000Z',
+  fillTime: '2026-11-24T00:00:00.000Z',
+};
+
+describe('sandbox read contracts', () => {
+  it('parses run summaries and detail counts', () => {
+    expect(sandboxRunSummarySchema.parse(runSummary)).toMatchObject({ id: runId });
+    const detail = sandboxRunDetailSchema.parse({
+      ...runSummary,
+      dayStartEquityUsd: '1000.00',
+      tokenKeys: [bscKey],
+      tokens: [
+        {
+          tokenKey: bscKey,
+          symbol: 'CAKE',
+          chain: 'bsc',
+          contractAddress: bscKey.slice(4),
+          enabled: true,
+        },
+      ],
+      settings: runSettings,
+      paper: runPaper,
+      pausedAt: null,
+      executionMode: 'live-paper',
+      openPositions: 1,
+      openTrades: 1,
+      closedTrades: 0,
+      intents: 1,
+      pendingIntents: 0,
+      equityPoints: 1,
+      ledgerEntries: 1,
+      eventCount: 2,
+      eventHash: hash,
+    });
+    expect(detail.executionMode).toBe('live-paper');
+    expect(detail.eventCount).toBe(2);
+  });
+
+  it('parses position, trade, intent, events and equity responses', () => {
+    expect(sandboxPositionSchema.parse(position).tokenId).toBe(bscKey);
+    expect(sandboxTradeSchema.parse(trade).status).toBe('open');
+    expect(sandboxIntentSchema.parse(intent).status).toBe('filled');
+
+    const events = sandboxEventsResponseSchema.parse({
+      events: [
+        {
+          seq: 0,
+          clockTime: '2026-11-24T00:00:00.000Z',
+          module: 'run',
+          eventType: 'run.started',
+          severity: 'info',
+          tokenId: null,
+          strategyId: null,
+          regime: null,
+          decision: null,
+          alternatives: [],
+          riskChecks: [],
+          dataSnapshotId: 'snapshot-1',
+          configVersion: 'config-1',
+          seed: 1,
+          correlationId: null,
+          reasonCode: null,
+          reasonText: null,
+          recordedAt: '2026-11-24T00:00:00.000Z',
+          prevHash: '0'.repeat(64),
+          hash,
+        },
+      ],
+      hasMore: false,
+      nextAfterSeq: 0,
+    });
+    expect(events.events).toHaveLength(1);
+
+    const equity = sandboxEquityResponseSchema.parse({
+      points: [
+        {
+          clockTime: '2026-11-24T00:00:00.000Z',
+          equityUsd: '857.85',
+          cashUsd: '799.50',
+          positionsValueUsd: '58.35',
+          drawdownPct: '14.2150',
+        },
+      ],
+      total: 1,
+      limit: 500,
+      offset: 0,
+    });
+    expect(equity.points[0]?.drawdownPct).toBe('14.2150');
+  });
+
+  it('applies query defaults and rejects out-of-bounds pagination', () => {
+    expect(sandboxRunsQuerySchema.parse({})).toEqual({
+      includeArchived: false,
+      limit: 50,
+      offset: 0,
+    });
+    expect(
+      sandboxRunsQuerySchema.parse({ includeArchived: 'true', status: 'failed' }),
+    ).toMatchObject({ includeArchived: true, status: 'failed' });
+    expect(sandboxRunsQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
+    expect(sandboxPageQuerySchema.parse({})).toEqual({ limit: 100, offset: 0 });
+    expect(sandboxPageQuerySchema.safeParse({ offset: -1 }).success).toBe(false);
+    expect(sandboxEquityQuerySchema.parse({})).toEqual({ limit: 500, offset: 0 });
+    expect(sandboxEventsQuerySchema.parse({})).toEqual({ limit: 200 });
+    expect(sandboxEventsQuerySchema.parse({ afterSeq: '10', limit: '50' })).toEqual({
+      afterSeq: 10,
+      limit: 50,
+    });
+    expect(sandboxEventsQuerySchema.safeParse({ limit: 1_001 }).success).toBe(false);
+  });
+
+  it('parses the overview and paginated run list', () => {
+    const overview = sandboxOverviewSchema.parse({
+      enabled: true,
+      executionMode: 'live-paper',
+      runs: {
+        total: 1,
+        draft: 0,
+        running: 1,
+        paused: 0,
+        stopped: 0,
+        failed: 0,
+        archived: 0,
+      },
+      activeRuns: [runSummary],
+      lastTickAt: '2026-11-24T00:00:05.000Z',
+      universe: {
+        tokens: 1,
+        enabledTokens: 1,
+        staleTokens: [],
+        lastCandleAt: '2026-11-24T00:00:00.000Z',
+      },
+    });
+    expect(overview.activeRuns).toHaveLength(1);
+
+    const listed = sandboxRunsResponseSchema.parse({
+      runs: [runSummary],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    expect(listed.runs[0]?.returnPct).toBe('-14.22');
+  });
+
+  it('parses a live-paper report wrapper and rejects a bad hash', () => {
+    const report = {
+      paperVersion: 'paper-run-v1',
+      runId,
+      seed: 1,
+      configVersion: 'config-1',
+      dataSnapshotId: 'snapshot-1',
+      settingsVersion: 'settings-1',
+      config: {
+        runId,
+        seed: 1,
+        timeframe: '1h',
+        tokenIds: [bscKey],
+        initialCapitalUsd: '1000.00',
+        feeBps: 25,
+        slippageBps: 10,
+        liquidityCapPct: 1,
+        maxPendingBars: 1,
+        cooldownHoursAfterStop: 24,
+        counterfactualHorizonHours: 24,
+      },
+      period: {
+        firstBar: 1_764_000_000_000,
+        lastBar: 1_764_003_600_000,
+        bars: 1,
+        tokens: [bscKey],
+      },
+      metrics: {
+        initialCapitalUsd: '1000.00',
+        finalEquityUsd: '857.85',
+        totalReturnPct: '-14.22',
+        maxDrawdownPct: '14.22',
+        peakEquityUsd: '1000.00',
+        finalCashUsd: '799.50',
+        finalPositionsValueUsd: '58.35',
+        realizedPnlUsd: '0.00',
+        unrealizedPnlUsd: '58.35',
+        feesPaidUsd: '0.50',
+        tradeCount: 0,
+        wins: 0,
+        losses: 0,
+        winRatePct: null,
+        profitFactor: null,
+        averageWinUsd: null,
+        averageLossUsd: null,
+        timeInMarketPct: '0.00',
+        averageExposurePct: '5.84',
+        perStrategy: [],
+        perToken: [],
+      },
+      equityCurve: [
+        {
+          clockTime: 1_764_000_000_000,
+          equityUsd: '857.85',
+          cashUsd: '799.50',
+          positionsValueUsd: '58.35',
+          drawdownPct: '14.22',
+        },
+      ],
+      positions: [
+        {
+          tokenId: bscKey,
+          strategyKey: 'trend_pullback',
+          strategyVersion: 1,
+          amount: '1.99500000',
+          avgCostUsd: '100.25000000',
+          marketPriceUsd: '105.00000000',
+          marketValueUsd: '209.48',
+          openedAt: 1_764_000_000_000,
+          stopLossPct: '3.0000',
+          takeProfitPct: null,
+        },
+      ],
+      trades: [],
+      intentJournal: [
+        {
+          intentId: 'intent-1',
+          tokenId: bscKey,
+          side: 'buy',
+          strategyKey: 'trend_pullback',
+          strategyVersion: 1,
+          status: 'filled',
+          requestedUsd: '200.00',
+          requestedAmount: null,
+          filledUsd: '199.50',
+          filledAmount: '1.99500000',
+          priceUsd: '100.00000000',
+          feeUsd: '0.50',
+          reasonCode: 'FILL_FILLED',
+          strategyReasonCode: 'TREND_PULLBACK_ENTRY',
+          reasonText: 'filled',
+          decisionTime: 1_764_000_000_000,
+          fillTime: 1_764_000_000_000,
+        },
+      ],
+      counterfactuals: [],
+      eventCount: 2,
+      eventHash: hash,
+      ledgerEntries: 1,
+      reconciliationOk: true,
+      reconciliationChecks: ['cash identity'],
+      reportHash: hash,
+    };
+
+    const parsed = sandboxReportResponseSchema.parse({
+      executionMode: 'live-paper',
+      report,
+    });
+    expect(parsed.executionMode).toBe('live-paper');
+    expect(parsed.report.reportHash).toBe(hash);
+
+    const bad = sandboxReportResponseSchema.safeParse({
+      executionMode: 'live-paper',
+      report: { ...report, reportHash: 'not-a-hash' },
+    });
+    expect(bad.success).toBe(false);
   });
 });

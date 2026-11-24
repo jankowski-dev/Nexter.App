@@ -233,6 +233,8 @@ export function makeTick(
 }
 
 export interface SeedSandboxRunOptions {
+  /** Reuse an existing owner (for API e2e) instead of creating a fixture user. */
+  userId?: string;
   name?: string;
   status?: string;
   initialCapitalUsd?: string;
@@ -249,27 +251,19 @@ export interface SeedSandboxRunOptions {
   withToken?: boolean;
 }
 
-/** Inserts one owner, one run and its frozen token snapshot. */
+/** Inserts one owner (unless `userId` is supplied), one run and its token snapshot. */
 export async function seedSandboxRun(
   db: Database,
   options: SeedSandboxRunOptions = {},
 ): Promise<{ userId: string; runId: string }> {
-  const [user] = await db
-    .insert(users)
-    .values({
-      email: `sandbox-fixture-${randomUUID()}@example.com`,
-      passwordHash: 'not-a-real-hash',
-    })
-    .returning({ id: users.id });
-  if (!user) throw new Error('sandbox fixture user insert returned no row');
-
+  const userId = options.userId ?? (await insertFixtureUser(db));
   const capital = options.initialCapitalUsd ?? '1000.00';
   const status = options.status ?? 'running';
   const draft = status === 'draft';
   const [run] = await db
     .insert(sandboxRuns)
     .values({
-      userId: user.id,
+      userId,
       name: options.name ?? 'Sandbox fixture run',
       status,
       initialCapitalUsd: capital,
@@ -306,5 +300,18 @@ export async function seedSandboxRun(
     });
   }
 
-  return { userId: user.id, runId: run.id };
+  return { userId, runId: run.id };
+}
+
+async function insertFixtureUser(db: Database): Promise<string> {
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: `sandbox-fixture-${randomUUID()}@example.com`,
+      passwordHash: 'not-a-real-hash',
+    })
+    .returning({ id: users.id });
+  if (!user) throw new Error('sandbox fixture user insert returned no row');
+
+  return user.id;
 }

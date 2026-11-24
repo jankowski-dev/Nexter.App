@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
+import { SandboxReadService } from './sandbox-read.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED, SANDBOX_VERSION, type SandboxStatus } from './sandbox.types';
@@ -22,6 +23,7 @@ async function compile(enabled: boolean) {
       { provide: SANDBOX_ENABLED, useValue: enabled },
       { provide: SandboxTokensService, useValue: tokens },
       { provide: SandboxRunService, useValue: {} },
+      { provide: SandboxReadService, useValue: {} },
       SandboxEnabledGuard,
     ],
   }).compile();

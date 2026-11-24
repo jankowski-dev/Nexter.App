@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Inject,
@@ -16,28 +17,46 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import {
   sandboxCoverageQuerySchema,
+  sandboxEquityQuerySchema,
+  sandboxEventsQuerySchema,
+  sandboxPageQuerySchema,
   sandboxRunCreateRequestSchema,
   sandboxRunStartRequestSchema,
   sandboxRunUpdateRequestSchema,
+  sandboxRunsQuerySchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenUpdateRequestSchema,
   type SandboxCoverageQuery,
   type SandboxCoverageResponse,
+  type SandboxEquityQuery,
+  type SandboxEquityResponse,
+  type SandboxEventsQuery,
+  type SandboxEventsResponse,
+  type SandboxIntentsResponse,
+  type SandboxOverview,
+  type SandboxPageQuery,
+  type SandboxPositionsResponse,
+  type SandboxReportResponse,
   type SandboxRun,
   type SandboxRunCreateRequest,
+  type SandboxRunDetail,
   type SandboxRunStartRequest,
+  type SandboxRunsQuery,
+  type SandboxRunsResponse,
   type SandboxRunUpdateRequest,
   type SandboxToken,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
   type SandboxTokenUpdateRequest,
+  type SandboxTradesResponse,
 } from '@nexter/contracts';
 import type { FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
+import { SandboxReadService } from './sandbox-read.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED, SANDBOX_VERSION, type SandboxStatus } from './sandbox.types';
@@ -49,6 +68,7 @@ export class SandboxController {
     @Inject(SANDBOX_ENABLED) private readonly enabled: boolean,
     private readonly tokens: SandboxTokensService,
     private readonly runs: SandboxRunService,
+    private readonly read: SandboxReadService,
   ) {}
 
   @Get('status')
@@ -112,6 +132,100 @@ export class SandboxController {
     @Query(new ZodValidationPipe(sandboxCoverageQuerySchema)) query: SandboxCoverageQuery,
   ): Promise<SandboxCoverageResponse> {
     return this.tokens.coverage(auth.user.id, query.tokenKey);
+  }
+
+  @Get('overview')
+  @UseGuards(SandboxEnabledGuard)
+  overview(@CurrentAuth() auth: AuthContext): Promise<SandboxOverview> {
+    return this.read.overview(auth.user.id);
+  }
+
+  @Get('runs')
+  @UseGuards(SandboxEnabledGuard)
+  listRuns(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(sandboxRunsQuerySchema)) query: SandboxRunsQuery,
+  ): Promise<SandboxRunsResponse> {
+    return this.read.listRuns(auth.user.id, query);
+  }
+
+  @Get('runs/:id')
+  @UseGuards(SandboxEnabledGuard)
+  getRun(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxRunDetail> {
+    return this.read.getRun(auth.user.id, id);
+  }
+
+  @Get('runs/:id/positions')
+  @UseGuards(SandboxEnabledGuard)
+  positions(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxPositionsResponse> {
+    return this.read.positions(auth.user.id, id);
+  }
+
+  @Get('runs/:id/trades')
+  @UseGuards(SandboxEnabledGuard)
+  trades(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxPageQuerySchema)) query: SandboxPageQuery,
+  ): Promise<SandboxTradesResponse> {
+    return this.read.trades(auth.user.id, id, query);
+  }
+
+  @Get('runs/:id/intents')
+  @UseGuards(SandboxEnabledGuard)
+  intents(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxPageQuerySchema)) query: SandboxPageQuery,
+  ): Promise<SandboxIntentsResponse> {
+    return this.read.intents(auth.user.id, id, query);
+  }
+
+  @Get('runs/:id/events')
+  @UseGuards(SandboxEnabledGuard)
+  events(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxEventsQuerySchema)) query: SandboxEventsQuery,
+  ): Promise<SandboxEventsResponse> {
+    return this.read.events(auth.user.id, id, query);
+  }
+
+  @Get('runs/:id/equity')
+  @UseGuards(SandboxEnabledGuard)
+  equity(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxEquityQuerySchema)) query: SandboxEquityQuery,
+  ): Promise<SandboxEquityResponse> {
+    return this.read.equity(auth.user.id, id, query);
+  }
+
+  @Get('runs/:id/report.json')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  reportJson(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReportResponse> {
+    return this.read.report(auth.user.id, id);
+  }
+
+  @Get('runs/:id/report.md')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  @Header('Content-Type', 'text/markdown; charset=utf-8')
+  reportMarkdown(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<string> {
+    return this.read.reportMarkdown(auth.user.id, id);
   }
 
   @Post('runs')

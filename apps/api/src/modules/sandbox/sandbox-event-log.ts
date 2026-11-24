@@ -204,6 +204,20 @@ export async function listSandboxEvents(
   return rows.map((row) => eventFromRow(row));
 }
 
+/**
+ * Reads the complete persisted chain, oldest first.
+ *
+ * Reserved for report generation, which must reproduce the run's
+ * `eventCount`/`eventHash` audit check. The owner journal endpoint uses the
+ * bounded `listSandboxEvents` instead.
+ */
+export async function listAllSandboxEvents(
+  executor: DbExecutor,
+  runId: string,
+): Promise<SandboxEvent[]> {
+  return (await readEventRows(executor, runId)).map((row) => eventFromRow(row));
+}
+
 async function readEventRows(executor: DbExecutor, runId: string): Promise<SandboxEventRecord[]> {
   return executor
     .select()

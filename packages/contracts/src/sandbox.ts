@@ -398,3 +398,504 @@ export const sandboxRunSchema = z.object({
   archivedAt: z.iso.datetime().nullable(),
 });
 export type SandboxRun = z.infer<typeof sandboxRunSchema>;
+
+/**
+ * Execution mode of the Stage 2 sandbox. Live paper fills use real market data
+ * and virtual money only: no wallet, key, signing or real order is involved.
+ */
+export const SANDBOX_EXECUTION_MODE = 'live-paper' as const;
+export const sandboxExecutionModeSchema = z.literal(SANDBOX_EXECUTION_MODE);
+export type SandboxExecutionMode = z.infer<typeof sandboxExecutionModeSchema>;
+
+/** Display scales returned by the read API (Postgres numeric is normalized first). */
+export const SANDBOX_USD_SCALE = 2;
+export const SANDBOX_UNITS_SCALE = 8;
+export const SANDBOX_PERCENT_SCALE = 2;
+export const SANDBOX_PERCENT_FINE_SCALE = 4;
+
+const sandboxReadTimestampSchema = z.iso.datetime();
+
+export const sandboxRunSummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1).max(80),
+  status: sandboxRunStatusSchema,
+  initialCapitalUsd: sandboxDecimalSchema,
+  cashUsd: sandboxDecimalSchema,
+  equityUsd: sandboxDecimalSchema,
+  peakEquityUsd: sandboxDecimalSchema,
+  /** `(equity / initialCapital - 1) * 100`, two decimals. */
+  returnPct: sandboxDecimalSchema,
+  /** `(peakEquity - equity) / peakEquity * 100`, four decimals, never negative. */
+  drawdownPct: sandboxDecimalSchema,
+  tokenCount: z.number().int().nonnegative(),
+  lastBarClose: sandboxReadTimestampSchema.nullable(),
+  lastTickAt: sandboxReadTimestampSchema.nullable(),
+  startedAt: sandboxReadTimestampSchema.nullable(),
+  stoppedAt: sandboxReadTimestampSchema.nullable(),
+  archivedAt: sandboxReadTimestampSchema.nullable(),
+  error: z.string().nullable(),
+  createdAt: sandboxReadTimestampSchema,
+  updatedAt: sandboxReadTimestampSchema,
+});
+export type SandboxRunSummary = z.infer<typeof sandboxRunSummarySchema>;
+
+export const sandboxRunDetailSchema = sandboxRunSchema.extend({
+  executionMode: sandboxExecutionModeSchema,
+  openPositions: z.number().int().nonnegative(),
+  openTrades: z.number().int().nonnegative(),
+  closedTrades: z.number().int().nonnegative(),
+  intents: z.number().int().nonnegative(),
+  pendingIntents: z.number().int().nonnegative(),
+  equityPoints: z.number().int().nonnegative(),
+  ledgerEntries: z.number().int().nonnegative(),
+  /** Number of persisted events; the next event receives this sequence. */
+  eventCount: z.number().int().nonnegative(),
+  eventHash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type SandboxRunDetail = z.infer<typeof sandboxRunDetailSchema>;
+
+/**
+ * One open position. Closed positions are delete-free zero tombstones in
+ * `sandbox_positions`; the API omits them and the trade journal keeps history.
+ */
+export const sandboxPositionSchema = z.object({
+  tokenId: z.string().min(1).max(80),
+  strategyKey: z.string().min(1).max(40),
+  strategyVersion: z.number().int().positive(),
+  amount: sandboxDecimalSchema,
+  avgCostUsd: sandboxDecimalSchema,
+  costBasisUsd: sandboxDecimalSchema,
+  marketPriceUsd: sandboxDecimalSchema,
+  marketValueUsd: sandboxDecimalSchema,
+  openedAt: sandboxReadTimestampSchema,
+  stopLossPct: sandboxDecimalSchema.nullable(),
+  takeProfitPct: sandboxDecimalSchema.nullable(),
+  entryIntentId: z.string().min(1).max(200),
+  feesPaidUsd: sandboxDecimalSchema,
+  updatedAt: sandboxReadTimestampSchema,
+});
+export type SandboxPosition = z.infer<typeof sandboxPositionSchema>;
+
+export const sandboxTradeSchema = z.object({
+  tradeId: z.string().min(1).max(200),
+  tokenId: z.string().min(1).max(80),
+  strategyKey: z.string().min(1).max(40),
+  strategyVersion: z.number().int().positive(),
+  entryAt: sandboxReadTimestampSchema,
+  entryPriceUsd: sandboxDecimalSchema,
+  entryAmount: sandboxDecimalSchema,
+  entryNotionalUsd: sandboxDecimalSchema,
+  entryFeeUsd: sandboxDecimalSchema,
+  entryCostBasisUsd: sandboxDecimalSchema,
+  entryIntentId: z.string().min(1).max(200).nullable(),
+  exitAt: sandboxReadTimestampSchema.nullable(),
+  exitPriceUsd: sandboxDecimalSchema.nullable(),
+  exitAmount: sandboxDecimalSchema,
+  exitNotionalUsd: sandboxDecimalSchema,
+  exitFeeUsd: sandboxDecimalSchema,
+  exitReasonCode: z.string().min(1).max(80).nullable(),
+  exitIntentId: z.string().min(1).max(200).nullable(),
+  realizedPnlUsd: sandboxDecimalSchema,
+  status: z.enum(['open', 'closed']),
+  updatedAt: sandboxReadTimestampSchema,
+});
+export type SandboxTrade = z.infer<typeof sandboxTradeSchema>;
+
+export const sandboxIntentStatusSchema = z.enum([
+  'pending',
+  'filled',
+  'partial',
+  'rejected',
+  'expired',
+]);
+export type SandboxIntentStatus = z.infer<typeof sandboxIntentStatusSchema>;
+
+export const sandboxIntentSchema = z.object({
+  intentId: z.string().min(1).max(200),
+  tokenId: z.string().min(1).max(80),
+  side: z.enum(['buy', 'sell']),
+  strategyKey: z.string().min(1).max(40),
+  strategyVersion: z.number().int().positive(),
+  status: sandboxIntentStatusSchema,
+  requestedUsd: sandboxDecimalSchema.nullable(),
+  requestedAmount: sandboxDecimalSchema.nullable(),
+  filledUsd: sandboxDecimalSchema,
+  filledAmount: sandboxDecimalSchema,
+  priceUsd: sandboxDecimalSchema.nullable(),
+  stopLossPct: sandboxDecimalSchema.nullable(),
+  takeProfitPct: sandboxDecimalSchema.nullable(),
+  feeUsd: sandboxDecimalSchema,
+  reasonCode: z.string().min(1).max(80),
+  strategyReasonCode: z.string().min(1).max(80).nullable(),
+  reasonText: z.string().max(2_000),
+  decisionTime: sandboxReadTimestampSchema,
+  fillTime: sandboxReadTimestampSchema.nullable(),
+});
+export type SandboxIntent = z.infer<typeof sandboxIntentSchema>;
+
+const sandboxEventDecisionSchema = z.object({
+  action: z.enum(['buy', 'sell', 'hold', 'block', 'noop']),
+  sizeUsd: sandboxDecimalSchema.nullable(),
+  reasonCode: z.string().min(1).max(80),
+  reasonText: z.string().max(2_000),
+});
+
+const sandboxEventAlternativeSchema = z.object({
+  action: z.enum(['buy', 'sell', 'hold', 'block', 'noop']),
+  reasonCode: z.string().min(1).max(80),
+  whyNot: z.string().max(2_000),
+});
+
+const sandboxEventRiskCheckSchema = z.object({
+  name: z.string().min(1).max(120),
+  value: z.string().max(120),
+  limit: z.string().max(120),
+  passed: z.boolean(),
+});
+
+/**
+ * One journal event. Canonical hashing metadata (`prevHash`, `hash`) and the
+ * decision/why-not/risk-check payloads are exposed; the raw state before/after
+ * and `inputs` blobs stay out of the read API to keep the journal bounded.
+ */
+export const sandboxEventSchema = z.object({
+  seq: z.number().int().nonnegative(),
+  clockTime: sandboxReadTimestampSchema,
+  module: z.enum([
+    'run',
+    'data',
+    'clock',
+    'regime',
+    'strategy',
+    'portfolio',
+    'risk',
+    'execution',
+    'ledger',
+    'manual',
+  ]),
+  eventType: z.string().min(1).max(120),
+  severity: z.enum(['debug', 'info', 'warn', 'error', 'decision']),
+  tokenId: z.string().min(1).max(80).nullable(),
+  strategyId: z.string().min(1).max(120).nullable(),
+  regime: z.string().min(1).max(40).nullable(),
+  decision: sandboxEventDecisionSchema.nullable(),
+  alternatives: z.array(sandboxEventAlternativeSchema),
+  riskChecks: z.array(sandboxEventRiskCheckSchema),
+  dataSnapshotId: z.string().min(1).max(200),
+  configVersion: z.string().min(1).max(200),
+  seed: z.number().int(),
+  correlationId: z.string().min(1).max(200).nullable(),
+  reasonCode: z.string().min(1).max(80).nullable(),
+  reasonText: z.string().max(2_000).nullable(),
+  recordedAt: sandboxReadTimestampSchema,
+  prevHash: z.string().regex(/^[0-9a-f]{64}$/),
+  hash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type SandboxEvent = z.infer<typeof sandboxEventSchema>;
+
+export const sandboxEquityPointSchema = z.object({
+  clockTime: sandboxReadTimestampSchema,
+  equityUsd: sandboxDecimalSchema,
+  cashUsd: sandboxDecimalSchema,
+  positionsValueUsd: sandboxDecimalSchema,
+  drawdownPct: sandboxDecimalSchema,
+});
+export type SandboxEquityPoint = z.infer<typeof sandboxEquityPointSchema>;
+
+export const sandboxRunsQuerySchema = z.object({
+  status: sandboxRunStatusSchema.optional(),
+  includeArchived: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => value === true || value === 'true')
+    .default(false),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+export type SandboxRunsQuery = z.infer<typeof sandboxRunsQuerySchema>;
+
+export const sandboxPageQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+export type SandboxPageQuery = z.infer<typeof sandboxPageQuerySchema>;
+
+export const sandboxEquityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(2_000).default(500),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+export type SandboxEquityQuery = z.infer<typeof sandboxEquityQuerySchema>;
+
+export const sandboxEventsQuerySchema = z.object({
+  /** Exclusive lower bound: return events with `seq > afterSeq`. */
+  afterSeq: z.coerce.number().int().min(0).optional(),
+  limit: z.coerce.number().int().min(1).max(1_000).default(200),
+});
+export type SandboxEventsQuery = z.infer<typeof sandboxEventsQuerySchema>;
+
+export const sandboxRunsResponseSchema = z.object({
+  runs: z.array(sandboxRunSummarySchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxRunsResponse = z.infer<typeof sandboxRunsResponseSchema>;
+
+export const sandboxPositionsResponseSchema = z.object({
+  positions: z.array(sandboxPositionSchema),
+});
+export type SandboxPositionsResponse = z.infer<typeof sandboxPositionsResponseSchema>;
+
+export const sandboxTradesResponseSchema = z.object({
+  trades: z.array(sandboxTradeSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxTradesResponse = z.infer<typeof sandboxTradesResponseSchema>;
+
+export const sandboxIntentsResponseSchema = z.object({
+  intents: z.array(sandboxIntentSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxIntentsResponse = z.infer<typeof sandboxIntentsResponseSchema>;
+
+export const sandboxEventsResponseSchema = z.object({
+  events: z.array(sandboxEventSchema),
+  hasMore: z.boolean(),
+  nextAfterSeq: z.number().int().nonnegative().nullable(),
+});
+export type SandboxEventsResponse = z.infer<typeof sandboxEventsResponseSchema>;
+
+export const sandboxEquityResponseSchema = z.object({
+  points: z.array(sandboxEquityPointSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxEquityResponse = z.infer<typeof sandboxEquityResponseSchema>;
+
+export const sandboxRunCountsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  draft: z.number().int().nonnegative(),
+  running: z.number().int().nonnegative(),
+  paused: z.number().int().nonnegative(),
+  stopped: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  archived: z.number().int().nonnegative(),
+});
+export type SandboxRunCounts = z.infer<typeof sandboxRunCountsSchema>;
+
+export const sandboxUniverseHealthSchema = z.object({
+  tokens: z.number().int().nonnegative(),
+  enabledTokens: z.number().int().nonnegative(),
+  staleTokens: z.array(z.string().min(1).max(80)),
+  lastCandleAt: sandboxReadTimestampSchema.nullable(),
+});
+export type SandboxUniverseHealth = z.infer<typeof sandboxUniverseHealthSchema>;
+
+export const sandboxOverviewSchema = z.object({
+  enabled: z.boolean(),
+  executionMode: sandboxExecutionModeSchema,
+  runs: sandboxRunCountsSchema,
+  /** Running, non-archived runs, newest first (bounded by the read service). */
+  activeRuns: z.array(sandboxRunSummarySchema),
+  lastTickAt: sandboxReadTimestampSchema.nullable(),
+  universe: sandboxUniverseHealthSchema,
+});
+export type SandboxOverview = z.infer<typeof sandboxOverviewSchema>;
+
+/*
+ * Report contract.
+ *
+ * The JSON mirrors the deterministic Stage 1C `RunReport` (numeric epoch-ms
+ * timestamps, 8-decimal units, 2-decimal USD/percent) and wraps it with the
+ * Stage 2 `executionMode` label. Keeping the wrapper at the API level preserves
+ * the core report type and its `reportHash`.
+ */
+const sandboxReportTimestampSchema = z.number().int().nonnegative();
+const sandboxReportDecimalSchema = sandboxDecimalSchema;
+const sandboxReportTimestampNullableSchema = sandboxReportTimestampSchema.nullable();
+const sandboxReportDecimalNullableSchema = sandboxReportDecimalSchema.nullable();
+
+export const sandboxReportConfigSchema = z.object({
+  runId: z.string().min(1),
+  seed: z.number().int(),
+  timeframe: z.string().min(1),
+  tokenIds: z.array(z.string().min(1)),
+  initialCapitalUsd: sandboxReportDecimalSchema,
+  feeBps: z.number(),
+  slippageBps: z.number(),
+  liquidityCapPct: z.number(),
+  maxPendingBars: z.number().int(),
+  cooldownHoursAfterStop: z.number(),
+  counterfactualHorizonHours: z.number(),
+});
+export type SandboxReportConfig = z.infer<typeof sandboxReportConfigSchema>;
+
+export const sandboxReportPeriodSchema = z.object({
+  firstBar: sandboxReportTimestampSchema,
+  lastBar: sandboxReportTimestampSchema,
+  bars: z.number().int().nonnegative(),
+  tokens: z.array(z.string().min(1)),
+});
+export type SandboxReportPeriod = z.infer<typeof sandboxReportPeriodSchema>;
+
+export const sandboxReportStrategyMetricSchema = z.object({
+  strategyKey: z.string().min(1),
+  tradeCount: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+  realizedPnlUsd: sandboxReportDecimalSchema,
+  winRatePct: sandboxReportDecimalNullableSchema,
+});
+export type SandboxReportStrategyMetric = z.infer<typeof sandboxReportStrategyMetricSchema>;
+
+export const sandboxReportTokenMetricSchema = z.object({
+  tokenId: z.string().min(1),
+  tradeCount: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+  realizedPnlUsd: sandboxReportDecimalSchema,
+  winRatePct: sandboxReportDecimalNullableSchema,
+});
+export type SandboxReportTokenMetric = z.infer<typeof sandboxReportTokenMetricSchema>;
+
+export const sandboxReportMetricsSchema = z.object({
+  initialCapitalUsd: sandboxReportDecimalSchema,
+  finalEquityUsd: sandboxReportDecimalSchema,
+  totalReturnPct: sandboxReportDecimalSchema,
+  maxDrawdownPct: sandboxReportDecimalSchema,
+  peakEquityUsd: sandboxReportDecimalSchema,
+  finalCashUsd: sandboxReportDecimalSchema,
+  finalPositionsValueUsd: sandboxReportDecimalSchema,
+  realizedPnlUsd: sandboxReportDecimalSchema,
+  unrealizedPnlUsd: sandboxReportDecimalSchema,
+  feesPaidUsd: sandboxReportDecimalSchema,
+  tradeCount: z.number().int().nonnegative(),
+  wins: z.number().int().nonnegative(),
+  losses: z.number().int().nonnegative(),
+  winRatePct: sandboxReportDecimalNullableSchema,
+  profitFactor: sandboxReportDecimalNullableSchema,
+  averageWinUsd: sandboxReportDecimalNullableSchema,
+  averageLossUsd: sandboxReportDecimalNullableSchema,
+  timeInMarketPct: sandboxReportDecimalSchema,
+  averageExposurePct: sandboxReportDecimalSchema,
+  perStrategy: z.array(sandboxReportStrategyMetricSchema),
+  perToken: z.array(sandboxReportTokenMetricSchema),
+});
+export type SandboxReportMetrics = z.infer<typeof sandboxReportMetricsSchema>;
+
+export const sandboxReportEquityPointSchema = z.object({
+  clockTime: sandboxReportTimestampSchema,
+  equityUsd: sandboxReportDecimalSchema,
+  cashUsd: sandboxReportDecimalSchema,
+  positionsValueUsd: sandboxReportDecimalSchema,
+  drawdownPct: sandboxReportDecimalSchema,
+});
+export type SandboxReportEquityPoint = z.infer<typeof sandboxReportEquityPointSchema>;
+
+export const sandboxReportPositionSchema = z.object({
+  tokenId: z.string().min(1),
+  strategyKey: z.string().min(1),
+  strategyVersion: z.number().int().positive(),
+  amount: sandboxReportDecimalSchema,
+  avgCostUsd: sandboxReportDecimalSchema,
+  marketPriceUsd: sandboxReportDecimalSchema,
+  marketValueUsd: sandboxReportDecimalSchema,
+  openedAt: sandboxReportTimestampSchema,
+  stopLossPct: sandboxReportDecimalNullableSchema,
+  takeProfitPct: sandboxReportDecimalNullableSchema,
+});
+export type SandboxReportPosition = z.infer<typeof sandboxReportPositionSchema>;
+
+export const sandboxReportTradeSchema = z.object({
+  tradeId: z.string().min(1),
+  tokenId: z.string().min(1),
+  strategyKey: z.string().min(1),
+  strategyVersion: z.number().int().positive(),
+  entryAt: sandboxReportTimestampSchema,
+  entryPriceUsd: sandboxReportDecimalSchema,
+  entryAmount: sandboxReportDecimalSchema,
+  entryNotionalUsd: sandboxReportDecimalSchema,
+  entryFeeUsd: sandboxReportDecimalSchema,
+  entryCostBasisUsd: sandboxReportDecimalSchema,
+  entryIntentId: z.string().min(1),
+  exitAt: sandboxReportTimestampNullableSchema,
+  exitPriceUsd: sandboxReportDecimalNullableSchema,
+  exitAmount: sandboxReportDecimalSchema,
+  exitNotionalUsd: sandboxReportDecimalSchema,
+  exitFeeUsd: sandboxReportDecimalSchema,
+  exitReasonCode: z.string().min(1).nullable(),
+  exitIntentId: z.string().min(1).nullable(),
+  realizedPnlUsd: sandboxReportDecimalSchema,
+  status: z.enum(['open', 'closed']),
+});
+export type SandboxReportTrade = z.infer<typeof sandboxReportTradeSchema>;
+
+export const sandboxReportIntentSchema = z.object({
+  intentId: z.string().min(1),
+  tokenId: z.string().min(1),
+  side: z.enum(['buy', 'sell']),
+  strategyKey: z.string().min(1),
+  strategyVersion: z.number().int().positive(),
+  status: z.enum(['filled', 'partial', 'rejected', 'expired']),
+  requestedUsd: sandboxReportDecimalNullableSchema,
+  requestedAmount: sandboxReportDecimalNullableSchema,
+  filledUsd: sandboxReportDecimalSchema,
+  filledAmount: sandboxReportDecimalSchema,
+  priceUsd: sandboxReportDecimalNullableSchema,
+  feeUsd: sandboxReportDecimalSchema,
+  reasonCode: z.string().min(1),
+  strategyReasonCode: z.string().min(1),
+  reasonText: z.string(),
+  decisionTime: sandboxReportTimestampSchema,
+  fillTime: sandboxReportTimestampNullableSchema,
+});
+export type SandboxReportIntent = z.infer<typeof sandboxReportIntentSchema>;
+
+export const sandboxReportCounterfactualSchema = z.object({
+  tokenId: z.string().min(1),
+  decisionTime: sandboxReportTimestampSchema,
+  reasonCode: z.string().min(1),
+  entryAt: sandboxReportTimestampNullableSchema,
+  entryPriceUsd: sandboxReportDecimalNullableSchema,
+  exitAt: sandboxReportTimestampNullableSchema,
+  exitPriceUsd: sandboxReportDecimalNullableSchema,
+  returnPct: sandboxReportDecimalNullableSchema,
+  outcome: z.enum(['missed_opportunity', 'bad_save', 'neutral', 'insufficient_data']),
+  hindsight: z.literal(true),
+  usedForDecisions: z.literal(false),
+});
+export type SandboxReportCounterfactual = z.infer<typeof sandboxReportCounterfactualSchema>;
+
+export const sandboxRunReportSchema = z.object({
+  paperVersion: z.string().min(1),
+  runId: z.uuid(),
+  seed: z.number().int(),
+  configVersion: z.string().min(1),
+  dataSnapshotId: z.string().min(1),
+  settingsVersion: z.string().min(1),
+  config: sandboxReportConfigSchema,
+  period: sandboxReportPeriodSchema,
+  metrics: sandboxReportMetricsSchema,
+  equityCurve: z.array(sandboxReportEquityPointSchema),
+  positions: z.array(sandboxReportPositionSchema),
+  trades: z.array(sandboxReportTradeSchema),
+  intentJournal: z.array(sandboxReportIntentSchema),
+  counterfactuals: z.array(sandboxReportCounterfactualSchema),
+  eventCount: z.number().int().nonnegative(),
+  eventHash: z.string().regex(/^[0-9a-f]{64}$/),
+  ledgerEntries: z.number().int().nonnegative(),
+  reconciliationOk: z.boolean(),
+  reconciliationChecks: z.array(z.string()),
+  reportHash: z.string().regex(/^[0-9a-f]{64}$/),
+});
+export type SandboxRunReport = z.infer<typeof sandboxRunReportSchema>;
+
+export const sandboxReportResponseSchema = z.object({
+  executionMode: sandboxExecutionModeSchema,
+  report: sandboxRunReportSchema,
+});
+export type SandboxReportResponse = z.infer<typeof sandboxReportResponseSchema>;

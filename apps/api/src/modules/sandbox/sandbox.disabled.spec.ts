@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
+import { SandboxReadService } from './sandbox-read.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED } from './sandbox.types';
@@ -15,6 +16,7 @@ describe('Sandbox module with SANDBOX_ENABLED=0', () => {
         { provide: SANDBOX_ENABLED, useValue: false },
         { provide: SandboxTokensService, useValue: {} },
         { provide: SandboxRunService, useValue: {} },
+        { provide: SandboxReadService, useValue: {} },
         SandboxEnabledGuard,
       ],
     }).compile();
