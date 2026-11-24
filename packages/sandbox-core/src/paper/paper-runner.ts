@@ -63,7 +63,8 @@ export type PaperRunErrorCode =
   | 'PAPER_NO_CANDLES'
   | 'PAPER_NO_MARK'
   | 'PAPER_MIXED_TIMEFRAMES'
-  | 'PAPER_BAD_SETTINGS';
+  | 'PAPER_BAD_SETTINGS'
+  | 'PAPER_EVALUATE_FROM_OUT_OF_RANGE';
 
 /** Typed run-level failure: bad configuration, no data or no mark for a position. */
 export class PaperRunError extends Error {
@@ -351,13 +352,31 @@ export class PaperRunner {
       );
     }
 
-    const barCloses = [...new Set(candles.map((candle) => candle.openTime + step))].sort(
+    const allBarCloses = [...new Set(candles.map((candle) => candle.openTime + step))].sort(
       (left, right) => left - right,
     );
     const candleByOpen = new Map<string, Candle>();
     for (const candle of candles) {
       candleByOpen.set(`${candle.tokenId}|${candle.openTime}`, candle);
     }
+
+    // `evaluateFrom` starts the evaluation at the first bar that opens at or
+    // after it; every earlier candle stays in the market view as lookback
+    // history only. A bar opens at `close - step`, so a 30-day window is exactly
+    // 720 one-hour bars rather than 721. Without it the whole series is evaluated
+    // exactly as Stage 1C always did.
+    const evaluateFrom = input.evaluateFrom;
+    const startIndex =
+      evaluateFrom === undefined
+        ? 0
+        : allBarCloses.findIndex((close) => close - step >= evaluateFrom);
+    if (startIndex < 0) {
+      throw new PaperRunError(
+        'PAPER_EVALUATE_FROM_OUT_OF_RANGE',
+        `evaluateFrom ${String(evaluateFrom)} is after the last supplied bar close`,
+      );
+    }
+    const barCloses = startIndex === 0 ? allBarCloses : allBarCloses.slice(startIndex);
 
     const firstClose = barCloses[0] as Timestamp;
     const lastClose = barCloses[barCloses.length - 1] as Timestamp;

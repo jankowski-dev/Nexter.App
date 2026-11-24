@@ -423,6 +423,13 @@ export interface CounterfactualInput {
  *
  * `initialCapitalUsd` is optional because the approved $1,000 paper capital is
  * a default; a caller may supply a different starting balance.
+ *
+ * `evaluateFrom` is the optional historical-replay boundary: when set, the
+ * supplied candles before it are lookback history only and the loop, equity
+ * curve, trades and report start at the first bar that opens at or after it.
+ * The market view still receives the full candle set, so regimes and indicators
+ * can use the prefix. Omitting it evaluates every supplied bar, exactly as
+ * Stage 1C always did.
  */
 export interface PaperRunInput {
   readonly runId: string;
@@ -435,6 +442,7 @@ export interface PaperRunInput {
   readonly paper: PaperRunSettings;
   readonly initialState?: EngineState;
   readonly initialCapitalUsd?: string;
+  readonly evaluateFrom?: Timestamp;
 }
 
 /**
@@ -453,6 +461,40 @@ export interface PaperRunResult {
   readonly equityCurve: readonly EquityPoint[];
   readonly eventCount: number;
   readonly eventHash: string;
+}
+
+/**
+ * Input to the reusable candle-driven paper run.
+ *
+ * This is the Stage 1C report pipeline (`PaperRunner` + final marks + metrics +
+ * hindsight counterfactuals + `buildReport`) without any file handling, so a
+ * caller such as the historical replay worker can run it over candles it loaded
+ * elsewhere. `configVersion` and `dataSnapshotId` are supplied because they are
+ * derived from the frozen run config and the full input candle set, which the
+ * caller owns. `evaluateFrom` is forwarded to `PaperRunner` unchanged.
+ */
+export interface RunPaperFromCandlesInput {
+  readonly runId: string;
+  readonly seed: number;
+  readonly configVersion: string;
+  readonly dataSnapshotId: string;
+  readonly tokenIds: readonly string[];
+  readonly candles: readonly Candle[];
+  readonly settings: SandboxDecisionSettings;
+  readonly paper: PaperRunSettings;
+  readonly initialCapitalUsd?: string;
+  readonly evaluateFrom?: Timestamp;
+}
+
+/** Result of `runPaperFromCandles`: the deterministic report and the raw run. */
+export interface RunPaperFromCandlesResult {
+  readonly report: RunReport;
+  readonly result: PaperRunResult;
+  /**
+   * The full event journal the report's count/hash describe. Callers that only
+   * need the report may ignore it; the CLI writes it as `events.jsonl`.
+   */
+  readonly events: readonly SandboxEvent[];
 }
 
 /** Marked period of one paper run. */

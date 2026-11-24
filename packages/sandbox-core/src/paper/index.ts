@@ -7,3 +7,4 @@ export * from './metrics';
 export * from './paper-logger';
 export * from './paper-runner';
 export * from './report';
+export * from './run-paper';

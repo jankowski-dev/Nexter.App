@@ -833,6 +833,59 @@ describe('PaperRunner event log', () => {
   });
 });
 
+describe('PaperRunner evaluateFrom', () => {
+  function evaluationInput(candles: readonly Candle[], evaluateFrom?: Timestamp): PaperRunInput {
+    return {
+      runId: 'evaluate-from',
+      seed: 7,
+      configVersion: 'v1',
+      dataSnapshotId: 'snap',
+      tokenIds: ['token'],
+      candles,
+      settings: DEFAULT_SETTINGS,
+      paper: DEFAULT_PAPER_SETTINGS,
+      initialCapitalUsd: '1000.00',
+      ...(evaluateFrom === undefined ? {} : { evaluateFrom }),
+    };
+  }
+
+  it('starts the evaluation at evaluateFrom and keeps prefix candles as lookback', async () => {
+    const candles = buildCandles(steadyCloses(300), { start: START });
+    const log = new MemoryEventLog();
+    const result = await new PaperRunner(log).run(evaluationInput(candles, START + 100 * HOUR));
+
+    expect(result.equityCurve[0]?.clockTime).toBe(START + 101 * HOUR);
+    expect(result.equityCurve).toHaveLength(200);
+    // Prefix candles are lookback only: no ledger entry may predate evaluateFrom.
+    expect(result.ledger.entries.every((entry) => entry.clockTime >= START + 101 * HOUR)).toBe(
+      true,
+    );
+    const started = eventsOfType(log, 'paper.run_started')[0];
+    expect(started?.clockTime).toBe(iso(START + 101 * HOUR));
+    expect(started?.inputs.bars).toBe(200);
+  });
+
+  it('rejects an evaluateFrom with no bar at or after it', async () => {
+    const candles = buildCandles(steadyCloses(30), { start: START });
+    await expect(
+      new PaperRunner(new MemoryEventLog()).run(evaluationInput(candles, START + 10_000 * HOUR)),
+    ).rejects.toMatchObject({
+      name: 'PaperRunError',
+      code: 'PAPER_EVALUATE_FROM_OUT_OF_RANGE',
+    });
+  });
+
+  it('evaluates the whole series exactly as before when evaluateFrom is omitted', async () => {
+    const candles = buildCandles(steadyCloses(30), { start: START });
+    const implicit = await new PaperRunner(new MemoryEventLog()).run(evaluationInput(candles));
+    const zero = await new PaperRunner(new MemoryEventLog()).run(evaluationInput(candles, START));
+
+    expect(zero.equityCurve).toEqual(implicit.equityCurve);
+    expect(zero.eventHash).toBe(implicit.eventHash);
+    expect(zero.equityCurve).toHaveLength(30);
+  });
+});
+
 describe('PaperRunner result shape', () => {
   it('echoes the paper config and reports the whole log hash', async () => {
     const { result, log } = await runTrend();
