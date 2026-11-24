@@ -1,8 +1,40 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
-import { sandboxCandles, sandboxTokens, type Database } from '@nexter/db';
+import {
+  sandboxCandles,
+  sandboxEquityPoints,
+  sandboxIntents,
+  sandboxLedgerEntries,
+  sandboxPositions,
+  sandboxRuns,
+  sandboxRunTokens,
+  sandboxTokens,
+  sandboxTrades,
+  type Database,
+  type DbExecutor,
+} from '@nexter/db';
 import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
+import type { SandboxEvent } from '@nexter/sandbox-core';
 import { DB } from '../../shared/db/db.module';
+import { listSandboxEvents, SandboxEventLog } from './sandbox-event-log';
+import {
+  assertSandboxTickInput,
+  buildSandboxClosedPositionTokenIds,
+  buildSandboxEquityPointRow,
+  buildSandboxIntentRows,
+  buildSandboxLedgerEntryRows,
+  buildSandboxPositionRows,
+  buildSandboxTradeRows,
+  isSandboxRunStatus,
+  parseEngineState,
+  parseOptionalEngineState,
+  parseOptionalLedgerState,
+  parsePaperLedgerState,
+  SandboxPersistenceError,
+  type SandboxRunSnapshot,
+  type SandboxTickInput,
+  type SandboxTickSummary,
+} from './sandbox.types';
 
 export interface SandboxCandleUpsertOptions {
   /**
@@ -184,4 +216,320 @@ export class SandboxRepository {
       ]),
     );
   }
+
+  /**
+   * Loads one run with its frozen token snapshot and validated JSONB state.
+   *
+   * Returns `null` for an unknown run. A draft run that has not initialised its
+   * state yet reports `null` engine/ledger state; any malformed state fails
+   * closed with `SANDBOX_STATE_INVALID`.
+   */
+  async loadRun(runId: string, executor: DbExecutor = this.db): Promise<SandboxRunSnapshot | null> {
+    const [row] = await executor
+      .select()
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId))
+      .limit(1);
+    if (!row) return null;
+
+    if (!isSandboxRunStatus(row.status)) {
+      throw new SandboxPersistenceError(
+        'SANDBOX_STATE_INVALID',
+        `Sandbox run ${runId} has an unknown status "${row.status}"`,
+      );
+    }
+
+    const tokens = await executor
+      .select({
+        tokenKey: sandboxRunTokens.tokenKey,
+        symbol: sandboxRunTokens.symbol,
+        chain: sandboxRunTokens.chain,
+        contractAddress: sandboxRunTokens.contractAddress,
+        enabled: sandboxRunTokens.enabled,
+      })
+      .from(sandboxRunTokens)
+      .where(eq(sandboxRunTokens.runId, runId))
+      .orderBy(asc(sandboxRunTokens.tokenKey));
+
+    return {
+      id: row.id,
+      userId: row.userId,
+      name: row.name,
+      status: row.status,
+      initialCapitalUsd: row.initialCapitalUsd,
+      cashUsd: row.cashUsd,
+      equityUsd: row.equityUsd,
+      peakEquityUsd: row.peakEquityUsd,
+      dayStartEquityUsd: row.dayStartEquityUsd,
+      settings: row.settings,
+      engineState: parseOptionalEngineState(row.engineState),
+      ledgerState: parseOptionalLedgerState(row.ledgerState),
+      lastBarClose: row.lastBarClose ?? null,
+      eventSeq: row.eventSeq,
+      eventHash: row.eventHash,
+      lastTickAt: row.lastTickAt ?? null,
+      error: row.error ?? null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      archivedAt: row.archivedAt ?? null,
+      tokens,
+    };
+  }
+
+  /** Reads a bounded slice of one run's persisted event chain. */
+  async listEvents(
+    runId: string,
+    options: { afterSeq?: number; limit?: number } = {},
+  ): Promise<SandboxEvent[]> {
+    return listSandboxEvents(this.db, runId, options);
+  }
+
+  /**
+   * Runs one tick in a single transaction: loads the validated run state and
+   * verified event log, lets the caller decide/append events, then persists the
+   * resulting state and projections. Any thrown error rolls back events, state
+   * and projections together.
+   */
+  async commitTick(
+    runId: string,
+    work: (session: SandboxTickSession) => Promise<SandboxTickInput>,
+  ): Promise<SandboxTickSummary> {
+    return this.db.transaction(async (tx) => {
+      const run = await this.loadRun(runId, tx);
+      if (!run) {
+        throw new SandboxPersistenceError(
+          'SANDBOX_RUN_NOT_FOUND',
+          `Sandbox run ${runId} does not exist`,
+        );
+      }
+      const eventLog = await SandboxEventLog.load(tx, runId);
+      const tick = await work({ tx, run, eventLog });
+      return this.persistTickInTransaction(tx, runId, tick);
+    });
+  }
+
+  /**
+   * Persists one tick in its own transaction.
+   *
+   * Use `commitTick` when the tick also appends events, so the event rows and
+   * the run state commit atomically.
+   */
+  async persistTick(runId: string, tick: SandboxTickInput): Promise<SandboxTickSummary> {
+    return this.db.transaction((tx) => this.persistTickInTransaction(tx, runId, tick));
+  }
+
+  /**
+   * Writes run state and every query projection inside the caller's
+   * transaction. Events are written by `SandboxEventLog` in the same
+   * transaction; this method persists the post-append `eventSeq`/`eventHash`
+   * head explicitly and never invents a chain.
+   */
+  async persistTickInTransaction(
+    executor: DbExecutor,
+    runId: string,
+    tick: SandboxTickInput,
+  ): Promise<SandboxTickSummary> {
+    assertSandboxTickInput(tick);
+    const engineState = parseEngineState(tick.engineState);
+    const ledgerState = parsePaperLedgerState(tick.ledgerState);
+
+    const [head] = await executor
+      .select({ eventSeq: sandboxRuns.eventSeq, eventHash: sandboxRuns.eventHash })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId))
+      .limit(1);
+    if (!head) {
+      throw new SandboxPersistenceError(
+        'SANDBOX_RUN_NOT_FOUND',
+        `Sandbox run ${runId} does not exist`,
+      );
+    }
+
+    const now = new Date();
+    await executor
+      .update(sandboxRuns)
+      .set({
+        status: tick.status,
+        cashUsd: tick.cashUsd,
+        equityUsd: tick.equityUsd,
+        peakEquityUsd: tick.peakEquityUsd,
+        dayStartEquityUsd: tick.dayStartEquityUsd,
+        engineState: jsonObject(engineState),
+        ledgerState: jsonObject(ledgerState),
+        lastBarClose: tick.lastBarClose,
+        eventSeq: head.eventSeq,
+        eventHash: head.eventHash,
+        lastTickAt: tick.lastTickAt,
+        error: tick.error ?? null,
+        updatedAt: now,
+      })
+      .where(eq(sandboxRuns.id, runId));
+
+    const positionRows = buildSandboxPositionRows(runId, ledgerState, tick.markedPositions);
+    if (positionRows.length > 0) {
+      await executor
+        .insert(sandboxPositions)
+        .values(positionRows.map((row) => ({ ...row, updatedAt: now })))
+        .onConflictDoUpdate({
+          target: [sandboxPositions.runId, sandboxPositions.tokenId],
+          set: {
+            strategyKey: sql`excluded."strategy_key"`,
+            strategyVersion: sql`excluded."strategy_version"`,
+            amount: sql`excluded."amount"`,
+            avgCostUsd: sql`excluded."avg_cost_usd"`,
+            costBasisUsd: sql`excluded."cost_basis_usd"`,
+            marketPriceUsd: sql`excluded."market_price_usd"`,
+            marketValueUsd: sql`excluded."market_value_usd"`,
+            openedAt: sql`excluded."opened_at"`,
+            stopLossPct: sql`excluded."stop_loss_pct"`,
+            takeProfitPct: sql`excluded."take_profit_pct"`,
+            entryIntentId: sql`excluded."entry_intent_id"`,
+            feesPaidUsd: sql`excluded."fees_paid_usd"`,
+            updatedAt: sql`excluded."updated_at"`,
+          },
+        });
+    }
+
+    // Delete-free close: a position the ledger no longer holds keeps its row as
+    // a zero-amount tombstone, so the projection never leaks a stale position.
+    const existingPositions = await executor
+      .select({ tokenId: sandboxPositions.tokenId })
+      .from(sandboxPositions)
+      .where(eq(sandboxPositions.runId, runId));
+    const closedTokenIds = buildSandboxClosedPositionTokenIds(
+      existingPositions.map((row) => row.tokenId),
+      positionRows.map((row) => row.tokenId),
+    );
+    if (closedTokenIds.length > 0) {
+      await executor
+        .update(sandboxPositions)
+        .set({
+          amount: '0.00000000',
+          costBasisUsd: '0.00',
+          marketValueUsd: '0.00',
+          updatedAt: now,
+        })
+        .where(
+          and(eq(sandboxPositions.runId, runId), inArray(sandboxPositions.tokenId, closedTokenIds)),
+        );
+    }
+
+    const tradeRows = buildSandboxTradeRows(runId, ledgerState);
+    if (tradeRows.length > 0) {
+      await executor
+        .insert(sandboxTrades)
+        .values(tradeRows.map((row) => ({ ...row, updatedAt: now })))
+        .onConflictDoUpdate({
+          target: [sandboxTrades.runId, sandboxTrades.tradeId],
+          set: {
+            tokenId: sql`excluded."token_id"`,
+            strategyKey: sql`excluded."strategy_key"`,
+            strategyVersion: sql`excluded."strategy_version"`,
+            entryAt: sql`excluded."entry_at"`,
+            entryPriceUsd: sql`excluded."entry_price_usd"`,
+            entryAmount: sql`excluded."entry_amount"`,
+            entryNotionalUsd: sql`excluded."entry_notional_usd"`,
+            entryFeeUsd: sql`excluded."entry_fee_usd"`,
+            entryCostBasisUsd: sql`excluded."entry_cost_basis_usd"`,
+            entryIntentId: sql`excluded."entry_intent_id"`,
+            exitAt: sql`excluded."exit_at"`,
+            exitPriceUsd: sql`excluded."exit_price_usd"`,
+            exitAmount: sql`excluded."exit_amount"`,
+            exitNotionalUsd: sql`excluded."exit_notional_usd"`,
+            exitFeeUsd: sql`excluded."exit_fee_usd"`,
+            exitReasonCode: sql`excluded."exit_reason_code"`,
+            exitIntentId: sql`excluded."exit_intent_id"`,
+            realizedPnlUsd: sql`excluded."realized_pnl_usd"`,
+            status: sql`excluded."status"`,
+            updatedAt: sql`excluded."updated_at"`,
+          },
+        });
+    }
+
+    // The ledger is append-only: re-persisting an existing sequence is a no-op
+    // and never overwrites a booked entry.
+    const [ledgerHead] = await executor
+      .select({ sequence: sql<number | null>`max(${sandboxLedgerEntries.sequence})` })
+      .from(sandboxLedgerEntries)
+      .where(eq(sandboxLedgerEntries.runId, runId));
+    const lastSequence = ledgerHead?.sequence ?? 0;
+    const entryRows = buildSandboxLedgerEntryRows(runId, ledgerState).filter(
+      (row) => row.sequence > lastSequence,
+    );
+    if (entryRows.length > 0) {
+      await executor
+        .insert(sandboxLedgerEntries)
+        .values(entryRows)
+        .onConflictDoNothing({
+          target: [sandboxLedgerEntries.runId, sandboxLedgerEntries.sequence],
+        });
+    }
+
+    const intentRows = buildSandboxIntentRows(runId, tick.intents);
+    if (intentRows.length > 0) {
+      await executor
+        .insert(sandboxIntents)
+        .values(intentRows)
+        .onConflictDoUpdate({
+          target: [sandboxIntents.runId, sandboxIntents.intentId],
+          set: {
+            tokenId: sql`excluded."token_id"`,
+            side: sql`excluded."side"`,
+            strategyKey: sql`excluded."strategy_key"`,
+            strategyVersion: sql`excluded."strategy_version"`,
+            status: sql`excluded."status"`,
+            requestedUsd: sql`excluded."requested_usd"`,
+            requestedAmount: sql`excluded."requested_amount"`,
+            filledUsd: sql`excluded."filled_usd"`,
+            filledAmount: sql`excluded."filled_amount"`,
+            priceUsd: sql`excluded."price_usd"`,
+            feeUsd: sql`excluded."fee_usd"`,
+            reasonCode: sql`excluded."reason_code"`,
+            strategyReasonCode: sql`excluded."strategy_reason_code"`,
+            reasonText: sql`excluded."reason_text"`,
+            decisionTime: sql`excluded."decision_time"`,
+            fillTime: sql`excluded."fill_time"`,
+          },
+        });
+    }
+
+    const equityRow = buildSandboxEquityPointRow(runId, tick.equityPoint);
+    await executor
+      .insert(sandboxEquityPoints)
+      .values(equityRow)
+      .onConflictDoUpdate({
+        target: [sandboxEquityPoints.runId, sandboxEquityPoints.clockTime],
+        set: {
+          equityUsd: sql`excluded."equity_usd"`,
+          cashUsd: sql`excluded."cash_usd"`,
+          positionsValueUsd: sql`excluded."positions_value_usd"`,
+          drawdownPct: sql`excluded."drawdown_pct"`,
+        },
+      });
+
+    return {
+      eventSeq: head.eventSeq,
+      eventHash: head.eventHash,
+      positions: positionRows.length,
+      trades: tradeRows.length,
+      ledgerEntries: entryRows.length,
+      intents: intentRows.length,
+    };
+  }
+}
+
+/** Session handed to `commitTick`; the log is bound to the tick transaction. */
+export interface SandboxTickSession {
+  readonly tx: DbExecutor;
+  readonly run: SandboxRunSnapshot;
+  readonly eventLog: SandboxEventLog;
+}
+
+/**
+ * JSONB columns are declared as `Record<string, unknown>`; the validated core
+ * state types are structurally JSON objects but are interfaces without an index
+ * signature, so the cast is limited to this boundary.
+ */
+function jsonObject(value: object): Record<string, unknown> {
+  return value as unknown as Record<string, unknown>;
 }

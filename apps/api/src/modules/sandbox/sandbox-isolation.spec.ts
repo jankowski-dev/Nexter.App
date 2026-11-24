@@ -50,6 +50,14 @@ describe('sandbox stage 2 isolation', () => {
     }
   });
 
+  it('has no DELETE path in the sandbox module', () => {
+    for (const { file, source } of sandboxSources) {
+      expect(source, file).not.toMatch(/\.delete\(/);
+      expect(source, file).not.toMatch(/delete\s+from/i);
+      expect(source, file).not.toMatch(/\bdeleteFn\b/);
+    }
+  });
+
   it('keeps sandbox contracts independent of old AI contracts', () => {
     expect(contractsSource).not.toMatch(/ai-trading|trading-bots|market_candles|\bai_/);
   });
