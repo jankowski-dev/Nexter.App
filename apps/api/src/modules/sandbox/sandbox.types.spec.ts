@@ -225,6 +225,7 @@ describe('sandbox tick validation', () => {
       engineState: engineState(),
       ledgerState: ledger,
       markedPositions: marked.positions,
+      marks: { [TOKEN]: '105.00000000' },
       equityPoint: {
         clockTime: AT,
         equityUsd: marked.equityUsd,
@@ -267,6 +268,18 @@ describe('sandbox tick validation', () => {
     expect(() => assertSandboxTickInput(mark)).toThrow(/marketValueUsd/);
   });
 
+  it('requires an exact mark that rounds to the displayed mark', () => {
+    const missing = tick();
+    (missing as { marks: Record<string, string> }).marks = {};
+    expect(() => assertSandboxTickInput(missing)).toThrow(/missing exact mark/);
+
+    const mismatched = tick();
+    (mismatched as { marks: Record<string, string> }).marks = {
+      [TOKEN]: '105.000000129',
+    };
+    expect(() => assertSandboxTickInput(mismatched)).toThrow(/8-decimal display/);
+  });
+
   it('accepts the marked ledger identities and rejects mismatches', () => {
     expect(() => assertSandboxTickConsistency(tick())).not.toThrow();
 
@@ -295,10 +308,13 @@ describe('sandbox tick validation', () => {
 });
 
 describe('sandbox projection builders', () => {
-  it('projects the open position with its entry intent and mark', () => {
+  it('projects the open position with its exact tick mark', () => {
     const ledger = buyLedger();
-    const marked = markPortfolio(ledger, { [TOKEN]: '105.00000000' });
-    const rows = buildSandboxPositionRows('run-1', ledger, marked.positions);
+    const exactMark = '105.000000123456789012';
+    const marked = markPortfolio(ledger, { [TOKEN]: exactMark });
+    const rows = buildSandboxPositionRows('run-1', ledger, marked.positions, {
+      [TOKEN]: exactMark,
+    });
 
     expect(rows).toHaveLength(1);
     const row = rows[0]!;
@@ -309,7 +325,8 @@ describe('sandbox projection builders', () => {
       strategyVersion: 1,
       amount: ledger.positions[TOKEN]?.amount,
       costBasisUsd: ledger.positions[TOKEN]?.costBasisUsd,
-      marketPriceUsd: '105.00000000',
+      // The projection keeps the exact tick mark, not the 8-decimal display.
+      marketPriceUsd: exactMark,
       marketValueUsd: marked.positions[0]?.marketValueUsd,
       entryIntentId: 'intent-1',
       feesPaidUsd: ledger.positions[TOKEN]?.feesPaidUsd,
@@ -320,7 +337,7 @@ describe('sandbox projection builders', () => {
   it('rejects a position without a mark', () => {
     const ledger = buyLedger();
 
-    expect(() => buildSandboxPositionRows('run-1', ledger, [])).toThrow(/missing mark/);
+    expect(() => buildSandboxPositionRows('run-1', ledger, [], {})).toThrow(/missing mark/);
   });
 
   it('computes delete-free tombstones for closed positions', () => {

@@ -393,4 +393,19 @@ describe('renderMarkdown', () => {
     expect(markdown).toContain('token-b');
     expect(markdown).not.toContain('generatedAt');
   });
+
+  it('applies presentation options without patching rendered text', () => {
+    const report = { ...buildReport(makeInput()), counterfactuals: [] };
+    const markdown = renderMarkdown(report, {
+      title: 'Live paper run report',
+      intro: ['> Execution mode: `live-paper`'],
+      counterfactualNote: 'Counterfactuals omitted for this host.',
+    });
+
+    expect(markdown.startsWith('# Live paper run report')).toBe(true);
+    expect(markdown).toContain('> Execution mode: `live-paper`');
+    expect(markdown).toContain('Counterfactuals omitted for this host.');
+    expect(markdown).not.toContain('No rejected buys to analyze.');
+    expect(markdown).toContain(report.reportHash);
+  });
 });

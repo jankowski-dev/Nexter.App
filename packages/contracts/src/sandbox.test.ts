@@ -675,13 +675,19 @@ describe('sandbox read contracts', () => {
     const parsed = sandboxReportResponseSchema.parse({
       executionMode: 'live-paper',
       report,
+      pendingIntents: 1,
+      notes: ['pending intents are excluded', 'counterfactuals are omitted'],
     });
     expect(parsed.executionMode).toBe('live-paper');
     expect(parsed.report.reportHash).toBe(hash);
+    expect(parsed.pendingIntents).toBe(1);
+    expect(parsed.notes).toHaveLength(2);
 
     const bad = sandboxReportResponseSchema.safeParse({
       executionMode: 'live-paper',
       report: { ...report, reportHash: 'not-a-hash' },
+      pendingIntents: 0,
+      notes: [],
     });
     expect(bad.success).toBe(false);
   });

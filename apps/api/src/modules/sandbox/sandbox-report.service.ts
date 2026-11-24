@@ -8,7 +8,6 @@ import {
 import {
   buildReport,
   markPortfolio,
-  paperConfigVersion,
   Reason,
   replayEventChain,
   renderMarkdown,
@@ -35,6 +34,23 @@ import {
 /** Reasons a deterministic report cannot be produced from the persisted run. */
 const REPORT_NOT_READY_MESSAGE = 'Отчёт пока недоступен: состояние запуска не прошло сверку';
 
+const COUNTERFACTUAL_NOTE =
+  'Counterfactuals are omitted for live-paper runs: hindsight diagnostics are not persisted and ' +
+  'recomputing them later would make the report hash depend on backfilled market data. ' +
+  'Rejected intents remain visible in the intent journal.';
+
+/**
+ * Raised when recomputing the final mark from persisted exact marks does not
+ * reproduce the run/equity-point equity. The service maps it to a 409; a
+ * contradicting report is never published.
+ */
+export class SandboxReportConsistencyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SandboxReportConsistencyError';
+  }
+}
+
 export interface SandboxReportSource {
   readonly run: SandboxRunSnapshot;
   readonly config: SandboxRunnerConfig;
@@ -45,16 +61,25 @@ export interface SandboxReportSource {
   readonly marks: Readonly<Record<string, string>>;
 }
 
+export interface SandboxGeneratedReport {
+  readonly report: RunReport;
+  readonly pendingIntents: number;
+}
+
 /**
  * Builds the deterministic Stage 1C report from persisted live-paper state.
  *
  * Pure and synchronous: the same source objects always produce the same
- * `RunReport` and `reportHash`. Counterfactuals are passed as an empty list;
- * they are hindsight diagnostics that the live runner never persisted, and
- * recomputing them from retained candles would make the hash depend on data
- * that can be backfilled after the fact. The journal still exposes every
- * rejected intent. The `live-paper` label lives in the API wrapper so the core
- * report type and its hash stay unchanged.
+ * `RunReport` and `reportHash`. The report identity comes from the persisted
+ * event chain: `configVersion` is the chain's version (all events must agree)
+ * and `dataSnapshotId` is the **last** persisted event's tick snapshot, which is
+ * the snapshot represented by the current run state/equity.
+ *
+ * Counterfactuals are passed as an empty list; they are hindsight diagnostics
+ * that the live runner never persisted, and recomputing them from retained
+ * candles would make the hash depend on data that can be backfilled after the
+ * fact. The journal still exposes every rejected intent. The `live-paper` label
+ * lives in the API wrapper so the core report type and its hash stay unchanged.
  */
 export function buildSandboxReport(source: SandboxReportSource): RunReport {
   const { run, config, events, equity, intents, marks } = source;
@@ -67,6 +92,14 @@ export function buildSandboxReport(source: SandboxReportSource): RunReport {
   if (equity.length === 0) {
     throw new Error('A report requires at least one equity point');
   }
+
+  const configVersion = events[events.length - 1]?.configVersion as string;
+  if (events.some((event) => event.configVersion !== configVersion)) {
+    throw new SandboxReportConsistencyError(
+      'Persisted events disagree about the run config version; refusing a mixed report',
+    );
+  }
+  const dataSnapshotId = events[events.length - 1]?.dataSnapshotId as string;
 
   const tokenIds = [...config.tokenKeys].sort();
   const paperConfig: PaperRunConfig = {
@@ -85,8 +118,8 @@ export function buildSandboxReport(source: SandboxReportSource): RunReport {
 
   const result: PaperRunResult = {
     config: paperConfig,
-    configVersion: paperConfigVersion(paperConfig),
-    dataSnapshotId: events[0]?.dataSnapshotId as string,
+    configVersion,
+    dataSnapshotId,
     ledger: run.ledgerState,
     state: run.engineState,
     intents,
@@ -94,9 +127,11 @@ export function buildSandboxReport(source: SandboxReportSource): RunReport {
     eventCount: run.eventSeq,
     eventHash: run.eventHash,
   };
+  // `marks` are the raw persisted numeric(30,18) strings, not the core 8-decimal
+  // display price. Recomputing from them must reproduce the tick's exact cents.
   const finalMark = markPortfolio(run.ledgerState, marks);
 
-  return buildReport({
+  const report = buildReport({
     result,
     finalMark,
     marks,
@@ -104,44 +139,86 @@ export function buildSandboxReport(source: SandboxReportSource): RunReport {
     counterfactuals: [],
     settingsVersion: settingsVersion(config.settings),
   });
+
+  const tolerance = new Decimal('0.01').times(
+    Math.max(Object.keys(run.ledgerState.positions).length, 1),
+  );
+  const lastEquity = equity[equity.length - 1];
+  if (lastEquity === undefined) {
+    throw new SandboxReportConsistencyError('A report requires a last equity point');
+  }
+  assertSameValue('final equity', report.metrics.finalEquityUsd, run.equityUsd, tolerance);
+  assertSameValue('final equity', report.metrics.finalEquityUsd, lastEquity.equityUsd, tolerance);
+  assertSameValue(
+    'final positions value',
+    report.metrics.finalPositionsValueUsd,
+    lastEquity.positionsValueUsd,
+    tolerance,
+  );
+
+  return report;
 }
 
-/** Wraps the core report with the Stage 2 execution label. */
-export function toSandboxReportResponse(report: RunReport): SandboxReportResponse {
+function assertSameValue(
+  label: string,
+  recomputed: string,
+  persisted: string,
+  tolerance: Decimal,
+): void {
+  if (new Decimal(recomputed).minus(persisted).abs().greaterThan(tolerance)) {
+    throw new SandboxReportConsistencyError(
+      `Recomputed ${label} ${recomputed} does not match the persisted ${persisted} within ${tolerance.toFixed(2)} USD`,
+    );
+  }
+}
+
+/** Wraps the core report with the Stage 2 execution label and omission notes. */
+export function toSandboxReportResponse(
+  report: RunReport,
+  pendingIntents: number,
+  notes: readonly string[],
+): SandboxReportResponse {
   // The contract mirrors `RunReport` field by field but its inferred arrays are
   // mutable, so this is a documented structural boundary cast, not `any`.
   return {
     executionMode: SANDBOX_EXECUTION_MODE,
     report: report as unknown as SandboxRunReport,
+    pendingIntents,
+    notes: [...notes],
   };
 }
 
 /**
- * Markdown rendering for owners. The core renderer is presentation-only; the
- * heading is relabelled so a downloaded report cannot be mistaken for a real
- * execution, and the hash table remains the core report's hash.
+ * Markdown rendering for owners. The core renderer remains presentation-only;
+ * the host supplies a live-paper title/intro and an explicit counterfactual
+ * omission note through renderer options, so no rendered text is patched.
  */
-export function renderSandboxReportMarkdown(report: RunReport): string {
-  const rendered = renderMarkdown(report);
-  const heading = '# Paper run report\n';
-  const liveHeading =
-    '# Live paper run report\n\n' +
-    '> Execution mode: `live-paper`. Virtual money only: no wallet, key, signing or real order ' +
-    'was involved.\n';
+export function renderSandboxReportMarkdown(report: RunReport, notes: readonly string[]): string {
+  return renderMarkdown(report, {
+    title: 'Live paper run report',
+    intro: [
+      '> Execution mode: `live-paper`. Virtual money only: no wallet, key, signing or real ' +
+        'order was involved.',
+      ...notes.filter((note) => note !== COUNTERFACTUAL_NOTE).map((note) => `- ${note}`),
+    ],
+    counterfactualNote: COUNTERFACTUAL_NOTE,
+  });
+}
 
-  const relabelled = rendered.startsWith(heading)
-    ? `${liveHeading}${rendered.slice(heading.length)}`
-    : `${liveHeading}\n${rendered}`;
-
-  // The core renderer always prints the counterfactual section. Live runs do not
-  // persist the hindsight candle window, so state the omission explicitly
-  // instead of claiming that no rejected buys existed.
-  return relabelled.replace(
-    'No rejected buys to analyze.',
-    'Counterfactuals are omitted for live-paper runs: hindsight diagnostics are not persisted ' +
-      'and recomputing them later would make the report hash depend on backfilled market data. ' +
-      'Rejected intents remain visible in the intent journal.',
-  );
+/** Notes that make JSON/Markdown omissions and report identity explicit. */
+export function sandboxReportNotes(report: RunReport, pendingIntents: number): string[] {
+  const notes = [
+    `dataSnapshotId is the last persisted event snapshot (${report.dataSnapshotId}); ` +
+      `configVersion comes from the persisted event chain.`,
+  ];
+  if (pendingIntents > 0) {
+    notes.push(
+      `${pendingIntents} pending intent(s) are excluded from report.intentJournal; ` +
+        'use GET /runs/:id/intents to inspect them.',
+    );
+  }
+  notes.push(COUNTERFACTUAL_NOTE);
+  return notes;
 }
 
 /**
@@ -159,24 +236,34 @@ export class SandboxReportService {
   constructor(private readonly repository: SandboxRepository) {}
 
   async getReport(userId: string, runId: string): Promise<SandboxReportResponse> {
-    return toSandboxReportResponse(await this.generate(userId, runId));
+    const generated = await this.generate(userId, runId);
+    return toSandboxReportResponse(
+      generated.report,
+      generated.pendingIntents,
+      sandboxReportNotes(generated.report, generated.pendingIntents),
+    );
   }
 
   async getReportMarkdown(userId: string, runId: string): Promise<string> {
-    return renderSandboxReportMarkdown(await this.generate(userId, runId));
+    const generated = await this.generate(userId, runId);
+    return renderSandboxReportMarkdown(
+      generated.report,
+      sandboxReportNotes(generated.report, generated.pendingIntents),
+    );
   }
 
-  private async generate(userId: string, runId: string): Promise<RunReport> {
+  private async generate(userId: string, runId: string): Promise<SandboxGeneratedReport> {
     const run = await this.requireRun(userId, runId);
     if (run.ledgerState === null || run.engineState === null) {
       throw reportNotReady('Запуск ещё не инициализирован');
     }
 
-    const [events, equityRows, intentRows, positionRows] = await Promise.all([
+    const [events, equityRows, intentRows, positionRows, pendingIntents] = await Promise.all([
       this.repository.listAllEvents(runId),
       this.repository.listAllEquityPoints(runId),
       this.repository.listTerminalIntents(runId),
       this.repository.listPositions(runId),
+      this.repository.countIntents(runId, 'pending'),
     ]);
 
     if (events.length === 0 || equityRows.length === 0) {
@@ -203,7 +290,8 @@ export class SandboxReportService {
     const marks: Record<string, string> = {};
     for (const row of positionRows) {
       if (new Decimal(row.amount).greaterThan(0)) {
-        marks[row.tokenId] = formatUnits(row.marketPriceUsd);
+        // Keep the exact numeric(30,18) tick mark for reconciliation.
+        marks[row.tokenId] = row.marketPriceUsd;
       }
     }
     for (const tokenId of Object.keys(run.ledgerState.positions)) {
@@ -227,7 +315,10 @@ export class SandboxReportService {
     );
 
     try {
-      return buildSandboxReport({ run, config, events, equity, intents, marks });
+      return {
+        report: buildSandboxReport({ run, config, events, equity, intents, marks }),
+        pendingIntents,
+      };
     } catch (error) {
       this.logger.warn(
         `Sandbox report ${runId} could not be built: ${
@@ -240,7 +331,8 @@ export class SandboxReportService {
 
   private async requireRun(userId: string, runId: string): Promise<SandboxRunSnapshot> {
     const run = await this.repository.loadRun(runId);
-    if (!run || run.userId !== userId || run.archivedAt !== null) {
+    // Archived runs stay readable; only lifecycle mutations are blocked.
+    if (!run || run.userId !== userId) {
       throw new NotFoundException({
         code: 'SANDBOX_RUN_NOT_FOUND',
         message: 'Sandbox run not found',
@@ -259,9 +351,6 @@ function reportNotReady(message: string): ConflictException {
 }
 
 function toReportIntent(row: SandboxIntentRecord, runId: string): IntentRecord {
-  if (row.status === 'pending') {
-    throw reportNotReady('В журнале остался незавершённый интент');
-  }
   const status = row.status;
   if (
     status !== 'filled' &&
@@ -269,13 +358,13 @@ function toReportIntent(row: SandboxIntentRecord, runId: string): IntentRecord {
     status !== 'rejected' &&
     status !== 'expired'
   ) {
-    throw reportNotReady(`Неизвестный статус интента ${status}`);
+    throw reportNotReady(`Неизвестный статус терминального интента ${status}`);
   }
 
   return {
     intentId: row.intentId,
     tokenId: row.tokenId,
-    side: row.side === 'sell' ? 'sell' : 'buy',
+    side: asIntentSide(row.side),
     strategyKey: asStrategyKey(row.strategyKey, runId),
     strategyVersion: row.strategyVersion,
     status,
@@ -308,4 +397,11 @@ function asStrategyKey(value: string, runId: string): StrategyKey {
     throw reportNotReady(`Неизвестная стратегия ${value} в запуске ${runId}`);
   }
   return value as StrategyKey;
+}
+
+function asIntentSide(value: string): 'buy' | 'sell' {
+  if (value !== 'buy' && value !== 'sell') {
+    throw reportNotReady(`Неизвестная сторона интента ${value}`);
+  }
+  return value;
 }

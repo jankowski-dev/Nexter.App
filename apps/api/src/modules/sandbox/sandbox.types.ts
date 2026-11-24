@@ -197,6 +197,13 @@ export interface SandboxTickInput {
   readonly ledgerState: PaperLedgerState;
   /** Marked positions from `markPortfolio` for the same clock time. */
   readonly markedPositions: readonly PortfolioPosition[];
+  /**
+   * Exact per-token mark used at this tick (the raw provider candle close,
+   * typically up to 18 decimals). `markedPositions.marketPriceUsd` is only the
+   * 8-decimal display value; the projection and report need the exact mark so a
+   * low-priced token's market value and equity reconcile.
+   */
+  readonly marks: Readonly<Record<string, string>>;
   readonly equityPoint: EquityPoint;
   readonly intents: readonly IntentRecord[];
   readonly lastBarClose: Date;
@@ -550,6 +557,9 @@ export function assertSandboxTickInput(tick: SandboxTickInput): void {
   if (!isSandboxRunStatus(tick.status)) {
     invalid('status', `unknown sandbox run status ${String(tick.status)}`);
   }
+  if (typeof tick.marks !== 'object' || tick.marks === null || Array.isArray(tick.marks)) {
+    invalid('marks', 'must be an object of exact per-token marks');
+  }
   for (const field of ['cashUsd', 'equityUsd', 'peakEquityUsd', 'dayStartEquityUsd'] as const) {
     assertDecimal(tick[field], field);
   }
@@ -579,6 +589,26 @@ export function assertSandboxTickInput(tick: SandboxTickInput): void {
     assertDecimal(mark.marketValueUsd, `${path}.marketValueUsd`);
     assertNullableDecimal(mark.stopLossPct, `${path}.stopLossPct`);
     assertNullableDecimal(mark.takeProfitPct, `${path}.takeProfitPct`);
+  }
+
+  // Every open ledger position (and therefore every marked position) needs the
+  // exact mark that produced its 2-decimal market value; the 8-decimal display
+  // price is not enough to reconstruct a low-priced token's equity.
+  for (const tokenId of Object.keys(tick.ledgerState.positions)) {
+    const exact = tick.marks[tokenId];
+    if (exact === undefined) {
+      invalid(`marks.${tokenId}`, 'missing exact mark for an open ledger position');
+    }
+    assertDecimal(exact, `marks.${tokenId}`);
+  }
+  for (const mark of tick.markedPositions) {
+    const exact = tick.marks[mark.tokenId];
+    if (exact === undefined) {
+      invalid(`marks.${mark.tokenId}`, 'missing exact mark for a marked position');
+    }
+    if (new Decimal(exact).toFixed(8) !== mark.marketPriceUsd) {
+      invalid(`marks.${mark.tokenId}`, 'must round to the marked 8-decimal display price');
+    }
   }
 }
 
@@ -658,6 +688,7 @@ export function buildSandboxPositionRows(
   runId: string,
   ledger: PaperLedgerState,
   markedPositions: SandboxTickInput['markedPositions'],
+  marks: SandboxTickInput['marks'],
 ): SandboxPositionRow[] {
   const marked = new Map(markedPositions.map((position) => [position.tokenId, position]));
 
@@ -673,6 +704,13 @@ export function buildSandboxPositionRows(
       if (mark.amount !== position.amount) {
         invalid(`markedPositions.${tokenId}.amount`, 'does not match the ledger position');
       }
+      const exactMark = marks[tokenId];
+      if (exactMark === undefined) {
+        invalid(`marks.${tokenId}`, 'missing exact mark for an open ledger position');
+      }
+      if (new Decimal(exactMark).toFixed(8) !== mark.marketPriceUsd) {
+        invalid(`marks.${tokenId}`, 'must round to the marked 8-decimal display price');
+      }
       return {
         runId,
         tokenId,
@@ -681,7 +719,8 @@ export function buildSandboxPositionRows(
         amount: position.amount,
         avgCostUsd: position.avgCostUsd,
         costBasisUsd: position.costBasisUsd,
-        marketPriceUsd: mark.marketPriceUsd,
+        // Persist the exact tick mark, not the core 8-decimal display value.
+        marketPriceUsd: exactMark,
         marketValueUsd: mark.marketValueUsd,
         openedAt: new Date(position.openedAt),
         stopLossPct: position.stopLossPct,

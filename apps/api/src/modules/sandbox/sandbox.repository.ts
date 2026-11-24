@@ -507,6 +507,16 @@ export class SandboxRepository {
       .orderBy(asc(sandboxPositions.tokenId));
   }
 
+  /** Number of open positions without loading the projection rows. */
+  async countOpenPositions(runId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(sandboxPositions)
+      .where(and(eq(sandboxPositions.runId, runId), sql`${sandboxPositions.amount} > 0`));
+
+    return Number(row?.count ?? 0);
+  }
+
   async listTrades(runId: string, options: SandboxPageOptions = {}): Promise<SandboxTradeRecord[]> {
     return this.db
       .select()
@@ -1109,7 +1119,12 @@ export class SandboxRepository {
       })
       .where(eq(sandboxRuns.id, runId));
 
-    const positionRows = buildSandboxPositionRows(runId, ledgerState, tick.markedPositions);
+    const positionRows = buildSandboxPositionRows(
+      runId,
+      ledgerState,
+      tick.markedPositions,
+      tick.marks,
+    );
     if (positionRows.length > 0) {
       await executor
         .insert(sandboxPositions)

@@ -897,5 +897,9 @@ export type SandboxRunReport = z.infer<typeof sandboxRunReportSchema>;
 export const sandboxReportResponseSchema = z.object({
   executionMode: sandboxExecutionModeSchema,
   report: sandboxRunReportSchema,
+  /** Pending intents are live-only and are excluded from `report.intentJournal`. */
+  pendingIntents: z.number().int().nonnegative(),
+  /** Explicit notes about intentional omissions and report identity. */
+  notes: z.array(z.string()),
 });
 export type SandboxReportResponse = z.infer<typeof sandboxReportResponseSchema>;

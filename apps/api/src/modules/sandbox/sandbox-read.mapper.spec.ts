@@ -25,6 +25,80 @@ import type { SandboxRunSummaryRow } from './sandbox.repository';
 const at = new Date('2026-11-24T00:00:00.000Z');
 const tokenId = 'bsc:0x1111111111111111111111111111111111111111';
 
+function samplePositionRecord(): SandboxPositionRecord {
+  return {
+    runId: 'run-1',
+    tokenId,
+    strategyKey: 'trend_pullback',
+    strategyVersion: 1,
+    amount: '1.995000000000000000',
+    avgCostUsd: '100.250000000000000000',
+    costBasisUsd: '200.000000000000000000',
+    marketPriceUsd: '105.000000000000000000',
+    marketValueUsd: '209.475000000000000000',
+    openedAt: at,
+    stopLossPct: '3.000000',
+    takeProfitPct: null,
+    entryIntentId: 'intent-1',
+    feesPaidUsd: '0.500000000000000000',
+    updatedAt: at,
+  };
+}
+
+function sampleTradeRecord(): SandboxTradeRecord {
+  return {
+    runId: 'run-1',
+    tradeId: 'trade-1',
+    tokenId,
+    strategyKey: 'trend_pullback',
+    strategyVersion: 1,
+    entryAt: at,
+    entryPriceUsd: '100.000000000000000000',
+    entryAmount: '1.995000000000000000',
+    entryNotionalUsd: '199.500000000000000000',
+    entryFeeUsd: '0.500000000000000000',
+    entryCostBasisUsd: '200.000000000000000000',
+    entryIntentId: 'intent-1',
+    exitAt: null,
+    exitPriceUsd: null,
+    exitAmount: '0.000000000000000000',
+    exitNotionalUsd: '0.000000000000000000',
+    exitFeeUsd: '0.000000000000000000',
+    exitReasonCode: null,
+    exitIntentId: null,
+    realizedPnlUsd: '0.000000000000000000',
+    status: 'open',
+    createdAt: at,
+    updatedAt: at,
+  };
+}
+
+function sampleIntentRecord(): SandboxIntentRecord {
+  return {
+    runId: 'run-1',
+    intentId: 'intent-1',
+    tokenId,
+    side: 'buy',
+    strategyKey: 'trend_pullback',
+    strategyVersion: 1,
+    status: 'filled',
+    requestedUsd: '200.000000000000000000',
+    requestedAmount: null,
+    filledUsd: '199.500000000000000000',
+    filledAmount: '1.995000000000000000',
+    priceUsd: '100.000000000000000000',
+    stopLossPct: '3.000000',
+    takeProfitPct: null,
+    feeUsd: '0.500000000000000000',
+    reasonCode: 'FILL_FILLED',
+    strategyReasonCode: 'TREND_PULLBACK_ENTRY',
+    reasonText: 'filled',
+    decisionTime: at,
+    fillTime: at,
+    createdAt: at,
+  };
+}
+
 describe('sandbox read mapper', () => {
   it('normalizes 18-decimal driver strings to display scales', () => {
     expect(formatUsd('200.000000000000000000')).toBe('200.00');
@@ -34,6 +108,11 @@ describe('sandbox read mapper', () => {
     expect(formatUnits('-0.000000000000000000')).toBe('0.00000000');
     expect(formatPercentFine('14.215000')).toBe('14.2150');
     expect(formatPercent('14.215')).toBe('14.22');
+    // Round first, then normalize a tiny negative value that rounds to zero.
+    expect(formatUsd('-0.004')).toBe('0.00');
+    expect(formatUnits('-0.000000004')).toBe('0.00000000');
+    expect(formatPercent('-0.004')).toBe('0.00');
+    expect(formatPercentFine('-0.00004')).toBe('0.0000');
   });
 
   it('computes return and drawdown without NaN on padded values', () => {
@@ -75,23 +154,7 @@ describe('sandbox read mapper', () => {
   });
 
   it('maps position, trade and intent rows to display scales', () => {
-    const position: SandboxPositionRecord = {
-      runId: 'run-1',
-      tokenId,
-      strategyKey: 'trend_pullback',
-      strategyVersion: 1,
-      amount: '1.995000000000000000',
-      avgCostUsd: '100.250000000000000000',
-      costBasisUsd: '200.000000000000000000',
-      marketPriceUsd: '105.000000000000000000',
-      marketValueUsd: '209.475000000000000000',
-      openedAt: at,
-      stopLossPct: '3.000000',
-      takeProfitPct: null,
-      entryIntentId: 'intent-1',
-      feesPaidUsd: '0.500000000000000000',
-      updatedAt: at,
-    };
+    const position = samplePositionRecord();
     expect(toSandboxPosition(position)).toMatchObject({
       amount: '1.99500000',
       avgCostUsd: '100.25000000',
@@ -103,31 +166,7 @@ describe('sandbox read mapper', () => {
       feesPaidUsd: '0.50',
     });
 
-    const trade: SandboxTradeRecord = {
-      runId: 'run-1',
-      tradeId: 'trade-1',
-      tokenId,
-      strategyKey: 'trend_pullback',
-      strategyVersion: 1,
-      entryAt: at,
-      entryPriceUsd: '100.000000000000000000',
-      entryAmount: '1.995000000000000000',
-      entryNotionalUsd: '199.500000000000000000',
-      entryFeeUsd: '0.500000000000000000',
-      entryCostBasisUsd: '200.000000000000000000',
-      entryIntentId: 'intent-1',
-      exitAt: null,
-      exitPriceUsd: null,
-      exitAmount: '0.000000000000000000',
-      exitNotionalUsd: '0.000000000000000000',
-      exitFeeUsd: '0.000000000000000000',
-      exitReasonCode: null,
-      exitIntentId: null,
-      realizedPnlUsd: '0.000000000000000000',
-      status: 'open',
-      createdAt: at,
-      updatedAt: at,
-    };
+    const trade = sampleTradeRecord();
     expect(toSandboxTrade(trade)).toMatchObject({
       entryPriceUsd: '100.00000000',
       entryAmount: '1.99500000',
@@ -137,29 +176,7 @@ describe('sandbox read mapper', () => {
       status: 'open',
     });
 
-    const intent: SandboxIntentRecord = {
-      runId: 'run-1',
-      intentId: 'intent-1',
-      tokenId,
-      side: 'buy',
-      strategyKey: 'trend_pullback',
-      strategyVersion: 1,
-      status: 'filled',
-      requestedUsd: '200.000000000000000000',
-      requestedAmount: null,
-      filledUsd: '199.500000000000000000',
-      filledAmount: '1.995000000000000000',
-      priceUsd: '100.000000000000000000',
-      stopLossPct: '3.000000',
-      takeProfitPct: null,
-      feeUsd: '0.500000000000000000',
-      reasonCode: 'FILL_FILLED',
-      strategyReasonCode: 'TREND_PULLBACK_ENTRY',
-      reasonText: 'filled',
-      decisionTime: at,
-      fillTime: at,
-      createdAt: at,
-    };
+    const intent = sampleIntentRecord();
     expect(toSandboxIntent(intent)).toMatchObject({
       status: 'filled',
       requestedUsd: '200.00',
@@ -188,12 +205,17 @@ describe('sandbox read mapper', () => {
       drawdownPct: '14.2150',
     });
 
-    expect(() =>
-      toSandboxIntent({
-        ...(row as unknown as SandboxIntentRecord),
-        status: 'mystery',
-      } as SandboxIntentRecord),
-    ).toThrow(/Unknown sandbox intent status/);
+    expect(() => toSandboxIntent({ ...sampleIntentRecord(), status: 'mystery' })).toThrow(
+      /Unknown sandbox intent status/,
+    );
+
+    expect(() => toSandboxIntent({ ...sampleIntentRecord(), side: 'sideways' })).toThrow(
+      /Unknown sandbox intent side/,
+    );
+
+    expect(() => toSandboxTrade({ ...sampleTradeRecord(), status: 'mystery' })).toThrow(
+      /Unknown sandbox trade status/,
+    );
   });
 
   it('maps events without exposing raw state/input blobs', () => {

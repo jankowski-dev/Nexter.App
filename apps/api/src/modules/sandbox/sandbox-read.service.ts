@@ -127,9 +127,9 @@ export class SandboxReadService {
 
   async getRun(userId: string, runId: string): Promise<SandboxRunDetail> {
     const run = await this.requireRun(userId, runId);
-    const [positions, openTrades, closedTrades, intents, pendingIntents, equityPoints, ledger] =
+    const [openPositions, openTrades, closedTrades, intents, pendingIntents, equityPoints, ledger] =
       await Promise.all([
-        this.repository.listPositions(runId),
+        this.repository.countOpenPositions(runId),
         this.repository.countTrades(runId, 'open'),
         this.repository.countTrades(runId, 'closed'),
         this.repository.countIntents(runId),
@@ -139,7 +139,7 @@ export class SandboxReadService {
       ]);
 
     return toSandboxRunDetail(run, {
-      openPositions: positions.filter((row) => new Decimal(row.amount).greaterThan(0)).length,
+      openPositions,
       openTrades,
       closedTrades,
       intents,
@@ -247,7 +247,8 @@ export class SandboxReadService {
 
   private async requireRun(userId: string, runId: string): Promise<SandboxRunSnapshot> {
     const run = await this.repository.loadRun(runId);
-    if (!run || run.userId !== userId || run.archivedAt !== null) {
+    // Archived runs remain readable; only lifecycle mutations are blocked.
+    if (!run || run.userId !== userId) {
       throw new NotFoundException({
         code: 'SANDBOX_RUN_NOT_FOUND',
         message: 'Sandbox run not found',

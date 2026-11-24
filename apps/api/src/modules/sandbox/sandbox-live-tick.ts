@@ -338,6 +338,7 @@ export async function runSandboxLiveTick(
       engineState: state,
       ledgerState: ledger,
       markedPositions: marked.positions,
+      marks,
       equityPoint: {
         clockTime,
         equityUsd: marked.equityUsd,

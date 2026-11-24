@@ -98,10 +98,12 @@ The API imports `@nexter/sandbox-core` (workspace dependency). No old AI/trading
 - `sandbox_runs`: run identity/config/status, cash/equity/peak/day-start projections, engine and ledger JSONB snapshots, last bar close, event seq/hash, last tick/error, timestamps, archived_at.
 - `sandbox_run_tokens`: immutable per-run token snapshot (token key/symbol/chain/contract).
 - `sandbox_events`: append-only hash-chained events `(run_id, seq)`; payload JSONB + key columns; SELECT/INSERT only.
-- `sandbox_positions`, `sandbox_trades`, `sandbox_ledger_entries`, `sandbox_equity_points`, `sandbox_intents`: query projections rebuilt from the ledger/engine after each tick; SELECT/INSERT/UPDATE, no DELETE.
-- Optional `sandbox_reports`: stored report JSON at pause/stop with report hash.
+- `sandbox_positions`, `sandbox_trades`, `sandbox_ledger_entries`, `sandbox_equity_points`, `sandbox_intents`: query projections rebuilt from the ledger/engine after each tick; SELECT/INSERT/UPDATE, no DELETE. `sandbox_positions.market_price_usd` stores the **exact** tick mark (the raw provider close, up to 18 decimals), not the core `PortfolioPosition.marketPriceUsd` 8-decimal display value. The 2-decimal market value/equity still come from the core mark.
+- Optional `sandbox_reports`: reserved for an explicit snapshot job. Stage 2 reports are generated on demand from persisted state; a GET never writes this table.
 
 The engine/ledger JSONB is the source of truth; projection tables serve the UI and report. Every tick writes state + projections + events in one transaction.
+
+Report identity follows the persisted chain: `configVersion` is the event chain's version (all events must agree) and `dataSnapshotId` is the **last** persisted tick snapshot, i.e. the snapshot represented by the current run state/equity. `replayEventChain` must match the run's event count/hash, and recomputing the final mark from the exact `market_price_usd` values must reproduce `sandbox_runs.equity_usd` and the last equity point within one cent per position; otherwise the API returns `409 SANDBOX_REPORT_NOT_READY` and publishes no report. Pending intents are excluded from `report.intentJournal` (they remain visible through `GET /runs/:id/intents`) and hindsight counterfactuals are omitted, because they were never persisted and later backfilled candles would change the hash; both are stated in the JSON `notes`/`pendingIntents` and the Markdown.
 
 ### 5.2 Ingestion
 
@@ -193,7 +195,7 @@ A top-level `Песочница` sidebar/mobile entry (`/sandbox`), independent 
 - **Обзор:** active run summary (equity, P&L, drawdown, cash, positions), equity chart, token regime/phase/health, last decision, data freshness; start/pause/stop controls.
 - **Запуски:** list with status/equity/return; create draft (name, universe, capital, limits), start/pause/resume/stop/archive; run detail.
 - **Журнал:** events, intents (filled/partial/rejected/expired), trades, risk checks, "why not" alternatives; filters by token/type/severity.
-- **Отчёты:** JSON/Markdown download for the selected run; summary cards.
+- **Отчёты:** JSON/Markdown download for the selected run; summary cards. The report is labelled `live-paper`, its hash is deterministic, and it recomputes the same equity as the dashboard/equity point from exact marks. Pending intents and omitted counterfactuals are stated explicitly; archived runs remain downloadable read-only.
 - **Настройки запуска:** Stage 1B/1C defaults (positions, exposure, cash buffer, daily loss, max DD, risk, cooldown, fees/slippage) with a "reset to defaults" action; the owner cannot edit while running.
 - **Close trade:** a ConfirmDialog from a position card; the next tick sells; a toast/status.
 

@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { createDb, users, type Database } from '@nexter/db';
-import type { SandboxEventInput } from '@nexter/sandbox-core';
+import { createDb, sandboxEvents, sandboxRuns, users, type Database } from '@nexter/db';
+import { Reason, type OrderIntent, type SandboxEventInput } from '@nexter/sandbox-core';
 import {
   sandboxEquityResponseSchema,
   sandboxEventsResponseSchema,
@@ -14,7 +14,7 @@ import {
   sandboxRunsResponseSchema,
   sandboxTradesResponseSchema,
 } from '@nexter/contracts';
-import { sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -22,7 +22,12 @@ import { AppModule } from '../src/app.module';
 import { SandboxRepository } from '../src/modules/sandbox/sandbox.repository';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 import { assertDisposableTestDatabase } from './helpers/test-database';
-import { makeOpenLedger, makeTick, seedSandboxRun } from './helpers/sandbox-fixtures';
+import {
+  makeOpenLedger,
+  makeTick,
+  SANDBOX_TEST_TOKEN,
+  seedSandboxRun,
+} from './helpers/sandbox-fixtures';
 
 const canRun = Boolean(
   process.env.NEXTER_TEST_DB === '1' &&
@@ -45,14 +50,14 @@ function csrfFrom(response: request.Response): string {
   return raw?.split(';')[0]?.split('=')[1] ?? '';
 }
 
-function eventInput(runId: string, eventType: string): SandboxEventInput {
+function eventInput(runId: string, eventType: string, dataSnapshotId: string): SandboxEventInput {
   return {
     runId,
     clockTime: '2026-11-24T00:00:00.000Z',
     module: 'run',
     eventType,
     severity: 'info',
-    dataSnapshotId: 'snapshot-1',
+    dataSnapshotId,
     configVersion: 'config-1',
     seed: 1,
   };
@@ -112,8 +117,8 @@ describe('Sandbox read API (e2e)', () => {
     const tick = makeTick(open.ledger, open.marked, open.intents);
 
     await repository.commitTick(runId, async ({ eventLog }) => {
-      await eventLog.append(eventInput(runId, 'run.started'));
-      await eventLog.append(eventInput(runId, 'run.ticked'));
+      await eventLog.append(eventInput(runId, 'run.started', 'snapshot-0'));
+      await eventLog.append(eventInput(runId, 'run.ticked', 'snapshot-1'));
       return tick;
     });
 
@@ -164,19 +169,37 @@ describe('Sandbox read API (e2e)', () => {
     await setupOwner(agent);
     const userId = await ownerId();
     const runId = await seedTickedRun(userId);
+    if (!db) throw new Error('test database is not configured');
+    const runStateBefore = await db
+      .select({
+        eventSeq: sandboxRuns.eventSeq,
+        eventHash: sandboxRuns.eventHash,
+        updatedAt: sandboxRuns.updatedAt,
+        lastTickAt: sandboxRuns.lastTickAt,
+      })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId));
+    const eventsBefore = await db
+      .select({ seq: sandboxEvents.seq, hash: sandboxEvents.hash })
+      .from(sandboxEvents)
+      .where(eq(sandboxEvents.runId, runId))
+      .orderBy(asc(sandboxEvents.seq));
 
     const overview = await agent.get('/api/v1/sandbox/overview').expect(200);
+    expect(overview.headers['cache-control']).toBe('no-store');
     const parsedOverview = sandboxOverviewSchema.parse(overview.body);
     expect(parsedOverview.executionMode).toBe('live-paper');
     expect(parsedOverview.runs.running).toBe(1);
     expect(parsedOverview.activeRuns).toHaveLength(1);
 
     const runs = await agent.get('/api/v1/sandbox/runs').expect(200);
+    expect(runs.headers['cache-control']).toBe('no-store');
     const parsedRuns = sandboxRunsResponseSchema.parse(runs.body);
     expect(parsedRuns.total).toBe(1);
     expect(parsedRuns.runs[0]?.id).toBe(runId);
 
     const detail = await agent.get(`/api/v1/sandbox/runs/${runId}`).expect(200);
+    expect(detail.headers['cache-control']).toBe('no-store');
     const parsedDetail = sandboxRunDetailSchema.parse(detail.body);
     expect(parsedDetail.executionMode).toBe('live-paper');
     expect(parsedDetail.eventCount).toBe(2);
@@ -204,6 +227,23 @@ describe('Sandbox read API (e2e)', () => {
     expect(parsedEquity.total).toBe(1);
     expect(parsedEquity.points[0]?.cashUsd).toMatch(/^\d+\.\d{2}$/);
     expect(parsedEquity.points[0]?.equityUsd).toBe(parsedDetail.equityUsd);
+
+    const runStateAfter = await db
+      .select({
+        eventSeq: sandboxRuns.eventSeq,
+        eventHash: sandboxRuns.eventHash,
+        updatedAt: sandboxRuns.updatedAt,
+        lastTickAt: sandboxRuns.lastTickAt,
+      })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId));
+    const eventsAfter = await db
+      .select({ seq: sandboxEvents.seq, hash: sandboxEvents.hash })
+      .from(sandboxEvents)
+      .where(eq(sandboxEvents.runId, runId))
+      .orderBy(asc(sandboxEvents.seq));
+    expect(runStateAfter).toEqual(runStateBefore);
+    expect(eventsAfter).toEqual(eventsBefore);
   });
 
   it.runIf(canRun)('paginates events deterministically by seq', async () => {
@@ -242,21 +282,56 @@ describe('Sandbox read API (e2e)', () => {
     const runId = await seedTickedRun(await ownerId());
 
     const first = await agent.get(`/api/v1/sandbox/runs/${runId}/report.json`).expect(200);
+    expect(first.headers['cache-control']).toBe('no-store');
     const firstReport = sandboxReportResponseSchema.parse(first.body);
     expect(firstReport.executionMode).toBe('live-paper');
     expect(firstReport.report.runId).toBe(runId);
     expect(firstReport.report.eventCount).toBe(2);
     expect(firstReport.report.positions).toHaveLength(1);
     expect(firstReport.report.counterfactuals).toEqual([]);
+    expect(firstReport.report.configVersion).toBe('config-1');
+    expect(firstReport.report.dataSnapshotId).toBe('snapshot-1');
+    expect(firstReport.pendingIntents).toBe(0);
+
+    const detail = await agent.get(`/api/v1/sandbox/runs/${runId}`).expect(200);
+    const parsedDetail = sandboxRunDetailSchema.parse(detail.body);
+    const equity = await agent.get(`/api/v1/sandbox/runs/${runId}/equity`).expect(200);
+    const parsedEquity = sandboxEquityResponseSchema.parse(equity.body);
+    expect(firstReport.report.metrics.finalEquityUsd).toBe(parsedDetail.equityUsd);
+    expect(firstReport.report.metrics.finalEquityUsd).toBe(parsedEquity.points.at(-1)?.equityUsd);
+
+    if (!db || !repository) throw new Error('test database is not configured');
+    const pendingIntent: OrderIntent = {
+      intentId: 'pending-1',
+      tokenId: SANDBOX_TEST_TOKEN,
+      side: 'buy',
+      strategyKey: 'trend_pullback',
+      strategyVersion: 1,
+      reasonCode: Reason.TREND_PULLBACK_ENTRY,
+      sizeUsd: '10.00',
+      amount: null,
+      stopLossPct: null,
+      takeProfitPct: null,
+      decisionPriceUsd: '105.00000000',
+      clockTime: Date.now(),
+    };
+    const inserted = await db.transaction((tx) =>
+      repository.insertPendingIntents(tx, runId, [pendingIntent]),
+    );
+    expect(inserted).toBe(1);
 
     const second = await agent.get(`/api/v1/sandbox/runs/${runId}/report.json`).expect(200);
     const secondReport = sandboxReportResponseSchema.parse(second.body);
     expect(secondReport.report.reportHash).toBe(firstReport.report.reportHash);
+    expect(secondReport.pendingIntents).toBe(1);
+    expect(secondReport.notes.join(' ')).toContain('1 pending intent(s) are excluded');
+    expect(secondReport.report.intentJournal).toHaveLength(firstReport.report.intentJournal.length);
 
     const markdown = await agent.get(`/api/v1/sandbox/runs/${runId}/report.md`).expect(200);
     expect(markdown.headers['content-type']).toContain('text/markdown');
     expect(markdown.text.startsWith('# Live paper run report')).toBe(true);
     expect(markdown.text).toContain('> Execution mode: `live-paper`');
+    expect(markdown.text).toContain('1 pending intent(s) are excluded');
     expect(markdown.text).toContain(firstReport.report.reportHash);
   });
 
@@ -274,6 +349,39 @@ describe('Sandbox read API (e2e)', () => {
       .get('/api/v1/sandbox/runs/33333333-3333-4333-8333-333333333333')
       .expect(404);
     expect(missing.body).toMatchObject({ error: { code: 'SANDBOX_RUN_NOT_FOUND' } });
+  });
+
+  it.runIf(canRun)('keeps archived runs readable but out of the default list', async () => {
+    const agent = request.agent(app.getHttpServer());
+    await setupOwner(agent);
+    const userId = await ownerId();
+    const runId = await seedTickedRun(userId);
+    if (!db) throw new Error('test database is not configured');
+    await db
+      .update(sandboxRuns)
+      .set({
+        status: 'stopped',
+        stoppedAt: new Date(),
+        archivedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(sandboxRuns.id, runId));
+
+    const defaultList = await agent.get('/api/v1/sandbox/runs').expect(200);
+    expect(sandboxRunsResponseSchema.parse(defaultList.body).total).toBe(0);
+
+    const archivedList = await agent
+      .get('/api/v1/sandbox/runs')
+      .query({ includeArchived: 'true' })
+      .expect(200);
+    const parsedArchived = sandboxRunsResponseSchema.parse(archivedList.body);
+    expect(parsedArchived.total).toBe(1);
+    expect(parsedArchived.runs[0]?.archivedAt).not.toBeNull();
+
+    const detail = await agent.get(`/api/v1/sandbox/runs/${runId}`).expect(200);
+    expect(sandboxRunDetailSchema.parse(detail.body).archivedAt).not.toBeNull();
+    const report = await agent.get(`/api/v1/sandbox/runs/${runId}/report.json`).expect(200);
+    expect(sandboxReportResponseSchema.parse(report.body).report.runId).toBe(runId);
   });
 
   it.runIf(canRun)('hides another owner run behind 404', async () => {

@@ -35,28 +35,33 @@ function decimal(value: string | Decimal): Decimal {
   return new Decimal(value);
 }
 
+/**
+ * Rounds first, then normalizes a rounded zero. Normalizing only an exact zero
+ * would still emit `-0.00` for a tiny negative value such as `-0.004`.
+ */
+function formatFixed(value: string | Decimal, decimals: number): string {
+  const rounded = decimal(value).toDecimalPlaces(decimals, Decimal.ROUND_HALF_UP);
+  return (rounded.isZero() ? new Decimal(0) : rounded).toFixed(decimals);
+}
+
 /** Formats a USD value with two decimals (`0` never becomes `-0.00`). */
-export function formatUsd(value: string): string {
-  const parsed = decimal(value);
-  return (parsed.isZero() ? new Decimal(0) : parsed).toFixed(2);
+export function formatUsd(value: string | Decimal): string {
+  return formatFixed(value, 2);
 }
 
 /** Formats a price or token amount with eight decimals. */
-export function formatUnits(value: string): string {
-  const parsed = decimal(value);
-  return (parsed.isZero() ? new Decimal(0) : parsed).toFixed(8);
+export function formatUnits(value: string | Decimal): string {
+  return formatFixed(value, 8);
 }
 
 /** Formats a percentage with two decimals. */
 export function formatPercent(value: string | Decimal): string {
-  const parsed = decimal(value);
-  return (parsed.isZero() ? new Decimal(0) : parsed).toFixed(2);
+  return formatFixed(value, 2);
 }
 
 /** Formats a high-precision percentage (drawdown) with four decimals. */
 export function formatPercentFine(value: string | Decimal): string {
-  const parsed = decimal(value);
-  return (parsed.isZero() ? new Decimal(0) : parsed).toFixed(4);
+  return formatFixed(value, 4);
 }
 
 /** `(equity / initialCapital - 1) * 100`, never NaN when capital is zero. */
@@ -176,16 +181,27 @@ export function toSandboxTrade(row: SandboxTradeRecord): SandboxTrade {
     exitReasonCode: row.exitReasonCode,
     exitIntentId: row.exitIntentId,
     realizedPnlUsd: formatUsd(row.realizedPnlUsd),
-    status: row.status === 'closed' ? 'closed' : 'open',
+    status: sandboxTradeStatus(row.status),
     updatedAt: isoRequired(row.updatedAt),
   };
+}
+
+function sandboxTradeStatus(value: string): SandboxTrade['status'] {
+  switch (value) {
+    case 'open':
+    case 'closed':
+      return value;
+    default:
+      // A persisted unknown status is a defect; never present it as open.
+      throw new Error(`Unknown sandbox trade status "${value}"`);
+  }
 }
 
 export function toSandboxIntent(row: SandboxIntentDbRecord): SandboxIntent {
   return {
     intentId: row.intentId,
     tokenId: row.tokenId,
-    side: row.side === 'sell' ? 'sell' : 'buy',
+    side: sandboxIntentSide(row.side),
     strategyKey: row.strategyKey,
     strategyVersion: row.strategyVersion,
     status: sandboxIntentStatus(row.status),
@@ -203,6 +219,16 @@ export function toSandboxIntent(row: SandboxIntentDbRecord): SandboxIntent {
     decisionTime: isoRequired(row.decisionTime),
     fillTime: iso(row.fillTime),
   };
+}
+
+function sandboxIntentSide(value: string): SandboxIntent['side'] {
+  switch (value) {
+    case 'buy':
+    case 'sell':
+      return value;
+    default:
+      throw new Error(`Unknown sandbox intent side "${value}"`);
+  }
 }
 
 function sandboxIntentStatus(value: string): SandboxIntent['status'] {

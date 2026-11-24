@@ -223,6 +223,9 @@ export function makeTick(
     engineState: makeEngineState(),
     ledgerState: ledger,
     markedPositions: marked.positions,
+    marks: Object.fromEntries(
+      marked.positions.map((position) => [position.tokenId, position.marketPriceUsd]),
+    ),
     equityPoint: makeEquityPoint(marked, SANDBOX_TEST_AT, ledger.cashUsd),
     intents,
     lastBarClose: new Date(SANDBOX_TEST_AT),

@@ -136,12 +136,14 @@ export class SandboxController {
 
   @Get('overview')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   overview(@CurrentAuth() auth: AuthContext): Promise<SandboxOverview> {
     return this.read.overview(auth.user.id);
   }
 
   @Get('runs')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   listRuns(
     @CurrentAuth() auth: AuthContext,
     @Query(new ZodValidationPipe(sandboxRunsQuerySchema)) query: SandboxRunsQuery,
@@ -151,6 +153,7 @@ export class SandboxController {
 
   @Get('runs/:id')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   getRun(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -160,6 +163,7 @@ export class SandboxController {
 
   @Get('runs/:id/positions')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   positions(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -169,6 +173,7 @@ export class SandboxController {
 
   @Get('runs/:id/trades')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   trades(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -179,6 +184,7 @@ export class SandboxController {
 
   @Get('runs/:id/intents')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   intents(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -189,6 +195,7 @@ export class SandboxController {
 
   @Get('runs/:id/events')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   events(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
@@ -199,6 +206,7 @@ export class SandboxController {
 
   @Get('runs/:id/equity')
   @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
   equity(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
