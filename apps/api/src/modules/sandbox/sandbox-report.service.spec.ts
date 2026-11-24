@@ -13,6 +13,7 @@ import {
   type SandboxEventInput,
 } from '@nexter/sandbox-core';
 import type { SandboxPositionRecord } from '@nexter/db';
+import { ConflictException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import {
   makeEngineState,
@@ -26,11 +27,16 @@ import {
   buildSandboxReport,
   renderSandboxReportMarkdown,
   SandboxReportConsistencyError,
+  SandboxReportService,
   sandboxReportNotes,
   toSandboxReportResponse,
   type SandboxReportSource,
 } from './sandbox-report.service';
-import { buildSandboxPositionRows, type SandboxRunSnapshot } from './sandbox.types';
+import {
+  buildSandboxPositionRows,
+  SandboxPersistenceError,
+  type SandboxRunSnapshot,
+} from './sandbox.types';
 
 const RUN_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -304,5 +310,64 @@ describe('sandbox report service', () => {
   it('refuses a report without an equity point', async () => {
     const source = await reportSource();
     expect(() => buildSandboxReport({ ...source, equity: [] })).toThrow(/equity point/i);
+  });
+});
+
+describe('sandbox report service read failures', () => {
+  function repository(overrides: {
+    run?: () => Promise<SandboxRunSnapshot>;
+    events?: () => Promise<never>;
+  }) {
+    return {
+      loadRun:
+        overrides.run ??
+        (async () => {
+          const source = await reportSource();
+          return source.run;
+        }),
+      listAllEvents: overrides.events ?? (async () => []),
+      listAllEquityPoints: async () => [],
+      listTerminalIntents: async () => [],
+      listPositions: async () => [],
+      countIntents: async () => 0,
+    };
+  }
+
+  it('maps a corrupt persisted run to the typed report-not-ready 409', async () => {
+    const service = new SandboxReportService(
+      repository({
+        run: async () => {
+          throw new SandboxPersistenceError('SANDBOX_STATE_INVALID', 'corrupt ledger');
+        },
+      }) as never,
+    );
+
+    const error = await service.getReport('22222222-2222-4222-8222-222222222222', RUN_ID).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'SANDBOX_REPORT_NOT_READY',
+    });
+  });
+
+  it('maps a corrupt event payload read to the typed report-not-ready 409', async () => {
+    const service = new SandboxReportService(
+      repository({
+        events: async () => {
+          throw new SandboxPersistenceError('SANDBOX_EVENT_PAYLOAD_INVALID', 'bad event payload');
+        },
+      }) as never,
+    );
+
+    const error = await service.getReport('22222222-2222-4222-8222-222222222222', RUN_ID).then(
+      () => null,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'SANDBOX_REPORT_NOT_READY',
+    });
   });
 });

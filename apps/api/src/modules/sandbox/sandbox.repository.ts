@@ -766,23 +766,67 @@ export class SandboxRepository {
     return rows.length > 0;
   }
 
-  /** Soft-hides a terminal run; no row is ever deleted. */
-  async archiveRun(userId: string, runId: string): Promise<boolean> {
-    const now = new Date();
-    const rows = await this.db
-      .update(sandboxRuns)
-      .set({ archivedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(sandboxRuns.id, runId),
-          eq(sandboxRuns.userId, userId),
-          inArray(sandboxRuns.status, ['stopped', 'failed']),
-          isNull(sandboxRuns.archivedAt),
-        ),
-      )
-      .returning({ id: sandboxRuns.id });
+  /**
+   * Conditionally transitions a run and expires its pending intents in one
+   * transaction, so a stopped/paused transition can never leave a pending row
+   * behind if the second write fails.
+   */
+  async transitionRunAndExpire(
+    userId: string,
+    runId: string,
+    from: readonly string[],
+    patch: SandboxRunTransitionPatch,
+    reasonText: string,
+    at: Date = new Date(),
+  ): Promise<{ expiredIntents: number } | null> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .update(sandboxRuns)
+        .set({ ...patch, updatedAt: at })
+        .where(
+          and(
+            eq(sandboxRuns.id, runId),
+            eq(sandboxRuns.userId, userId),
+            inArray(sandboxRuns.status, [...from]),
+            isNull(sandboxRuns.archivedAt),
+          ),
+        )
+        .returning({ id: sandboxRuns.id });
+      if (rows.length === 0) return null;
 
-    return rows.length > 0;
+      const expiredIntents = await expirePendingIntentsWith(tx, runId, reasonText, at);
+      return { expiredIntents };
+    });
+  }
+
+  /**
+   * Soft-hides a terminal run and expires its pending intents in one
+   * transaction; no row is ever deleted.
+   */
+  async archiveRunAndExpire(
+    userId: string,
+    runId: string,
+    reasonText: string,
+    at: Date = new Date(),
+  ): Promise<{ archivedAt: Date; expiredIntents: number } | null> {
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .update(sandboxRuns)
+        .set({ archivedAt: at, updatedAt: at })
+        .where(
+          and(
+            eq(sandboxRuns.id, runId),
+            eq(sandboxRuns.userId, userId),
+            inArray(sandboxRuns.status, ['stopped', 'failed']),
+            isNull(sandboxRuns.archivedAt),
+          ),
+        )
+        .returning({ id: sandboxRuns.id });
+      if (rows.length === 0) return null;
+
+      const expiredIntents = await expirePendingIntentsWith(tx, runId, reasonText, at);
+      return { archivedAt: at, expiredIntents };
+    });
   }
 
   /** Runs the live scheduler may advance: running and not archived. */
@@ -1023,18 +1067,7 @@ export class SandboxRepository {
     reasonText: string,
     at: Date = new Date(),
   ): Promise<number> {
-    const rows = await this.db
-      .update(sandboxIntents)
-      .set({
-        status: 'expired',
-        reasonCode: Reason.FILL_EXPIRED,
-        reasonText,
-        fillTime: at,
-      })
-      .where(and(eq(sandboxIntents.runId, runId), eq(sandboxIntents.status, 'pending')))
-      .returning({ intentId: sandboxIntents.intentId });
-
-    return rows.length;
+    return expirePendingIntentsWith(this.db, runId, reasonText, at);
   }
 
   /**
@@ -1301,6 +1334,30 @@ export class SandboxRepository {
       intents: intentRows.length,
     };
   }
+}
+
+/**
+ * Expires every still-pending intent for a run on the supplied executor. Kept
+ * transaction-capable so stop/archive can combine it with the status write.
+ */
+async function expirePendingIntentsWith(
+  executor: DbExecutor,
+  runId: string,
+  reasonText: string,
+  at: Date,
+): Promise<number> {
+  const rows = await executor
+    .update(sandboxIntents)
+    .set({
+      status: 'expired',
+      reasonCode: Reason.FILL_EXPIRED,
+      reasonText,
+      fillTime: at,
+    })
+    .where(and(eq(sandboxIntents.runId, runId), eq(sandboxIntents.status, 'pending')))
+    .returning({ intentId: sandboxIntents.intentId });
+
+  return rows.length;
 }
 
 /** Session handed to `commitTick`; the log is bound to the tick transaction. */

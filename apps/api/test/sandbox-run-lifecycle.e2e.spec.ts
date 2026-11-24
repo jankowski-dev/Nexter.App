@@ -8,6 +8,7 @@ import {
   sandboxRuns,
   users,
 } from '@nexter/db';
+import { Reason } from '@nexter/sandbox-core';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SandboxRepository } from '../src/modules/sandbox/sandbox.repository';
 import { SandboxRunService } from '../src/modules/sandbox/sandbox-run.service';
@@ -155,5 +156,31 @@ describe.runIf(canRun)('sandbox run lifecycle persistence', () => {
       .where(eq(sandboxIntents.runId, owner.runId));
     expect(stoppedIntent?.status).toBe('expired');
     expect(stoppedIntent?.reasonCode).toBe('FILL_EXPIRED');
+
+    // Archive must expire a pending row even when it appeared after the stop,
+    // atomically with the archive transition.
+    const inserted = await repository.insertManualCloseIntent(owner.runId, {
+      intentId: 'archive-pending',
+      tokenId: SANDBOX_TEST_TOKEN,
+      side: 'sell',
+      strategyKey: 'trend_pullback',
+      strategyVersion: 1,
+      reasonCode: Reason.MANUAL_CLOSE,
+      sizeUsd: '0.00',
+      amount: '1.00000000',
+      stopLossPct: null,
+      takeProfitPct: null,
+      decisionPriceUsd: '0.00000000',
+      clockTime: Date.now(),
+    });
+    expect(inserted).toBe(true);
+
+    await service.archive(owner.userId, owner.runId, {});
+    const afterArchive = await created.db
+      .select()
+      .from(sandboxIntents)
+      .where(eq(sandboxIntents.runId, owner.runId));
+    expect(afterArchive).toHaveLength(2);
+    expect(afterArchive.every((row) => row.status === 'expired')).toBe(true);
   });
 });

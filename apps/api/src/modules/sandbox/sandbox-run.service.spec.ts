@@ -182,12 +182,25 @@ function harness(initial: SandboxRunSnapshot = makeRun()) {
         return true;
       },
     ),
-    archiveRun: vi.fn(async () => {
+    transitionRunAndExpire: vi.fn(
+      async (
+        _userId: string,
+        _id: string,
+        from: string[],
+        patch: Partial<SandboxRunSnapshot> & { status: SandboxRunStatus },
+      ) => {
+        if (!from.includes(run.status) || run.archivedAt !== null) return null;
+        run = { ...run, ...patch, updatedAt: new Date(AT) };
+        return { expiredIntents: 0 };
+      },
+    ),
+    archiveRunAndExpire: vi.fn(async () => {
       if ((run.status !== 'stopped' && run.status !== 'failed') || run.archivedAt !== null) {
-        return false;
+        return null;
       }
-      run = { ...run, archivedAt: new Date(AT) };
-      return true;
+      const archivedAt = new Date(AT);
+      run = { ...run, archivedAt, updatedAt: archivedAt };
+      return { archivedAt, expiredIntents: 0 };
     }),
     hasPendingSell: vi.fn(async () => pendingSell),
     insertManualCloseIntent: vi.fn(async () => true),
@@ -340,10 +353,15 @@ describe('SandboxRunService lifecycle', () => {
     expect((await h.service.resume(USER, RUN, {})).status).toBe('running');
     expect((await h.service.stop(USER, RUN, {})).status).toBe('stopped');
 
-    expect(h.repo.expirePendingIntents).toHaveBeenCalledWith(
+    expect(h.repo.transitionRunAndExpire).toHaveBeenCalledWith(
+      USER,
       RUN,
+      ['running', 'paused'],
+      expect.objectContaining({ status: 'stopped' }),
       'Run stopped before the pending intent could fill',
+      expect.any(Date),
     );
+    expect(h.repo.expirePendingIntents).not.toHaveBeenCalled();
     expect(h.audit.log.mock.calls.map((call) => call[0].action)).toEqual([
       'sandbox.run_paused',
       'sandbox.run_resumed',
@@ -367,10 +385,12 @@ describe('SandboxRunService lifecycle', () => {
     const h = harness(makeRun({ status: 'stopped' }));
     const archived = await h.service.archive(USER, RUN, {});
     expect(archived.archivedAt).not.toBeNull();
-    expect(h.repo.expirePendingIntents).toHaveBeenCalledWith(
+    expect(h.repo.archiveRunAndExpire).toHaveBeenCalledWith(
+      USER,
       RUN,
       'Run archived before the pending intent could fill',
     );
+    expect(h.repo.expirePendingIntents).not.toHaveBeenCalled();
     expect(h.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'sandbox.run_archived' }),
     );

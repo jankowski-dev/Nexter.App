@@ -133,12 +133,9 @@ describe.runIf(canRun)('sandbox stage 2 schema', () => {
 
   it('gives the app role no DELETE on any sandbox table', async () => {
     const role = await db.execute(sql`select 1 from pg_roles where rolname = 'nexter_app'`);
-
-    if (role.rows.length === 0) {
-      // CI migrates as the postgres superuser; the app-role grants are applied
-      // only where the deployment role exists.
-      return;
-    }
+    // CI provisions this role before the test step; a missing role means the
+    // runtime grant gate was not exercised and must fail rather than skip.
+    expect(role.rows.length).toBe(1);
 
     const grants = await db.execute(sql`
       select table_name, privilege_type

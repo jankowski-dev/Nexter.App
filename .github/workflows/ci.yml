@@ -73,6 +73,11 @@ jobs:
       - name: Migrate database
         run: pnpm db:migrate
 
+      - name: Provision app role
+        run: APP_DB_USER=nexter_app APP_DB_PASSWORD=ci-app-password-0123456789 pnpm db:provision-app
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/nexter
+
       - name: Test
         run: pnpm test
 

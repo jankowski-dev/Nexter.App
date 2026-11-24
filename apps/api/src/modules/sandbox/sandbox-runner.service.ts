@@ -12,11 +12,12 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB_POOL } from '../../shared/db/db.module';
 import { SandboxDataService, type SandboxDataSourceToken } from './sandbox-data.service';
 import { type SandboxLiveQuote } from './sandbox-live-broker';
-import { findNewBarClose, runSandboxLiveTick } from './sandbox-live-tick';
+import { findNewBarClose, runSandboxLiveTick, SandboxLiveTickError } from './sandbox-live-tick';
 import { SandboxRepository } from './sandbox.repository';
 import {
   resolveSandboxRunConfig,
   SANDBOX_ENABLED,
+  SandboxPersistenceError,
   type SandboxRunSnapshot,
   type SandboxRunnerConfig,
 } from './sandbox.types';
@@ -24,6 +25,40 @@ import {
 const RUNNER_LOCK_KEY = 'nexter:sandbox-runner';
 const RUNNER_INTERVAL_MS = 60_000;
 const HOUR_MS = 3_600_000;
+
+/**
+ * Persistence failures that mean the persisted run can no longer be trusted:
+ * invalid JSONB/state, a broken event chain or an invalid event payload.
+ * `SANDBOX_RUN_NOT_FOUND` is deliberately not terminal (the run may have been
+ * removed/archived between the list and the tick).
+ */
+const TERMINAL_PERSISTENCE_CODES: ReadonlySet<SandboxPersistenceError['code']> = new Set([
+  'SANDBOX_STATE_INVALID',
+  'SANDBOX_EVENT_CHAIN_DESYNC',
+  'SANDBOX_EVENT_PAYLOAD_INVALID',
+]);
+
+/** Live-tick failures that fail closed: missing state, reconciliation, clock. */
+const TERMINAL_TICK_CODES: ReadonlySet<SandboxLiveTickError['code']> = new Set([
+  'SANDBOX_LIVE_STATE_MISSING',
+  'SANDBOX_LIVE_RECONCILIATION_FAILED',
+  'SANDBOX_LIVE_CLOCK_INVALID',
+]);
+
+/**
+ * True for errors that mean the run must stop permanently. Everything else
+ * (pool timeout/reset, provider/DB blip, unknown infrastructure) is transient:
+ * the run stays `running` and is retried on the next 60-second pass.
+ */
+export function isTerminalSandboxError(error: unknown): boolean {
+  if (error instanceof SandboxPersistenceError) {
+    return TERMINAL_PERSISTENCE_CODES.has(error.code);
+  }
+  if (error instanceof SandboxLiveTickError) {
+    return TERMINAL_TICK_CODES.has(error.code);
+  }
+  return false;
+}
 
 /** Internal control flow: a scheduled tick decided not to advance the run. */
 class SandboxTickSkip extends Error {
@@ -94,7 +129,12 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
         try {
           await this.advanceRun(run.id, now);
         } catch (error) {
-          await this.failRun(run.id, run.userId, error);
+          if (error instanceof SandboxTickSkip) continue;
+          if (isTerminalSandboxError(error)) {
+            await this.failRun(run.id, run.userId, error);
+          } else {
+            await this.handleTransient(run.id, now, error);
+          }
         }
       }
     } catch (error) {
@@ -168,7 +208,20 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
           eventLog,
         });
 
-        await this.repository.insertPendingIntents(tx, runId, result.pendingIntents);
+        const insertedIntents = await this.repository.insertPendingIntents(
+          tx,
+          runId,
+          result.pendingIntents,
+        );
+        if (insertedIntents < result.pendingIntents.length) {
+          // A manual close or another decision can hold the pending
+          // (run, token, side) unique slot between list and insert. The
+          // conflict guard drops the duplicate; record it for diagnostics.
+          this.logger.warn(
+            `Sandbox run ${runId} queued ${result.pendingIntents.length} intent(s) but ` +
+              `persisted ${insertedIntents}; a conflicting pending intent won`,
+          );
+        }
         return result.tick;
       });
 
@@ -221,6 +274,26 @@ export class SandboxRunnerService implements OnApplicationBootstrap, OnApplicati
     }
 
     return quotes;
+  }
+
+  /**
+   * A transient infrastructure error (pool timeout/reset, DB blip, unknown
+   * failure) must not end an autonomous run. Leave the status and intents as
+   * they are, refresh `last_tick_at` best-effort and retry on the next pass.
+   */
+  private async handleTransient(runId: string, now: Date, error: unknown): Promise<void> {
+    const message = (
+      error instanceof Error ? error.message : String(error ?? 'unknown sandbox error')
+    ).slice(0, 1000);
+    this.logger.warn(`Sandbox run ${runId} tick deferred after a transient error: ${message}`);
+    try {
+      await this.repository.touchRunTick(runId, now);
+    } catch (touchError) {
+      this.logger.warn(
+        `Sandbox run ${runId} transient tick bookkeeping failed: ` +
+          `${touchError instanceof Error ? touchError.message : 'unknown'}`,
+      );
+    }
   }
 
   private async failRun(runId: string, userId: string, error: unknown): Promise<void> {

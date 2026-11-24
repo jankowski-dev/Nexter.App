@@ -6,9 +6,14 @@ import {
   MemoryEventLog,
   type Candle,
 } from '@nexter/sandbox-core';
-import { SandboxRunnerService } from './sandbox-runner.service';
+import { SandboxRunnerService, isTerminalSandboxError } from './sandbox-runner.service';
 import type { SandboxPendingIntent, SandboxTokenRecord } from './sandbox.repository';
-import type { SandboxRunSnapshot, SandboxRunnerConfig } from './sandbox.types';
+import { SandboxLiveTickError } from './sandbox-live-tick';
+import {
+  SandboxPersistenceError,
+  type SandboxRunSnapshot,
+  type SandboxRunnerConfig,
+} from './sandbox.types';
 
 const USER = '22222222-2222-4222-8222-222222222222';
 const RUN = '11111111-1111-4111-8111-111111111111';
@@ -286,15 +291,95 @@ describe('SandboxRunnerService', () => {
     expect(h.repo.touchRunTick).toHaveBeenCalled();
   });
 
-  it('marks a run failed and audits a decision/reconciliation error', async () => {
-    const h = harness({ commitError: new Error('ledger reconciliation failed') });
+  it('classifies persistence/tick failures as terminal and infrastructure as transient', () => {
+    expect(
+      isTerminalSandboxError(new SandboxPersistenceError('SANDBOX_STATE_INVALID', 'bad')),
+    ).toBe(true);
+    expect(
+      isTerminalSandboxError(new SandboxPersistenceError('SANDBOX_EVENT_CHAIN_DESYNC', 'bad')),
+    ).toBe(true);
+    expect(
+      isTerminalSandboxError(new SandboxPersistenceError('SANDBOX_EVENT_PAYLOAD_INVALID', 'bad')),
+    ).toBe(true);
+    expect(
+      isTerminalSandboxError(new SandboxLiveTickError('SANDBOX_LIVE_RECONCILIATION_FAILED', 'bad')),
+    ).toBe(true);
+    // A vanished run and any unknown/infrastructure error are retryable.
+    expect(
+      isTerminalSandboxError(new SandboxPersistenceError('SANDBOX_RUN_NOT_FOUND', 'gone')),
+    ).toBe(false);
+    expect(isTerminalSandboxError(new Error('pool timeout'))).toBe(false);
+    expect(isTerminalSandboxError('boom')).toBe(false);
+  });
+
+  it('keeps the run running after a transient loadRun failure and ticks next pass', async () => {
+    const h = harness();
+    const now = new Date(lastClose(h.series));
+    h.repo.loadRun.mockRejectedValueOnce(new Error('pool timeout'));
+
+    await h.service.runOnce(now);
+
+    expect(h.repo.markRunFailed).not.toHaveBeenCalled();
+    expect(h.repo.expirePendingIntents).not.toHaveBeenCalled();
+    expect(h.repo.touchRunTick).toHaveBeenCalledWith(RUN, now);
+    expect(h.getRun().status).toBe('running');
+
+    await h.service.runOnce(now);
+
+    expect(h.repo.commitTick).toHaveBeenCalledTimes(1);
+    expect(h.getRun().lastBarClose?.getTime()).toBe(lastClose(h.series));
+    expect(h.getRun().status).toBe('running');
+  });
+
+  it('keeps the run running after a transient commitTick failure and ticks next pass', async () => {
+    const h = harness({ commitError: new Error('connection reset') });
+    const now = new Date(lastClose(h.series));
+
+    await h.service.runOnce(now);
+
+    expect(h.repo.markRunFailed).not.toHaveBeenCalled();
+    expect(h.repo.expirePendingIntents).not.toHaveBeenCalled();
+    expect(h.repo.touchRunTick).toHaveBeenCalledWith(RUN, now);
+    expect(h.getRun().status).toBe('running');
+    expect(h.getRun().lastBarClose).toBeNull();
+
+    h.setCommitError(undefined);
+    await h.service.runOnce(now);
+
+    expect(h.repo.commitTick).toHaveBeenCalledTimes(2);
+    expect(h.getRun().lastBarClose?.getTime()).toBe(lastClose(h.series));
+    expect(h.getRun().status).toBe('running');
+  });
+
+  it('fails the run on a terminal reconciliation error and expires pending intents', async () => {
+    const h = harness({
+      commitError: new SandboxLiveTickError(
+        'SANDBOX_LIVE_RECONCILIATION_FAILED',
+        'ledger reconciliation failed',
+      ),
+    });
 
     await h.service.runOnce(new Date(lastClose(h.series)));
 
     expect(h.repo.markRunFailed).toHaveBeenCalledWith(RUN, 'ledger reconciliation failed');
+    expect(h.repo.expirePendingIntents).toHaveBeenCalledWith(RUN, expect.any(String));
+    expect(h.getRun().status).toBe('failed');
     expect(h.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'sandbox.run_failed', entityId: RUN }),
     );
+  });
+
+  it('fails the run on a terminal persisted-state error', async () => {
+    const h = harness();
+    h.repo.loadRun.mockRejectedValueOnce(
+      new SandboxPersistenceError('SANDBOX_STATE_INVALID', 'corrupt ledger state'),
+    );
+
+    await h.service.runOnce(new Date(lastClose(h.series)));
+
+    expect(h.repo.markRunFailed).toHaveBeenCalledWith(RUN, 'corrupt ledger state');
+    expect(h.repo.expirePendingIntents).toHaveBeenCalled();
+    expect(h.getRun().status).toBe('failed');
   });
 
   it('does not fail the run when the quote provider is unavailable', async () => {

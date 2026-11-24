@@ -295,19 +295,23 @@ export class SandboxRunService {
       });
     }
 
-    const stopped = await this.repository.transitionRun(userId, runId, ['running', 'paused'], {
-      status: 'stopped',
-      stoppedAt: new Date(),
-      pausedAt: null,
-    });
+    const now = new Date();
+    const stopped = await this.repository.transitionRunAndExpire(
+      userId,
+      runId,
+      ['running', 'paused'],
+      {
+        status: 'stopped',
+        stoppedAt: now,
+        pausedAt: null,
+      },
+      'Run stopped before the pending intent could fill',
+      now,
+    );
     if (!stopped) throw stateChanged('stop');
 
-    const expiredIntents = await this.repository.expirePendingIntents(
-      runId,
-      'Run stopped before the pending intent could fill',
-    );
     await this.auditTransition(userId, runId, 'sandbox.run_stopped', run.status, 'stopped', meta, {
-      expiredIntents,
+      expiredIntents: stopped.expiredIntents,
     });
     return toRunContract(await this.requireRun(userId, runId));
   }
@@ -321,20 +325,24 @@ export class SandboxRunService {
       });
     }
 
-    const archived = await this.repository.archiveRun(userId, runId);
-    if (!archived) throw stateChanged('archive');
-
-    const expiredIntents = await this.repository.expirePendingIntents(
+    const archived = await this.repository.archiveRunAndExpire(
+      userId,
       runId,
       'Run archived before the pending intent could fill',
     );
+    if (!archived) throw stateChanged('archive');
+
     await this.audit.log({
       userId,
       action: 'sandbox.run_archived',
       entityType: 'sandbox_run',
       entityId: runId,
       before: { status: run.status, archivedAt: null },
-      after: { status: run.status, archivedAt: new Date().toISOString(), expiredIntents },
+      after: {
+        status: run.status,
+        archivedAt: archived.archivedAt.toISOString(),
+        expiredIntents: archived.expiredIntents,
+      },
       ip: meta.ip,
       userAgent: meta.userAgent,
     });

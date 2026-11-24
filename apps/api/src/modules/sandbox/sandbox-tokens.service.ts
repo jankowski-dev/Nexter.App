@@ -308,7 +308,7 @@ export function buildSandboxCoverage(
   if (synthetic) {
     warnings.push('Данные CoinGecko помечены как synthetic и не являются биржевым OHLCV.');
   }
-  if (stale) warnings.push('Последняя свеча старше 2 часов.');
+  if (stale) warnings.push('Последняя свеча старше одного закрытого бара (1h).');
 
   return {
     tokenKey,

@@ -27,6 +27,7 @@ import { SandboxRepository } from './sandbox.repository';
 import {
   resolveSandboxRunConfig,
   SANDBOX_STRATEGY_KEYS,
+  SandboxPersistenceError,
   type SandboxRunSnapshot,
   type SandboxRunnerConfig,
 } from './sandbox.types';
@@ -253,6 +254,23 @@ export class SandboxReportService {
   }
 
   private async generate(userId: string, runId: string): Promise<SandboxGeneratedReport> {
+    try {
+      return await this.generateReport(userId, runId);
+    } catch (error) {
+      // A corrupt persisted run/event/equity row must surface as the typed
+      // 409 rather than an unhandled 500. NotFound/409 from the checks below
+      // pass through unchanged.
+      if (error instanceof SandboxPersistenceError) {
+        this.logger.warn(
+          `Sandbox report ${runId} could not read persisted state: ${error.message}`,
+        );
+        throw reportNotReady('Сохранённое состояние запуска не прошло проверку');
+      }
+      throw error;
+    }
+  }
+
+  private async generateReport(userId: string, runId: string): Promise<SandboxGeneratedReport> {
     const run = await this.requireRun(userId, runId);
     if (run.ledgerState === null || run.engineState === null) {
       throw reportNotReady('Запуск ещё не инициализирован');
