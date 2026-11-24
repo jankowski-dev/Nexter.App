@@ -282,8 +282,8 @@ Rules:
 - Reject a buy when `hasPosition` (`FILL_POSITION_EXISTS`), a sell when the position is missing/zero (`FILL_NO_POSITION`).
 - `fillPriceBuy = open * (1 + slippageBps/10000)`, `fillPriceSell = open * (1 - slippageBps/10000)`; format to 8 decimals.
 - `liquidityCapUsd = volumeUsd * liquidityCapPct/100`.
-- Buy: `fillUsd = min(intent.sizeUsd, liquidityCapUsd)`; `fee = fillUsd*feeBps/10000`; `cashFloor = equity*cashBufferPct/100`; if `fillUsd + fee > cash - cashFloor` → reject `FILL_INSUFFICIENT_CASH`; `amount = fillUsd / fillPrice` (8 decimals); status `partial` when `fillUsd < intent.sizeUsd`.
-- Sell: `fillAmount = min(intent.amount, positionAmount, liquidityCapUsd / fillPrice)`; if zero → reject `FILL_LIQUIDITY`; `notional = fillAmount*fillPrice`; `fee = notional*feeBps/10000`; `proceeds = notional - fee`; status `partial` when `fillAmount < intent.amount`.
+- Buy: `fillUsd = min(intent.sizeUsd, liquidityCapUsd)`; floor it to cents first: `bookedFill = fillUsd.toFixed(2, ROUND_DOWN)`; `bookedFee = usd(Decimal(bookedFill)*feeBps/10000)`; `cashFloor = equity*cashBufferPct/100`; if `Decimal(bookedFill) + Decimal(bookedFee) > cash - cashFloor` → reject `FILL_INSUFFICIENT_CASH`; `amount = Decimal(bookedFill) / fillPrice` (8 decimals); status `partial` when the booked 2-decimal fill is below the requested 2-decimal size; emit `requestedUsd - filledUsd = unfilledUsd`.
+- Sell: `fillAmount = min(intent.amount, positionAmount, liquidityCapUsd / fillPrice)`; if zero → reject `FILL_LIQUIDITY`; `bookedNotional = usd(fillAmount*fillPrice)`; `bookedFee = usd(Decimal(bookedNotional)*feeBps/10000)`; `bookedProceeds = Decimal(bookedNotional) - Decimal(bookedFee)`; emit the three strings so `notionalUsd - feeUsd === proceedsUsd`; status `partial` when the rounded 8-decimal fill is below the rounded 8-decimal requested amount.
 - Zero/negative open/volume (validated candles prevent it) → reject `FILL_NO_DATA`.
 - All USD/amount strings are 2/8-decimal formatted; internal Decimal exact.
 - No ledger, no events here.

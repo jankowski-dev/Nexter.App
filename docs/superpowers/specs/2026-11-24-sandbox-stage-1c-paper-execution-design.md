@@ -122,6 +122,8 @@ proceeds  = notional - fee
 
 Prices are formatted to 8 decimals, amounts to 8 decimals, USD to 2 decimals for ledger/report fields; the internal Decimal is exact until formatting. Buy fees are included in the position cost basis. Sell fees reduce proceeds and realized P&L.
 
+**Booked values are the source of truth.** The buy fill is floored to cents **before** the cash-floor check, the fee is computed on the booked fill, and the position amount is derived from the booked fill; otherwise a half-up cent could pass the exact check and then breach the floor once the ledger books the rounded strings. For a sell, the booked notional is rounded to cents, the fee is computed on the booked notional, and `proceeds = booked notional - booked fee` by construction, so the three emitted USD strings always agree.
+
 ### 5.3 Liquidity and partial fills
 
 - `liquidityCapUsd = bar.volumeUsd * liquidityCapPct / 100`.
