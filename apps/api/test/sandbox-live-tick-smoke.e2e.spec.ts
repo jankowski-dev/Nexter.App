@@ -59,7 +59,6 @@ if (liveEnabled) {
 }
 
 const CAKE_KEY = 'bsc:0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82';
-const BTC_KEY = 'binance:BTCUSDT';
 const HOUR = 3_600_000;
 
 interface LiveToken {
@@ -75,14 +74,6 @@ const CAKE: LiveToken = {
   symbol: 'CAKE',
   chain: 'bsc',
   contractAddress: CAKE_KEY.slice('bsc:'.length),
-  coingeckoId: null,
-};
-
-const BTC: LiveToken = {
-  tokenKey: BTC_KEY,
-  symbol: 'BTC',
-  chain: 'binance',
-  contractAddress: null,
   coingeckoId: null,
 };
 
@@ -174,25 +165,23 @@ describe.runIf(liveEnabled)('sandbox live tick smoke', () => {
       new CoinGeckoClient(),
     );
 
-    // Real 180-day series for a DEX token and a Binance major.
-    const btcRefresh = await data.refreshToken(BTC, { days: 180 });
+    // Real 180-day CAKE series (the only token this run trades). Binance is
+    // geo-restricted on some CI runners and is not required here.
     const cakeRefresh = await data.refreshToken(CAKE, { days: 180 });
-    expect(btcRefresh.synthetic).toBe(false);
     expect(cakeRefresh.synthetic).toBe(false);
+    expect(cakeRefresh.source).toBe('geckoterminal');
+    expect(cakeRefresh.fetched).toBe(SANDBOX_REQUIRED_CANDLES);
 
     const now = new Date();
-    const stats = await repository.candleStatsMany([BTC_KEY, CAKE_KEY]);
-    for (const key of [BTC_KEY, CAKE_KEY]) {
-      const stat = stats.get(key);
-      if (stat === undefined) throw new Error(`no candle stats for ${key}`);
-      const coverage = buildSandboxCoverage(key, stat, now);
-      expect(coverage.available).toBe(SANDBOX_REQUIRED_CANDLES);
-      expect(coverage.required).toBe(SANDBOX_REQUIRED_CANDLES);
-      expect(coverage.gaps).toBe(0);
-      expect(coverage.synthetic).toBe(false);
-      expect(coverage.stale).toBe(false);
-      expect(coverage.status).toBe('ok');
-    }
+    const cakeStat = (await repository.candleStatsMany([CAKE_KEY])).get(CAKE_KEY);
+    if (cakeStat === undefined) throw new Error('no candle stats for CAKE');
+    const cakeCoverage = buildSandboxCoverage(CAKE_KEY, cakeStat, now);
+    expect(cakeCoverage.available).toBe(SANDBOX_REQUIRED_CANDLES);
+    expect(cakeCoverage.required).toBe(SANDBOX_REQUIRED_CANDLES);
+    expect(cakeCoverage.gaps).toBe(0);
+    expect(cakeCoverage.synthetic).toBe(false);
+    expect(cakeCoverage.stale).toBe(false);
+    expect(cakeCoverage.status).toBe('ok');
 
     const candles = await repository.loadCandles([CAKE_KEY], SANDBOX_TIMEFRAME, 3);
     const decisionBar = candles.at(-2);
