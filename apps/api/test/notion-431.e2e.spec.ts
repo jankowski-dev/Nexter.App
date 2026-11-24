@@ -5,7 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import {
   createDb,
   importRows,
@@ -64,7 +64,7 @@ describe.runIf(canRun)('Notion 431-row import', () => {
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const setup = await agent
       .post('/api/v1/auth/setup')
       .send({

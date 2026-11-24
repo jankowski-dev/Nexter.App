@@ -176,8 +176,9 @@ describe.runIf(canRun)('sandbox db event log', () => {
     const { runId } = await seedSandboxRun(db);
     let captured: SandboxEventLog | undefined;
 
-    await expect(
-      db.transaction(async (tx) => {
+    let appendError: unknown;
+    try {
+      await db.transaction(async (tx) => {
         const log = await SandboxEventLog.load(tx, runId);
         captured = log;
         // Occupy the next sequence so the log's insert hits the primary key.
@@ -194,10 +195,23 @@ describe.runIf(canRun)('sandbox db event log', () => {
         });
 
         await log.append(eventInput(runId, 'run.started'));
-      }),
-      // Drizzle wraps the Postgres error (`Failed query: insert ...`), so match
-      // any throw here and rely on the chain invariants asserted below.
-    ).rejects.toThrow();
+      });
+      throw new Error('expected the duplicate append to fail');
+    } catch (error) {
+      appendError = error;
+    }
+
+    // Drizzle wraps the Postgres error in `Failed query: ...` and keeps the PG
+    // error on `.cause`; assert both the wrapper and the unique violation.
+    expect(appendError).toBeInstanceOf(Error);
+    expect((appendError as Error).message).toMatch(/Failed query|duplicate key|unique/i);
+    const cause = (appendError as { cause?: { code?: string; message?: string } }).cause;
+    if (cause !== undefined) {
+      expect(
+        cause.code === '23505' || /duplicate key|unique/i.test(cause.message ?? ''),
+        `unexpected cause: ${JSON.stringify(cause)}`,
+      ).toBe(true);
+    }
 
     expect(captured?.events()).toEqual([]);
     expect(captured?.hash()).toBe(GENESIS_HASH);

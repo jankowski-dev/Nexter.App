@@ -53,6 +53,7 @@ const request: AiCycleRequest = {
   variants: 100,
   maxDrafts: 0,
   execution: 'next-open',
+  strategyMode: 'legacy',
 };
 
 describe('AiCycleService cycle limit', () => {

@@ -27,6 +27,7 @@ import {
   sandboxTradesResponseSchema,
 } from '@nexter/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { SandboxEventInput } from '@nexter/sandbox-core';
 import { AppModule } from '../src/app.module';
 import { SandboxEventLog } from '../src/modules/sandbox/sandbox-event-log';
 import type { SandboxCandleInput } from '../src/modules/sandbox/sandbox.repository';
@@ -35,16 +36,25 @@ import { SandboxRunnerService } from '../src/modules/sandbox/sandbox-runner.serv
 import { SandboxDataService } from '../src/modules/sandbox/sandbox-data.service';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 import { assertDisposableTestDatabase } from './helpers/test-database';
-import { seedSandboxRun } from './helpers/sandbox-fixtures';
+import {
+  makeOpenLedger,
+  makeTick,
+  SANDBOX_TEST_AT,
+  seedSandboxRun,
+} from './helpers/sandbox-fixtures';
 
 /**
  * Fake-clock end-to-end suite for the Stage 2 live-paper loop.
  *
  * The real Nest module, controller, lifecycle service, live tick, event log,
  * projections, read API and report service run against Postgres, but every
- * provider call and the clock are deterministic: candles are seeded by the
- * test and the runner is advanced with an explicit `now`. No wall clock and no
- * network are involved in the assertions.
+ * provider call and every runner tick is deterministic: candles are seeded by
+ * the test and the runner is advanced with an explicit `now`. No provider
+ * network is used.
+ *
+ * One wall-clock dependency remains: `requestClose` stamps the manual-close
+ * intent with `Date.now()`, so the test pins `Date.now()` only around that HTTP
+ * call (and restores it in `finally`); all persistence/tick times are injected.
  *
  * DB-gated (`NEXTER_TEST_DB=1` + a disposable `DATABASE_URL`); skipped locally.
  */
@@ -146,6 +156,19 @@ function appendCandle(index: number, previousClose: string, close: string): Sand
     open: previousClose,
     high: String(Math.max(Number(previousClose), Number(close))),
     low: String(Math.min(Number(previousClose), Number(close))),
+  };
+}
+
+function eventInput(runId: string, eventType: string): SandboxEventInput {
+  return {
+    runId,
+    clockTime: new Date(SANDBOX_TEST_AT).toISOString(),
+    module: 'run',
+    eventType,
+    severity: 'info',
+    dataSnapshotId: 'snapshot-0',
+    configVersion: 'config-1',
+    seed: 1,
   };
 }
 
@@ -700,6 +723,17 @@ describe('Sandbox live-paper fake-clock e2e', () => {
           (await api(liveApp, cookies, 'get', `/api/v1/sandbox/runs/${runId}`).expect(200)).body,
         );
         expect(archivedDetail.archivedAt).not.toBeNull();
+        // Archived runs stay readable, including the report artifact.
+        const archivedReport = sandboxReportResponseSchema.parse(
+          (
+            await api(liveApp, cookies, 'get', `/api/v1/sandbox/runs/${runId}/report.json`).expect(
+              200,
+            )
+          ).body,
+        );
+        expect(archivedReport.executionMode).toBe('live-paper');
+        expect(archivedReport.report.runId).toBe(runId);
+        expect(archivedReport.report.eventCount).toBe(archivedDetail.eventCount);
 
         const overview = sandboxOverviewSchema.parse(
           (await api(liveApp, cookies, 'get', '/api/v1/sandbox/overview').expect(200)).body,
@@ -713,8 +747,10 @@ describe('Sandbox live-paper fake-clock e2e', () => {
           .select({ action: auditLog.action })
           .from(auditLog)
           .where(and(eq(auditLog.entityType, 'sandbox_run'), eq(auditLog.entityId, runId)));
-        expect(new Set(runAudits.map((row) => row.action))).toEqual(
-          new Set([
+        // Exact rows, not a Set: a duplicate audit would still pass set equality.
+        const runAuditActions = runAudits.map((row) => row.action).sort();
+        expect(runAuditActions).toEqual(
+          [
             'sandbox.run_created',
             'sandbox.run_updated',
             'sandbox.run_started',
@@ -723,15 +759,16 @@ describe('Sandbox live-paper fake-clock e2e', () => {
             'sandbox.run_stopped',
             'sandbox.run_archived',
             'sandbox.trade_close_requested',
-          ]),
+          ].sort(),
         );
 
         const tokenAudits = await db
           .select({ action: auditLog.action })
           .from(auditLog)
           .where(eq(auditLog.entityType, 'sandbox_token'));
-        expect(new Set(tokenAudits.map((row) => row.action))).toEqual(
-          new Set(['sandbox.token_created', 'sandbox.token_updated', 'sandbox.token_refreshed']),
+        const tokenAuditActions = tokenAudits.map((row) => row.action).sort();
+        expect(tokenAuditActions).toEqual(
+          ['sandbox.token_created', 'sandbox.token_updated', 'sandbox.token_refreshed'].sort(),
         );
 
         const [finalRun] = await db
@@ -794,5 +831,45 @@ describe('Sandbox live-paper fake-clock e2e', () => {
     } finally {
       await restoreSingleton();
     }
+  });
+
+  it.runIf(canRun)('stops with an open position and keeps its report readable', async () => {
+    if (!db) throw new Error('test database is not configured');
+    const cookies = await setupOwner(app);
+    const userId = await ownerId();
+    const repository = new SandboxRepository(db);
+    const { runId } = await seedSandboxRun(db, { userId, status: 'running' });
+
+    const open = makeOpenLedger();
+    const tick = makeTick(open.ledger, open.marked, open.intents);
+    await repository.commitTick(runId, async ({ eventLog }) => {
+      await eventLog.append(eventInput(runId, 'run.started'));
+      return tick;
+    });
+
+    const stopped = await api(app, cookies, 'post', `/api/v1/sandbox/runs/${runId}/stop`).expect(
+      200,
+    );
+    expect(stopped.body).toMatchObject({ status: 'stopped' });
+
+    // Stop is not a forced liquidation: the open position stays marked and
+    // readable, and the report is still generated from the persisted state.
+    const positions = sandboxPositionsResponseSchema.parse(
+      (await api(app, cookies, 'get', `/api/v1/sandbox/runs/${runId}/positions`).expect(200)).body,
+    );
+    expect(positions.positions).toHaveLength(1);
+    expect(Number(positions.positions[0]?.amount)).toBeGreaterThan(0);
+
+    const detail = sandboxRunDetailSchema.parse(
+      (await api(app, cookies, 'get', `/api/v1/sandbox/runs/${runId}`).expect(200)).body,
+    );
+    const report = sandboxReportResponseSchema.parse(
+      (await api(app, cookies, 'get', `/api/v1/sandbox/runs/${runId}/report.json`).expect(200))
+        .body,
+    );
+    expect(report.executionMode).toBe('live-paper');
+    expect(report.report.positions).toHaveLength(1);
+    expect(report.report.eventCount).toBe(detail.eventCount);
+    expect(report.report.metrics.finalEquityUsd).toBe(detail.equityUsd);
   });
 });

@@ -43,6 +43,8 @@ function group(token: Asset, overrides: Partial<TradeGroupSummary> = {}): TradeG
     holdingDays: 0,
     source: 'manual',
     notes: null,
+    stopLossPct: null,
+    takeProfitPct: null,
     quality: {
       assetVerified: true,
       chainKnown: true,

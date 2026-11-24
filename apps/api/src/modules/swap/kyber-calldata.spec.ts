@@ -11,32 +11,32 @@ import {
   type SwapBuildExpectation,
 } from './kyber-calldata';
 
-const wallet = '0x1111111111111111111111111111111111111111';
-const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
-const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
-const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
-const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
-const other = '0x2222222222222222222222222222222222222222';
+const wallet = '0x1111111111111111111111111111111111111111' as const;
+const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5' as const;
+const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996' as const;
+const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d' as const;
+const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d' as const;
+const other = '0x2222222222222222222222222222222222222222' as const;
 const amount = 1_000_000_000_000_000_000n;
 const minOut = 1_990_000_000_000_000_000n;
 const quotedOut = 2_000_000_000_000_000_000n;
 const deadline = Math.floor(Date.now() / 1000) + 300;
 
 interface SwapOverrides {
-  dstReceiver?: string;
-  srcToken?: string;
-  dstToken?: string;
+  dstReceiver?: `0x${string}`;
+  srcToken?: `0x${string}`;
+  dstToken?: `0x${string}`;
   amount?: bigint;
   minReturnAmount?: bigint;
-  srcReceivers?: string[];
+  srcReceivers?: `0x${string}`[];
   srcAmounts?: bigint[];
-  feeReceivers?: string[];
+  feeReceivers?: `0x${string}`[];
   feeAmounts?: bigint[];
-  callTarget?: string;
-  approveTarget?: string;
+  callTarget?: `0x${string}`;
+  approveTarget?: `0x${string}`;
   flags?: bigint;
-  permit?: string;
-  targetData?: string;
+  permit?: `0x${string}`;
+  targetData?: `0x${string}`;
 }
 
 function encodeSwap(

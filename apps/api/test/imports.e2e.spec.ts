@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import {
   auditLog,
   createDb,
@@ -197,7 +197,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `imports-e2e-${Date.now()}-${emailCounter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')
@@ -223,7 +223,7 @@ describe.runIf(canRun)('Notion import e2e', () => {
   }
 
   function previewRequest(
-    agent: SuperAgentTest,
+    agent: ReturnType<typeof request.agent>,
     csrf: string,
     payload: ReturnType<typeof buildExport>,
   ) {
@@ -235,18 +235,18 @@ describe.runIf(canRun)('Notion import e2e', () => {
   }
 
   async function preview(
-    agent: SuperAgentTest,
+    agent: ReturnType<typeof request.agent>,
     csrf: string,
     payload: ReturnType<typeof buildExport>,
   ) {
     return previewRequest(agent, csrf, payload).expect(200);
   }
 
-  async function commit(agent: SuperAgentTest, csrf: string, importId: string) {
+  async function commit(agent: ReturnType<typeof request.agent>, csrf: string, importId: string) {
     return agent.post(`/api/v1/imports/${importId}/commit`).set('x-csrf-token', csrf).expect(200);
   }
 
-  async function rollback(agent: SuperAgentTest, csrf: string, importId: string) {
+  async function rollback(agent: ReturnType<typeof request.agent>, csrf: string, importId: string) {
     return agent.post(`/api/v1/imports/${importId}/rollback`).set('x-csrf-token', csrf).expect(200);
   }
 

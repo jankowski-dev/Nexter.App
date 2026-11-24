@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import {
   accounts,
   auditLog,
@@ -58,7 +58,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `accounting-e2e-${Date.now()}-${emailCounter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')
@@ -83,7 +83,11 @@ describe.runIf(canRun)('Accounting e2e', () => {
     };
   }
 
-  async function create(agent: SuperAgentTest, csrf: string, body: Record<string, unknown>) {
+  async function create(
+    agent: ReturnType<typeof request.agent>,
+    csrf: string,
+    body: Record<string, unknown>,
+  ) {
     if (body.type === 'buy' && typeof body.assetId === 'string') {
       const watchlist = await agent
         .post('/api/v1/watchlist')
@@ -107,7 +111,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
   }
 
-  async function getAssets(agent: SuperAgentTest) {
+  async function getAssets(agent: ReturnType<typeof request.agent>) {
     const response = await agent.get('/api/v1/assets').expect(200);
     return response.body.assets as Array<{
       id: string;
@@ -117,7 +121,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
     }>;
   }
 
-  async function getAccounts(agent: SuperAgentTest) {
+  async function getAccounts(agent: ReturnType<typeof request.agent>) {
     const response = await agent.get('/api/v1/accounts').expect(200);
     return response.body.accounts as Array<{
       id: string;
@@ -127,7 +131,12 @@ describe.runIf(canRun)('Accounting e2e', () => {
     }>;
   }
 
-  async function setPrice(agent: SuperAgentTest, csrf: string, assetId: string, priceUsd: string) {
+  async function setPrice(
+    agent: ReturnType<typeof request.agent>,
+    csrf: string,
+    assetId: string,
+    priceUsd: string,
+  ) {
     return agent
       .post(`/api/v1/prices/${assetId}`)
       .set('x-csrf-token', csrf)
@@ -844,8 +853,8 @@ describe.runIf(canRun)('Accounting e2e', () => {
       usdValue: '600',
     });
 
-    await setPrice(agent, owner.csrf, link?.id, '10');
-    await setPrice(agent, owner.csrf, bnb?.id, '600');
+    await setPrice(agent, owner.csrf, link!.id, '10');
+    await setPrice(agent, owner.csrf, bnb!.id, '600');
 
     await create(agent, owner.csrf, {
       type: 'buy',
@@ -1357,7 +1366,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
       amount: '1000',
       usdValue: '1000',
     });
-    await setPrice(agent, owner.csrf, link?.id, '10');
+    await setPrice(agent, owner.csrf, link!.id, '10');
 
     const firstBuy = await create(agent, owner.csrf, {
       type: 'buy',
@@ -1369,7 +1378,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
     });
     const firstGroupId = firstBuy.body.transaction.tradeGroupId as string;
 
-    await setPrice(agent, owner.csrf, link?.id, '12');
+    await setPrice(agent, owner.csrf, link!.id, '12');
     const secondBuy = await create(agent, owner.csrf, {
       type: 'buy',
       accountId: wallet?.id,
@@ -1399,7 +1408,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
       tradeGroupId: secondGroupId,
     });
 
-    await setPrice(agent, owner.csrf, link?.id, '15');
+    await setPrice(agent, owner.csrf, link!.id, '15');
 
     await request(app.getHttpServer()).get('/api/v1/portfolio/token-summaries').expect(401);
 
@@ -1527,7 +1536,7 @@ describe.runIf(canRun)('Accounting e2e', () => {
       amount: '1000',
       usdValue: '1000',
     });
-    await setPrice(agent, owner.csrf, link?.id, '10');
+    await setPrice(agent, owner.csrf, link!.id, '10');
 
     const sequences = fc.sample(
       fc.array(fc.integer({ min: 1, max: 5 }), { minLength: 1, maxLength: 3 }),

@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { auditLog, createDb, sandboxTokens, users, type Database } from '@nexter/db';
 import { sandboxCoverageResponseSchema, sandboxTokenSchema } from '@nexter/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -46,7 +46,7 @@ describe('Sandbox tokens and coverage (e2e)', () => {
     );
   }
 
-  async function setupOwner(agent: SuperAgentTest): Promise<string> {
+  async function setupOwner(agent: ReturnType<typeof request.agent>): Promise<string> {
     const setup = await agent
       .post('/api/v1/auth/setup')
       .send({

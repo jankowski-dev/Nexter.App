@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { createDb, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -36,7 +36,7 @@ describe('Sandbox status (e2e)', () => {
   let db: Database | null = null;
   let pool: ReturnType<typeof createDb>['pool'] | null = null;
 
-  async function setupOwner(agent: SuperAgentTest): Promise<void> {
+  async function setupOwner(agent: ReturnType<typeof request.agent>): Promise<void> {
     const setup = await agent
       .post('/api/v1/auth/setup')
       .send({

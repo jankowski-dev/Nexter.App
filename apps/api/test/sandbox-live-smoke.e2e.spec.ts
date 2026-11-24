@@ -94,15 +94,15 @@ describe.runIf(liveEnabled)('sandbox live provider smoke', () => {
     );
     const now = new Date();
 
-    // Binance majors: the curated real-OHLCV fallback path.
+    // Binance majors: the curated real-OHLCV fallback path. A partial series is
+    // a real data-quality failure for the always-on majors, not tolerated.
     const btc = await data.refreshToken(BTC, { days: 180 });
     expect(btc.synthetic).toBe(false);
     expect(btc.source).toBe('binance');
-    expect(btc.fetched).toBeGreaterThanOrEqual(4_300);
+    expect(btc.fetched).toBe(SANDBOX_REQUIRED_CANDLES);
 
     const btcRows = repository.candles(BTC_KEY);
-    expect(btcRows.length).toBe(btc.fetched);
-    expect(btcRows.length).toBeGreaterThanOrEqual(4_300);
+    expect(btcRows.length).toBe(SANDBOX_REQUIRED_CANDLES);
     expect(btcRows.every((row) => row.timeframe === SANDBOX_TIMEFRAME)).toBe(true);
     expect(btcRows.every((row) => /^\d+\.\d{18}$/.test(row.close))).toBe(true);
     expect(btcRows.every((row) => /^\d+\.\d{18}$/.test(row.volumeUsd))).toBe(true);
@@ -118,19 +118,11 @@ describe.runIf(liveEnabled)('sandbox live provider smoke', () => {
     const btcStats = repository.stats(BTC_KEY);
     const btcCoverage = buildSandboxCoverage(BTC_KEY, btcStats, now);
     expect(btcCoverage.required).toBe(SANDBOX_REQUIRED_CANDLES);
-    expect(btcCoverage.available).toBe(btcStats.available);
+    expect(btcCoverage.available).toBe(SANDBOX_REQUIRED_CANDLES);
     expect(btcCoverage.gaps).toBe(0);
     expect(btcCoverage.synthetic).toBe(false);
-    const btcLastClose = (btcStats.lastOpenTime?.getTime() ?? 0) + SANDBOX_TIMEFRAME_MS;
-    expect(btcCoverage.stale).toBe(now.getTime() - btcLastClose > SANDBOX_TIMEFRAME_MS);
-    const btcComplete = btcCoverage.available >= SANDBOX_REQUIRED_CANDLES && btcCoverage.gaps === 0;
-    expect(btcCoverage.status).toBe(
-      btcCoverage.available === 0
-        ? 'missing'
-        : btcComplete && !btcCoverage.stale
-          ? 'ok'
-          : 'partial',
-    );
+    expect(btcCoverage.stale).toBe(false);
+    expect(btcCoverage.status).toBe('ok');
     expect(btcCoverage.firstOpenTime).not.toBeNull();
     expect(btcCoverage.lastOpenTime).not.toBeNull();
 
@@ -143,21 +135,22 @@ describe.runIf(liveEnabled)('sandbox live provider smoke', () => {
       (btcStats.lastOpenTime?.getTime() ?? 0) - SANDBOX_TIMEFRAME_MS,
     );
 
-    // GeckoTerminal DEX path (known BSC CAKE/WBNB pool). Public API may 429;
-    // the client retries and the assertion stays on observed rows only.
+    // GeckoTerminal DEX path (CAKE token contract; the client resolves its top
+    // pool). Public API may 429; the client retries. A partial series fails the
+    // smoke rather than being silently accepted.
     const cake = await data.refreshToken(CAKE, { days: 180 });
     expect(cake.synthetic).toBe(false);
     expect(cake.source).toBe('geckoterminal');
-    expect(cake.fetched).toBeGreaterThanOrEqual(4_000);
+    expect(cake.fetched).toBe(SANDBOX_REQUIRED_CANDLES);
 
     const cakeStats = repository.stats(CAKE_KEY);
     const cakeCoverage = buildSandboxCoverage(CAKE_KEY, cakeStats, now);
     expect(cakeCoverage.required).toBe(SANDBOX_REQUIRED_CANDLES);
-    expect(cakeCoverage.available).toBe(cakeStats.available);
+    expect(cakeCoverage.available).toBe(SANDBOX_REQUIRED_CANDLES);
     expect(cakeCoverage.gaps).toBe(0);
     expect(cakeCoverage.synthetic).toBe(false);
-    const cakeLastClose = (cakeStats.lastOpenTime?.getTime() ?? 0) + SANDBOX_TIMEFRAME_MS;
-    expect(cakeCoverage.stale).toBe(now.getTime() - cakeLastClose > SANDBOX_TIMEFRAME_MS);
+    expect(cakeCoverage.stale).toBe(false);
+    expect(cakeCoverage.status).toBe('ok');
 
     // Observed evidence for the Stage 2 report (also asserted above).
     console.info(

@@ -89,7 +89,8 @@ NODE_ENV=development SANDBOX_LIVE_SMOKE=1 \
 
 It fetches 180 days of real 1h candles through `SandboxDataService`
 (`binance:BTCUSDT` + `bsc:0x0e09fabb73bd3ade0a17ecc321fd13a19e81ce82`, the CAKE
-BSC pool), upserts them into an in-memory repository and asserts the
+token contract on BSC; the client resolves its top pool), upserts them into an
+in-memory repository and asserts the
 available/required/gaps/stale/synthetic coverage math. CI never sets
 `SANDBOX_LIVE_SMOKE`, so the suite is skipped and no network is used.
 

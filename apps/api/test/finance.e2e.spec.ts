@@ -4,7 +4,7 @@ import cookie from '@fastify/cookie';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { createDb, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -33,7 +33,7 @@ describe.runIf(canRun)('Finance API', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `finance-e2e-${Date.now()}-${emailCounter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')

@@ -16,7 +16,7 @@ import {
 } from '@nexter/contracts';
 import { asc, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { SandboxRepository } from '../src/modules/sandbox/sandbox.repository';
@@ -77,7 +77,7 @@ describe('Sandbox read API (e2e)', () => {
     );
   }
 
-  async function setupOwner(agent: SuperAgentTest): Promise<string> {
+  async function setupOwner(agent: ReturnType<typeof request.agent>): Promise<string> {
     const setup = await agent
       .post('/api/v1/auth/setup')
       .send({
@@ -316,8 +316,9 @@ describe('Sandbox read API (e2e)', () => {
       decisionPriceUsd: '105.00000000',
       clockTime: Date.now(),
     };
+    const activeRepository = repository;
     const inserted = await db.transaction((tx) =>
-      repository.insertPendingIntents(tx, runId, [pendingIntent]),
+      activeRepository.insertPendingIntents(tx, runId, [pendingIntent]),
     );
     expect(inserted).toBe(1);
 

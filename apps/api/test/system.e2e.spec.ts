@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { sql } from 'drizzle-orm';
 import { createDb, tradeGroups, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -31,7 +31,7 @@ describe.runIf(canRun)('System status e2e', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `system-e2e-${Date.now()}-${emailCounter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')

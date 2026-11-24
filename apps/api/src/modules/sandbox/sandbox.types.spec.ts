@@ -189,23 +189,25 @@ describe('sandbox state validation', () => {
   });
 
   it('fails loudly on unknown top-level state fields (strict schemas)', () => {
-    const engine = clone(engineState()) as Record<string, unknown>;
+    const engine = clone(engineState()) as unknown as Record<string, unknown>;
     engine.extra = true;
     expect(() => parseEngineState(engine)).toThrow(/extra/);
 
-    const ledger = clone(buyLedger()) as Record<string, unknown>;
+    const ledger = clone(buyLedger()) as unknown as Record<string, unknown>;
     ledger.extra = true;
     expect(() => parsePaperLedgerState(ledger)).toThrow(/extra/);
   });
 
   it('fails loudly on unknown nested state fields (strict schemas)', () => {
-    const engine = clone(engineState()) as {
+    const engine = clone(engineState()) as unknown as {
       tokens: Record<string, { regime: Record<string, unknown> }>;
     };
     engine.tokens[TOKEN]!.regime.extra = true;
     expect(() => parseEngineState(engine)).toThrow(/extra/);
 
-    const ledger = clone(buyLedger()) as { positions: Record<string, Record<string, unknown>> };
+    const ledger = clone(buyLedger()) as unknown as {
+      positions: Record<string, Record<string, unknown>>;
+    };
     ledger.positions[TOKEN]!.extra = true;
     expect(() => parsePaperLedgerState(ledger)).toThrow(/extra/);
   });
