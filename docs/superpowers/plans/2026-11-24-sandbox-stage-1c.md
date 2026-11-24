@@ -273,7 +273,6 @@ export function planSellFill(input: {
   intent: OrderIntent;
   candle: Candle;
   positionAmount: string;
-  positionAvgCostUsd: string;
   settings: PaperRunSettings;
 }): SellFillPlan;
 ```
