@@ -575,6 +575,10 @@ describe('DecisionEngine golden multi-bar replay', () => {
       expect(risk).toBeDefined();
       if (risk === undefined) throw new Error('unreachable');
       expect(risk.decision?.action).toBe(side);
+      // Strict audit adjacency: the risk check that authorised this order is the
+      // event immediately before it in the same cycle.
+      expect(risk.seq).toBe(event.seq - 1);
+      expect(risk.clockTime).toBe(event.clockTime);
       const checks = risk.riskChecks ?? [];
       expect(checks.map((check) => check.name)).toEqual(
         side === 'buy' ? expectedBuyChecks : expectedSellChecks,
@@ -623,10 +627,9 @@ describe('DecisionEngine golden multi-bar replay', () => {
       expect(tokenState.tokenId).toBe(tokenId);
       expect(typeof tokenState.strategyState).toBe('object');
     }
-    // Equity is the host's mark-to-market sum, not an engine output: it must be
-    // a positive decimal and must have moved from the 1000.00 start.
-    expect(Number(first.finalEquityUsd)).toBeGreaterThan(0);
-    expect(first.finalEquityUsd).not.toBe('1000.00');
+    // Equity is the host's mark-to-market sum, not an engine output; the literal
+    // is pinned so the summary table in the review packet stays true.
+    expect(first.finalEquityUsd).toBe('1047.32');
   });
 });
 

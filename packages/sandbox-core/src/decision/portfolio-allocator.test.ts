@@ -520,8 +520,11 @@ describe('allocateOpportunities cent truncation', () => {
   });
 
   it('accounts with the floored size so later allocations see the emitted cash', () => {
-    // equity 1000.03: two token caps of 20% are 200.006 each. Both must emit
-    // 200.00 and leave cash available of 1000.03 - 10.003 (buffer) - 400.00.
+    // equity 1000.02 puts the 20% token cap at 200.004, so the first order
+    // emits 200.00 (0.004 less than the exact size). Cash is 210.00, so the
+    // second candidate is cash-capped: floored accounting leaves exactly 10.00
+    // and it is allocated; exact-size accounting would leave 9.996, floor to
+    // 9.99 and drop it below the 10.00 minimum order.
     const result = allocateOpportunities(
       [
         ranked('first', 1, {
@@ -530,17 +533,25 @@ describe('allocateOpportunities cent truncation', () => {
         }),
         ranked('second', 2, { strategyKey: 'recovery', signal: signal({ stopLossPct: '10' }) }),
       ],
-      portfolio({ equity: '1000.03' }),
+      portfolio({
+        equity: '1000.02',
+        cash: '210.00',
+        positions: [position('held', { strategyKey: 'range_reversion', marketValueUsd: '790.02' })],
+      }),
       settings({
         ...OPEN_CAPS,
         maxTokenExposurePct: 20,
-        cashBufferPct: 10,
+        cashBufferPct: 0,
         perTradeRiskPct: 5,
         liquidityCapPct: 100,
       }),
     );
 
-    expect(result.allocations.map((entry) => entry.sizeUsd)).toEqual(['200.00', '200.00']);
+    expect(result.allocations.map((entry) => entry.sizeUsd)).toEqual(['200.00', '10.00']);
+    expect(result.allocations.map((entry) => entry.bindingConstraint)).toEqual([
+      Reason.ALLOC_TOKEN_CAP,
+      Reason.ALLOC_CASH_BUFFER,
+    ]);
     expect(result.drops).toEqual([]);
   });
 });

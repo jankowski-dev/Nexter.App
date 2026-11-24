@@ -378,7 +378,8 @@ midpoint exit, recovery entry) plus all three exit reasons that matter here
   alternative;
 - the first classification of every token is ILLIQUID /
   `REGIME_INSUFFICIENT_HISTORY`;
-- CRASH is adopted for AAA and CCC on the first raw CRASH bar (dwell bypassed);
+- CRASH is adopted for AAA and CCC on the raw-regime CRASH change event
+  (dwell bypassed);
 - every non-CRASH/ILLIQUID regime change had at least `regimeDwellBars` (3)
   confirmations;
 - every RECOVERY change follows a CRASH or TREND_DOWN;
@@ -389,7 +390,10 @@ midpoint exit, recovery entry) plus all three exit reasons that matter here
 - no buy candidate is risk-vetoed in the replay (`risk.checked` with
   `decision.action: block` count is `0`), so every sized candidate becomes an intent;
 - two full replays produce the same intents and hash; the hash, event count and
-  intent list are pinned.
+  intent list are pinned;
+- the run does not exercise a recovery-strategy exit end-to-end: the AAA and CCC
+  recovery positions stay open at the end; recovery exits are covered by
+  `recovery.test.ts`.
 
 ### 5.5 Sample event lines (golden replay, `recordedAt` is excluded from the hash)
 
@@ -594,7 +598,7 @@ The corresponding `order.intent` (seq 1484):
 }
 ```
 
-Last `decision.completed` (seq 3955, final hash above):
+Last `decision.completed` (seq 3935, final hash above):
 
 ```json
 {
@@ -640,7 +644,8 @@ Each item is a claim to verify, not an assertion to trust.
    different pending candidate with count 1", "adopts a non-crash change
    immediately when dwell is one bar", "measures crash drawdown over
    max(slowHours, rangeWindowHours)". Golden: CRASH adopted for AAA and CCC on the
-   first raw CRASH bar; no premature non-crash adoption across 400 bars.
+   raw-regime CRASH change event; no premature non-crash adoption across 400
+   bars.
 2. **Recovery confirmation.** RECOVERY requires a prior CRASH or TREND_DOWN, a
    close above the fast SMA and `recoveryConfirmBars` (3) strictly rising fast-SMA
    transitions; the classifier then still needs dwell. The recovery strategy buys
@@ -688,7 +693,8 @@ Each item is a claim to verify, not an assertion to trust.
    float-drift-free money); `risk-manager.test.ts` "returns all twelve checks in
    contract order and passes", one test per cap, "keeps all twelve checks when an
    early check fails", "reports the first failing check in table order"; golden:
-   every intent has a passing complete `risk.checked` immediately before it, and
+   every intent has a passing complete `risk.checked` immediately before it
+   (asserted by `seq` adjacency and the same `clockTime`), and
    the run contains no risk veto at all. The allocator/risk rounding defect found
    in review (F1) is fixed: sizes are truncated to cents, the minimum-order check
    and the allocator's own accounting use the emitted size, and the cap-binding
@@ -719,7 +725,7 @@ Each item is a claim to verify, not an assertion to trust.
     `daily_loss_limit`, `max_drawdown`, `per_trade_risk`, `liquidity`,
     `data_stale`, `cooldown`, `token_blocked`, `size_too_small`) with decimal
     `value`/`limit`, even when an earlier check fails; sells log two. Golden:
-    the exact name arrays are asserted for all 33 intents.
+    the exact name arrays are asserted for all 45 intents (24 buy / 21 sell).
 11. **Deterministic golden hash.** Two `replay()` calls in one test produce
     identical intents and the same final hash; the hash, event count and intent
     list are literals. `eventHash` excludes `recordedAt`/`timing`, so wall-clock
@@ -812,9 +818,10 @@ change the plan requires; nothing was silently re-pinned.
 | risk-vetoed buys  | `24` of 42 sized                                                   | `0`                                                                |
 | open positions    | `AAA`, `BBB`, `CCC`                                                | `AAA`, `BBB`, `CCC`                                                |
 
-The first four sample events in section 5.5 are byte-identical before and after
-(same `seq`/hash): they precede the first decision that the fix changes. Only the
-last `decision.completed` sample and the later events differ.
+The first four sample events in section 5.5 are identical in every hashable field
+(same `seq` and hash) before and after: they precede the first decision that the
+fix changes. Only the last `decision.completed` sample and the later events
+differ.
 
 ### F2 — Minor/deferred: entry during the first bars of a crash while the old trend regime is held
 

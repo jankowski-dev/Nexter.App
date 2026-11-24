@@ -262,8 +262,9 @@ For each ranked opportunity, in order:
 8. `sizeByRisk = riskUsd / (stopDistancePct/100)`.
 9. `liquidityCap = averageVolumeUsd × liquidityCapPct/100`.
 10. `size = min(tokenCap, strategyCap, cashAvailable, sizeByRisk, liquidityCap)`.
-11. If `size < minOrderUsd` → drop with `SIZE_TOO_SMALL`.
-12. Emit `OrderIntent` with size and stop/take.
+11. `sizeUsd = moneyDown(size)` — floor to cents (`toFixed(2, ROUND_DOWN)`). The emitted size can never exceed the cap that produced it, so the risk check that re-derives the same cap cannot veto the allocator's own output.
+12. If the floored `sizeUsd < minOrderUsd` → drop with `SIZE_TOO_SMALL`.
+13. Otherwise emit `OrderIntent` with `sizeUsd` (floored) and stop/take; `bindingConstraint` is the exact constraint equal to `size` (first in the fixed order). Increment open positions, token value and strategy value, and decrement cash available, by the floored emitted size, not the unrounded `size`.
 
 Sells are not ranked and do not consume buy capacity. For an open position, the strategy's sell signal emits a full-close intent (`amount = position.amount`, `sizeUsd = position.marketValueUsd`); risk still checks data/liquidity, but a sell is allowed to reduce risk even when daily/drawdown limits are hit.
 
