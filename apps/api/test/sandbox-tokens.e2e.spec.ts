@@ -1,10 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request, { type SuperAgentTest } from 'supertest';
-import { auditLog, createDb, type Database } from '@nexter/db';
+import { auditLog, createDb, sandboxTokens, users, type Database } from '@nexter/db';
 import { sandboxCoverageResponseSchema, sandboxTokenSchema } from '@nexter/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -37,6 +37,14 @@ describe('Sandbox tokens and coverage (e2e)', () => {
   let app: NestFastifyApplication;
   let db: Database | null = null;
   let pool: ReturnType<typeof createDb>['pool'] | null = null;
+
+  async function restoreSingleton(): Promise<void> {
+    if (!db) return;
+    await db.execute(sql`truncate table users restart identity cascade`);
+    await db.execute(
+      sql`create unique index if not exists users_singleton_unique on users ((true))`,
+    );
+  }
 
   async function setupOwner(agent: SuperAgentTest): Promise<string> {
     const setup = await agent
@@ -89,8 +97,12 @@ describe('Sandbox tokens and coverage (e2e)', () => {
   });
 
   afterAll(async () => {
-    await app.close();
-    await pool?.end();
+    try {
+      await restoreSingleton();
+    } finally {
+      await app.close();
+      await pool?.end();
+    }
   });
 
   it('requires authentication for the token universe', async () => {
@@ -189,7 +201,7 @@ describe('Sandbox tokens and coverage (e2e)', () => {
     const refreshed = await agent
       .post(`/api/v1/sandbox/tokens/${created.body.id}/refresh`)
       .set('x-csrf-token', csrf)
-      .expect(201);
+      .expect(200);
     expect(refreshed.body.fetched).toBe(0);
     expect(refreshed.body.coverage.status).toBe('missing');
 
@@ -224,5 +236,73 @@ describe('Sandbox tokens and coverage (e2e)', () => {
       .send({ enabled: false })
       .expect(404);
     expect(response.body).toMatchObject({ error: { code: 'SANDBOX_TOKEN_NOT_FOUND' } });
+  });
+
+  it.runIf(canRun)('isolates list, patch and coverage between owners', async () => {
+    if (!db) return;
+    const agent = request.agent(app.getHttpServer());
+    const csrf = await setupOwner(agent);
+    const secondKey = 'ethereum:0x2222222222222222222222222222222222222222';
+
+    await agent
+      .post('/api/v1/sandbox/tokens')
+      .set('x-csrf-token', csrf)
+      .send({ tokenKey: bscKey, symbol: 'CAKE', name: 'PancakeSwap' })
+      .expect(201);
+
+    try {
+      // The users table is a singleton; drop its guard for this test only so a
+      // genuine second owner and token can be seeded outside the API.
+      await db.execute(sql`drop index if exists users_singleton_unique`);
+      const [secondOwner] = await db
+        .insert(users)
+        .values({
+          email: `sandbox-second-${Date.now()}@example.com`,
+          passwordHash: 'not-a-real-hash',
+        })
+        .returning({ id: users.id });
+      expect(secondOwner?.id).toBeTruthy();
+
+      const [foreignToken] = await db
+        .insert(sandboxTokens)
+        .values({
+          userId: secondOwner?.id as string,
+          tokenKey: secondKey,
+          symbol: 'ETH',
+          name: 'Ether',
+          chain: 'ethereum',
+          contractAddress: secondKey.slice('ethereum:'.length),
+          coingeckoId: null,
+          enabled: true,
+        })
+        .returning({ id: sandboxTokens.id });
+      expect(foreignToken?.id).toBeTruthy();
+
+      const listed = await agent.get('/api/v1/sandbox/tokens').expect(200);
+      expect(listed.body.tokens.map((token: { tokenKey: string }) => token.tokenKey)).toEqual([
+        bscKey,
+      ]);
+
+      const patch = await agent
+        .patch(`/api/v1/sandbox/tokens/${foreignToken?.id}`)
+        .set('x-csrf-token', csrf)
+        .send({ enabled: false })
+        .expect(404);
+      expect(patch.body).toMatchObject({ error: { code: 'SANDBOX_TOKEN_NOT_FOUND' } });
+
+      const coverage = await agent
+        .get('/api/v1/sandbox/coverage')
+        .query({ tokenKey: secondKey })
+        .expect(404);
+      expect(coverage.body).toMatchObject({ error: { code: 'SANDBOX_TOKEN_NOT_FOUND' } });
+
+      const [unchanged] = await db
+        .select({ enabled: sandboxTokens.enabled })
+        .from(sandboxTokens)
+        .where(eq(sandboxTokens.id, foreignToken?.id as string));
+      expect(unchanged?.enabled).toBe(true);
+    } finally {
+      await restoreSingleton();
+    }
   });
 });

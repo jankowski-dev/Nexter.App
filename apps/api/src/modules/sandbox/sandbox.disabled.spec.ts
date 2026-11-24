@@ -1,18 +1,13 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { SandboxController } from './sandbox.controller';
+import { SandboxEnabledGuard } from './sandbox-enabled.guard';
+import { SandboxTokensService } from './sandbox-tokens.service';
+import { SANDBOX_ENABLED } from './sandbox.types';
 
 describe('Sandbox module with SANDBOX_ENABLED=0', () => {
-  beforeAll(() => {
-    process.env.SANDBOX_ENABLED = '0';
-  });
-
   it('keeps status reachable and hides the data API', async () => {
-    const { SandboxController } = await import('./sandbox.controller');
-    const { SandboxEnabledGuard } = await import('./sandbox-enabled.guard');
-    const { SandboxTokensService } = await import('./sandbox-tokens.service');
-    const { SANDBOX_ENABLED } = await import('./sandbox.types');
-
     const moduleRef = await Test.createTestingModule({
       controllers: [SandboxController],
       providers: [

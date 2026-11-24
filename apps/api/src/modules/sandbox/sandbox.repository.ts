@@ -4,8 +4,13 @@ import { sandboxCandles, sandboxTokens, type Database } from '@nexter/db';
 import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
 import { DB } from '../../shared/db/db.module';
 
-/** Rows per multi-row insert; keeps statements well under the parameter limit. */
-export const SANDBOX_CANDLE_UPSERT_CHUNK = 500;
+export interface SandboxCandleUpsertOptions {
+  /**
+   * Synthetic (CoinGecko) data may only replace rows that are already
+   * synthetic; a real GeckoTerminal/Binance bar always wins.
+   */
+  protectPrimaryRows?: boolean;
+}
 
 export interface SandboxTokenRecord {
   id: string;
@@ -82,16 +87,6 @@ export class SandboxRepository {
     return row ?? null;
   }
 
-  async findTokenByKey(userId: string, tokenKey: string): Promise<SandboxTokenRecord | null> {
-    const [row] = await this.db
-      .select()
-      .from(sandboxTokens)
-      .where(and(eq(sandboxTokens.userId, userId), eq(sandboxTokens.tokenKey, tokenKey)))
-      .limit(1);
-
-    return row ?? null;
-  }
-
   async insertToken(input: SandboxTokenInsert): Promise<SandboxTokenRecord> {
     const [row] = await this.db.insert(sandboxTokens).values(input).returning();
     if (!row) throw new Error('Sandbox token insert returned no row');
@@ -123,31 +118,37 @@ export class SandboxRepository {
    * Upserts candles by `(tokenKey, timeframe, openTime)`. Candles are shared by
    * provider key because the integration is read-only market data; every query
    * that exposes them is scoped through the owner's token universe.
+   *
+   * With `protectPrimaryRows`, a synthetic (CoinGecko) row only replaces an
+   * existing synthetic row, so a temporary primary-provider failure cannot
+   * downgrade real OHLCV.
    */
-  async upsertCandles(rows: SandboxCandleInput[]): Promise<number> {
-    let upserted = 0;
+  async upsertCandles(
+    rows: SandboxCandleInput[],
+    options: SandboxCandleUpsertOptions = {},
+  ): Promise<number> {
+    if (rows.length === 0) return 0;
 
-    for (let index = 0; index < rows.length; index += SANDBOX_CANDLE_UPSERT_CHUNK) {
-      const chunk = rows.slice(index, index + SANDBOX_CANDLE_UPSERT_CHUNK);
-      await this.db
-        .insert(sandboxCandles)
-        .values(chunk)
-        .onConflictDoUpdate({
-          target: [sandboxCandles.tokenKey, sandboxCandles.timeframe, sandboxCandles.openTime],
-          set: {
-            open: sql`excluded."open"`,
-            high: sql`excluded."high"`,
-            low: sql`excluded."low"`,
-            close: sql`excluded."close"`,
-            volumeUsd: sql`excluded."volume_usd"`,
-            source: sql`excluded."source"`,
-            fetchedAt: sql`excluded."fetched_at"`,
-          },
-        });
-      upserted += chunk.length;
-    }
+    await this.db
+      .insert(sandboxCandles)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [sandboxCandles.tokenKey, sandboxCandles.timeframe, sandboxCandles.openTime],
+        set: {
+          open: sql`excluded."open"`,
+          high: sql`excluded."high"`,
+          low: sql`excluded."low"`,
+          close: sql`excluded."close"`,
+          volumeUsd: sql`excluded."volume_usd"`,
+          source: sql`excluded."source"`,
+          fetchedAt: sql`excluded."fetched_at"`,
+        },
+        setWhere: options.protectPrimaryRows
+          ? sql`${sandboxCandles.source} = 'coingecko'`
+          : undefined,
+      });
 
-    return upserted;
+    return rows.length;
   }
 
   async candleStatsMany(tokenKeys: string[]): Promise<Map<string, SandboxCandleStats>> {

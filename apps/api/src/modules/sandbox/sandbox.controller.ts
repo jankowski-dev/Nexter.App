@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Inject,
   Param,
   ParseUUIDPipe,
@@ -81,6 +83,7 @@ export class SandboxController {
   }
 
   @Post('tokens/:id/refresh')
+  @HttpCode(HttpStatus.OK)
   @UseGuards(SandboxEnabledGuard)
   refreshToken(
     @CurrentAuth() auth: AuthContext,

@@ -53,10 +53,6 @@ function harness(tokens: SandboxTokenRecord[] = [row()]) {
       async (ownerId: string, id: string) =>
         tokens.find((token) => token.userId === ownerId && token.id === id) ?? null,
     ),
-    findTokenByKey: vi.fn(
-      async (ownerId: string, tokenKey: string) =>
-        tokens.find((token) => token.userId === ownerId && token.tokenKey === tokenKey) ?? null,
-    ),
     insertToken: vi.fn(async (input: SandboxTokenInsert) => {
       const created = row({ ...input });
       tokens.push(created);
@@ -344,6 +340,34 @@ describe('SandboxTokensService coverage', () => {
     expect(coverage.warning).toContain('старше');
   });
 
+  it('treats a complete but stale window as partial, never ok', async () => {
+    const { service, repo } = harness();
+    repo.candleStatsMany.mockResolvedValueOnce(
+      new Map([
+        [
+          row().tokenKey,
+          fullStats({
+            lastOpenTime: new Date(now.getTime() - 3 * 3_600_000),
+            firstOpenTime: new Date(now.getTime() - 3 * 3_600_000 - 4319 * 3_600_000),
+          }),
+        ],
+      ]),
+    );
+
+    const response = await service.coverage(userId, undefined, now);
+    const coverage = response.tokens[0];
+
+    expect(coverage).toMatchObject({
+      available: 4320,
+      required: 4320,
+      gaps: 0,
+      stale: true,
+      status: 'partial',
+    });
+    expect(coverage.warning).toContain('старше');
+    expect(coverage.warning).not.toContain('Доступно');
+  });
+
   it('treats a token without candles as missing with a warning', async () => {
     const { service, repo } = harness();
     repo.candleStatsMany.mockResolvedValueOnce(new Map());
@@ -410,6 +434,36 @@ describe('SandboxTokensService preflight', () => {
       [partialToken.tokenKey, 'partial'],
       [missingToken.tokenKey, 'missing'],
     ]);
+  });
+
+  it('never reports ok for stale coverage', async () => {
+    const { service, repo } = harness();
+    repo.candleStatsMany.mockResolvedValueOnce(
+      new Map([
+        [
+          row().tokenKey,
+          fullStats({
+            lastOpenTime: new Date(now.getTime() - 3 * 3_600_000),
+            firstOpenTime: new Date(now.getTime() - 3 * 3_600_000 - 4319 * 3_600_000),
+          }),
+        ],
+      ]),
+    );
+
+    const preflight = await service.preflight(userId, [row().tokenKey], now);
+
+    expect(preflight.status).toBe('partial');
+    expect(preflight.warnings[0]).toContain('старше');
+  });
+
+  it('rejects an empty universe with a warning', async () => {
+    const { service } = harness();
+
+    const preflight = await service.preflight(userId, [], now);
+
+    expect(preflight.status).toBe('missing');
+    expect(preflight.coverage).toEqual([]);
+    expect(preflight.warnings[0]).toContain('Не выбрано');
   });
 
   it('warns about requested tokens outside the owner universe', async () => {

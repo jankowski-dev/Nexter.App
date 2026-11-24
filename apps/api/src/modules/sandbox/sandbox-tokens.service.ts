@@ -227,6 +227,15 @@ export class SandboxTokensService {
     const tokens = await this.repository.listTokens(userId);
     const owned = new Set(tokens.map((token) => token.tokenKey));
     const requested = [...new Set(tokenKeys)];
+
+    if (requested.length === 0) {
+      return {
+        status: 'missing',
+        warnings: ['Не выбрано ни одного токена для запуска.'],
+        coverage: [],
+      };
+    }
+
     const known = requested.filter((key) => owned.has(key));
     const missing = requested.filter((key) => !owned.has(key));
 
@@ -284,18 +293,16 @@ export function buildSandboxCoverage(
       : 0;
   const gaps = Math.max(0, spanBars - available);
   const synthetic = stats.syntheticCandles > 0;
-  const stale = !lastOpenTime || now.getTime() - lastOpenTime.getTime() > SANDBOX_STALE_AFTER_MS;
+  const lastCloseTime = lastOpenTime ? lastOpenTime.getTime() + SANDBOX_TIMEFRAME_MS : null;
+  const stale = lastCloseTime === null || now.getTime() - lastCloseTime > SANDBOX_STALE_AFTER_MS;
+  const complete = available >= SANDBOX_REQUIRED_CANDLES && gaps === 0;
   const status: SandboxCoverageStatus =
-    available === 0
-      ? 'missing'
-      : available >= SANDBOX_REQUIRED_CANDLES && gaps === 0
-        ? 'ok'
-        : 'partial';
+    available === 0 ? 'missing' : complete && !stale ? 'ok' : 'partial';
 
   const warnings: string[] = [];
   if (available === 0) {
     warnings.push('Нет часовых свечей: сначала загрузите данные.');
-  } else if (status === 'partial') {
+  } else if (!complete) {
     warnings.push(`Доступно ${available} из ${SANDBOX_REQUIRED_CANDLES} часовых свечей.`);
   }
   if (synthetic) {

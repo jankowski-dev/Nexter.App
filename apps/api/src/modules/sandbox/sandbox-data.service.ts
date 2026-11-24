@@ -11,7 +11,6 @@ import { BinanceClient } from '../market-data/binance.client';
 import { CoinGeckoClient } from '../market-data/coingecko.client';
 import { GeckoTerminalClient } from '../market-data/geckoterminal.client';
 import {
-  SANDBOX_CANDLE_UPSERT_CHUNK,
   SandboxRepository,
   type SandboxCandleInput,
   type SandboxTokenRecord,
@@ -19,6 +18,9 @@ import {
 
 /** GeckoTerminal and Binance both cap a 1h series at 5,000 bars. */
 const MAX_PROVIDER_CANDLES = 5000;
+
+/** Rows per multi-row insert; keeps statements well under the parameter limit. */
+export const SANDBOX_CANDLE_UPSERT_CHUNK = 500;
 
 export interface SandboxRefreshOptions {
   now?: Date;
@@ -56,14 +58,19 @@ export class SandboxDataService {
   ): Promise<SandboxRefreshResult> {
     const now = options.now ?? new Date();
     const days = options.days ?? SANDBOX_WARMUP_DAYS;
-    const limit = Math.min(MAX_PROVIDER_CANDLES, Math.max(1, days * 24));
+    // Providers include the in-progress hour, which is dropped as unclosed.
+    // Request one extra bar so a fresh universe stores the full 180-day window.
+    const requestedBars = days * 24 + 1;
+    const limit = Math.min(MAX_PROVIDER_CANDLES, Math.max(1, requestedBars));
 
     const candles = await this.loadCandles(token, days, limit);
     const rows = normalizeCandles(token.tokenKey, candles, now);
+    const synthetic = rows.length > 0 && rows.every((row) => row.source === 'coingecko');
     let upserted = 0;
     for (let index = 0; index < rows.length; index += SANDBOX_CANDLE_UPSERT_CHUNK) {
       upserted += await this.repository.upsertCandles(
         rows.slice(index, index + SANDBOX_CANDLE_UPSERT_CHUNK),
+        { protectPrimaryRows: synthetic },
       );
     }
     const sources = new Set(rows.map((row) => row.source));
@@ -72,7 +79,7 @@ export class SandboxDataService {
       fetched: rows.length,
       upserted,
       source: sources.size === 1 ? ([...sources][0] as string) : null,
-      synthetic: rows.length > 0 && rows.every((row) => row.source === 'coingecko'),
+      synthetic,
     };
   }
 
@@ -94,10 +101,11 @@ export class SandboxDataService {
       }
     } else if (token.chain === 'binance') {
       const parsed = parseSandboxTokenKey(token.tokenKey);
+      // Binance converts days back into a 1h bar count; pass the bar window.
       candles = await this.binance.getCandles(
         parsed?.baseSymbol ?? token.symbol,
         SANDBOX_TIMEFRAME,
-        days,
+        limit / 24,
       );
     }
 

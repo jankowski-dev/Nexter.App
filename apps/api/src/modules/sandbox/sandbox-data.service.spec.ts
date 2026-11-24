@@ -75,7 +75,7 @@ describe('SandboxDataService', () => {
 
     const result = await service.refreshToken(token(), { now });
 
-    expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledWith('bsc', key.slice(4), '1h', 4320);
+    expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledWith('bsc', key.slice(4), '1h', 4321);
     expect(binance.getCandles).not.toHaveBeenCalled();
     expect(coingecko.getHourlyCandles).not.toHaveBeenCalled();
     expect(result).toEqual({ fetched: 2, upserted: 2, source: 'geckoterminal', synthetic: false });
@@ -98,7 +98,21 @@ describe('SandboxDataService', () => {
 
     await service.refreshToken(token(), { now, days: 90 });
 
-    expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledWith('bsc', key.slice(4), '1h', 2160);
+    expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledWith('bsc', key.slice(4), '1h', 2161);
+  });
+
+  it('requests one extra bar so a fresh 180-day token stores 4320 closed bars', async () => {
+    const currentHour = new Date('2026-11-24T12:00:00.000Z');
+    const candles = Array.from({ length: 4321 }, (_, index) =>
+      candle({ openTime: new Date(currentHour.getTime() - (4320 - index) * 3_600_000) }),
+    );
+    const { service, geckoterminal } = harness(candles);
+
+    const result = await service.refreshToken(token(), { now });
+
+    expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledWith('bsc', key.slice(4), '1h', 4321);
+    expect(result.fetched).toBe(4320);
+    expect(result.upserted).toBe(4320);
   });
 
   it('falls back to CoinGecko 1h and marks the data synthetic', async () => {
@@ -107,7 +121,7 @@ describe('SandboxDataService', () => {
       source: 'coingecko',
       quality: 'synthetic',
     });
-    const { service, geckoterminal, coingecko, byKey } = harness([]);
+    const { service, geckoterminal, coingecko, byKey, repo } = harness([]);
     geckoterminal.getOhlcvCandles.mockResolvedValue([]);
     coingecko.getHourlyCandles.mockResolvedValue([hourly]);
 
@@ -116,6 +130,9 @@ describe('SandboxDataService', () => {
     expect(geckoterminal.getOhlcvCandles).toHaveBeenCalledOnce();
     expect(coingecko.getHourlyCandles).toHaveBeenCalledWith('pancakeswap-token', 180);
     expect(result).toEqual({ fetched: 1, upserted: 1, source: 'coingecko', synthetic: true });
+    expect(repo.upsertCandles).toHaveBeenCalledWith(expect.any(Array), {
+      protectPrimaryRows: true,
+    });
     expect(byKey.get(`${key}:1h:2026-11-24T10:00:00.000Z`)?.source).toBe('coingecko');
   });
 
@@ -134,7 +151,7 @@ describe('SandboxDataService', () => {
     });
 
     const binanceResult = await binanceHarness.service.refreshToken(binanceToken, { now });
-    expect(binanceHarness.binance.getCandles).toHaveBeenCalledWith('BTC', '1h', 180);
+    expect(binanceHarness.binance.getCandles).toHaveBeenCalledWith('BTC', '1h', 4321 / 24);
     expect(binanceHarness.geckoterminal.getOhlcvCandles).not.toHaveBeenCalled();
     expect(binanceResult).toEqual({ fetched: 1, upserted: 1, source: 'binance', synthetic: false });
 

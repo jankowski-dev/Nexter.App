@@ -121,14 +121,20 @@ describe('sandbox token contracts', () => {
     },
   );
 
-  it('requires at least one patch field and never contains tokenKey', () => {
+  it('requires at least one patch field and rejects an immutable tokenKey', () => {
     expect(sandboxTokenUpdateRequestSchema.safeParse({}).success).toBe(false);
 
-    const parsed = sandboxTokenUpdateRequestSchema.parse({
-      enabled: false,
-      tokenKey: 'ethereum:0x2222222222222222222222222222222222222222',
+    expect(
+      sandboxTokenUpdateRequestSchema.safeParse({
+        enabled: false,
+        tokenKey: 'ethereum:0x2222222222222222222222222222222222222222',
+      }).success,
+    ).toBe(false);
+    expect(sandboxTokenUpdateRequestSchema.safeParse({ chain: 'ethereum' }).success).toBe(false);
+    expect(sandboxTokenUpdateRequestSchema.parse({ enabled: false })).toEqual({ enabled: false });
+    expect(sandboxTokenUpdateRequestSchema.parse({ coingeckoId: null })).toEqual({
+      coingeckoId: null,
     });
-    expect(parsed).toEqual({ enabled: false });
   });
 });
 

@@ -8,8 +8,8 @@ export const SANDBOX_TIMEFRAME_MS = 3_600_000;
 export const SANDBOX_WARMUP_DAYS = 180;
 export const SANDBOX_REQUIRED_CANDLES = SANDBOX_WARMUP_DAYS * 24;
 
-/** A candle older than this is reported as stale (one bar plus clock tolerance). */
-export const SANDBOX_STALE_AFTER_MS = 2 * SANDBOX_TIMEFRAME_MS;
+/** A closed 1h bar is stale when its close is older than one more bar. */
+export const SANDBOX_STALE_AFTER_MS = SANDBOX_TIMEFRAME_MS;
 
 const EVM_KEY_PATTERN = /^(bsc|ethereum):(0x[0-9a-fA-F]{40})$/;
 const BINANCE_KEY_PATTERN = /^binance:([A-Z0-9]{2,20}USDT)$/;
@@ -153,6 +153,7 @@ export const sandboxTokenUpdateRequestSchema = z
     coingeckoId: coingeckoIdSchema.nullable().optional(),
     enabled: z.boolean().optional(),
   })
+  .strict()
   .refine((value) => Object.keys(value).length > 0, 'At least one field must be provided');
 export type SandboxTokenUpdateRequest = z.infer<typeof sandboxTokenUpdateRequestSchema>;
 
