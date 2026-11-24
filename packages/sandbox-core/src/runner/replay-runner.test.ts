@@ -112,6 +112,81 @@ describe('ReplayRunner', () => {
     expect(log.events().at(-1)?.reasonCode).toBe('DATA_OUT_OF_ORDER');
   });
 
+  it('includes candleCloseTime and timeframe in the data.out_of_order payload', async () => {
+    const { clock, market, log, snapshot } = setup([candle(10_000)]);
+    let call = 0;
+    const outOfOrderSource = {
+      next: () => {
+        call += 1;
+        if (call === 1) return candle(10_000);
+        if (call === 2) return candle(1_000);
+        return null;
+      },
+    };
+    const runner = new ReplayRunner({
+      runId: 'run-1',
+      seed: 7,
+      configVersion: 'config-1',
+      dataSnapshotId: snapshot.id,
+      clock,
+      source: outOfOrderSource,
+      market,
+      eventLog: log,
+    });
+    await expect(runner.run()).rejects.toThrow(DataSourceOrderError);
+    const outOfOrder = log.events().find((event) => event.eventType === 'data.out_of_order');
+    expect(outOfOrder?.inputs).toMatchObject({
+      candleCloseTime: new Date(1_000 + 3_600_000).toISOString(),
+      timeframe: '1h',
+    });
+  });
+
+  it('classifies a failing candle source as DATA_SOURCE_ERROR and rethrows the original', async () => {
+    const { clock, market, log, snapshot } = setup([candle(1_000)]);
+    const boom = new Error('source boom');
+    const failingSource = {
+      next: (): Candle => {
+        throw boom;
+      },
+    };
+    const runner = new ReplayRunner({
+      runId: 'run-1',
+      seed: 7,
+      configVersion: 'config-1',
+      dataSnapshotId: snapshot.id,
+      clock,
+      source: failingSource,
+      market,
+      eventLog: log,
+    });
+    await expect(runner.run()).rejects.toBe(boom);
+    const failed = log.events().at(-1);
+    expect(failed?.eventType).toBe('run.failed');
+    expect(failed?.reasonCode).toBe('DATA_SOURCE_ERROR');
+    expect(failed?.reasonText).toBe('source boom');
+  });
+
+  it('classifies an unresolvable candle close time as DATA_SOURCE_ERROR', async () => {
+    const { clock, market, log, snapshot } = setup([candle(1_000)]);
+    const badTimeframeSource = {
+      next: () => ({ ...candle(1_000), timeframe: '2h' }),
+    };
+    const runner = new ReplayRunner({
+      runId: 'run-1',
+      seed: 7,
+      configVersion: 'config-1',
+      dataSnapshotId: snapshot.id,
+      clock,
+      source: badTimeframeSource,
+      market,
+      eventLog: log,
+    });
+    await expect(runner.run()).rejects.toThrow(/Unknown timeframe/);
+    const failed = log.events().at(-1);
+    expect(failed?.eventType).toBe('run.failed');
+    expect(failed?.reasonCode).toBe('DATA_SOURCE_ERROR');
+  });
+
   it('logs run.failed and rethrows when the handler fails', async () => {
     const { clock, source, market, log, snapshot } = setup([candle(1_000)]);
     const runner = new ReplayRunner({

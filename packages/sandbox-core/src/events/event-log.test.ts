@@ -78,6 +78,27 @@ describe('MemoryEventLog', () => {
     expect(event.reasonCode).toBe('TREND_UP');
   });
 
+  it.each([
+    'regime.changed',
+    'opportunity.ranked',
+    'portfolio.allocated',
+    'token.state_changed',
+    'decision.cycle',
+  ])('requires a reasonCode for the %s family', async (eventType) => {
+    const log = new MemoryEventLog();
+    await expect(
+      log.append({ ...base, module: 'regime', eventType, severity: 'decision' }),
+    ).rejects.toThrow(/reasonCode/);
+    const event = await log.append({
+      ...base,
+      module: 'regime',
+      eventType,
+      severity: 'decision',
+      reasonCode: 'FAMILY_REASON',
+    });
+    expect(event.reasonCode).toBe('FAMILY_REASON');
+  });
+
   it('rejects a decision event without alternatives', async () => {
     const log = new MemoryEventLog();
     await expect(
@@ -105,5 +126,24 @@ describe('MemoryEventLog', () => {
     });
     expect(event.decision?.action).toBe('buy');
     expect(event.alternatives).toHaveLength(1);
+  });
+
+  it('rejects non-JSON event payloads before hashing', async () => {
+    const log = new MemoryEventLog();
+    await expect(
+      log.append({ ...base, inputs: { when: new Date('2026-01-01T00:00:00.000Z') } }),
+    ).rejects.toThrow(/Non-JSON value at inputs/);
+    await expect(log.append({ ...base, stateAfter: { handler: () => undefined } })).rejects.toThrow(
+      /Non-JSON value at stateAfter/,
+    );
+    expect(log.events()).toHaveLength(0);
+  });
+
+  it('keeps undefined payload values hashed as null', async () => {
+    const one = new MemoryEventLog();
+    const two = new MemoryEventLog();
+    await one.append({ ...base, inputs: { value: undefined } });
+    await two.append({ ...base, inputs: { value: null } });
+    expect(one.hash()).toBe(two.hash());
   });
 });

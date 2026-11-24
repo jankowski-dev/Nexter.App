@@ -13,6 +13,13 @@ export class DataSourceOrderError extends Error {
   }
 }
 
+export class DataSourceError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = 'DataSourceError';
+  }
+}
+
 export class SnapshotMismatchError extends Error {
   constructor(expected: string, actual: string) {
     super(`market snapshot ${actual} does not match replay data snapshot ${expected}`);
@@ -34,6 +41,27 @@ export interface ReplayRunnerOptions {
 
 function iso(timestamp: number): string {
   return new Date(timestamp).toISOString();
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** A throwing source is a data problem, never a handler bug. */
+function readCandle(source: CandleSource): Candle | null {
+  try {
+    return source.next();
+  } catch (error) {
+    throw new DataSourceError(`candle source failed: ${messageOf(error)}`, error);
+  }
+}
+
+function readCloseTime(candle: Candle): number {
+  try {
+    return candleCloseTime(candle);
+  } catch (error) {
+    throw new DataSourceError(`candle close time failed: ${messageOf(error)}`, error);
+  }
 }
 
 export class ReplayRunner {
@@ -85,9 +113,9 @@ export class ReplayRunner {
 
     try {
       for (;;) {
-        const candle = source.next();
+        const candle = readCandle(source);
         if (!candle) break;
-        const closeTime = candleCloseTime(candle);
+        const closeTime = readCloseTime(candle);
         // A candle is only replayable once it is closed at or after the current
         // simulation time. Anything that already closed in the past is stale.
         if (closeTime < clock.now()) {
@@ -98,7 +126,12 @@ export class ReplayRunner {
             eventType: 'data.out_of_order',
             severity: 'error',
             tokenId: candle.tokenId,
-            inputs: { candleOpenTime: iso(candle.openTime), clockTime: iso(clock.now()) },
+            inputs: {
+              candleOpenTime: iso(candle.openTime),
+              candleCloseTime: iso(closeTime),
+              timeframe: candle.timeframe,
+              clockTime: iso(clock.now()),
+            },
             dataSnapshotId,
             configVersion,
             seed,
@@ -181,6 +214,14 @@ export class ReplayRunner {
         candles += 1;
       }
     } catch (error) {
+      const reasonCode =
+        error instanceof DataSourceOrderError
+          ? 'DATA_OUT_OF_ORDER'
+          : error instanceof DataSourceError
+            ? 'DATA_SOURCE_ERROR'
+            : 'HANDLER_ERROR';
+      // Re-throw the underlying failure so callers see the original error.
+      const failure = error instanceof DataSourceError ? (error.cause ?? error) : error;
       await eventLog.append({
         runId,
         clockTime: iso(clock.now()),
@@ -191,10 +232,10 @@ export class ReplayRunner {
         dataSnapshotId,
         configVersion,
         seed,
-        reasonCode: error instanceof DataSourceOrderError ? 'DATA_OUT_OF_ORDER' : 'HANDLER_ERROR',
-        reasonText: error instanceof Error ? error.message : String(error),
+        reasonCode,
+        reasonText: messageOf(failure),
       });
-      throw error;
+      throw failure;
     }
 
     await eventLog.append({
