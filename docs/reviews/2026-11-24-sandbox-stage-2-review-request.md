@@ -6,8 +6,9 @@ Stage 1C base: `3771b67` (accepted by the owner on 2026-11-24)
 Stage 2 docs base: `67c8c32` (design, ADR 0084, plan)
 Task 8 base: `efb28e4`
 Frozen code head: `b4b1e03` (final CI green, after removing the temporary
-one-off CI step; code/test tree identical to `cd31bca`/`05082b6`) plus this
-packet/docs commit (docs-only; no code or test changes after `b4b1e03`).
+one-off CI step; code/test tree identical to `cd31bca`/`05082b6`). The final
+docs-only head `8983bde` adds this packet update; no code or test changes exist
+after `b4b1e03`.
 Status: **Stage 2 implemented; independent review gate**
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
@@ -73,7 +74,7 @@ No production data or production configuration was changed by this branch.
 | `npx pnpm@10.20.0 lint`                                               | clean                                                                                                                                                                                                     |
 | `npx pnpm@10.20.0 format:check`                                       | “All matched files use Prettier code style!”                                                                                                                                                              |
 | Stage 1B/1C goldens (`decision-engine.golden`, `paper-runner.golden`) | **2 files / 6 tests passed**; goldens unchanged                                                                                                                                                           |
-| Fake-clock e2e                                                        | **green in CI** (3/3 on `e01c5cd`); locally only the unauthenticated 401 route test runs, the two DB-gated tests skip (no Postgres)                                                                       |
+| Fake-clock e2e                                                        | **green in CI** (3/3 on `e01c5cd`); locally only the unauthenticated 401 route test runs, the three DB-gated tests skip (no Postgres)                                                                     |
 | Live provider ingestion smoke                                         | local: Binance **4320/4320 `ok`** and GeckoTerminal **4320/4320 `ok`**; one-off CI: Gecko **4320/4320 `ok`**, Binance **HTTP 451 → unavailable, BTC assertions skipped** (environment-aware by design)    |
 | Live tick smoke (`sandbox-live-tick-smoke.e2e.spec.ts`)               | **passed** in one-off CI run 45461431183: CAKE 4320/4320 `ok`, two real closed bars (17:00→18:00 UTC), sell **filled**, 17 events, report `af725870…`, run stopped; Binance is not required by this smoke |
 
@@ -88,11 +89,13 @@ real database execution.
 | `6d21ed9` | [run 45438632692](https://github.com/jankowski-dev/Nexter.App/actions/runs/45438632692) | **failure**: first DB execution, 5 files / 10 tests                                            |
 | `b1f8bf2` | [run 45442051125](https://github.com/jankowski-dev/Nexter.App/actions/runs/45442051125) | **success** after the 10 CI test defects were fixed                                            |
 | `e01c5cd` | [run 45450320973](https://github.com/jankowski-dev/Nexter.App/actions/runs/45450320973) | **success** after the independent-review test/evidence findings                                |
-| `4b20fcd` | [run 45454768964](https://github.com/jankowski-dev/Nexter.App/actions/runs/45454768964) | **success** (final docs/packet head before this note)                                          |
+| `4b20fcd` | [run 45454768964](https://github.com/jankowski-dev/Nexter.App/actions/runs/45454768964) | **success** (interim docs/packet head)                                                         |
+| `b363154` | [run 45456619303](https://github.com/jankowski-dev/Nexter.App/actions/runs/45456619303) | **success**: interim docs head                                                                 |
 | `2b49bf5` | [run 45458959683](https://github.com/jankowski-dev/Nexter.App/actions/runs/45458959683) | **failure**: one-off live smoke, Binance HTTP 451/0 rows                                       |
 | `05082b6` | [run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183) | **success**: one-off live smoke (CAKE strict, Binance skipped)                                 |
 | `cd31bca` | [run 45463903353](https://github.com/jankowski-dev/Nexter.App/actions/runs/45463903353) | **success**: one-off live smoke repeated; CAKE 4320/4320, fill, report, stop                   |
 | `b4b1e03` | [run 45466287752](https://github.com/jankowski-dev/Nexter.App/actions/runs/45466287752) | **success**: final code head, temporary one-off step removed (output-only CI; DB suites green) |
+| `8983bde` | [run 45468500668](https://github.com/jankowski-dev/Nexter.App/actions/runs/45468500668) | **success**: final docs-only head (this packet)                                                |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
