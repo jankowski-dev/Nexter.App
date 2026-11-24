@@ -8,6 +8,7 @@ import {
   jsonb,
   numeric,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -1825,6 +1826,285 @@ export const botQuoteSamples = pgTable(
   ],
 );
 
+export const sandboxTokens = pgTable(
+  'sandbox_tokens',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    tokenKey: text('token_key').notNull(),
+    symbol: text('symbol').notNull(),
+    name: text('name').notNull(),
+    chain: text('chain').notNull(),
+    contractAddress: text('contract_address'),
+    coingeckoId: text('coingecko_id'),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('sandbox_tokens_user_token_unique').on(table.userId, table.tokenKey),
+    index('sandbox_tokens_user_idx').on(table.userId),
+  ],
+);
+
+export const sandboxCandles = pgTable(
+  'sandbox_candles',
+  {
+    tokenKey: text('token_key').notNull(),
+    timeframe: text('timeframe').notNull(),
+    openTime: timestamp('open_time', { withTimezone: true }).notNull(),
+    open: numeric('open', { precision: 30, scale: 18 }).notNull(),
+    high: numeric('high', { precision: 30, scale: 18 }).notNull(),
+    low: numeric('low', { precision: 30, scale: 18 }).notNull(),
+    close: numeric('close', { precision: 30, scale: 18 }).notNull(),
+    volumeUsd: numeric('volume_usd', { precision: 30, scale: 18 }).notNull().default('0'),
+    source: text('source').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'sandbox_candles_pk',
+      columns: [table.tokenKey, table.timeframe, table.openTime],
+    }),
+    index('sandbox_candles_token_time_idx').on(table.tokenKey, table.openTime),
+  ],
+);
+
+export const sandboxRuns = pgTable(
+  'sandbox_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    status: text('status').notNull().default('draft'),
+    initialCapitalUsd: numeric('initial_capital_usd', { precision: 18, scale: 2 }).notNull(),
+    cashUsd: numeric('cash_usd', { precision: 18, scale: 2 }).notNull(),
+    equityUsd: numeric('equity_usd', { precision: 18, scale: 2 }).notNull(),
+    peakEquityUsd: numeric('peak_equity_usd', { precision: 18, scale: 2 }).notNull(),
+    dayStartEquityUsd: numeric('day_start_equity_usd', { precision: 18, scale: 2 }).notNull(),
+    settings: jsonb('settings').$type<Record<string, unknown>>().notNull().default({}),
+    engineState: jsonb('engine_state').$type<Record<string, unknown>>().notNull().default({}),
+    ledgerState: jsonb('ledger_state').$type<Record<string, unknown>>().notNull().default({}),
+    lastBarClose: timestamp('last_bar_close', { withTimezone: true }),
+    eventSeq: integer('event_seq').notNull().default(0),
+    eventHash: text('event_hash').notNull().default('0'.repeat(64)),
+    lastTickAt: timestamp('last_tick_at', { withTimezone: true }),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    pausedAt: timestamp('paused_at', { withTimezone: true }),
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('sandbox_runs_user_status_archived_idx').on(table.userId, table.status, table.archivedAt),
+    index('sandbox_runs_status_idx').on(table.status),
+  ],
+);
+
+export const sandboxRunTokens = pgTable(
+  'sandbox_run_tokens',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    tokenKey: text('token_key').notNull(),
+    symbol: text('symbol').notNull(),
+    chain: text('chain').notNull(),
+    contractAddress: text('contract_address'),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_run_tokens_pk', columns: [table.runId, table.tokenKey] }),
+  ],
+);
+
+export const sandboxEvents = pgTable(
+  'sandbox_events',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    seq: integer('seq').notNull(),
+    clockTime: timestamp('clock_time', { withTimezone: true }).notNull(),
+    module: text('module').notNull(),
+    eventType: text('event_type').notNull(),
+    severity: text('severity').notNull(),
+    tokenId: text('token_id'),
+    strategyId: text('strategy_id'),
+    regime: text('regime'),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    hash: text('hash').notNull(),
+    prevHash: text('prev_hash').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_events_pk', columns: [table.runId, table.seq] }),
+    index('sandbox_events_run_clock_idx').on(table.runId, table.clockTime),
+  ],
+);
+
+export const sandboxPositions = pgTable(
+  'sandbox_positions',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    tokenId: text('token_id').notNull(),
+    strategyKey: text('strategy_key').notNull(),
+    strategyVersion: integer('strategy_version').notNull(),
+    amount: numeric('amount', { precision: 38, scale: 8 }).notNull(),
+    avgCostUsd: numeric('avg_cost_usd', { precision: 30, scale: 18 }).notNull(),
+    costBasisUsd: numeric('cost_basis_usd', { precision: 18, scale: 2 }).notNull(),
+    marketPriceUsd: numeric('market_price_usd', { precision: 30, scale: 18 }).notNull(),
+    marketValueUsd: numeric('market_value_usd', { precision: 18, scale: 2 }).notNull(),
+    openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
+    stopLossPct: numeric('stop_loss_pct', { precision: 9, scale: 4 }),
+    takeProfitPct: numeric('take_profit_pct', { precision: 9, scale: 4 }),
+    feesPaidUsd: numeric('fees_paid_usd', { precision: 18, scale: 2 }).notNull().default('0'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ name: 'sandbox_positions_pk', columns: [table.runId, table.tokenId] })],
+);
+
+export const sandboxTrades = pgTable(
+  'sandbox_trades',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    tradeId: text('trade_id').notNull(),
+    tokenId: text('token_id').notNull(),
+    strategyKey: text('strategy_key').notNull(),
+    strategyVersion: integer('strategy_version').notNull(),
+    entryAt: timestamp('entry_at', { withTimezone: true }).notNull(),
+    entryPriceUsd: numeric('entry_price_usd', { precision: 30, scale: 18 }).notNull(),
+    entryAmount: numeric('entry_amount', { precision: 38, scale: 8 }).notNull(),
+    entryNotionalUsd: numeric('entry_notional_usd', { precision: 18, scale: 2 }).notNull(),
+    entryFeeUsd: numeric('entry_fee_usd', { precision: 18, scale: 2 }).notNull(),
+    entryCostBasisUsd: numeric('entry_cost_basis_usd', { precision: 18, scale: 2 }).notNull(),
+    entryIntentId: text('entry_intent_id'),
+    exitAt: timestamp('exit_at', { withTimezone: true }),
+    exitPriceUsd: numeric('exit_price_usd', { precision: 30, scale: 18 }),
+    exitAmount: numeric('exit_amount', { precision: 38, scale: 8 }).notNull().default('0'),
+    exitNotionalUsd: numeric('exit_notional_usd', { precision: 18, scale: 2 })
+      .notNull()
+      .default('0'),
+    exitFeeUsd: numeric('exit_fee_usd', { precision: 18, scale: 2 }).notNull().default('0'),
+    exitReasonCode: text('exit_reason_code'),
+    exitIntentId: text('exit_intent_id'),
+    realizedPnlUsd: numeric('realized_pnl_usd', { precision: 18, scale: 2 }).notNull().default('0'),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_trades_pk', columns: [table.runId, table.tradeId] }),
+    index('sandbox_trades_run_token_idx').on(table.runId, table.tokenId),
+  ],
+);
+
+export const sandboxLedgerEntries = pgTable(
+  'sandbox_ledger_entries',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    sequence: integer('sequence').notNull(),
+    entryId: text('entry_id').notNull(),
+    clockTime: timestamp('clock_time', { withTimezone: true }).notNull(),
+    tokenId: text('token_id').notNull(),
+    side: text('side').notNull(),
+    intentId: text('intent_id').notNull(),
+    amount: numeric('amount', { precision: 38, scale: 8 }).notNull(),
+    priceUsd: numeric('price_usd', { precision: 30, scale: 18 }).notNull(),
+    notionalUsd: numeric('notional_usd', { precision: 18, scale: 2 }).notNull(),
+    feeUsd: numeric('fee_usd', { precision: 18, scale: 2 }).notNull(),
+    costBasisReleasedUsd: numeric('cost_basis_released_usd', { precision: 18, scale: 2 }),
+    positionCostBasisAfterUsd: numeric('position_cost_basis_after_usd', {
+      precision: 18,
+      scale: 2,
+    }).notNull(),
+    cashAfterUsd: numeric('cash_after_usd', { precision: 18, scale: 2 }).notNull(),
+    positionAmountAfter: numeric('position_amount_after', { precision: 38, scale: 8 }).notNull(),
+    positionAvgCostAfter: numeric('position_avg_cost_after', { precision: 30, scale: 18 }),
+    realizedPnlUsd: numeric('realized_pnl_usd', { precision: 18, scale: 2 }),
+    reasonCode: text('reason_code').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_ledger_entries_pk', columns: [table.runId, table.sequence] }),
+    uniqueIndex('sandbox_ledger_entries_run_entry_unique').on(table.runId, table.entryId),
+  ],
+);
+
+export const sandboxEquityPoints = pgTable(
+  'sandbox_equity_points',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    clockTime: timestamp('clock_time', { withTimezone: true }).notNull(),
+    equityUsd: numeric('equity_usd', { precision: 18, scale: 2 }).notNull(),
+    cashUsd: numeric('cash_usd', { precision: 18, scale: 2 }).notNull(),
+    positionsValueUsd: numeric('positions_value_usd', { precision: 18, scale: 2 }).notNull(),
+    drawdownPct: numeric('drawdown_pct', { precision: 9, scale: 4 }).notNull(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_equity_points_pk', columns: [table.runId, table.clockTime] }),
+  ],
+);
+
+export const sandboxIntents = pgTable(
+  'sandbox_intents',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    intentId: text('intent_id').notNull(),
+    tokenId: text('token_id').notNull(),
+    side: text('side').notNull(),
+    strategyKey: text('strategy_key').notNull(),
+    strategyVersion: integer('strategy_version').notNull(),
+    status: text('status').notNull(),
+    requestedUsd: numeric('requested_usd', { precision: 18, scale: 2 }),
+    requestedAmount: numeric('requested_amount', { precision: 38, scale: 8 }),
+    filledUsd: numeric('filled_usd', { precision: 18, scale: 2 }).notNull().default('0'),
+    filledAmount: numeric('filled_amount', { precision: 38, scale: 8 }).notNull().default('0'),
+    priceUsd: numeric('price_usd', { precision: 30, scale: 18 }),
+    feeUsd: numeric('fee_usd', { precision: 18, scale: 2 }).notNull().default('0'),
+    reasonCode: text('reason_code').notNull(),
+    strategyReasonCode: text('strategy_reason_code'),
+    reasonText: text('reason_text').notNull().default(''),
+    decisionTime: timestamp('decision_time', { withTimezone: true }).notNull(),
+    fillTime: timestamp('fill_time', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    primaryKey({ name: 'sandbox_intents_pk', columns: [table.runId, table.intentId] }),
+    index('sandbox_intents_run_decision_idx').on(table.runId, table.decisionTime),
+  ],
+);
+
+export const sandboxReports = pgTable(
+  'sandbox_reports',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => sandboxRuns.id, { onDelete: 'restrict' }),
+    reportHash: text('report_hash').notNull(),
+    report: jsonb('report').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ name: 'sandbox_reports_pk', columns: [table.runId, table.reportHash] })],
+);
+
 export type Chain = typeof chains.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
@@ -1867,3 +2147,14 @@ export type FinanceCategory = typeof financeCategories.$inferSelect;
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type FinanceTransfer = typeof financeTransfers.$inferSelect;
 export type FinanceImportRow = typeof financeImportRows.$inferSelect;
+export type SandboxTokenRecord = typeof sandboxTokens.$inferSelect;
+export type SandboxCandleRecord = typeof sandboxCandles.$inferSelect;
+export type SandboxRunRecord = typeof sandboxRuns.$inferSelect;
+export type SandboxRunTokenRecord = typeof sandboxRunTokens.$inferSelect;
+export type SandboxEventRecord = typeof sandboxEvents.$inferSelect;
+export type SandboxPositionRecord = typeof sandboxPositions.$inferSelect;
+export type SandboxTradeRecord = typeof sandboxTrades.$inferSelect;
+export type SandboxLedgerEntryRecord = typeof sandboxLedgerEntries.$inferSelect;
+export type SandboxEquityPointRecord = typeof sandboxEquityPoints.$inferSelect;
+export type SandboxIntentRecord = typeof sandboxIntents.$inferSelect;
+export type SandboxReportRecord = typeof sandboxReports.$inferSelect;

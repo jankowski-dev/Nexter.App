@@ -76,6 +76,9 @@ importers:
       '@nexter/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@nexter/sandbox-core':
+        specifier: workspace:*
+        version: link:../../packages/sandbox-core
       '@node-rs/argon2':
         specifier: 2.2.2
         version: 2.2.2

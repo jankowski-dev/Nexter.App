@@ -104,6 +104,10 @@ export const envSchema = z.object({
   SWAP_BSC_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_ETHEREUM_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_SELECTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
+  SANDBOX_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((value) => value === 'true'),
   RECONCILIATION_ENABLED: z
     .enum(['true', 'false'])
     .default('false')
