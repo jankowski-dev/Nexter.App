@@ -4,18 +4,18 @@
 - Branch: `feat/sandbox-stage-1b`
 - Base: `28176d1` (Stage 1A merged)
 - Code head at request: `b407592`
-- This packet, the golden replay test and the design/plan status updates are the review-request commit (subject `docs(sandbox): add stage 1b review request`).
+- Review-request commit: `b771499` (golden test, this packet, design/plan status)
+- F1 fix commit: the commit with subject `fix(sandbox): align allocation rounding with risk caps` (moneyDown, allocator accounting, regression tests, re-pinned golden values, this packet update)
 - Package: `packages/sandbox-core`
 - Reviewer: independent (agent and/or owner). The reviewer does not edit code.
 - Design: `docs/superpowers/specs/2026-11-24-sandbox-stage-1b-decision-engine-design.md`
 - Plan: `docs/superpowers/plans/2026-11-24-sandbox-stage-1b.md`
 - Stage 1A review (signed off): `docs/reviews/2026-11-23-sandbox-stage-1a-review-request.md`
 
-Stage 1B is **implemented**. The full gate is green. The golden replay found **one
-open major defect** in the allocator/risk seam (finding F1 below); it is reported
-here, not fixed, because Task 8 is scoped to the golden test, this packet and the
-docs status lines. **Stage 1B is not signed off until the reviewer closes F1 and
-the remaining findings.**
+Stage 1B is **implemented**. The full gate is green. The golden replay found one
+major defect in the allocator/risk seam (F1); it is **fixed and regression-tested**
+in the F1 fix commit, and the golden values were re-pinned deliberately (section
+7.1). **Stage 1B is not signed off until the independent review closes.**
 
 ## 1. Scope
 
@@ -140,6 +140,17 @@ M docs/superpowers/specs/2026-11-24-sandbox-stage-1b-decision-engine-design.md
 M docs/superpowers/plans/2026-11-24-sandbox-stage-1b.md
 ```
 
+The F1 fix commit touches only:
+
+```
+M packages/sandbox-core/src/decision/decimal.ts
+M packages/sandbox-core/src/decision/decimal.test.ts
+M packages/sandbox-core/src/decision/portfolio-allocator.ts
+M packages/sandbox-core/src/decision/portfolio-allocator.test.ts
+M packages/sandbox-core/src/decision/decision-engine.golden.test.ts
+M docs/reviews/2026-11-24-sandbox-stage-1b-review-request.md
+```
+
 No `apps/*`, no database, no old AI/legacy file is touched. `.gitignore` only adds
 `packages/sandbox-core/out/` (CLI smoke artifacts). `package.json` gains the
 runtime dependency `decimal.js` (10.6.0) and keeps `zod`; `tsx`, `typescript` and
@@ -157,12 +168,14 @@ npx pnpm@10.20.0 --filter @nexter/sandbox-core test
 
 ```
  Test Files  27 passed (27)
-      Tests  325 passed (325)
-   Duration  10.10s
+      Tests  330 passed (330)
+   Duration  10.2s
 ```
 
 The golden file is one of the 27; the Stage 1A suite and all Stage 1B unit
-suites are unchanged and green.
+suites are green. The F1 fix adds five tests: two for `moneyDown` and three
+allocator cent-truncation tests (including a cap-binding allocation that is then
+accepted by `checkBuyRisk`).
 
 ### 4.2 Typecheck
 
@@ -285,54 +298,68 @@ token in one cycle throw. USD is `toFixed(2)`; token amounts are `toFixed(8)`.
 ### 5.3 Pinned outcome
 
 Two independent replays produce identical intents, the same event count and the
-same final hash. Pinned literals:
+same final hash. Pinned literals (re-pinned deliberately by the F1 fix; the
+pre-fix values are in section F1.1):
 
 | Pin                                 | Value                                                              |
 | ----------------------------------- | ------------------------------------------------------------------ |
-| final `eventHash`                   | `b12d5c283de46ab4b51b3b09b62034f5d734f28b1850ad6b6097239c0b2946c0` |
-| total events                        | `3956`                                                             |
-| intents (buys / sells)              | `33` (`18` / `15`)                                                 |
-| final host equity                   | `1054.23` USD                                                      |
+| final `eventHash`                   | `b260f984250cf2cca57610a3fe47c85d91d5f93c26472818f2e21f564226847a` |
+| total events                        | `3936`                                                             |
+| intents (buys / sells)              | `45` (`24` / `21`)                                                 |
+| final host equity                   | `1047.32` USD                                                      |
 | positions still open at the end     | `AAA`, `BBB`, `CCC`                                                |
 | `dataSnapshotId` of the scenario    | `6bcc8b50894a6be2918a4b8cfbe556102353bcfc5ea04800be323c1eeef54330` |
 | `settingsVersion(DEFAULT_SETTINGS)` | `cc3d30cf416f7fac9a96b96d40868050cce7e68cb300f47d17fc92b789f1a26c` |
+| risk-vetoed allocations in the run  | `0`                                                                |
 
 Pinned intent list (token, side, reason code, size USD) in replay order:
 
 ```
-AAA buy  TREND_PULLBACK_ENTRY 200.00
-CCC buy  TREND_PULLBACK_ENTRY 199.98
-BBB buy  RANGE_REVERSION_ENTRY 199.51
-CCC sell TREND_PULLBACK_STOP 194.28
-BBB sell RANGE_REVERSION_MID 204.12
-BBB buy  RANGE_REVERSION_ENTRY 200.68
-BBB sell RANGE_REVERSION_MID 208.49
-BBB buy  RANGE_REVERSION_ENTRY 203.11
-BBB sell RANGE_REVERSION_MID 209.12
-BBB buy  RANGE_REVERSION_ENTRY 205.28
-BBB sell RANGE_REVERSION_STOP 202.37
-BBB buy  RANGE_REVERSION_ENTRY 204.87
+AAA buy TREND_PULLBACK_ENTRY 200.00
+BBB buy RANGE_REVERSION_ENTRY 199.76
+CCC buy TREND_PULLBACK_ENTRY 199.40
+BBB sell RANGE_REVERSION_STOP 196.93
+BBB buy RANGE_REVERSION_ENTRY 198.78
+CCC sell TREND_PULLBACK_STOP 195.12
+CCC buy TREND_PULLBACK_ENTRY 197.47
+CCC sell TREND_PULLBACK_STOP 191.84
+BBB sell RANGE_REVERSION_MID 206.52
+BBB buy RANGE_REVERSION_ENTRY 199.73
+BBB sell RANGE_REVERSION_STOP 196.90
+BBB buy RANGE_REVERSION_ENTRY 199.33
+BBB sell RANGE_REVERSION_MID 207.09
+BBB buy RANGE_REVERSION_ENTRY 201.70
+BBB sell RANGE_REVERSION_STOP 198.84
+BBB buy RANGE_REVERSION_ENTRY 201.30
+BBB sell RANGE_REVERSION_MID 209.14
+BBB buy RANGE_REVERSION_ENTRY 203.71
+BBB sell RANGE_REVERSION_STOP 200.82
+BBB buy RANGE_REVERSION_ENTRY 203.30
 AAA sell TREND_PULLBACK_STOP 187.20
-BBB sell RANGE_REVERSION_MID 212.85
-BBB buy  RANGE_REVERSION_ENTRY 201.00
-BBB sell RANGE_REVERSION_STOP 198.15
-BBB buy  RANGE_REVERSION_ENTRY 200.43
-BBB sell RANGE_REVERSION_MID 208.23
-BBB buy  RANGE_REVERSION_ENTRY 201.99
-AAA buy  RECOVERY_ENTRY 168.11
-BBB sell RANGE_REVERSION_STOP 199.12
-BBB buy  RANGE_REVERSION_ENTRY 201.55
-BBB sell RANGE_REVERSION_MID 209.18
-BBB buy  RANGE_REVERSION_ENTRY 203.76
-BBB sell RANGE_REVERSION_MID 209.79
-BBB buy  RANGE_REVERSION_ENTRY 205.80
-CCC buy  RECOVERY_ENTRY 171.48
-BBB sell RANGE_REVERSION_MID 211.89
-BBB buy  RANGE_REVERSION_ENTRY 208.46
-BBB sell RANGE_REVERSION_STOP 205.50
-BBB buy  RANGE_REVERSION_ENTRY 208.30
-BBB sell RANGE_REVERSION_MID 215.52
-BBB buy  RANGE_REVERSION_ENTRY 211.04
+BBB sell RANGE_REVERSION_MID 211.21
+BBB buy RANGE_REVERSION_ENTRY 199.42
+BBB sell RANGE_REVERSION_STOP 196.59
+BBB buy RANGE_REVERSION_ENTRY 198.86
+BBB sell RANGE_REVERSION_MID 206.60
+AAA buy RECOVERY_ENTRY 167.00
+BBB buy RANGE_REVERSION_ENTRY 200.77
+BBB sell RANGE_REVERSION_STOP 197.92
+BBB buy RANGE_REVERSION_ENTRY 200.34
+BBB sell RANGE_REVERSION_MID 208.14
+BBB buy RANGE_REVERSION_ENTRY 202.58
+BBB sell RANGE_REVERSION_STOP 199.71
+BBB buy RANGE_REVERSION_ENTRY 202.15
+BBB sell RANGE_REVERSION_MID 210.02
+BBB buy RANGE_REVERSION_ENTRY 204.42
+BBB sell RANGE_REVERSION_STOP 201.52
+BBB buy RANGE_REVERSION_ENTRY 203.98
+CCC buy RECOVERY_ENTRY 170.19
+BBB sell RANGE_REVERSION_MID 211.92
+BBB buy RANGE_REVERSION_ENTRY 206.91
+BBB sell RANGE_REVERSION_STOP 203.97
+BBB buy RANGE_REVERSION_ENTRY 206.61
+BBB sell RANGE_REVERSION_MID 214.65
+BBB buy RANGE_REVERSION_ENTRY 209.65
 ```
 
 The run exercises all three strategies (trend pullback entry, range entry and
@@ -359,6 +386,8 @@ midpoint exit, recovery entry) plus all three exit reasons that matter here
   CRASH (hostile-regime exit with the original strategy);
 - deterministic money formats, no duplicate token intents, live state returned for
   the next cycle, no look-ahead;
+- no buy candidate is risk-vetoed in the replay (`risk.checked` with
+  `decision.action: block` count is `0`), so every sized candidate becomes an intent;
 - two full replays produce the same intents and hash; the hash, event count and
   intent list are pinned.
 
@@ -590,10 +619,10 @@ Last `decision.completed` (seq 3955, final hash above):
   "alternatives": [],
   "riskChecks": [],
   "correlationId": null,
-  "seq": 3955,
-  "recordedAt": "2026-11-24T00:09:58.827Z",
-  "prevHash": "e3ca9c21ae4d9c4cd69853f4c66fc49a83e8dbfd3b5bbbd90acc9656768b43d6",
-  "hash": "b12d5c283de46ab4b51b3b09b62034f5d734f28b1850ad6b6097239c0b2946c0"
+  "seq": 3935,
+  "recordedAt": "2026-11-24T00:30:01.072Z",
+  "prevHash": "c4f4bf3600c270d64ee89d75841b2cfb3e541fb76adca55858b188f2ba6ab45c",
+  "hash": "b260f984250cf2cca57610a3fe47c85d91d5f93c26472818f2e21f564226847a"
 }
 ```
 
@@ -659,9 +688,11 @@ Each item is a claim to verify, not an assertion to trust.
    float-drift-free money); `risk-manager.test.ts` "returns all twelve checks in
    contract order and passes", one test per cap, "keeps all twelve checks when an
    early check fails", "reports the first failing check in table order"; golden:
-   every intent has a passing complete `risk.checked` immediately before it.
-   **Caveat: the caps hold, but the allocator/risk seam has a rounding defect that
-   vetoes valid allocations — see finding F1.**
+   every intent has a passing complete `risk.checked` immediately before it, and
+   the run contains no risk veto at all. The allocator/risk rounding defect found
+   in review (F1) is fixed: sizes are truncated to cents, the minimum-order check
+   and the allocator's own accounting use the emitted size, and the cap-binding
+   case is covered by `portfolio-allocator.test.ts` and `decimal.test.ts`.
 7. **Sell exemption from loss limits.** `checkSellRisk` returns exactly
    `data_stale` and `liquidity`; daily loss, drawdown, cooldown, blocked phase,
    exposure and minimum order never gate a sell. Tests: "returns exactly the stale
@@ -719,18 +750,20 @@ packages/sandbox-core/src --include=*.ts` returns 0 matches; public types are
 
 ## 7. Findings
 
-### F1 — Major (open): allocator half-up rounding can exceed the risk caps it was sized against
+### F1 — Major (fixed): allocator half-up rounding could exceed the risk caps it was sized against
 
-`allocateOpportunities` rounds the chosen size with `money()` → `Decimal.toFixed(2)`
-(half-up, `ROUND_HALF_UP`). `checkBuyRisk` then re-derives the limit from the exact
-equity and compares the **rounded** size with `lessThanOrEqualTo`. When the binding
-cap has more than two decimals and the third decimal is 5–9, the rounded size is
-strictly above the cap and the risk manager vetoes the very allocation the
-allocator produced. The check logs `value: "20.00"`, `limit: "20.00"`,
-`passed: false`, which is very hard to diagnose.
+**Root cause.** `allocateOpportunities` rounded the chosen size with `money()` →
+`Decimal.toFixed(2)` (half-up). `checkBuyRisk` then re-derived the limit from the
+exact equity and compared the **rounded** size with `lessThanOrEqualTo`. When the
+binding cap had more than two decimals and the third decimal was 5–9, the rounded
+size was strictly above the cap and the risk manager vetoed the very allocation the
+allocator produced. The check logged `value: "20.00"`, `limit: "20.00"`,
+`passed: false`, which was very hard to diagnose. The allocator had also updated
+its own token/strategy/cash accounting with the unrounded size, so its state did
+not match the emitted order.
 
-Reproduction (default settings, equity 992.14, cash 992.14, no positions, one
-`trend_pullback` candidate with stop 1.28%):
+Reproduction before the fix (default settings, equity 992.14, cash 992.14, no
+positions, one `trend_pullback` candidate with stop 1.28%):
 
 ```
 allocateOpportunities -> sizeUsd "198.43"   (exact token cap 992.14 * 20% = 198.428)
@@ -738,33 +771,50 @@ checkBuyRisk          -> passed false, failedCode RISK_TOKEN_EXPOSURE
                          max_token_exposure value "20.00" limit "20.00" passed false
 ```
 
-The same seam hits the per-trade risk cap: in the golden replay AAA is vetoed twice
-with size `168.33`, `per_trade_risk value "5.05" limit "5.05" passed false`.
+The same seam hit the per-trade risk cap: in the pre-fix golden replay AAA was
+vetoed twice with size `168.33`, `per_trade_risk value "5.05" limit "5.05"
+passed false`. In that run **24 of 42 sized buy attempts were vetoed**, 22 by
+`max_token_exposure` (BBB 18, CCC 4) and 2 by `per_trade_risk` (AAA 2). It did not
+break money safety (nothing unsafe was emitted), but it silently dropped valid
+entries and made entry availability depend on cent parity.
 
-Observed in the pinned 400-bar golden run: **24 of 42 sized buy attempts were
-vetoed**, 22 by `max_token_exposure` (BBB 18, CCC 4) and 2 by `per_trade_risk`
-(AAA 2). Examples: `199.77`, `199.81`, `200.52`, `203.07`, `208.23` at the token
-cap; `168.33` at the per-trade cap. Consequence: on a portfolio whose equity in
-cents is `≡ 3 (mod 5)` the 20% token cap always rounds up, so the engine can be
-unable to open any new position at all for as long as equity stays there. This
-does **not** break money safety (nothing unsafe is emitted; the veto is
-conservative), but it silently drops valid entries and makes sizing depend on
-cent parity.
+**Fix (this commit; no risk formula or cap percentage changed).**
 
-Not fixed here: Task 8 is scoped to the golden test, this packet and the docs
-status lines. Recommended fix in a reviewed follow-up:
+- `decision/decimal.ts` adds `moneyDown(value)` → `toFixed(2, ROUND_DOWN)`.
+  `money()` stays half-up for display and risk values.
+- `portfolio-allocator.ts` now emits `moneyDown(size)`; runs the `minOrderUsd`
+  check against the floored size; and updates `openPositions`, `tokenValues`,
+  `strategyValues` and `cashAvailable` with the floored emitted size, so the
+  allocator's accounting matches the order exactly. `bindingConstraint` still
+  comes from the exact minimum.
+- Regression tests: `decimal.test.ts` (`moneyDown` truncates `1.239 → 1.23`,
+  `1.999 → 1.99`, `198.428 → 198.42`, `money` stays half-up);
+  `portfolio-allocator.test.ts` (equity 992.14 / 20% cap → `198.42`, allocation
+  accepted, and a following `checkBuyRisk` passes all twelve checks; equity
+  100.04 / 10% cap → exact `10.004`, floored `10.00` below `minOrderUsd 10.004`
+  → `ALLOC_SIZE_TOO_SMALL`; two 20% caps on equity 1000.03 emit `200.00` each and
+  account with the floored value).
+- The golden replay now pins zero risk vetoes (`risk.checked` with
+  `decision.action: block`), which fails if this seam regresses.
 
-- floor the allocated size to cents (`ROUND_DOWN` for the size only, keeping
-  half-up for display/reporting) or compare exposure with the unrounded size
-  against the cap plus a one-cent tolerance; and
-- add regression tests at the token-cap and per-trade-risk boundaries
-  (equity 992.14 / 998.81 / 1002.63 and `riskWeight 0.5`), asserting the intent is
-  emitted and every logged check passes.
+**Deliberate contract change.** Fixing the seam changes decisions, so the golden
+pin was re-pinned in the same commit (section F1.1). This is the deliberate contract
+change the plan requires; nothing was silently re-pinned.
 
-That fix deliberately changes the golden hash: the pinned
-`b12d5c28…`/`3956`/33-intent contract must be re-pinned in the same commit, with
-the change called out as a contract change. Until then, the current pin documents
-today's behaviour, including the vetoes.
+### F1.1 Golden re-pin after the fix (deliberate)
+
+| Pin               | Before F1 fix                                                      | After F1 fix                                                       |
+| ----------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| final `eventHash` | `b12d5c283de46ab4b51b3b09b62034f5d734f28b1850ad6b6097239c0b2946c0` | `b260f984250cf2cca57610a3fe47c85d91d5f93c26472818f2e21f564226847a` |
+| total events      | `3956`                                                             | `3936`                                                             |
+| intents           | `33` (18 buys / 15 sells)                                          | `45` (24 buys / 21 sells)                                          |
+| final host equity | `1054.23` USD                                                      | `1047.32` USD                                                      |
+| risk-vetoed buys  | `24` of 42 sized                                                   | `0`                                                                |
+| open positions    | `AAA`, `BBB`, `CCC`                                                | `AAA`, `BBB`, `CCC`                                                |
+
+The first four sample events in section 5.5 are byte-identical before and after
+(same `seq`/hash): they precede the first decision that the fix changes. Only the
+last `decision.completed` sample and the later events differ.
 
 ### F2 — Minor/deferred: entry during the first bars of a crash while the old trend regime is held
 
@@ -809,7 +859,6 @@ are unchanged; the CLI smoke in section 4.6 still returns 3 candles / 8 events.
 
 | #   | Item                                                                                                            | Severity |
 | --- | --------------------------------------------------------------------------------------------------------------- | -------- |
-| F1  | Allocator/risk rounding seam vetoes valid buys; fix before sign-off/Stage 1C and re-pin the golden hash         | Major    |
 | F2  | Falling-knife entry during the first bars of a crash while the old trend regime is still held                   | Minor    |
 | D1  | `regimeDwellBars` is global; per-regime dwell tuning is not implemented                                         | Minor    |
 | D2  | Cooldowns are host-provided: the engine derives `COOLDOWN` from `cooldownUntil` but never sets one              | Minor    |
@@ -817,16 +866,16 @@ are unchanged; the CLI smoke in section 4.6 still returns 3 candles / 8 events.
 | D4  | Take-profit is always `null` in Stage 1B; exits are strategy-driven only                                        | Minor    |
 | D5  | `Money`/percent formatting is two-decimal display formatting; higher-precision ledger values belong to Stage 1C | Minor    |
 
-Nothing is deferred that could move money, read live data, or write outside the
-package.
+F1 is fixed and no longer deferred. Nothing open is deferred that could move money,
+read live data, or write outside the package.
 
 ## 10. Gate
 
 **Stage 1C must not start until this review is signed off.**
 
 - The reviewer does not edit code; findings are returned to the implementer.
-- F1 is a major finding and must be fixed with regression tests, followed by a
-  full gate re-run and a deliberate golden re-pin.
+- F1 is already fixed with regression tests, a full gate re-run and a deliberate
+  golden re-pin; verify the fix and the re-pin.
 - Any further critical/major finding must be fixed and the full gate (tests,
   typecheck, build, lint, format) re-run before Stage 1C.
 - Minor findings may be deferred only if recorded in the review outcome.
@@ -839,7 +888,7 @@ Review outcome template:
 ```
 Reviewer:
 Date:
-Commit reviewed: b407592 + the review-request commit
+Commit reviewed: b407592 + the review-request commit + the F1 fix commit
 Verdict: approved | approved with findings | changes required
 
 Critical findings (block Stage 1B):

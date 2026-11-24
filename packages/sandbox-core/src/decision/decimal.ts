@@ -32,6 +32,16 @@ export function money(value: Decimal): string {
   return value.toFixed(2);
 }
 
+/**
+ * Formats a decimal amount truncated toward zero at two decimals.
+ *
+ * Used for order sizes: rounding a cap-binding size up would exceed the cap it
+ * was derived from and fail the risk check that re-derives the same limit.
+ */
+export function moneyDown(value: Decimal): string {
+  return value.toFixed(2, Decimal.ROUND_DOWN);
+}
+
 /** Formats a decimal percentage with two decimals. */
 export function percent(value: Decimal): string {
   return value.toFixed(2);

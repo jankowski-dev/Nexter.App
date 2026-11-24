@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from './defaults';
 import type { OpportunityCandidate, RankedOpportunity } from './opportunity-ranker';
 import { allocateOpportunities } from './portfolio-allocator';
 import { Reason } from './reason-codes';
+import { checkBuyRisk } from './risk-manager';
 import type { StrategySignal } from './strategies';
 import type { PortfolioPosition, PortfolioSnapshot, SandboxDecisionSettings } from './types';
 
@@ -441,5 +442,105 @@ describe('allocateOpportunities sequencing and output', () => {
       allocations: [],
       drops: [],
     });
+  });
+});
+
+describe('allocateOpportunities cent truncation', () => {
+  it('emits a floored cap size that still passes every risk check', () => {
+    // equity 992.14 * 20% = 198.428; half-up would emit 198.43 and the risk
+    // manager would veto its own allocation (value 20.00 == limit 20.00).
+    const capSettings = settings({
+      ...OPEN_CAPS,
+      maxTokenExposurePct: 20,
+      perTradeRiskPct: 1,
+      liquidityCapPct: 1,
+    });
+    const snapshot = portfolio({ equity: '992.14' });
+    const candidates = [
+      ranked('new', 1, { strategyKey: 'recovery', signal: signal({ stopLossPct: '3' }) }),
+    ];
+
+    const result = allocateOpportunities(candidates, snapshot, capSettings);
+
+    expect(result.drops).toEqual([]);
+    expect(result.allocations).toHaveLength(1);
+    const allocation = result.allocations[0];
+    expect(allocation?.sizeUsd).toBe('198.42');
+    expect(allocation?.bindingConstraint).toBe(Reason.ALLOC_TOKEN_CAP);
+    expect(allocation).toBeDefined();
+    if (allocation === undefined) throw new Error('unreachable');
+
+    const outcome = checkBuyRisk({
+      tokenId: 'new',
+      strategyKey: 'recovery',
+      sizeUsd: allocation.sizeUsd,
+      stopLossPct: allocation.stopLossPct,
+      riskWeight: 1,
+      context: {
+        now: 0,
+        portfolio: snapshot,
+        settings: capSettings,
+        phases: { new: 'SLEEPING' },
+        features: {
+          new: {
+            bars: 300,
+            lastClose: '1',
+            fastSma: '1',
+            slowSma: '1',
+            longSma: null,
+            atrPct: '1',
+            recentHigh: '1',
+            recentLow: '1',
+            avgVolumeUsd: '200000.00',
+            drawdownPct: '0',
+            staleBars: 0,
+          },
+        },
+      },
+    });
+
+    expect(outcome.passed).toBe(true);
+    expect(outcome.failedCode).toBeNull();
+    expect(outcome.checks.every((check) => check.passed)).toBe(true);
+  });
+
+  it('drops a size whose floored value falls below minOrderUsd', () => {
+    // equity 100.04 * 10% = 10.004; the exact size meets minOrder 10.004, but
+    // the emitted size is 10.00, so the allocation must be dropped.
+    const result = allocateOpportunities(
+      [ranked('new', 1, { strategyKey: 'recovery', signal: signal({ stopLossPct: '1' }) })],
+      portfolio({ equity: '100.04' }),
+      settings({ ...OPEN_CAPS, maxTokenExposurePct: 10, minOrderUsd: '10.004' }),
+    );
+
+    expect(result.allocations).toEqual([]);
+    expect(result.drops).toHaveLength(1);
+    expect(result.drops[0]?.reasonCode).toBe(Reason.ALLOC_SIZE_TOO_SMALL);
+    expect(result.drops[0]?.reasonText).toContain('10.00');
+  });
+
+  it('accounts with the floored size so later allocations see the emitted cash', () => {
+    // equity 1000.03: two token caps of 20% are 200.006 each. Both must emit
+    // 200.00 and leave cash available of 1000.03 - 10.003 (buffer) - 400.00.
+    const result = allocateOpportunities(
+      [
+        ranked('first', 1, {
+          strategyKey: 'trend_pullback',
+          signal: signal({ stopLossPct: '10' }),
+        }),
+        ranked('second', 2, { strategyKey: 'recovery', signal: signal({ stopLossPct: '10' }) }),
+      ],
+      portfolio({ equity: '1000.03' }),
+      settings({
+        ...OPEN_CAPS,
+        maxTokenExposurePct: 20,
+        cashBufferPct: 10,
+        perTradeRiskPct: 5,
+        liquidityCapPct: 100,
+      }),
+    );
+
+    expect(result.allocations.map((entry) => entry.sizeUsd)).toEqual(['200.00', '200.00']);
+    expect(result.drops).toEqual([]);
   });
 });

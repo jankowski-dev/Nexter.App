@@ -1,5 +1,5 @@
 import Decimal from 'decimal.js';
-import { minDecimal, money, toDecimal } from './decimal';
+import { minDecimal, money, moneyDown, toDecimal } from './decimal';
 import type { RankedOpportunity } from './opportunity-ranker';
 import { Reason } from './reason-codes';
 import type { ReasonCode } from './reason-codes';
@@ -202,15 +202,20 @@ export function allocateOpportunities(
     }
 
     const size = minDecimal(...constraints.map((constraint) => constraint.cap));
-    if (size.lessThan(minOrder)) {
-      pushDrop(candidate, Reason.ALLOC_SIZE_TOO_SMALL, { size });
+    // Emit the size truncated to cents. Rounding up could exceed the exact cap
+    // that produced it, and the risk manager (which re-derives the same cap)
+    // would veto the allocator's own output.
+    const sizeUsd = moneyDown(size);
+    const emitted = toDecimal(sizeUsd, 'sizeUsd');
+    if (emitted.lessThan(minOrder)) {
+      pushDrop(candidate, Reason.ALLOC_SIZE_TOO_SMALL, { size: emitted });
       continue;
     }
 
     const binding = constraints.find((constraint) => constraint.cap.equals(size));
     allocations.push({
       candidate,
-      sizeUsd: money(size),
+      sizeUsd,
       stopLossPct: stopText,
       takeProfitPct: candidate.signal.takeProfitPct,
       bindingConstraint: binding?.code ?? Reason.ALLOC_TOKEN_CAP,
@@ -218,17 +223,18 @@ export function allocateOpportunities(
 
     openPositions += 1;
     // Accepting a buy makes the token held for the rest of this cycle, so a
-    // duplicate ranked candidate cannot buy the same token twice.
+    // duplicate ranked candidate cannot buy the same token twice. Accounting
+    // uses the emitted (floored) size so it matches the order exactly.
     heldTokens.add(candidate.tokenId);
     tokenValues.set(
       candidate.tokenId,
-      (tokenValues.get(candidate.tokenId) ?? new Decimal(0)).plus(size),
+      (tokenValues.get(candidate.tokenId) ?? new Decimal(0)).plus(emitted),
     );
     strategyValues.set(
       candidate.strategyKey,
-      (strategyValues.get(candidate.strategyKey) ?? new Decimal(0)).plus(size),
+      (strategyValues.get(candidate.strategyKey) ?? new Decimal(0)).plus(emitted),
     );
-    cashAvailable = cashAvailable.minus(size);
+    cashAvailable = cashAvailable.minus(emitted);
   }
 
   return { allocations, drops };

@@ -1,6 +1,14 @@
 import Decimal from 'decimal.js';
 import { describe, expect, it } from 'vitest';
-import { DecimalInputError, maxDecimal, minDecimal, money, percent, toDecimal } from './decimal';
+import {
+  DecimalInputError,
+  maxDecimal,
+  minDecimal,
+  money,
+  moneyDown,
+  percent,
+  toDecimal,
+} from './decimal';
 
 describe('toDecimal', () => {
   it('parses non-negative decimal strings', () => {
@@ -60,6 +68,20 @@ describe('formatting', () => {
     expect(money(new Decimal('0'))).toBe('0.00');
     expect(percent(new Decimal('12'))).toBe('12.00');
     expect(percent(new Decimal('12.345'))).toBe('12.35');
+  });
+});
+
+describe('moneyDown', () => {
+  it('truncates a fractional cent instead of rounding up', () => {
+    expect(moneyDown(new Decimal('1.239'))).toBe('1.23');
+    expect(moneyDown(new Decimal('1.999'))).toBe('1.99');
+    expect(moneyDown(new Decimal('198.428'))).toBe('198.42');
+    expect(moneyDown(new Decimal('200'))).toBe('200.00');
+  });
+
+  it('leaves money() half-up so display and risk values keep their rounding', () => {
+    expect(money(new Decimal('1.239'))).toBe('1.24');
+    expect(money(new Decimal('1.999'))).toBe('2.00');
   });
 });
 

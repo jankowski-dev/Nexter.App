@@ -388,8 +388,8 @@ describe('DecisionEngine golden multi-bar replay', () => {
 
     const finalHash = first.finalHash;
     expect(finalHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(finalHash).toBe('b12d5c283de46ab4b51b3b09b62034f5d734f28b1850ad6b6097239c0b2946c0');
-    expect(first.events.length).toBe(3956);
+    expect(finalHash).toBe('b260f984250cf2cca57610a3fe47c85d91d5f93c26472818f2e21f564226847a');
+    expect(first.events.length).toBe(3936);
     expect(
       first.intents.map(({ tokenId, side, reasonCode, sizeUsd }) => ({
         tokenId,
@@ -399,38 +399,50 @@ describe('DecisionEngine golden multi-bar replay', () => {
       })),
     ).toEqual([
       { tokenId: 'AAA', side: 'buy', reasonCode: 'TREND_PULLBACK_ENTRY', sizeUsd: '200.00' },
-      { tokenId: 'CCC', side: 'buy', reasonCode: 'TREND_PULLBACK_ENTRY', sizeUsd: '199.98' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '199.51' },
-      { tokenId: 'CCC', side: 'sell', reasonCode: 'TREND_PULLBACK_STOP', sizeUsd: '194.28' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '204.12' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '200.68' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '208.49' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '203.11' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '209.12' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '205.28' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '202.37' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '204.87' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '199.76' },
+      { tokenId: 'CCC', side: 'buy', reasonCode: 'TREND_PULLBACK_ENTRY', sizeUsd: '199.40' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '196.93' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '198.78' },
+      { tokenId: 'CCC', side: 'sell', reasonCode: 'TREND_PULLBACK_STOP', sizeUsd: '195.12' },
+      { tokenId: 'CCC', side: 'buy', reasonCode: 'TREND_PULLBACK_ENTRY', sizeUsd: '197.47' },
+      { tokenId: 'CCC', side: 'sell', reasonCode: 'TREND_PULLBACK_STOP', sizeUsd: '191.84' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '206.52' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '199.73' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '196.90' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '199.33' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '207.09' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '201.70' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '198.84' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '201.30' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '209.14' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '203.71' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '200.82' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '203.30' },
       { tokenId: 'AAA', side: 'sell', reasonCode: 'TREND_PULLBACK_STOP', sizeUsd: '187.20' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '212.85' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '201.00' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '198.15' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '200.43' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '208.23' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '201.99' },
-      { tokenId: 'AAA', side: 'buy', reasonCode: 'RECOVERY_ENTRY', sizeUsd: '168.11' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '199.12' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '201.55' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '209.18' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '203.76' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '209.79' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '205.80' },
-      { tokenId: 'CCC', side: 'buy', reasonCode: 'RECOVERY_ENTRY', sizeUsd: '171.48' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '211.89' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '208.46' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '205.50' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '208.30' },
-      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '215.52' },
-      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '211.04' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '211.21' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '199.42' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '196.59' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '198.86' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '206.60' },
+      { tokenId: 'AAA', side: 'buy', reasonCode: 'RECOVERY_ENTRY', sizeUsd: '167.00' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '200.77' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '197.92' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '200.34' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '208.14' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '202.58' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '199.71' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '202.15' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '210.02' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '204.42' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '201.52' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '203.98' },
+      { tokenId: 'CCC', side: 'buy', reasonCode: 'RECOVERY_ENTRY', sizeUsd: '170.19' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '211.92' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '206.91' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_STOP', sizeUsd: '203.97' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '206.61' },
+      { tokenId: 'BBB', side: 'sell', reasonCode: 'RANGE_REVERSION_MID', sizeUsd: '214.65' },
+      { tokenId: 'BBB', side: 'buy', reasonCode: 'RANGE_REVERSION_ENTRY', sizeUsd: '209.65' },
     ]);
 
     // --- Behavioural coverage --------------------------------------------------
@@ -572,6 +584,13 @@ describe('DecisionEngine golden multi-bar replay', () => {
       intentChecked += 1;
     }
     expect(intentChecked).toBe(first.intents.length);
+
+    // F1 regression guard: every sized candidate survives the risk veto, so the
+    // allocator and the risk manager cannot disagree at a rounding boundary.
+    const riskBlocked = first.events.filter(
+      (event) => event.eventType === 'risk.checked' && event.decision?.action === 'block',
+    );
+    expect(riskBlocked).toEqual([]);
 
     // Sells are structurally exempt from daily-loss and drawdown vetoes.
     const sellRisk = first.events.filter(
