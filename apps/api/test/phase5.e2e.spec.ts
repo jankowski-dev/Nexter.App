@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { accounts, assets, createDb, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -31,7 +31,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `phase5-e2e-${Date.now()}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')
@@ -56,7 +56,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
   }
 
   async function createTransaction(
-    agent: SuperAgentTest,
+    agent: ReturnType<typeof request.agent>,
     csrf: string,
     body: Record<string, unknown>,
   ) {
@@ -81,7 +81,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     return agent.post('/api/v1/transactions').set('x-csrf-token', csrf).send(body).expect(201);
   }
 
-  async function getAssets(agent: SuperAgentTest) {
+  async function getAssets(agent: ReturnType<typeof request.agent>) {
     const response = await agent.get('/api/v1/assets').expect(200);
     return response.body.assets as Array<{
       id: string;
@@ -91,7 +91,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
     }>;
   }
 
-  async function getAccounts(agent: SuperAgentTest) {
+  async function getAccounts(agent: ReturnType<typeof request.agent>) {
     const response = await agent.get('/api/v1/accounts').expect(200);
     return response.body.accounts as Array<{
       id: string;

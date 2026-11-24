@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { auditLog, createDb, rateLimits, users, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -46,7 +46,7 @@ describe.runIf(canRun)('Auth e2e', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let emailCounter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `auth-e2e-${Date.now()}-${emailCounter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')
@@ -60,7 +60,7 @@ describe.runIf(canRun)('Auth e2e', () => {
     };
   }
 
-  async function enableTotp(agent: SuperAgentTest, csrf: string) {
+  async function enableTotp(agent: ReturnType<typeof request.agent>, csrf: string) {
     const totpSetup = await agent
       .post('/api/v1/auth/2fa/setup')
       .set('x-csrf-token', csrf)
@@ -84,7 +84,11 @@ describe.runIf(canRun)('Auth e2e', () => {
     };
   }
 
-  async function loginWithTotp(agent: SuperAgentTest, ownerEmail: string, secret: string) {
+  async function loginWithTotp(
+    agent: ReturnType<typeof request.agent>,
+    ownerEmail: string,
+    secret: string,
+  ) {
     await db.update(users).set({ lastTotpStep: null });
 
     const login = await agent

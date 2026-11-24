@@ -4,6 +4,7 @@ import type { MarketTimeframe, RawCandle } from './candle.types';
 
 const BINANCE_BASE_URL = 'https://api.binance.com';
 const BINANCE_SYMBOLS: Record<string, string> = {
+  BTC: 'BTCUSDT',
   XRP: 'XRPUSDT',
   LINK: 'LINKUSDT',
   ZEC: 'ZECUSDT',

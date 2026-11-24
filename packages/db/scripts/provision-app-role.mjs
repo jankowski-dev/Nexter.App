@@ -63,10 +63,11 @@ const statements = [
   `grant usage on schema public to ${quoteIdent(appUser)};`,
   `grant select, insert, update, delete on all tables in schema public to ${quoteIdent(appUser)};`,
   `revoke update, delete on audit_log from ${quoteIdent(appUser)};`,
-  `revoke delete on users, settings, accounts, assets, chains, imports, watchlist, swap_orders, swap_events, token_approvals, external_api_calls, watched_addresses, indexed_transfers, reconciliation_runs, reconciliation_items, vault_configs, vault_items, tasks, notes, habits, market_quotes, ai_settings, audio_notes, note_audio, market_history, ai_profiles, ai_profile_tokens, ai_service_configs, ai_pipeline_runs, ai_jobs, ai_artifacts, ai_candidates, ai_reports, ai_usage, market_candles from ${quoteIdent(appUser)};`,
+  `revoke delete on users, settings, accounts, assets, chains, imports, watchlist, swap_orders, swap_events, token_approvals, external_api_calls, watched_addresses, indexed_transfers, reconciliation_runs, reconciliation_items, vault_configs, vault_items, tasks, notes, habits, market_quotes, ai_settings, audio_notes, note_audio, market_history, ai_profiles, ai_profile_tokens, ai_service_configs, ai_pipeline_runs, ai_jobs, ai_artifacts, ai_candidates, ai_reports, ai_usage, market_candles, sandbox_tokens, sandbox_candles, sandbox_runs, sandbox_run_tokens, sandbox_events, sandbox_positions, sandbox_trades, sandbox_ledger_entries, sandbox_equity_points, sandbox_intents, sandbox_reports from ${quoteIdent(appUser)};`,
   `revoke update on vault_configs from ${quoteIdent(appUser)};`,
   `grant usage, select on all sequences in schema public to ${quoteIdent(appUser)};`,
   `revoke update on indexed_transfers, reconciliation_items from ${quoteIdent(appUser)};`,
+  `revoke update, delete on sandbox_events from ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant select, insert, update, delete on tables to ${quoteIdent(appUser)};`,
   `alter default privileges in schema public grant usage, select on sequences to ${quoteIdent(appUser)};`,
 ];
@@ -132,6 +133,17 @@ try {
         'ai_reports',
         'ai_usage',
         'market_candles',
+        'sandbox_tokens',
+        'sandbox_candles',
+        'sandbox_runs',
+        'sandbox_run_tokens',
+        'sandbox_events',
+        'sandbox_positions',
+        'sandbox_trades',
+        'sandbox_ledger_entries',
+        'sandbox_equity_points',
+        'sandbox_intents',
+        'sandbox_reports',
       ],
     ],
   );
@@ -146,7 +158,7 @@ try {
   const updateCheck = await client.query(
     `select table_name, has_table_privilege($1, 'public.' || table_name, 'update') as can_update
      from unnest($2::text[]) as table_name`,
-    [appUser, ['indexed_transfers', 'reconciliation_items', 'vault_configs']],
+    [appUser, ['indexed_transfers', 'reconciliation_items', 'vault_configs', 'sandbox_events']],
   );
   const updateAllowed = updateCheck.rows
     .filter((row) => row.can_update)
@@ -165,6 +177,7 @@ try {
         createDb: check.rows[0]?.rolcreatedb ?? null,
         createRole: check.rows[0]?.rolcreaterole ?? null,
         deleteDenied: true,
+        sandboxEventLogAppendOnly: true,
         result: 'provisioned',
       },
       null,

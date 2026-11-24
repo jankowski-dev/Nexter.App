@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { encodeAbiParameters, encodeFunctionData, toEventSelector } from 'viem';
 import {
   assets,
@@ -53,26 +53,26 @@ const canRun = Boolean(
 );
 
 const password = 'correct horse battery staple';
-const wallet = '0x1111111111111111111111111111111111111111';
-const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5';
+const wallet = '0x1111111111111111111111111111111111111111' as const;
+const router = '0x6131B5fae19EA4f9D964eAc0408E4408b66337b5' as const;
 const selector = '0xe21fd0e9';
 const selectorAllowlist = `${selector},0x59e50fed`;
-const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996';
-const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d';
-const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d';
-const ethereumTokenIn = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
-const ethereumTokenOut = '0x514910771af9ca656af840dff83e8264ecf986ca';
-const chainlinkAddress = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd';
+const executor = '0x8F10B468b06c6FD214B65F87778827F7D113f996' as const;
+const tokenIn = '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d' as const;
+const tokenOut = '0x1d28d989f9e3ccb8b15d0cec601734514f958e4d' as const;
+const ethereumTokenIn = '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48' as const;
+const ethereumTokenOut = '0x514910771af9ca656af840dff83e8264ecf986ca' as const;
+const chainlinkAddress = '0xf8a0bf9cf54bb92f17374d9e9a321e6a111a51bd' as const;
 
 function makeBuildData(
   overrides: {
-    recipient?: string;
-    srcToken?: string;
-    dstToken?: string;
+    recipient?: `0x${string}`;
+    srcToken?: `0x${string}`;
+    dstToken?: `0x${string}`;
     amount?: bigint;
     minOut?: bigint;
-    callTarget?: string;
-    feeReceivers?: string[];
+    callTarget?: `0x${string}`;
+    feeReceivers?: `0x${string}`[];
     feeAmounts?: bigint[];
     flags?: bigint;
   } = {},
@@ -112,8 +112,8 @@ function makeBuildData(
 function swappedLog(
   spentAmount: bigint,
   returnAmount: bigint,
-  srcToken = tokenIn,
-  dstToken = tokenOut,
+  srcToken: `0x${string}` = tokenIn,
+  dstToken: `0x${string}` = tokenOut,
 ) {
   return {
     address: router,
@@ -154,7 +154,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
   let erc20DefaultBalance = '1000000000000000000000';
   let rpcFailure = false;
   let buildData = makeBuildData();
-  let buildRouter = router;
+  let buildRouter: `0x${string}` = router;
   let buildValue = '0';
   let buildAmountIn = '1000000000000000000';
   let buildAmountOut = '2000000000000000000';
@@ -252,7 +252,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
     },
   };
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `swap-e2e-${Date.now()}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')

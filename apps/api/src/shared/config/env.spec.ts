@@ -92,3 +92,26 @@ describe('parseEnv', () => {
     expect(() => parseEnv(productionEnv({ TRUST_PROXY: 'true' }))).toThrow(/TRUST_PROXY/);
   });
 });
+
+describe('SANDBOX_ENABLED parsing', () => {
+  it.each([
+    ['true', true],
+    ['1', true],
+    ['false', false],
+    ['0', false],
+  ])('parses %s', (raw, expected) => {
+    const parsed = parseEnv({ NODE_ENV: 'test', SANDBOX_ENABLED: raw });
+
+    expect(parsed.SANDBOX_ENABLED).toBe(expected);
+  });
+
+  it('defaults to enabled', () => {
+    const parsed = parseEnv({ NODE_ENV: 'test' });
+
+    expect(parsed.SANDBOX_ENABLED).toBe(true);
+  });
+
+  it('rejects other values', () => {
+    expect(() => parseEnv({ NODE_ENV: 'test', SANDBOX_ENABLED: 'yes' })).toThrow();
+  });
+});

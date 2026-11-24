@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { createDb, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -33,7 +33,7 @@ describe.runIf(canRun)('Bot task reminders API', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let previousToken: string | undefined;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `bot-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')

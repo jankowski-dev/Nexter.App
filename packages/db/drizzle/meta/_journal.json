@@ -365,6 +365,13 @@
       "when": 1795361676306,
       "tag": "0051_ai_profile_token_delete",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1795506070183,
+      "tag": "0052_sandbox_stage2",
+      "breakpoints": true
     }
   ]
 }

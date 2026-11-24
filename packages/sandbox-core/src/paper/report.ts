@@ -207,22 +207,38 @@ export function buildReport(input: BuildReportInput): RunReport {
   return { ...body, reportHash: reportHash(body) };
 }
 
+/** Optional presentation hooks for host-specific Markdown wrappers. */
+export interface MarkdownRenderOptions {
+  /** Heading text without the leading `#`; defaults to `Paper run report`. */
+  readonly title?: string;
+  /** Extra Markdown lines inserted after the title and run line. */
+  readonly intro?: readonly string[];
+  /** Replaces the "no rejected buys" line when the host omits counterfactuals. */
+  readonly counterfactualNote?: string;
+}
+
 /**
  * Renders the report as Markdown tables and a short narrative.
  *
  * No locale formatting is used: every money/percent value is already a decimal
  * string and timestamps are ISO. Counterfactuals are explicitly labelled as
- * hindsight that never influenced a decision.
+ * hindsight that never influenced a decision. The optional presentation hooks
+ * let a host label the artifact or explain an intentional omission without
+ * patching the rendered text; they never change the report or its hash.
  */
-export function renderMarkdown(report: RunReport): string {
+export function renderMarkdown(report: RunReport, options: MarkdownRenderOptions = {}): string {
   const lines: string[] = [];
   const { metrics, config } = report;
 
-  lines.push('# Paper run report', '');
+  lines.push(`# ${options.title ?? 'Paper run report'}`, '');
   lines.push(
     `Run \`${report.runId}\` · seed \`${report.seed}\` · timeframe \`${config.timeframe}\``,
   );
   lines.push('');
+  for (const intro of options.intro ?? []) {
+    lines.push(intro);
+  }
+  if ((options.intro ?? []).length > 0) lines.push('');
 
   lines.push('## Summary', '');
   lines.push(
@@ -482,7 +498,7 @@ export function renderMarkdown(report: RunReport): string {
     '',
   );
   if (report.counterfactuals.length === 0) {
-    lines.push('No rejected buys to analyze.', '');
+    lines.push(options.counterfactualNote ?? 'No rejected buys to analyze.', '');
   } else {
     lines.push(
       table(

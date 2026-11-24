@@ -22,7 +22,8 @@ export type NavIconName =
   | 'upload'
   | 'sliders'
   | 'download'
-  | 'ai';
+  | 'ai'
+  | 'sandbox';
 
 const icons: Record<NavIconName, ReactNode> = {
   dashboard: (
@@ -150,6 +151,13 @@ const icons: Record<NavIconName, ReactNode> = {
       <path d="M12 3.5v11" />
       <path d="m7.5 10 4.5 4.5 4.5-4.5" />
       <path d="M5 20.5h14" />
+    </>
+  ),
+  sandbox: (
+    <>
+      <path d="M9.5 3.5h5M11 3.5v6.2L5.6 18a2 2 0 0 0 1.7 3h9.4a2 2 0 0 0 1.7-3L13 9.7V3.5" />
+      <path d="M8 14.5h8" />
+      <circle cx="10.5" cy="17.5" r="0.9" fill="currentColor" stroke="none" />
     </>
   ),
   settings: (

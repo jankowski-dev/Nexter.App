@@ -7,6 +7,7 @@ export const messages = {
   nav: {
     dashboard: 'Дашборд',
     crypto: 'Крипта',
+    sandbox: 'Песочница',
     portfolio: 'Торговля',
     operations: 'Операции',
     finance: 'Финансы',

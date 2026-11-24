@@ -10,6 +10,7 @@ export * from './data/jsonl-candles';
 export * from './data/snapshot';
 export * from './data/market-view';
 export * from './events/event-types';
+export * from './events/event-chain';
 export * from './events/event-log';
 export * from './events/memory-event-log';
 export * from './events/jsonl-event-log';

@@ -3,6 +3,7 @@ import { FinancePage } from '@/features/finance/finance-page';
 import { ImportPage } from '@/features/import/import-page';
 import { LoginPage } from '@/features/auth/login-page';
 import { PortfolioPage } from '@/features/portfolio/portfolio-page';
+import { SandboxPage } from '@/features/sandbox/sandbox-page';
 import { RecoveryPage } from '@/features/auth/recovery-page';
 import { ResetPasswordPage } from '@/features/auth/reset-password-page';
 import { Setup2faPage } from '@/features/auth/setup-2fa-page';
@@ -176,6 +177,12 @@ const portfolioRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/portfolio',
   component: PortfolioPage,
+});
+
+const sandboxRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/sandbox',
+  component: SandboxPage,
 });
 
 const tradesRoute = createRoute({
@@ -371,6 +378,7 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([
     dashboardRoute,
     portfolioRoute,
+    sandboxRoute,
     tradesRoute,
     tradeDetailRoute,
     operationsRoute,

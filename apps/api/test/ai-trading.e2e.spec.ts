@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import {
   aiCandidates,
   aiPipelineRuns,
@@ -39,7 +39,7 @@ describe.runIf(canRun)('AI trading control center API', () => {
   let db: Database;
   let pool: ReturnType<typeof createDb>['pool'];
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `ai-trading-e2e-${Date.now()}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')

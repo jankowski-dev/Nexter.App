@@ -3,7 +3,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import cookie from '@fastify/cookie';
 import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
-import request, { type SuperAgentTest } from 'supertest';
+import request from 'supertest';
 import { createDb, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -31,7 +31,7 @@ describe.runIf(canRun)('Notes API', () => {
   let pool: ReturnType<typeof createDb>['pool'];
   let counter = 0;
 
-  async function setupOwner(agent: SuperAgentTest) {
+  async function setupOwner(agent: ReturnType<typeof request.agent>) {
     const email = `notes-e2e-${Date.now()}-${counter++}@example.com`;
     const setup = await agent
       .post('/api/v1/auth/setup')
@@ -77,13 +77,13 @@ describe.runIf(canRun)('Notes API', () => {
     const post = (url: string, body: Record<string, unknown>) =>
       agent.post(url).set('x-csrf-token', owner.csrf).send(body);
 
-    const notes = [];
+    const notes: Array<{ id: string }> = [];
     for (let index = 1; index <= 3; index += 1) {
       const created = await post('/api/v1/notes', {
         title: `Заметка ${index}`,
         body: `Текст ${index}`,
       }).expect(201);
-      notes.push(created.body);
+      notes.push(created.body as { id: string });
     }
 
     const first = await agent.get('/api/v1/notes?limit=2&offset=0').expect(200);

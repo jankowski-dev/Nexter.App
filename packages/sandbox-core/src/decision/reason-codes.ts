@@ -98,6 +98,10 @@ export const Reason = Object.freeze({
   PAPER_RUN_STARTED: 'PAPER_RUN_STARTED',
   PAPER_RUN_COMPLETED: 'PAPER_RUN_COMPLETED',
   COOLDOWN_AFTER_STOP: 'COOLDOWN_AFTER_STOP',
+  /** A live-paper buy/sell intent is queued for the next tick (not yet resolved). */
+  INTENT_PENDING: 'INTENT_PENDING',
+  /** Owner-requested close of one position; fills on the next tick. */
+  MANUAL_CLOSE: 'MANUAL_CLOSE',
 
   TOKEN_SLEEPING: 'TOKEN_SLEEPING',
   TOKEN_ARMED: 'TOKEN_ARMED',
