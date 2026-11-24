@@ -335,6 +335,70 @@ export interface MetricsInput {
   readonly closedTrades: readonly PaperTrade[];
 }
 
+/** Hindsight verdict for one rejected buy. */
+export type CounterfactualOutcome =
+  'missed_opportunity' | 'bad_save' | 'neutral' | 'insufficient_data';
+
+/**
+ * A buy the decision engine (or the fill model) did not take.
+ *
+ * `decisionTime` is the decision bar close, exactly as the paper runner stamps
+ * intents. Counterfactual analysis resolves the entry from this timestamp, so
+ * the reason code identifies why the buy never happened: no position exists, the
+ * cash floor vetoed it, liquidity capped it at zero, or the bar had no data.
+ */
+export interface RejectedBuy {
+  readonly tokenId: string;
+  readonly decisionTime: Timestamp;
+  readonly reasonCode: ReasonCode;
+}
+
+/**
+ * One hindsight round trip for a rejected buy.
+ *
+ * This is a **reporting-only** artifact: `hindsight` is the literal `true` and
+ * `usedForDecisions` the literal `false`, so the type system and the persisted
+ * report both record that the answer was computed after the fact and can never
+ * feed back into a decision.
+ *
+ * `entryAt` is the entry bar's `openTime`; `exitAt` is the exit bar's close time
+ * (`openTime + timeframe`), because that is the instant the exit price was
+ * realised. Prices are 8-decimal USD strings, `returnPct` has two decimals.
+ *
+ * On missing data the record reports `insufficient_data` with `null` where the
+ * data was absent: a missing entry leaves every price/time field `null`, while a
+ * missing exit keeps the entry and leaves the exit fields and `returnPct` null.
+ */
+export interface CounterfactualRecord {
+  readonly tokenId: string;
+  readonly decisionTime: Timestamp;
+  readonly reasonCode: ReasonCode;
+  readonly entryAt: Timestamp | null;
+  readonly entryPriceUsd: string | null;
+  readonly exitAt: Timestamp | null;
+  readonly exitPriceUsd: string | null;
+  readonly returnPct: string | null;
+  readonly outcome: CounterfactualOutcome;
+  readonly hindsight: true;
+  readonly usedForDecisions: false;
+}
+
+/**
+ * Input to `analyzeRejectedBuys`.
+ *
+ * `candles` is the run's candle series (one timeframe per token); the analysis
+ * never reads outside it. `horizonHours` is the hindsight exit horizon measured
+ * from the entry bar open, and `feeBps`/`slippageBps` mirror the paper run so the
+ * counterfactual pays the same costs the paper bot would have paid.
+ */
+export interface CounterfactualInput {
+  readonly rejected: readonly RejectedBuy[];
+  readonly candles: readonly Candle[];
+  readonly horizonHours: number;
+  readonly feeBps: number;
+  readonly slippageBps: number;
+}
+
 /**
  * Input to one deterministic paper run.
  *
