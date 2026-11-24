@@ -76,6 +76,18 @@ jobs:
       - name: Test
         run: pnpm test
 
+      # One-off Stage 2 evidence run: real providers + the CI Postgres. This
+      # step is temporary and removed before the frozen Stage 2 head.
+      - name: Sandbox live smoke (one-off)
+        run: >-
+          pnpm --filter @nexter/api exec vitest run
+          test/sandbox-live-smoke.e2e.spec.ts
+          test/sandbox-live-tick-smoke.e2e.spec.ts
+        env:
+          NODE_ENV: development
+          NEXTER_TEST_DB: '1'
+          SANDBOX_LIVE_SMOKE: '1'
+
       - name: Build
         run: pnpm build
 
