@@ -27,10 +27,14 @@ import type {
  *
  * Money is `Decimal` until formatting. Prices are 8-decimal USD strings; the
  * $100 notional, its fee and the sale notional are 2-decimal USD strings; the
- * return is a 2-decimal percentage of the all-in cost. The record is
- * reproducible from its own strings: `amount = 100 / entryPrice`,
- * `sale = amount * exitPrice` (2 decimals), the sale fee is `feeBps` of the
- * booked sale, and the return compares proceeds with `100 + buy fee`. The
+ * return is a 2-decimal percentage of the all-in cost. The size and sale are
+ * computed from the **exact** slippage-adjusted prices, and the 8-decimal price
+ * strings are for display only: a low-priced token has few significant digits at
+ * 8 decimals, so feeding the rounded price back into `amount = 100 / entryPrice`
+ * would erase slippage, and a price that rounds to `0.00000000` is reported as
+ * `insufficient_data` instead of dividing by zero. The sale is rounded once to
+ * cents, the fee is `feeBps` of the booked sale, proceeds are
+ * `sale - fee`, and the return compares proceeds with `100 + buy fee`. The
  * outcome is classified from that emitted two-decimal return, so a record never
  * shows `0.00` beside a directional verdict.
  *
@@ -46,6 +50,7 @@ const HUNDRED = new Decimal(100);
 const HOUR_MS = 3_600_000;
 const NOTIONAL_USD = new Decimal(100);
 const ONE = new Decimal(1);
+const ZERO_PRICE = '0.00000000';
 const ZERO_PCT = '0.00';
 
 /** Typed input error for a malformed counterfactual request. */
@@ -100,9 +105,14 @@ function candleCloseTime(candle: Candle): Timestamp {
  * Groups candles by token, validates their timestamps/timeframes once and sorts
  * each series by `openTime` ascending. Sorting is by numeric timestamp only, so
  * it is locale-independent and stable for duplicate bars.
+ *
+ * A token must use exactly one timeframe: mixing bars of different lengths makes
+ * the exit close (`openTime + timeframe`) ambiguous, so a mixed series is a
+ * caller error instead of a silently mispriced round trip.
  */
 function indexCandles(candles: readonly Candle[]): Map<string, Candle[]> {
   const byToken = new Map<string, Candle[]>();
+  const timeframes = new Map<string, string>();
   for (const candle of candles) {
     if (!Number.isFinite(candle.openTime)) {
       throw new CounterfactualInputError(
@@ -111,6 +121,14 @@ function indexCandles(candles: readonly Candle[]): Map<string, Candle[]> {
     }
     if (!Object.hasOwn(TIMEFRAME_MS, candle.timeframe)) {
       throw new CounterfactualInputError(`Unknown candle timeframe: ${candle.timeframe}`);
+    }
+    const knownTimeframe = timeframes.get(candle.tokenId);
+    if (knownTimeframe === undefined) {
+      timeframes.set(candle.tokenId, candle.timeframe);
+    } else if (knownTimeframe !== candle.timeframe) {
+      throw new CounterfactualInputError(
+        `Candles for ${candle.tokenId} mix timeframes "${knownTimeframe}" and "${candle.timeframe}"`,
+      );
     }
     const series = byToken.get(candle.tokenId);
     if (series === undefined) {
@@ -133,7 +151,10 @@ function compareCodeUnits(left: string, right: string): number {
 }
 
 function assertRejection(row: RejectedBuy): void {
-  if (typeof row.tokenId !== 'string' || row.tokenId.length === 0) {
+  if (typeof row !== 'object' || row === null) {
+    throw new CounterfactualInputError('rejected rows must be objects');
+  }
+  if (typeof row.tokenId !== 'string' || row.tokenId.trim().length === 0) {
     throw new CounterfactualInputError('rejected.tokenId must be a non-empty string');
   }
   if (typeof row.decisionTime !== 'number' || !Number.isFinite(row.decisionTime)) {
@@ -243,7 +264,14 @@ function analyzeOne(
   if (entryOpen === null) return insufficientRecord(identity, null);
 
   const slippage = new Decimal(slippageBps).div(BPS);
-  const entryPriceUsd = entryOpen.times(ONE.plus(slippage)).toFixed(8);
+  // The exact price drives every money calculation; the 8-decimal string is for
+  // display only. Rounding first would erase slippage on low-priced tokens (and
+  // a sub-5e-9 price would round to zero, so the guard below rejects it).
+  const entryPriceExact = entryOpen.times(ONE.plus(slippage));
+  const entryPriceUsd = entryPriceExact.toFixed(8);
+  if (!entryPriceExact.greaterThan(0) || entryPriceUsd === ZERO_PRICE) {
+    return insufficientRecord(identity, null);
+  }
   const entry: EntryFill = {
     at: entryCandle.openTime,
     priceUsd: entryPriceUsd,
@@ -266,18 +294,22 @@ function analyzeOne(
   const exitClose = parsePrice(exitCandle.close, 'candle.close');
   if (exitClose === null) return insufficientRecord(identity, entry);
 
+  const exitPriceExact = exitClose.times(ONE.minus(slippage));
+  const exitPriceUsd = exitPriceExact.toFixed(8);
+  if (!exitPriceExact.greaterThan(0) || exitPriceUsd === ZERO_PRICE) {
+    return insufficientRecord(identity, entry);
+  }
+
   // Buy side: $100 notional plus its fee is the all-in cost.
   const buyFeeStr = NOTIONAL_USD.times(feeBps).div(BPS).toFixed(2);
   const cost = NOTIONAL_USD.plus(new Decimal(buyFeeStr));
-  // The token amount is derived from the emitted entry price, so the record can
-  // be recomputed exactly from the strings it carries.
-  const amountStr = NOTIONAL_USD.div(new Decimal(entryPriceUsd)).toFixed(8);
-  const amount = new Decimal(amountStr);
-
-  const exitPriceUsd = exitClose.times(ONE.minus(slippage)).toFixed(8);
+  // Size and sale use the exact prices, never the rounded display strings: at a
+  // 1e-6 entry price, an 8-decimal price is only 2 significant digits, so using
+  // it would wipe out the slippage and price move the counterfactual measures.
+  const amount = NOTIONAL_USD.div(entryPriceExact);
   // Round the sale once, then charge the fee on the booked sale and derive
   // proceeds from it, mirroring the paper fill model so cents never disagree.
-  const saleNotionalStr = amount.times(new Decimal(exitPriceUsd)).toFixed(2);
+  const saleNotionalStr = amount.times(exitPriceExact).toFixed(2);
   const saleNotional = new Decimal(saleNotionalStr);
   const sellFeeStr = saleNotional.times(feeBps).div(BPS).toFixed(2);
   const proceeds = saleNotional.minus(new Decimal(sellFeeStr));

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import Decimal from 'decimal.js';
 import { Reason } from '../decision/reason-codes';
 import type { Candle, Timestamp } from '../types';
 import { CounterfactualInputError, analyzeRejectedBuys } from './counterfactual';
@@ -19,13 +20,15 @@ const HOUR = 3_600_000;
 const T0 = Date.UTC(2026, 0, 1);
 
 function bar(index: number, open: string, close: string, tokenId = 'token-a'): Candle {
+  const openValue = new Decimal(open);
+  const closeValue = new Decimal(close);
   return makeCandle({
     tokenId,
     openTime: T0 + index * HOUR,
     open,
     close,
-    high: close,
-    low: open,
+    high: Decimal.max(openValue, closeValue).toString(),
+    low: Decimal.min(openValue, closeValue).toString(),
     volumeUsd: '100000',
   });
 }
@@ -133,6 +136,83 @@ describe('analyzeRejectedBuys', () => {
 
     expect(record?.returnPct).toBe('0.00');
     expect(record?.outcome).toBe('neutral');
+  });
+
+  it('applies slippage exactly on a low-priced token instead of rounding it away', () => {
+    // Entry open 0.00000100 and exit close 0.000001001 cancel out, so the exact
+    // round trip loses only the 10 bps buy + 10 bps sell slippage: -0.10%.
+    // Deriving the size from the 8-decimal entry price (1e-6) would book a flat
+    // 0.00 and misclassify this as neutral.
+    const candles = [
+      bar(0, '0.00000100', '0.00000100'),
+      bar(1, '0.00000100', '0.000001001'),
+      bar(2, '0.000001001', '0.000001001'),
+    ];
+    const [record] = analyzeRejectedBuys(
+      baseInput({
+        rejected: [rejection('token-a', T0)],
+        candles,
+        horizonHours: 2,
+        feeBps: 0,
+        slippageBps: 10,
+      }),
+    );
+
+    expect(record?.entryPriceUsd).toBe('0.00000100');
+    expect(record?.exitPriceUsd).toBe('0.00000100');
+    expect(record?.returnPct).toBe('-0.10');
+    expect(record?.outcome).toBe('bad_save');
+  });
+
+  it('reports a missed opportunity on a low-priced token when the exact move beats costs', () => {
+    // close/open = 1.01 up, times the slippage ratio 0.999/1.001 = +0.7982%.
+    const candles = [
+      bar(0, '0.00000100', '0.00000100'),
+      bar(1, '0.00000100', '0.00000101'),
+      bar(2, '0.00000101', '0.00000101'),
+    ];
+    const [record] = analyzeRejectedBuys(
+      baseInput({
+        rejected: [rejection('token-a', T0)],
+        candles,
+        horizonHours: 2,
+        feeBps: 0,
+        slippageBps: 10,
+      }),
+    );
+
+    expect(record?.entryPriceUsd).toBe('0.00000100');
+    expect(record?.exitPriceUsd).toBe('0.00000101');
+    expect(record?.returnPct).toBe('0.80');
+    expect(record?.outcome).toBe('missed_opportunity');
+  });
+
+  it('reports insufficient_data when a positive price rounds to zero at 8 decimals', () => {
+    // 1e-9 * 1.001 is positive but displays as 0.00000000; dividing the $100
+    // notional by it would emit a zero price and a NaN return.
+    const candles = [
+      bar(0, '0.000000001', '0.000000001'),
+      bar(1, '0.000000001', '0.000000001'),
+      bar(2, '0.000000001', '0.000000001'),
+    ];
+    const [record] = analyzeRejectedBuys(
+      baseInput({ rejected: [rejection('token-a', T0)], candles, horizonHours: 2 }),
+    );
+
+    expect(record).toEqual<CounterfactualRecord>({
+      tokenId: 'token-a',
+      decisionTime: T0,
+      reasonCode: Reason.FILL_POSITION_EXISTS,
+      entryAt: null,
+      entryPriceUsd: null,
+      exitAt: null,
+      exitPriceUsd: null,
+      returnPct: null,
+      outcome: 'insufficient_data',
+      hindsight: true,
+      usedForDecisions: false,
+    });
+    expect(JSON.stringify(record)).not.toMatch(/NaN|Infinity/);
   });
 
   it('enters on the bar whose open equals the decision time, not the next one', () => {
@@ -402,6 +482,33 @@ describe('analyzeRejectedBuys', () => {
           candles: fourBars(),
         }),
       ),
+    ).toThrow(CounterfactualInputError);
+    expect(() =>
+      analyzeRejectedBuys(baseInput({ rejected: [rejection('   ', T0)], candles: fourBars() })),
+    ).toThrow(CounterfactualInputError);
+    expect(() =>
+      analyzeRejectedBuys(
+        baseInput({
+          rejected: [null as unknown as RejectedBuy],
+          candles: fourBars(),
+        }),
+      ),
+    ).toThrow(CounterfactualInputError);
+  });
+
+  it('rejects a candle series that mixes timeframes for one token', () => {
+    const candles = [
+      bar(0, '1', '1'),
+      makeCandle({
+        tokenId: 'token-a',
+        timeframe: '4h',
+        openTime: T0 + HOUR,
+        open: '1',
+        close: '1',
+      }),
+    ];
+    expect(() =>
+      analyzeRejectedBuys(baseInput({ rejected: [rejection('token-a', T0)], candles })),
     ).toThrow(CounterfactualInputError);
   });
 });
