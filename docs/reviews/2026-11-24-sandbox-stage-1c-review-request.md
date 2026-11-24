@@ -5,6 +5,7 @@
 - Base: `ef2f342` (Stage 1B merged and signed off)
 - Code head at request: `f802f93` (chore: ignore local sdd scratch in prettier)
 - Review-request commit: the commit with subject `test(sandbox): add 180-day golden run and stage 1c review packet` — it adds the golden test, this packet and the design/plan status only, and changes no source file
+- Final-review fix commit: `4299a80` (`fix(sandbox): book exact cost basis and fail unreconciled runs`); this packet's §10 and re-pinned values are updated in the docs commit after it
 - Package: `packages/sandbox-core`
 - Reviewer: independent (agent and/or owner). The reviewer does not edit code.
 - Design: `docs/superpowers/specs/2026-11-24-sandbox-stage-1c-paper-execution-design.md`
@@ -14,6 +15,21 @@
 Stage 1C is **implemented**. The full gate is green and the 180-day golden run is
 deterministic and reconciled. **Stage 1C is not signed off until the independent
 review closes and the owner accepts the Stage 1 report.** Stage 2 must not start.
+
+The independent whole-branch review returned **Not ready** with one Critical and
+one Important finding; both are fixed in this branch (§10):
+
+- **C1 (Critical):** cost basis was reconstructed from the 8-decimal `avgCostUsd`,
+  so realized/unrealized P&L was wrong and reconciliation could fail for
+  low-priced tokens. The ledger now carries an exact cents cost basis per
+  position, trade and entry; a 1e-6 regression test pins it.
+- **I1 (Important):** a failed reconciliation was recorded but did not fail the
+  run. `buildReport` now throws on any discrepancy, so an unreconciled run writes
+  no report or artifacts, and `paper-main` exits non-zero.
+
+The 180-day golden was re-pinned once, deliberately, for the C1/I1 contract
+change: only `reportHash`/`eventHash` changed; every count, equity and metric pin
+is unchanged.
 
 ## 1. Scope
 
@@ -66,6 +82,9 @@ e8a4632 docs(sandbox): book rounded paper fill values
 2225e18 fix(sandbox): close stage 1b debt before paper execution
 2b1c88d docs(sandbox): add stage 1c design and plan
 ```
+
+The final-review fix wave adds `4299a80` (see §10); it changes only
+`packages/sandbox-core` source/tests and the plan, and re-pins the golden.
 
 The review-request commit adds only:
 
@@ -133,6 +152,11 @@ No `apps/*`, no database/migration, no old AI/legacy file is touched. The only
 Stage 1B source changes are the §12 debt closures; `pnpm-lock.yaml` is unchanged
 (no new dependency; `decimal.js` and `zod` remain the only runtime deps).
 
+The final-review fix wave (`4299a80`) touches only `paper/types.ts`,
+`paper/ledger.ts`, `paper/report.ts`, `paper/paper-runner.ts`,
+`paper/paper-logger.ts`, `cli/paper.ts`, their tests, the golden test, the plan
+and this packet; it adds no file, dependency or schema.
+
 ## 4. Commands and observed results
 
 All from the repo root with `npx pnpm@10.20.0`.
@@ -145,13 +169,16 @@ npx pnpm@10.20.0 --filter @nexter/sandbox-core test
 
 ```
  Test Files  37 passed (37)
-      Tests  533 passed (533)
-   Duration  75.09s (tests 90%, import 8%, transform 1%)
+      Tests  538 passed (538)
+   Duration  84.72s (tests 90%, import 8%, transform 1%, worker 1%)
 ```
 
 The goldens are included: the Stage 1B `decision-engine.golden.test.ts` (pinned
-`b260f984…`, unchanged) and the Stage 1C `paper-runner.golden.test.ts`. The
-Stage 1A suite is unchanged and green.
+`b260f984…`, unchanged) and the Stage 1C `paper-runner.golden.test.ts` (re-pinned
+for C1/I1, §10). The Stage 1A suite is unchanged and green. The C1 regression
+(`ledger.test.ts` "realizes cents-exact P&L and reconciles at a 1e-6 price") and
+the CLI exit-code regression (`cli/paper.test.ts` "paper-main exits non-zero…")
+add five tests over the pre-fix 533.
 
 ### 4.2 Typecheck
 
@@ -276,8 +303,8 @@ and event hashes. Pinned literals:
 
 | Pin                                 | Value                                                              |
 | ----------------------------------- | ------------------------------------------------------------------ |
-| `reportHash`                        | `ac2a0059068d3bb7bad49baeda1c563438f4217f650e0c1a89a548be6a4226f5` |
-| `eventHash`                         | `ef7da740575b165d1d712a76a17b894fdd2e9dc91cd848a52edf22df407cd8da` |
+| `reportHash`                        | `cabf8c7db10178d0f7aab0e1dc9de229e8ffe7cb51b3f18ee1aae7a588ccd295` |
+| `eventHash`                         | `a8fcf7cf4a37f2df3511f7e1a867a063d4b586cdc08aa80569be2b3056251890` |
 | events                              | `49379`                                                            |
 | intents                             | `454` (281 filled / 173 partial / 0 rejected / 0 expired)          |
 | closed trades                       | `227`                                                              |
@@ -293,9 +320,13 @@ and event hashes. Pinned literals:
 | `settingsVersion(DEFAULT_SETTINGS)` | `cc3d30cf416f7fac9a96b96d40868050cce7e68cb300f47d17fc92b789f1a26c` |
 
 The pins were established from the first deterministic run and are verified by two
-further replays inside the same test on every run. A pin change is a contract
-change, not a test fix; nothing was re-pinned silently (there was no earlier
-Stage 1C pin).
+further replays inside the same test on every run. The initial Stage 1C pins were
+`ac2a0059…` (report) and `ef7da740…` (events); they were re-pinned once, on
+purpose, when C1 added the exact-cents cost basis fields to `LedgerEntry` and
+`PaperTrade` (which changes every `ledger.entry` event and the report):
+`ac2a0059… → cabf8c7d…`, `ef7da740… → a8fcf7cf…`. No count, equity, return,
+drawdown or counterfactual pin changed. A pin change is a contract change, not a
+test fix.
 
 ### 5.3 Summary metrics
 
@@ -352,6 +383,7 @@ pullback entries followed by ATR stops), not a performance claim.
   "entryAmount": "3.04264264",
   "entryNotionalUsd": "150.00",
   "entryFeeUsd": "0.38",
+  "entryCostBasisUsd": "150.38",
   "entryIntentId": "stage1c-golden-180d:BBB:buy:2026-01-08T15:00:00.000Z:range_reversion",
   "exitAt": 1767891600000,
   "exitPriceUsd": "48.65226093",
@@ -428,7 +460,8 @@ Outcome histogram: 721 `bad_save`, 217 `missed_opportunity`, 6
   side, intent id, fill time, amount, notional, fee and price; rejected/expired
   intents have none; ledger entries equal filled + partial;
 - every intent has exactly one `execution.*` outcome event of the matching type;
-- `reconciliationOk`; every one of the 4,320 equity points satisfies
+- `reconciliationOk` is `true` and a failed reconciliation would abort the report
+  (I1); every one of the 4,320 equity points satisfies
   `equity = cash + positions value` within a cent; the last point equals the
   metric; `equity − initial = realized + unrealized` within a cent;
 - every fill price equals the **next bar open** at the fill time times
@@ -461,15 +494,15 @@ Outcome histogram: 721 `bad_save`, 217 `missed_opportunity`, 6
 
 Observed on the development machine (Windows, Node 22.17.0):
 
-| Measure                                   | Value        |
-| ----------------------------------------- | ------------ |
-| One 180-day run (`runPaperFromFiles`)     | ≈ 22.6 s     |
-| Golden file, three runs incl. event parse | 69.6 s       |
-| Events (one run)                          | 49,379       |
-| Ledger entries                            | 454          |
-| `events.jsonl`                            | 51,161,642 B |
-| `report.json`                             | 1,579,043 B  |
-| `report.md`                               | 169,590 B    |
+| Measure                                   | Value     |
+| ----------------------------------------- | --------- |
+| One 180-day run (`runPaperFromFiles`)     | ≈ 23 s    |
+| Golden file, three runs incl. event parse | 78.8 s    |
+| Events (one run)                          | 49,379    |
+| Ledger entries                            | 454       |
+| `events.jsonl`                            | ≈ 51.2 MB |
+| `report.json`                             | ≈ 1.59 MB |
+| `report.md`                               | ≈ 170 KB  |
 
 The golden test uses a 180 s timeout with no hard CI performance bound (the plan
 allows a generous smoke bound; none is asserted to avoid flaky CI machines). The
@@ -516,14 +549,18 @@ decisionTime`.
    the sell would book zero cents"; golden: unique intent ids, status split
    pinned, one execution event per intent.
 5. **Ledger identities and reconciliation.** Cash = initial − buys + sell
-   proceeds; position amounts = buys − sells; realized = Σ sell entries; fees =
-   Σ entry fees; trade aggregates match entries; equity = cash + positions value;
-   `equity − initial = realized + unrealized` within a cent; no negative cash or
-   amount; the entry cash trail and `positionAmountAfter` are replayed. Tests:
+   proceeds; position amounts = buys − sells; position cost basis = buys −
+   released cost; sell realized = proceeds − released cost; realized = Σ sell
+   entries; fees = Σ entry fees; trade aggregates and trade entry cost match
+   entries; equity = cash + positions value; `equity − initial = realized +
+unrealized` within a cent; no negative cash, amount or cost basis; the entry
+   cash trail, `positionAmountAfter` and `positionCostBasisAfterUsd` are replayed.
+   A discrepancy is a hard failure (I1), not a recorded flag. Tests:
    `ledger.test.ts` (buy/sell booking, partial sell, `markPortfolio`,
-   `reconcileLedger` clean/tampered cases, sequence and clock monotonicity,
-   duplicate ids); golden: `reconciliationOk`, per-point equity identity, the
-   metrics identity, and the entry/event/ledger id equality.
+   `reconcileLedger` clean/tampered cases including cost basis, sequence and clock
+   monotonicity, duplicate ids, 1e-6 exact-cost regression); golden:
+   `reconciliationOk`, per-point equity identity, the metrics identity, and the
+   entry/event/ledger id equality.
 6. **Cooldown and Stage 1B F2.** After a stop sell fill (`TREND_PULLBACK_STOP`,
    `RANGE_REVERSION_STOP`, `RECOVERY_STOP`) the host sets
    `cooldownUntil = fill bar open + 24h`, logs `paper.cooldown_set`, overlays the
@@ -558,13 +595,17 @@ decisionTime`.
 10. **Report hash and artifact contract.** `reportHash =
 sha256Hex(stableStringify(report without reportHash))`; the report contains no
     wall clock; `buildReport` rejects a journal whose count/hash disagrees with the
-    run; `writePaperArtifacts` writes canonical JSONL and refuses a non-empty
+    run, rejects caller metrics that disagree with the final mark/ledger, and now
+    **throws** when reconciliation fails, so an unreconciled run writes nothing
+    (I1); `writePaperArtifacts` writes canonical JSONL and refuses a non-empty
     directory. Tests: `report.test.ts` ("keeps the hash stable across two builds
     and key-order perturbations", "changes the report hash when a metric changes",
-    "rejects a journal that disagrees with the run audit", Markdown sections);
-    `cli/paper.test.ts` (artifact round-trip, canonical lines, fresh-directory
-    refusal, `1000` vs `1000.00` hash equality, non-1h rejection); golden:
-    artifacts round-trip and every JSONL line is canonical.
+    "throws instead of recording a failed reconciliation…", "rejects supplied
+    metrics…", "rejects a journal that disagrees with the run audit", Markdown
+    sections); `cli/paper.test.ts` (artifact round-trip, canonical lines,
+    fresh-directory refusal, `1000` vs `1000.00` hash equality, non-1h rejection,
+    `paper-main` non-zero exit); golden: artifacts round-trip and every JSONL line
+    is canonical.
 11. **Determinism.** Two replays and a reversed-file replay produce identical
     intents, ledger, equity curve and the same hashes; no `Date.now`,
     `Math.random` or `localeCompare` in the paper module, the runner or the report
@@ -573,8 +614,8 @@ sha256Hex(stableStringify(report without reportHash))`; the report contains no
     `paper-runner.test.ts` "is deterministic across two identical runs"; the CLI
     hash-equality test.
 12. **180-day report.** 4,320 bars over 180 days, final equity 1378.52, 227
-    trades, 944 counterfactuals, a readable `report.md` (169 KB) and a JSON report
-    (1.58 MB) with every section.
+    trades, 944 counterfactuals, a readable `report.md` (≈170 KB) and a JSON
+    report (≈1.59 MB) with every section.
 13. **No old imports, no schema, no real money.** `grep` for `@nexter/`, `apps/`,
     `ai-trading`, `trading-bots` in `packages/sandbox-core/src` returns 0 matches;
     no `any` in the package; no database, migration, HTTP, UI, wallet, key,
@@ -647,3 +688,78 @@ Spec coverage: pass | fail (notes)
 Quality: pass | fail (notes)
 Owner acceptance of the Stage 1 report: yes | no
 ```
+
+## 10. Final-review fix wave (C1, I1 and cheap minors)
+
+The whole-branch review is **Not ready** on two findings; both are fixed here.
+
+### 10.1 C1 — cents-exact cost basis
+
+`PaperPosition` gains `costBasisUsd`, `PaperTrade` gains `entryCostBasisUsd`, and
+`LedgerEntry` gains `costBasisReleasedUsd`/`positionCostBasisAfterUsd`. A buy
+sets the basis to `filledUsd + feeUsd`; a sell releases the whole remaining basis
+when it closes the position and `costBasis * appliedAmount / positionAmount`
+(rounded half-up once) otherwise. Realized P&L is `proceeds - released`; the
+trade accumulates the same value; `markPortfolio` computes unrealized as
+`marketValue - costBasis`. `avgCostUsd` remains an 8-decimal display/strategy
+value and is never used for P&L. `reconcileLedger` replays the cost-basis trail
+per token and checks every entry's `positionCostBasisAfterUsd`, each sell's
+`realized = proceeds - released`, the trade entry cost, and the existing cash,
+amount, clock, fee and equity identities.
+
+Regression: `ledger.test.ts` buys $200 at a `0.000001` open and sells at the same
+open with the default 25 bps fee and 10 bps slippage. The buy amount is
+`199800199.80019980`, the display average cost rounds to `0.00000100` (the old
+path realized `-0.70`), and the exact loss is `200.50` cost − `199.10` proceeds =
+**`-1.40`** (two `0.50` fees plus ~`0.40` slippage). The test pins `-1.40`, the
+released/remaining basis and a clean `reconcileLedger`. (The brief estimated
+"~-1.04"; the exact arithmetic of the chosen fill inputs is 1.40 and the exact
+value is what the test asserts.)
+
+### 10.2 I1 — reconciliation is a hard gate
+
+`buildReport` throws `PaperReportError` with the discrepancies when
+`reconcileLedger` is not ok, so no report/artifacts are produced (design §6.3).
+A produced report carries `reconciliationOk: true` and a static
+`reconciliationChecks` list (cash, position amounts, cost basis, realized, fees,
+trade aggregates, equity, P&L identity). `paper-main` already set
+`process.exitCode = 1` in its catch; a spawn-based CLI test now proves it exits 1
+and writes nothing. The old "records a failed reconciliation" test now expects
+the throw.
+
+### 10.3 Cheap minors
+
+1. Markdown adds per-strategy and per-token tables, a sentence that
+   counterfactuals are a fixed-horizon diagnostic (not the strategy's exit), the
+   reconciliation identity list and the ledger cost-basis note.
+2. The stale plan status line was removed.
+3. `PaperRunner` rejects mixed-timeframe input (`PAPER_MIXED_TIMEFRAMES`) like the
+   CLI instead of silently filtering.
+4. `PaperRunner.validateRunSettings` requires `counterfactualHorizonHours > 0`.
+5. Cash buffer is `[0, 100]` in both the runner and the fill model (0 = no
+   buffer, matching Stage 1B's non-negative rule).
+6. CLI numeric flags are parsed strictly (`^\d+$` / `^\d+(\.\d+)?$`): `1e3`,
+   `0x10` and padded whitespace are rejected.
+7. The runner's equity curve is built by `buildEquityCurve` instead of a
+   duplicated drawdown formula; the values are unchanged.
+8. Caller-supplied report metrics are checked against the final mark and ledger.
+9. Carried to Stage 2 unchanged: the `STOP_SELL_REASONS` hardcoded set, the global
+   `Decimal.set`, and the previous-close cash-floor convention.
+
+### 10.4 Re-pinned golden
+
+Only the hashes changed; every count, equity, return, drawdown, trade/P&L and
+counterfactual pin is identical.
+
+| Pin          | Before                                                             | After                                                              |
+| ------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| `reportHash` | `ac2a0059068d3bb7bad49baeda1c563438f4217f650e0c1a89a548be6a4226f5` | `cabf8c7db10178d0f7aab0e1dc9de229e8ffe7cb51b3f18ee1aae7a588ccd295` |
+| `eventHash`  | `ef7da740575b165d1d712a76a17b894fdd2e9dc91cd848a52edf22df407cd8da` | `a8fcf7cf4a37f2df3511f7e1a867a063d4b586cdc08aa80569be2b3056251890` |
+
+Why: every `ledger.entry` event now carries the two cost-basis fields, and every
+trade carries `entryCostBasisUsd`; the report gained the `reconciliationChecks`
+list and pins `reconciliationOk: true`. Final equity, return and drawdown are
+unchanged because cash depends only on fill notional and fees, not on how the
+cost basis is released; with all 227 trades closed, total realized P&L is still
+`378.52`, and the per-strategy/per-token summaries, win/loss counts and the sample
+trade are unchanged for this fixture.
