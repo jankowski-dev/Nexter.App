@@ -5,10 +5,9 @@ Branch: `feat/sandbox-stage-2`
 Stage 1C base: `3771b67` (accepted by the owner on 2026-11-24)
 Stage 2 docs base: `67c8c32` (design, ADR 0084, plan)
 Task 8 base: `efb28e4`
-Frozen code head: `b4b1e03` (final CI green, after removing the temporary
-one-off CI step; code/test tree identical to `cd31bca`/`05082b6`). The final
-docs-only head `8983bde` adds this packet update; no code or test changes exist
-after `b4b1e03`.
+Frozen code head: `4acc900` (Stage 2 review fixes; CI green) plus the final
+docs/packet commit. The previous frozen head `5fe93cf`/`b4b1e03` predates this
+review-fix round.
 Status: **Stage 2 implemented; independent review gate**
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
@@ -17,8 +16,9 @@ temporary one-off live-smoke step failed once on `2b49bf5` because GitHub's US
 runners get HTTP 451 from Binance; the smoke became environment-aware
 (CAKE/GeckoTerminal strict, Binance skipped when unreachable) and passed on
 `05082b6` and `cd31bca` (CAKE 4320/4320, tick fill, report, stop). That temporary
-step was removed in `b4b1e03`, and the final output-only CI run on `b4b1e03`
-is green.
+step was removed in `b4b1e03`. The whole-branch review fixes are in `4acc900`
+(CI green) and include provisioning `nexter_app` in CI so the runtime grant
+suite executes.
 
 Review this as one whole-branch Stage 2 review. The scope is paper only: no real
 money, exchange orders, wallets, keys, signing or real-ledger writes.
@@ -47,28 +47,29 @@ money, exchange orders, wallets, keys, signing or real-ledger writes.
 
 ## Tasks and commits
 
-| Task | Scope                                            | Commits                                                      | Review                            |
-| ---- | ------------------------------------------------ | ------------------------------------------------------------ | --------------------------------- |
-| Docs | Design, ADR 0084, plan                           | `67c8c32`                                                    | n/a                               |
-| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                                         | complete (scoped re-review clean) |
-| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                                         | complete (scoped re-review clean) |
-| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                              | complete (scoped re-review clean) |
-| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                                         | complete (scoped re-review clean) |
-| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                                         | complete (scoped re-review clean) |
-| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                                         | complete (scoped re-review clean) |
-| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                                         | complete (scoped re-review clean) |
-| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6`, `b4b1e03` + docs | **awaiting whole-branch review**  |
+| Task | Scope                                            | Commits                                                                 | Review                            |
+| ---- | ------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------- |
+| Docs | Design, ADR 0084, plan                           | `67c8c32`                                                               | n/a                               |
+| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                                                    | complete (scoped re-review clean) |
+| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                                                    | complete (scoped re-review clean) |
+| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                                         | complete (scoped re-review clean) |
+| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                                                    | complete (scoped re-review clean) |
+| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                                                    | complete (scoped re-review clean) |
+| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                                                    | complete (scoped re-review clean) |
+| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                                                    | complete (scoped re-review clean) |
+| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6`, `b4b1e03`, `4acc900` + docs | **awaiting whole-branch review**  |
 
-Branch diff from `3771b67` through `b4b1e03`: 147 files, +40,027/−111
+Branch diff from `3771b67` through `4acc900`: 148 files, +40,392/−111
 (including tests, fixtures, docs, contracts, core helpers, the migration
-snapshot and the test typecheck/CI fixes); this packet adds documentation only.
-No production data or production configuration was changed by this branch.
+snapshot and the test typecheck/CI/review fixes); this packet adds documentation
+only. No production data or production configuration was changed by this branch.
 
 ## Commands and outputs (local, 2026-11-24)
 
 | Command                                                               | Result                                                                                                                                                                                                    |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npx pnpm@10.20.0 test`                                               | exit 0. API **73 files passed / 25 skipped; 468 passed / 151 skipped**. Core **552 passed**. Contracts **55 passed**. Web **258 passed**. DB **1 passed**.                                                |
+| `npx pnpm@10.20.0 test`                                               | exit 0 (full gate before the final review-fix round): API **73 files passed / 25 skipped; 468 passed / 151 skipped**. Core **552 passed**. Contracts **55 passed**. Web **258 passed**. DB **1 passed**.  |
+| Review-fix focused API tests                                          | **57 passed** (runner, run service, report service, token coverage), plus typecheck/build/lint/format green; CI's full API run is **621 passed / 4 skipped** on `4acc900`.                                |
 | `npx pnpm@10.20.0 typecheck`                                          | all packages/apps pass; **API now also typechecks `test/**/*.ts`** via `apps/api/tsconfig.test.json` (262 pre-existing test type errors fixed mechanically)                                               |
 | `npx pnpm@10.20.0 build`                                              | web + sandbox-core + API pass (existing chunk-size warning only)                                                                                                                                          |
 | `npx pnpm@10.20.0 lint`                                               | clean                                                                                                                                                                                                     |
@@ -96,6 +97,7 @@ real database execution.
 | `cd31bca` | [run 45463903353](https://github.com/jankowski-dev/Nexter.App/actions/runs/45463903353) | **success**: one-off live smoke repeated; CAKE 4320/4320, fill, report, stop                   |
 | `b4b1e03` | [run 45466287752](https://github.com/jankowski-dev/Nexter.App/actions/runs/45466287752) | **success**: final code head, temporary one-off step removed (output-only CI; DB suites green) |
 | `8983bde` | [run 45468500668](https://github.com/jankowski-dev/Nexter.App/actions/runs/45468500668) | **success**: final docs-only head (this packet)                                                |
+| `4acc900` | [run 45479363737](https://github.com/jankowski-dev/Nexter.App/actions/runs/45479363737) | **success**: Stage 2 review fixes; app role provisioned, grant suite runs, API 621 passed      |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
@@ -137,9 +139,47 @@ e2e (`/status` 200, `/tokens` and `/overview` 404 `SANDBOX_DISABLED`), exact
 report-after-archive coverage, strict `available === required`/`status === 'ok'`
 smoke assertions, and the manual live-tick workflow.
 
-DB-gated suites executed by CI (all green in `e01c5cd`):
+### Stage 2 whole-branch review fixes (`4acc900`)
 
-- `sandbox-schema.e2e.spec.ts`
+- **Important 1 — transient DB errors no longer kill a run.** The runner
+  classifies fail-closed `SandboxPersistenceError` codes
+  (`STATE_INVALID`/`EVENT_CHAIN_DESYNC`/`EVENT_PAYLOAD_INVALID`) and every
+  `SandboxLiveTickError` code as terminal; all other errors (pool timeout/reset,
+  unknown infrastructure) log a warning, best-effort touch `last_tick_at`, keep
+  the run `running` and retry on the next 60-second pass. No intents are
+  expired and `failed` is not set. `SANDBOX_RUN_NOT_FOUND` is intentionally
+  transient. Unit tests cover transient `loadRun`/`commitTick` recovery and
+  terminal persistence/reconciliation failure (intents expired, audited).
+- **Important 2 — runtime grant gate now runs in CI.** CI runs
+  `APP_DB_USER=nexter_app APP_DB_PASSWORD=… pnpm db:provision-app` after
+  migrations. `sandbox-schema.e2e.spec.ts` no longer early-returns when the role
+  is missing: it asserts the role exists and runs the
+  `has_table_privilege`/precision checks against `nexter_app` (CI 4/4 passed).
+  The API test connection still uses the postgres superuser; static SQL/
+  provisioning assertions remain.
+- **Minor 3 — atomic stop/archive + pending expiry.** New repository helpers
+  `transitionRunAndExpire`/`archiveRunAndExpire` perform the conditional
+  transition and pending-intent expiry in one transaction; the service audits
+  the actual expired count/timestamp. The lifecycle DB test now also seeds a
+  pending row after stop and verifies archive expires it (all rows expired).
+- **Minor 4 — typed report 409.** `SandboxReportService.generate` wraps the
+  persisted-run read/map path and maps `SandboxPersistenceError` to
+  `409 SANDBOX_REPORT_NOT_READY`; corrupt JSONB/event payloads no longer escape
+  as 500. Two focused tests cover corrupt run state and corrupt event payload.
+- **Minor 7 — coverage warning wording.** The stale warning now says the last
+  candle is older than one closed 1h bar instead of “2 hours”.
+- **Minor 9 — pending-intent conflict visibility.** The runner records a warning
+  when `insertPendingIntents` persists fewer rows than queued, making the
+  manual-close-vs-engine same-tick race visible without changing behavior; the
+  partial unique index remains the guard. The exact race stays in deferred items.
+- **Minor 8 — packet head/evidence** is this update: code head `4acc900`, CI run
+  [45479363737](https://github.com/jankowski-dev/Nexter.App/actions/runs/45479363737),
+  runtime grant suite green (API 621 passed / 4 skipped).
+
+DB-gated suites executed by CI (all green in `e01c5cd` and `4acc900`):
+
+- `sandbox-schema.e2e.spec.ts` — tables/indexes/precision plus the **runtime**
+  `nexter_app` grant checks (role provisioned in CI).
 - `sandbox-tokens.e2e.spec.ts`
 - `sandbox-candles.e2e.spec.ts`
 - `sandbox-status.e2e.spec.ts` (owner-path test)
@@ -258,8 +298,10 @@ JSON/Markdown download). No manual buy/add/override and no real execution.
 - `sandbox.disabled.spec.ts` asserts `/status` stays readable, every other route
   is guarded, and the runner bootstrap exits when the flag is off.
 - `sandbox-schema.e2e.spec.ts` (CI) asserts tables, indexes, numeric scales and
-  no DELETE grant for `nexter_app`. `provision-app-role.mjs` revokes DELETE and
-  UPDATE on evidence tables.
+  the **runtime** no-DELETE/append-only grants for `nexter_app`; CI provisions
+  the role before the test step, so the `has_table_privilege` checks execute and
+  pass (4/4). `provision-app-role.mjs` revokes DELETE and UPDATE on evidence
+  tables and remains self-checking.
 - No secrets, keys, seed phrases, wallets or signing exist in the sandbox module.
   No public signup route was added.
 
@@ -267,8 +309,9 @@ JSON/Markdown download). No manual buy/add/override and no real execution.
 
 - 552 core tests, including the unchanged Stage 1B/1C goldens and event-chain replay.
 - 55 contract tests (sandbox lifecycle/read/report schemas).
-- 468 API tests locally; 151 skipped locally, and the full DB-gated set ran green
-  in CI on `e01c5cd` (including the new fake-clock e2e).
+- 468 API tests locally (focused review-fix run: 57 passed); 151 skipped locally,
+  and the full DB-gated set ran green in CI on `4acc900` (API **621 passed /
+  4 skipped**, including the new fake-clock e2e and review-fix tests).
 - 258 web tests (SSR/pure helpers, no DOM stack) including sandbox boundary checks.
 - API `typecheck` now covers `test/**/*.ts` (`tsconfig.test.json`), so the new
   e2e suites are type-checked on every gate; the 262 pre-existing test type
@@ -276,7 +319,9 @@ JSON/Markdown download). No manual buy/add/override and no real execution.
 - New in Task 8: fake-clock e2e (DB-gated), opt-in provider ingestion smoke,
   manual live-tick smoke + `workflow_dispatch` workflow, flag-off e2e, static
   flag/lock/route security tests, exact audit rows, stop/archive coverage,
-  Task 7 low fixes and `docs/runbooks/sandbox.md`.
+  Task 7 low fixes and `docs/runbooks/sandbox.md`. The review-fix round adds
+  transient/terminal runner tests, report 409 tests, atomic stop/archive tests,
+  and the CI app-role provisioning step.
 
 Unverified due to environment (explicit):
 
@@ -298,12 +343,20 @@ Unverified due to environment (explicit):
 - Event payloads are hashed after JSONB storage; the current canonical
   stringify/round-trip is stable, but any canonicalization or hash-visible field
   change needs an explicit replay/migration plan.
-- Transient DB retry/backoff is not implemented for the runner tick.
+- Transient DB/pool errors now keep the run `running` and retry on the next
+  60-second pass, but there is no in-pass retry/backoff or jitter.
 - Start warmup is synchronous (180-day provider fetch inside the start request);
   a cold start can be slow and should move to an explicit warmup state.
 - Same-tick pending-intent drop: resolved rows may still be non-terminal when a
-  new decision queues the same token/side; the partial unique index and the
-  next tick rejection keep it safe but the journal can show a rejection.
+  new decision queues the same token/side; the partial unique index drops the
+  duplicate and the runner now logs the persisted-vs-queued count, but there is
+  no drop event yet.
+- Report reads are not one `REPEATABLE READ` snapshot; a report generated while a
+  tick commits can mix pre/post-tick rows (the chain/equity consistency gate
+  fails closed with 409 rather than publishing a contradictory report).
+- The live tick smoke asserts the fill when the provider returns a fresh quote
+  and otherwise asserts an explicit pending intent; the one-off CI run filled,
+  but there is no hard “must fill” assertion (provider freshness is external).
 - Run list has no pagination cap beyond the contract limit (1–100) and no
   server-side search/sort.
 - Stacked drawers can still need two Escape presses in one edge path.
