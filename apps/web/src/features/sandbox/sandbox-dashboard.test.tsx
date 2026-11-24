@@ -3,19 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   SandboxEquityResponse,
+  SandboxEventsResponse,
   SandboxOverview,
   SandboxPositionsResponse,
   SandboxRunDetail,
 } from '@nexter/contracts';
 import { ConfirmProvider } from '@/lib/confirm';
-import { formatUsd } from '@/lib/format';
+import { formatSignedUsd, formatUsd } from '@/lib/format';
 
 vi.mock('./sandbox-hooks', () => ({
   useSandboxOverview: vi.fn(),
   useSandboxRunDetail: vi.fn(),
   useSandboxPositions: vi.fn(),
   useSandboxEquity: vi.fn(),
-  useSandboxEvents: vi.fn(),
+  useSandboxEventTail: vi.fn(),
   useSandboxLifecycle: vi.fn(),
   useCloseSandboxTrade: vi.fn(),
 }));
@@ -24,7 +25,7 @@ import { SandboxDashboard } from './sandbox-dashboard';
 import {
   useCloseSandboxTrade,
   useSandboxEquity,
-  useSandboxEvents,
+  useSandboxEventTail,
   useSandboxLifecycle,
   useSandboxOverview,
   useSandboxPositions,
@@ -43,7 +44,7 @@ const mockedOverview = vi.mocked(useSandboxOverview);
 const mockedDetail = vi.mocked(useSandboxRunDetail);
 const mockedPositions = vi.mocked(useSandboxPositions);
 const mockedEquity = vi.mocked(useSandboxEquity);
-const mockedEvents = vi.mocked(useSandboxEvents);
+const mockedEvents = vi.mocked(useSandboxEventTail);
 const mockedLifecycle = vi.mocked(useSandboxLifecycle);
 const mockedClose = vi.mocked(useCloseSandboxTrade);
 
@@ -57,23 +58,19 @@ function queryResult<T>(data: T): UseQueryResult<T, Error> {
   } as unknown as UseQueryResult<T, Error>;
 }
 
-function eventsResult(events = [sandboxEventFixture()]): ReturnType<typeof useSandboxEvents> {
-  return {
-    isPending: false,
-    isError: false,
-    error: null,
-    data: { pages: [{ events, hasMore: false, nextAfterSeq: null }], pageParams: [null] },
-    hasNextPage: false,
-    isFetchingNextPage: false,
-    fetchNextPage: vi.fn(),
-    refetch: vi.fn(),
-  } as unknown as ReturnType<typeof useSandboxEvents>;
+function eventsResult(events = [sandboxEventFixture()]): ReturnType<typeof useSandboxEventTail> {
+  return queryResult<SandboxEventsResponse>({
+    events,
+    hasMore: false,
+    nextAfterSeq: null,
+  }) as unknown as ReturnType<typeof useSandboxEventTail>;
 }
 
 function renderDashboard(
   options: {
     selectedRunId?: string | null;
     runs?: ReturnType<typeof sandboxRunSummaryFixture>[];
+    selectionPending?: boolean;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -83,6 +80,7 @@ function renderDashboard(
         selectedRunId={options.selectedRunId === undefined ? sandboxRunId : options.selectedRunId}
         onSelectRun={() => undefined}
         onChangeTab={() => undefined}
+        selectionPending={options.selectionPending}
       />
     </ConfirmProvider>,
   );
@@ -113,7 +111,7 @@ beforeEach(() => {
         },
       ],
       total: 2,
-      limit: 500,
+      limit: 2_000,
       offset: 0,
     }),
   );
@@ -262,5 +260,79 @@ describe('sandbox dashboard', () => {
     expect(html).toContain('доступен только просмотр');
     expect(html).not.toContain('Закрыть сделку');
     expect(html).not.toContain('Остановить');
+  });
+
+  it('shows the absolute P&L derived from equity minus initial capital', () => {
+    const html = renderDashboard();
+    expect(html).toContain('P&amp;L');
+    expect(html).toContain(formatSignedUsd('42.00'));
+  });
+
+  it('reads the latest-events tail and the 2000-point equity window', () => {
+    renderDashboard();
+    expect(mockedEquity).toHaveBeenCalledWith(sandboxRunId, true, 2_000, 0);
+    expect(mockedEvents).toHaveBeenCalledWith(sandboxRunId, true, 12, 200);
+  });
+
+  it('does not flash the empty state while the default run is resolving', () => {
+    mockedDetail.mockReturnValue({
+      isPending: false,
+      isError: false,
+      data: undefined,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as UseQueryResult<SandboxRunDetail, Error>);
+    const html = renderDashboard({ selectedRunId: null, selectionPending: true });
+    expect(html).toContain('Загрузка');
+    expect(html).not.toContain('Нет выбранного запуска');
+  });
+
+  it('does not warn about universe staleness outside the run tokens', () => {
+    mockedOverview.mockReturnValue(
+      queryResult<SandboxOverview>(
+        sandboxOverviewFixture({
+          universe: {
+            tokens: 2,
+            enabledTokens: 2,
+            staleTokens: ['bsc:0xother'],
+            lastCandleAt: '2026-11-24T00:00:00.000Z',
+          },
+        }),
+      ),
+    );
+    const html = renderDashboard();
+    expect(html).not.toContain('Устаревшие данные 1h');
+  });
+
+  it('does not show run freshness warnings for a paused run', () => {
+    mockedDetail.mockReturnValue(
+      queryResult<SandboxRunDetail>(
+        sandboxRunDetailFixture({
+          status: 'paused',
+          lastBarClose: '2026-01-01T00:00:00.000Z',
+        }),
+      ),
+    );
+    const html = renderDashboard();
+    expect(html).toContain('Данные свежие');
+    expect(html).not.toContain('Последний закрытый бар старше двух часов');
+  });
+
+  it('does not claim risk checks for an event without risk evidence', () => {
+    mockedEvents.mockReturnValue(
+      eventsResult([
+        sandboxEventFixture({
+          seq: 20,
+          module: 'strategy',
+          eventType: 'strategy.evaluated',
+          decision: null,
+          regime: null,
+          riskChecks: [],
+          alternatives: [],
+        }),
+      ]),
+    );
+    const html = renderDashboard();
+    expect(html).toContain('нет проверок');
   });
 });

@@ -132,6 +132,30 @@ export function filterSandboxTrades(
   return trades.filter((trade) => trade.status === status);
 }
 
+/** True when any client-side intent filter narrows the loaded page. */
+export function sandboxIntentFiltersActive(filters: SandboxIntentFilters): boolean {
+  return filters.status !== 'all' || filters.side !== 'all' || filters.tokenId !== null;
+}
+
+export function sandboxTradeFilterActive(status: SandboxTradeFilter): boolean {
+  return status !== 'all';
+}
+
+/** Filter changes always restart offset paging at the first page. */
+export function sandboxIntentFiltersWithOffset(
+  current: SandboxIntentFilters,
+  patch: Partial<SandboxIntentFilters>,
+): { filters: SandboxIntentFilters; offset: number } {
+  return { filters: { ...current, ...patch }, offset: 0 };
+}
+
+export function sandboxTradeFilterWithOffset(status: SandboxTradeFilter): {
+  status: SandboxTradeFilter;
+  offset: number;
+} {
+  return { status, offset: 0 };
+}
+
 /** Normalizes a limit that the API exposed to the UI (bounded 1–500). */
 export function clampSandboxPageLimit(limit: number, fallback = 50): number {
   if (!Number.isFinite(limit)) return fallback;

@@ -5,21 +5,25 @@ import {
   sandboxRunIdFromSearch,
   sandboxRunPickerOptions,
   sandboxSelectableRuns,
-  sandboxSelectedRun,
   sandboxUrlForSelection,
 } from './sandbox-selection';
 import { sandboxRunSummaryFixture } from './sandbox-test-fixtures';
 import type { SandboxRunSummary } from '@nexter/contracts';
+
+const runA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const runB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
 function run(overrides: Partial<SandboxRunSummary>): SandboxRunSummary {
   return sandboxRunSummaryFixture(overrides);
 }
 
 describe('sandbox run selection', () => {
-  it('reads an explicit run from the query string', () => {
-    expect(sandboxRunIdFromSearch('?run=abc-1')).toBe('abc-1');
-    expect(sandboxRunIdFromSearch('run=abc-1')).toBe('abc-1');
-    expect(sandboxRunIdFromSearch('?tab=journal&run=abc-2')).toBe('abc-2');
+  it('reads an explicit run from the query string and validates the UUID', () => {
+    expect(sandboxRunIdFromSearch(`?run=${runA}`)).toBe(runA);
+    expect(sandboxRunIdFromSearch(`run=${runB}`)).toBe(runB);
+    expect(sandboxRunIdFromSearch(`?tab=journal&run=${runA}`)).toBe(runA);
+    expect(sandboxRunIdFromSearch('?run=not-a-uuid')).toBeNull();
+    expect(sandboxRunIdFromSearch('?run=abc-1')).toBeNull();
     expect(sandboxRunIdFromSearch('?run=%20%20')).toBeNull();
     expect(sandboxRunIdFromSearch('?run=')).toBeNull();
     expect(sandboxRunIdFromSearch(undefined)).toBeNull();
@@ -44,14 +48,35 @@ describe('sandbox run selection', () => {
         run({ id: 'paused', status: 'paused' }),
       ]),
     ).toBe('paused');
-    expect(sandboxDefaultRunId([run({ id: 'draft', status: 'draft' })])).toBeNull();
+  });
+
+  it('falls back to the most recently updated non-archived run', () => {
+    const runs = [
+      run({
+        id: 'older',
+        status: 'stopped',
+        updatedAt: '2026-11-20T00:00:00.000Z',
+      }),
+      run({
+        id: 'newer',
+        status: 'failed',
+        updatedAt: '2026-11-24T10:00:00.000Z',
+      }),
+      run({
+        id: 'archived',
+        status: 'stopped',
+        updatedAt: '2026-11-25T00:00:00.000Z',
+        archivedAt: '2026-11-25T01:00:00.000Z',
+      }),
+    ];
+    expect(sandboxDefaultRunId(runs)).toBe('newer');
+    expect(sandboxDefaultRunId([run({ id: 'only', status: 'draft' })])).toBe('only');
     expect(sandboxDefaultRunId([])).toBeNull();
   });
 
   it('never default-selects an archived run', () => {
     const runs = [
       run({ id: 'archived', status: 'running', archivedAt: '2026-11-24T01:00:00.000Z' }),
-      run({ id: 'stopped', status: 'stopped' }),
     ];
     expect(sandboxDefaultRunId(runs)).toBeNull();
   });
@@ -80,14 +105,11 @@ describe('sandbox run selection', () => {
     expect(merged[0]?.status).toBe('running');
   });
 
-  it('filters archived runs from selectable lists and finds the selected run', () => {
+  it('filters archived runs from selectable lists', () => {
     const runs = [
       run({ id: 'visible' }),
       run({ id: 'archived', archivedAt: '2026-11-24T01:00:00.000Z' }),
     ];
     expect(sandboxSelectableRuns(runs).map((item) => item.id)).toEqual(['visible']);
-    expect(sandboxSelectedRun(runs, 'archived')?.id).toBe('archived');
-    expect(sandboxSelectedRun(runs, 'missing')).toBeNull();
-    expect(sandboxSelectedRun(runs, null)).toBeNull();
   });
 });

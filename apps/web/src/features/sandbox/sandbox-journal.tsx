@@ -20,8 +20,12 @@ import {
   filterSandboxIntents,
   filterSandboxTrades,
   flattenSandboxEventPages,
+  sandboxIntentFiltersActive,
+  sandboxIntentFiltersWithOffset,
   sandboxPageState,
   sandboxRiskEvents,
+  sandboxTradeFilterActive,
+  sandboxTradeFilterWithOffset,
   type SandboxEventFilters,
   type SandboxIntentFilters,
   type SandboxTradeFilter,
@@ -87,21 +91,39 @@ export function SandboxJournal({
   selectedRunId,
   onSelectRun,
   onChangeTab,
-}: SandboxTabSharedProps) {
+  selectionPending = false,
+  initialSection = 'events',
+  initialIntentFilters = defaultSandboxIntentFilters,
+  initialTradeStatus = 'all',
+}: SandboxTabSharedProps & {
+  initialSection?: JournalSection;
+  initialIntentFilters?: SandboxIntentFilters;
+  initialTradeStatus?: SandboxTradeFilter;
+}) {
   const detail = useSandboxRunDetail(selectedRunId);
   const live = detail.data?.status === 'running' && detail.data.archivedAt === null;
   const eventsQuery = useSandboxEvents(selectedRunId, live, 200);
-  const [section, setSection] = useState<JournalSection>('events');
+  const [section, setSection] = useState<JournalSection>(initialSection);
   const [eventFilters, setEventFilters] = useState<SandboxEventFilters>(defaultSandboxEventFilters);
   const [riskTokenId, setRiskTokenId] = useState<string | null>(null);
-  const [intentFilters, setIntentFilters] = useState<SandboxIntentFilters>(
-    defaultSandboxIntentFilters,
-  );
+  const [intentFilters, setIntentFilters] = useState<SandboxIntentFilters>(initialIntentFilters);
   const [intentOffset, setIntentOffset] = useState(0);
-  const [tradeStatus, setTradeStatus] = useState<SandboxTradeFilter>('all');
+  const [tradeStatus, setTradeStatus] = useState<SandboxTradeFilter>(initialTradeStatus);
   const [tradeOffset, setTradeOffset] = useState(0);
-  const intentsQuery = useSandboxIntents(selectedRunId, JOURNAL_PAGE_SIZE, intentOffset);
-  const tradesQuery = useSandboxTrades(selectedRunId, JOURNAL_PAGE_SIZE, tradeOffset);
+  const intentsQuery = useSandboxIntents(selectedRunId, JOURNAL_PAGE_SIZE, intentOffset, live);
+  const tradesQuery = useSandboxTrades(selectedRunId, JOURNAL_PAGE_SIZE, tradeOffset, live);
+
+  function updateIntentFilters(patch: Partial<SandboxIntentFilters>): void {
+    const next = sandboxIntentFiltersWithOffset(intentFilters, patch);
+    setIntentFilters(next.filters);
+    setIntentOffset(next.offset);
+  }
+
+  function updateTradeStatus(status: SandboxTradeFilter): void {
+    const next = sandboxTradeFilterWithOffset(status);
+    setTradeStatus(next.status);
+    setTradeOffset(next.offset);
+  }
 
   useEffect(() => {
     setIntentOffset(0);
@@ -109,6 +131,7 @@ export function SandboxJournal({
     setEventFilters(defaultSandboxEventFilters);
     setIntentFilters(defaultSandboxIntentFilters);
     setRiskTokenId(null);
+    setTradeStatus('all');
   }, [selectedRunId]);
 
   const events = useMemo(
@@ -135,6 +158,7 @@ export function SandboxJournal({
   );
 
   if (selectedRunId === null) {
+    if (selectionPending) return <LoadingRows rows={4} />;
     return (
       <EmptyState
         title="Нет выбранного запуска"
@@ -216,7 +240,18 @@ export function SandboxJournal({
             События с проверками риска из загруженной части журнала: имя, значение, лимит и
             результат.
           </p>
-          {riskEvents.length === 0 ? (
+          {eventsQuery.isPending ? (
+            <div className="mt-3">
+              <LoadingRows rows={3} />
+            </div>
+          ) : eventsQuery.isError ? (
+            <div className="mt-3">
+              <ErrorState
+                message="Не удалось загрузить проверки риска"
+                onRetry={() => void eventsQuery.refetch()}
+              />
+            </div>
+          ) : riskEvents.length === 0 ? (
             <p className="mt-3 text-sm text-zinc-600">Проверок риска пока нет.</p>
           ) : (
             <div className="mt-3 space-y-2">
@@ -229,6 +264,7 @@ export function SandboxJournal({
               ))}
             </div>
           )}
+          <EventLoadMore query={eventsQuery} events={events} />
         </Card>
       ) : null}
 
@@ -237,11 +273,12 @@ export function SandboxJournal({
           query={intentsQuery}
           intents={intents}
           filters={intentFilters}
-          onFilters={setIntentFilters}
+          onFilters={updateIntentFilters}
           tokenOptions={tokenOptions}
           symbolByToken={symbolByToken}
           offset={intentOffset}
           onOffset={setIntentOffset}
+          onRefresh={() => void intentsQuery.refetch()}
         />
       ) : null}
 
@@ -250,10 +287,11 @@ export function SandboxJournal({
           query={tradesQuery}
           trades={trades}
           status={tradeStatus}
-          onStatus={setTradeStatus}
+          onStatus={updateTradeStatus}
           symbolByToken={symbolByToken}
           offset={tradeOffset}
           onOffset={setTradeOffset}
+          onRefresh={() => void tradesQuery.refetch()}
         />
       ) : null}
     </div>
@@ -376,25 +414,39 @@ function EventsBlock({
         </div>
       )}
 
-      {query.hasNextPage ? (
-        <div className="mt-3 flex flex-col items-center gap-1">
-          <span className="text-[11px] text-zinc-500">
-            Загружено {events.length}; есть ещё события.
-          </span>
-          <Button
-            variant="secondary"
-            disabled={query.isFetchingNextPage}
-            onClick={() => void query.fetchNextPage()}
-          >
-            {query.isFetchingNextPage ? 'Загружаю…' : 'Загрузить ещё'}
-          </Button>
-        </div>
-      ) : events.length > 0 ? (
-        <div className="mt-3 text-center text-[11px] text-zinc-500">
-          Загружено {events.length}; это весь журнал.
-        </div>
-      ) : null}
+      <EventLoadMore query={query} events={events} />
     </Card>
+  );
+}
+
+function EventLoadMore({
+  query,
+  events,
+}: {
+  query: ReturnType<typeof useSandboxEvents>;
+  events: readonly SandboxEvent[];
+}) {
+  if (query.hasNextPage) {
+    return (
+      <div className="mt-3 flex flex-col items-center gap-1">
+        <span className="text-[11px] text-zinc-500">
+          Загружено {events.length}; есть ещё события.
+        </span>
+        <Button
+          variant="secondary"
+          disabled={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage()}
+        >
+          {query.isFetchingNextPage ? 'Загружаю…' : 'Загрузить ещё'}
+        </Button>
+      </div>
+    );
+  }
+  if (events.length === 0) return null;
+  return (
+    <div className="mt-3 text-center text-[11px] text-zinc-500">
+      Загружено {events.length}; это весь журнал.
+    </div>
   );
 }
 
@@ -575,16 +627,21 @@ function IntentsBlock({
   symbolByToken,
   offset,
   onOffset,
+  onRefresh,
 }: {
   query: ReturnType<typeof useSandboxIntents>;
   intents: readonly SandboxIntent[];
   filters: SandboxIntentFilters;
-  onFilters: (filters: SandboxIntentFilters) => void;
+  onFilters: (patch: Partial<SandboxIntentFilters>) => void;
   tokenOptions: ReadonlyArray<{ value: string; label: string }>;
   symbolByToken: ReadonlyMap<string, string>;
   offset: number;
   onOffset: (offset: number) => void;
+  onRefresh: () => void;
 }) {
+  const loaded = query.data?.intents.length ?? 0;
+  const active = sandboxIntentFiltersActive(filters);
+
   return (
     <Card>
       <div className="flex flex-wrap items-end gap-2">
@@ -595,10 +652,7 @@ function IntentsBlock({
             className="mt-1 w-40"
             value={filters.status}
             onChange={(event) =>
-              onFilters({
-                ...filters,
-                status: event.target.value as SandboxIntentFilters['status'],
-              })
+              onFilters({ status: event.target.value as SandboxIntentFilters['status'] })
             }
           >
             <option value="all">Все статусы</option>
@@ -616,7 +670,7 @@ function IntentsBlock({
             className="mt-1 w-36"
             value={filters.side}
             onChange={(event) =>
-              onFilters({ ...filters, side: event.target.value as SandboxIntentFilters['side'] })
+              onFilters({ side: event.target.value as SandboxIntentFilters['side'] })
             }
           >
             <option value="all">Все</option>
@@ -630,7 +684,7 @@ function IntentsBlock({
             aria-label="Фильтр интентов по токену"
             className="mt-1 w-44"
             value={filters.tokenId ?? ''}
-            onChange={(event) => onFilters({ ...filters, tokenId: event.target.value || null })}
+            onChange={(event) => onFilters({ tokenId: event.target.value || null })}
           >
             <option value="">Все токены</option>
             {tokenOptions.map((option) => (
@@ -640,7 +694,16 @@ function IntentsBlock({
             ))}
           </Select>
         </label>
+        <Button variant="ghost" onClick={onRefresh}>
+          Обновить
+        </Button>
       </div>
+
+      <p className="mt-2 text-xs text-zinc-500">
+        {active
+          ? `Фильтры применяются к загруженной странице: показано ${intents.length} из ${loaded} загруженных.`
+          : `Загружено ${loaded}${query.data ? ` из ${query.data.total}` : ''}.`}
+      </p>
 
       {query.isPending ? (
         <div className="mt-3">
@@ -648,14 +711,16 @@ function IntentsBlock({
         </div>
       ) : query.isError ? (
         <div className="mt-3">
-          <ErrorState message="Не удалось загрузить интенты" onRetry={() => void query.refetch()} />
+          <ErrorState message="Не удалось загрузить интенты" onRetry={onRefresh} />
         </div>
-      ) : (query.data?.intents.length ?? 0) === 0 ? (
+      ) : loaded === 0 ? (
         <p className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3 py-4 text-sm text-zinc-600">
-          Интентов пока нет.
+          {active ? 'На загруженной странице нет интентов под этот фильтр.' : 'Интентов пока нет.'}
         </p>
       ) : intents.length === 0 ? (
-        <p className="mt-3 text-sm text-zinc-600">Под фильтры не подошёл ни один интент.</p>
+        <p className="mt-3 text-sm text-zinc-600">
+          На загруженной странице нет интентов под этот фильтр.
+        </p>
       ) : (
         <div className="mt-3 space-y-2">
           {intents.map((intent) => (
@@ -699,7 +764,7 @@ function IntentsBlock({
         </div>
       )}
 
-      {query.data ? (
+      {query.data && !active ? (
         <OffsetPager
           total={query.data.total}
           offset={offset}
@@ -720,6 +785,7 @@ function TradesBlock({
   symbolByToken,
   offset,
   onOffset,
+  onRefresh,
 }: {
   query: ReturnType<typeof useSandboxTrades>;
   trades: readonly SandboxTrade[];
@@ -728,7 +794,11 @@ function TradesBlock({
   symbolByToken: ReadonlyMap<string, string>;
   offset: number;
   onOffset: (offset: number) => void;
+  onRefresh: () => void;
 }) {
+  const loaded = query.data?.trades.length ?? 0;
+  const active = sandboxTradeFilterActive(status);
+
   return (
     <Card>
       <div className="flex flex-wrap items-end gap-2">
@@ -745,7 +815,16 @@ function TradesBlock({
             <option value="closed">Закрытые</option>
           </Select>
         </label>
+        <Button variant="ghost" onClick={onRefresh}>
+          Обновить
+        </Button>
       </div>
+
+      <p className="mt-2 text-xs text-zinc-500">
+        {active
+          ? `Фильтры применяются к загруженной странице: показано ${trades.length} из ${loaded} загруженных.`
+          : `Загружено ${loaded}${query.data ? ` из ${query.data.total}` : ''}.`}
+      </p>
 
       {query.isPending ? (
         <div className="mt-3">
@@ -753,14 +832,16 @@ function TradesBlock({
         </div>
       ) : query.isError ? (
         <div className="mt-3">
-          <ErrorState message="Не удалось загрузить сделки" onRetry={() => void query.refetch()} />
+          <ErrorState message="Не удалось загрузить сделки" onRetry={onRefresh} />
         </div>
-      ) : (query.data?.trades.length ?? 0) === 0 ? (
+      ) : loaded === 0 ? (
         <p className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3 py-4 text-sm text-zinc-600">
-          Сделок пока нет.
+          {active ? 'На загруженной странице нет сделок под этот фильтр.' : 'Сделок пока нет.'}
         </p>
       ) : trades.length === 0 ? (
-        <p className="mt-3 text-sm text-zinc-600">Под фильтр не подошла ни одна сделка.</p>
+        <p className="mt-3 text-sm text-zinc-600">
+          На загруженной странице нет сделок под этот фильтр.
+        </p>
       ) : (
         <div className="mt-3 space-y-2">
           {trades.map((trade) => (
@@ -793,7 +874,7 @@ function TradesBlock({
         </div>
       )}
 
-      {query.data ? (
+      {query.data && !active ? (
         <OffsetPager
           total={query.data.total}
           offset={offset}

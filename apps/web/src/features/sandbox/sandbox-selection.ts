@@ -4,16 +4,19 @@ import { SANDBOX_PATH, sandboxStatusLabels, type SandboxTab } from './sandbox-ta
 /** Query parameter that keeps the selected run across tabs and reloads. */
 export const SANDBOX_RUN_QUERY = 'run';
 
+const SANDBOX_RUN_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /**
  * Reads the selected run id from a location search string (`?run=<uuid>`).
  * An absent, blank or malformed value falls back to "no explicit selection" so
- * the page can pick the first active run itself.
+ * the page never calls the API with an invalid id.
  */
 export function sandboxRunIdFromSearch(search: string | undefined): string | null {
   if (!search) return null;
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const raw = params.get(SANDBOX_RUN_QUERY)?.trim();
-  return raw ? raw : null;
+  return raw && SANDBOX_RUN_ID_PATTERN.test(raw) ? raw : null;
 }
 
 /**
@@ -32,17 +35,23 @@ export function sandboxSelectableRuns(runs: readonly SandboxRunSummary[]): Sandb
 }
 
 /**
- * Default selection for `Обзор` without an explicit `?run=`:
- * the first running run, otherwise the first paused run. Archived runs are
- * never picked automatically.
+ * Default selection without an explicit `?run=`:
+ * the first running run, otherwise the first paused run, otherwise the most
+ * recently updated non-archived run. Archived runs are never picked
+ * automatically.
  */
 export function sandboxDefaultRunId(runs: readonly SandboxRunSummary[]): string | null {
   const selectable = sandboxSelectableRuns(runs);
-  return (
-    selectable.find((run) => run.status === 'running')?.id ??
-    selectable.find((run) => run.status === 'paused')?.id ??
-    null
-  );
+  const running = selectable.find((run) => run.status === 'running');
+  if (running) return running.id;
+  const paused = selectable.find((run) => run.status === 'paused');
+  if (paused) return paused.id;
+
+  let latest: SandboxRunSummary | null = null;
+  for (const run of selectable) {
+    if (!latest || Date.parse(run.updatedAt) > Date.parse(latest.updatedAt)) latest = run;
+  }
+  return latest?.id ?? null;
 }
 
 /** Merges run lists (overview first) into one deduplicated list. */
@@ -81,13 +90,4 @@ export function sandboxRunPickerOptions(
       status: run.status,
       archived: run.archivedAt !== null,
     }));
-}
-
-/** Finds the selected run in the merged list; null when it is unknown. */
-export function sandboxSelectedRun(
-  runs: readonly SandboxRunSummary[],
-  runId: string | null,
-): SandboxRunSummary | null {
-  if (!runId) return null;
-  return runs.find((run) => run.id === runId) ?? null;
 }

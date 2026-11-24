@@ -21,6 +21,7 @@ import {
   updateSandboxToken,
   type SandboxLifecycleAction,
 } from './sandbox-api';
+import { sandboxTailEventsAfterSeq } from './sandbox-dashboard-helpers';
 import type {
   SandboxRunCreateRequest,
   SandboxRunUpdateRequest,
@@ -34,6 +35,18 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
+
+export const SANDBOX_POLL_MS = 30_000;
+
+/** Live runs poll every 30 s; everything else never polls. */
+export function sandboxLiveRefetchInterval(live: boolean): number | false {
+  return live ? SANDBOX_POLL_MS : false;
+}
+
+/** The overview polls only while at least one run is running. */
+export function sandboxOverviewRefetchInterval(runningRuns: number | undefined): number | false {
+  return runningRuns !== undefined && runningRuns > 0 ? SANDBOX_POLL_MS : false;
+}
 
 /** Invalidates every sandbox query after a mutation (list, detail and counts). */
 export function invalidateSandboxQueries(queryClient: QueryClient): Promise<void> {
@@ -87,17 +100,19 @@ export function useSandboxRuns(includeArchived: boolean, enabled = true) {
   });
 }
 
-export function useSandboxRunDetail(runId: string | null) {
+export function useSandboxRunDetail(runId: string | null, poll = true) {
   return useQuery({
     queryKey: sandboxQueryKeys.run(runId ?? 'none'),
     queryFn: () => fetchSandboxRun(runId as string),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
-    // Live runs refresh every 30 s; draft, paused, terminal and archived runs
-    // never poll.
+    // Live runs refresh every 30 s unless the caller is a read-only artifact
+    // view (reports) that must not poll; draft, paused, terminal and archived
+    // runs never poll.
     refetchInterval: (query) => {
+      if (!poll) return false;
       const run = query.state.data;
-      return run && run.status === 'running' && run.archivedAt === null ? 30_000 : false;
+      return run && run.status === 'running' && run.archivedAt === null ? SANDBOX_POLL_MS : false;
     },
   });
 }
@@ -107,7 +122,7 @@ export function useSandboxOverview(enabled = true) {
     queryKey: sandboxQueryKeys.overview,
     queryFn: fetchSandboxOverview,
     enabled,
-    refetchInterval: 30_000,
+    refetchInterval: (query) => sandboxOverviewRefetchInterval(query.state.data?.runs.running),
     refetchOnWindowFocus: false,
   });
 }
@@ -118,7 +133,7 @@ export function useSandboxPositions(runId: string | null, live: boolean) {
     queryFn: () => fetchSandboxPositions(runId as string),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
-    refetchInterval: live ? 30_000 : false,
+    refetchInterval: sandboxLiveRefetchInterval(live),
   });
 }
 
@@ -128,25 +143,27 @@ export function useSandboxEquity(runId: string | null, live: boolean, limit = 50
     queryFn: () => fetchSandboxEquity(runId as string, limit, offset),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
-    refetchInterval: live ? 30_000 : false,
+    refetchInterval: sandboxLiveRefetchInterval(live),
   });
 }
 
-export function useSandboxTrades(runId: string | null, limit = 50, offset = 0) {
+export function useSandboxTrades(runId: string | null, limit = 50, offset = 0, live = false) {
   return useQuery({
     queryKey: sandboxQueryKeys.trades(runId ?? 'none', limit, offset),
     queryFn: () => fetchSandboxTrades(runId as string, limit, offset),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
+    refetchInterval: sandboxLiveRefetchInterval(live),
   });
 }
 
-export function useSandboxIntents(runId: string | null, limit = 50, offset = 0) {
+export function useSandboxIntents(runId: string | null, limit = 50, offset = 0, live = false) {
   return useQuery({
     queryKey: sandboxQueryKeys.intents(runId ?? 'none', limit, offset),
     queryFn: () => fetchSandboxIntents(runId as string, limit, offset),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
+    refetchInterval: sandboxLiveRefetchInterval(live),
   });
 }
 
@@ -168,6 +185,30 @@ export function useSandboxEvents(runId: string | null, live: boolean, limit = 20
     enabled: runId !== null,
     refetchOnWindowFocus: false,
     refetchInterval: live ? 30_000 : false,
+  });
+}
+
+/**
+ * Dashboard tail: the newest events of a run, seeded from the run detail's
+ * persisted `eventCount`. This never reuses the journal's append pagination.
+ */
+export function useSandboxEventTail(
+  runId: string | null,
+  live: boolean,
+  eventCount: number | null,
+  limit = 200,
+) {
+  const afterSeq = eventCount === null ? null : sandboxTailEventsAfterSeq(eventCount, limit);
+  return useQuery({
+    queryKey: sandboxQueryKeys.eventTail(runId ?? 'none', limit, afterSeq),
+    queryFn: () =>
+      fetchSandboxEvents(runId as string, {
+        afterSeq: afterSeq ?? undefined,
+        limit,
+      }),
+    enabled: runId !== null && eventCount !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: sandboxLiveRefetchInterval(live),
   });
 }
 

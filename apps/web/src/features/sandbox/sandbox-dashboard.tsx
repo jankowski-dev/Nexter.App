@@ -10,6 +10,7 @@ import {
   formatDateTime,
   formatPct,
   formatPrice,
+  formatSignedUsd,
   formatTokenAmount,
   formatUsd,
   pnlTone,
@@ -18,14 +19,15 @@ import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import {
   useCloseSandboxTrade,
   useSandboxEquity,
-  useSandboxEvents,
+  useSandboxEventTail,
   useSandboxLifecycle,
   useSandboxOverview,
   useSandboxPositions,
   useSandboxRunDetail,
 } from './sandbox-hooks';
-import { flattenSandboxEventPages, sandboxEventWhyNot } from './sandbox-journal-helpers';
+import { sandboxEventWhyNot } from './sandbox-journal-helpers';
 import {
+  sandboxAbsolutePnlUsd,
   sandboxCloseConfirmation,
   sandboxCloseEligibility,
   sandboxFreshnessTone,
@@ -35,6 +37,7 @@ import {
   sandboxRunCounts,
   sandboxRunDrawdownPct,
   sandboxRunReturnPct,
+  sandboxRunStaleTokens,
   sandboxTokenStates,
 } from './sandbox-dashboard-helpers';
 import { SandboxHealth } from './sandbox-health';
@@ -52,6 +55,7 @@ import type { SandboxDashboardProps } from './sandbox-tab-types';
 import { useState } from 'react';
 import type {
   SandboxEquityPoint,
+  SandboxEvent,
   SandboxOverview,
   SandboxPosition,
   SandboxRunDetail,
@@ -89,14 +93,20 @@ export function SandboxDashboard({
   selectedRunId,
   onSelectRun,
   onChangeTab,
+  selectionPending = false,
 }: SandboxDashboardProps) {
   const confirm = useConfirm();
   const overview = useSandboxOverview();
   const detail = useSandboxRunDetail(selectedRunId);
   const running = detail.data?.status === 'running' && detail.data.archivedAt === null;
   const positionsQuery = useSandboxPositions(selectedRunId, running);
-  const equityQuery = useSandboxEquity(selectedRunId, running, 500, 0);
-  const eventsQuery = useSandboxEvents(selectedRunId, running, 200);
+  const equityQuery = useSandboxEquity(selectedRunId, running, 2_000, 0);
+  const eventsQuery = useSandboxEventTail(
+    selectedRunId,
+    running,
+    detail.data?.eventCount ?? null,
+    200,
+  );
   const lifecycle = useSandboxLifecycle();
   const closeTrade = useCloseSandboxTrade();
   const [notice, setNotice] = useState<string | null>(null);
@@ -108,7 +118,7 @@ export function SandboxDashboard({
     setNotice(text);
   }
 
-  const events = flattenSandboxEventPages(eventsQuery.data?.pages.map((page) => page.events) ?? []);
+  const events = eventsQuery.data?.events ?? [];
   const positions = positionsQuery.data?.positions ?? [];
 
   async function handleControl(action: DashboardControl): Promise<void> {
@@ -187,11 +197,15 @@ export function SandboxDashboard({
       ) : null}
 
       {selectedRunId === null ? (
-        <EmptyState
-          title="Нет выбранного запуска"
-          description="Создайте черновик, выберите токены и капитал, затем запустите его. После старта здесь появятся капитал, позиции, решения и свежесть данных."
-          action={<Button onClick={() => onChangeTab('runs')}>Перейти к запускам</Button>}
-        />
+        selectionPending ? (
+          <LoadingRows rows={4} />
+        ) : (
+          <EmptyState
+            title="Нет выбранного запуска"
+            description="Создайте черновик, выберите токены и капитал, затем запустите его. После старта здесь появятся капитал, позиции, решения и свежесть данных."
+            action={<Button onClick={() => onChangeTab('runs')}>Перейти к запускам</Button>}
+          />
+        )
       ) : detail.isPending ? (
         <LoadingRows rows={5} />
       ) : detail.isError || !detail.data ? (
@@ -242,7 +256,7 @@ function DashboardRun({
   run: SandboxRunDetail;
   overview: SandboxOverview | undefined;
   positions: readonly SandboxPosition[];
-  events: ReturnType<typeof flattenSandboxEventPages>;
+  events: readonly SandboxEvent[];
   equityPoints: readonly SandboxEquityPoint[];
   equityTotal: number | null;
   equityPending: boolean;
@@ -258,18 +272,22 @@ function DashboardRun({
   const counts = sandboxRunCounts(run);
   const returnPct = sandboxRunReturnPct(run);
   const drawdownPct = sandboxRunDrawdownPct(run);
+  const absolutePnl = sandboxAbsolutePnlUsd(run);
   const symbolByToken = new Map(run.tokens.map((token) => [token.tokenKey, token.symbol]));
   const tokenStates = sandboxTokenStates({ tokens: run.tokens, events, positions });
   const lastDecision = sandboxLastDecision(events);
-  const freshness = sandboxFreshnessWarnings({
-    lastBarClose: run.lastBarClose,
-    lastTickAt: run.lastTickAt,
-    lastCandleAt: overview?.universe.lastCandleAt ?? null,
-    staleTokens: overview?.universe.staleTokens ?? [],
-    now: new Date(),
-  });
-  const freshnessTone = sandboxFreshnessTone(freshness);
   const archived = run.archivedAt !== null;
+  const freshness =
+    run.status === 'running' && !archived
+      ? sandboxFreshnessWarnings({
+          lastBarClose: run.lastBarClose,
+          lastTickAt: run.lastTickAt,
+          lastCandleAt: overview?.universe.lastCandleAt ?? null,
+          staleTokens: sandboxRunStaleTokens(overview?.universe.staleTokens ?? [], run.tokenKeys),
+          now: new Date(),
+        })
+      : [];
+  const freshnessTone = sandboxFreshnessTone(freshness);
   const controls: DashboardControl[] = archived
     ? []
     : run.status === 'draft'
@@ -360,13 +378,20 @@ function DashboardRun({
         ) : null}
       </Card>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
           title="Капитал"
           value={formatUsd(run.equityUsd)}
           description="Equity по последнему бару"
           icon="statistics"
           tone="emerald"
+        />
+        <StatCard
+          title="P&L"
+          value={formatSignedUsd(absolutePnl)}
+          description="Капитал минус начальный"
+          icon="operations"
+          tone={absolutePnl.startsWith('-') ? 'rose' : 'emerald'}
         />
         <StatCard
           title="Доходность"
@@ -533,11 +558,11 @@ function DashboardRun({
                     </span>
                     <span>
                       Риск:{' '}
-                      {state.severity
-                        ? state.failedRiskChecks > 0
-                          ? `${state.failedRiskChecks} проверок не пройдено`
-                          : 'Проверки пройдены'
-                        : '—'}
+                      {state.riskStatus === 'failed'
+                        ? `${state.failedRiskChecks} проверок не пройдено`
+                        : state.riskStatus === 'passed'
+                          ? 'Проверки пройдены'
+                          : 'нет проверок'}
                     </span>
                   </div>
                   {state.reasonText ? (

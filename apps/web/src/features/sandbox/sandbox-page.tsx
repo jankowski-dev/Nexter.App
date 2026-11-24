@@ -112,6 +112,7 @@ export function SandboxPage() {
     selectedRunId: effectiveRunId,
     onSelectRun: selectRun,
     onChangeTab: changeTab,
+    selectionPending: overview.isPending || runsQuery.isPending,
   };
 
   return (

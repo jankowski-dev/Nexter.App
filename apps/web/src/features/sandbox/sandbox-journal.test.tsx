@@ -59,13 +59,29 @@ function eventsResult(events = [sandboxEventFixture()]): ReturnType<typeof useSa
   } as unknown as ReturnType<typeof useSandboxEvents>;
 }
 
-function renderJournal(selectedRunId: string | null = sandboxRunId): string {
+function renderJournal(
+  selectedRunId: string | null = sandboxRunId,
+  options: {
+    selectionPending?: boolean;
+    initialSection?: 'events' | 'intents' | 'trades' | 'risk';
+    initialIntentFilters?: {
+      status: 'all' | 'pending' | 'filled' | 'partial' | 'rejected' | 'expired';
+      side: 'all' | 'buy' | 'sell';
+      tokenId: string | null;
+    };
+    initialTradeStatus?: 'all' | 'open' | 'closed';
+  } = {},
+): string {
   return renderToStaticMarkup(
     <SandboxJournal
       runs={[sandboxRunSummaryFixture()]}
       selectedRunId={selectedRunId}
       onSelectRun={() => undefined}
       onChangeTab={() => undefined}
+      selectionPending={options.selectionPending}
+      initialSection={options.initialSection}
+      initialIntentFilters={options.initialIntentFilters}
+      initialTradeStatus={options.initialTradeStatus}
     />,
   );
 }
@@ -162,6 +178,102 @@ describe('sandbox journal', () => {
     const html = renderJournal(null);
     expect(html).toContain('Нет выбранного запуска');
     expect(html).toContain('Перейти к запускам');
+  });
+
+  it('does not flash the empty state while the default run is resolving', () => {
+    const html = renderJournal(null, { selectionPending: true });
+    expect(html).toContain('Загрузка');
+    expect(html).not.toContain('Нет выбранного запуска');
+  });
+
+  it('renders the intents section with a loaded-page filter caveat', () => {
+    const html = renderJournal(sandboxRunId, {
+      initialSection: 'intents',
+      initialIntentFilters: { status: 'filled', side: 'all', tokenId: null },
+    });
+    expect(html).toContain('Фильтр интентов по статусу');
+    expect(html).toContain('Фильтры применяются к загруженной странице');
+    expect(html).toContain('показано 1 из 1 загруженных');
+    expect(html).not.toContain('1–1 из 1');
+  });
+
+  it('renders the trades section with its filter and loaded-page caveat', () => {
+    const html = renderJournal(sandboxRunId, {
+      initialSection: 'trades',
+      initialTradeStatus: 'closed',
+    });
+    expect(html).toContain('Фильтр сделок');
+    expect(html).toContain('Фильтры применяются к загруженной странице');
+    expect(html).toContain('показано 1 из 1 загруженных');
+    expect(html).toContain('Закрыта');
+  });
+
+  it('renders the risk-check section with expanded evidence', () => {
+    const html = renderJournal(sandboxRunId, { initialSection: 'risk' });
+    expect(html).toContain('Проверки риска');
+    expect(html).toContain('Проверка');
+    expect(html).toContain('Не пройдено');
+    expect(html).toContain('из загруженной части журнала');
+  });
+
+  it('offers a load-more control for older risk checks', () => {
+    mockedEvents.mockReturnValue({
+      isPending: false,
+      isError: false,
+      error: null,
+      data: {
+        pages: [{ events: [sandboxEventFixture()], hasMore: true, nextAfterSeq: 1 }],
+        pageParams: [null],
+      },
+      hasNextPage: true,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useSandboxEvents>);
+    const html = renderJournal(sandboxRunId, { initialSection: 'risk' });
+    expect(html).toContain('Загрузить ещё');
+  });
+
+  it('polls intents and trades only for a running run', () => {
+    renderJournal();
+    expect(mockedIntents).toHaveBeenCalledWith(sandboxRunId, 50, 0, true);
+    expect(mockedTrades).toHaveBeenCalledWith(sandboxRunId, 50, 0, true);
+
+    mockedDetail.mockReturnValue(
+      queryResult<SandboxRunDetail>(sandboxRunDetailFixture({ status: 'stopped' })),
+    );
+    renderJournal();
+    expect(mockedIntents).toHaveBeenLastCalledWith(sandboxRunId, 50, 0, false);
+    expect(mockedTrades).toHaveBeenLastCalledWith(sandboxRunId, 50, 0, false);
+  });
+
+  it('appends multi-page events without duplicates', () => {
+    mockedEvents.mockReturnValue({
+      isPending: false,
+      isError: false,
+      error: null,
+      data: {
+        pages: [
+          { events: [sandboxEventFixture({ seq: 1 })], hasMore: true, nextAfterSeq: 1 },
+          {
+            events: [
+              sandboxEventFixture({ seq: 1 }),
+              sandboxEventFixture({ seq: 2 }),
+              sandboxEventFixture({ seq: 3 }),
+            ],
+            hasMore: false,
+            nextAfterSeq: 3,
+          },
+        ],
+        pageParams: [null, 1],
+      },
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useSandboxEvents>);
+    const html = renderJournal();
+    expect(html).toContain('Загружено 3; это весь журнал.');
   });
 
   it('never offers manual trading actions', () => {

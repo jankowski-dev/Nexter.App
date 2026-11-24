@@ -58,6 +58,8 @@ export const sandboxQueryKeys = {
   intents: (runId: string, limit: number, offset: number) =>
     ['sandbox', 'intents', runId, limit, offset] as const,
   events: (runId: string, limit: number) => ['sandbox', 'events', runId, limit] as const,
+  eventTail: (runId: string, limit: number, afterSeq: number | null) =>
+    ['sandbox', 'events-tail', runId, limit, afterSeq] as const,
   equity: (runId: string, limit: number, offset: number) =>
     ['sandbox', 'equity', runId, limit, offset] as const,
   report: (runId: string) => ['sandbox', 'report', runId] as const,

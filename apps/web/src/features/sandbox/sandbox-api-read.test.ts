@@ -15,6 +15,11 @@ import {
   sandboxQueryKeys,
 } from './sandbox-api';
 import {
+  SANDBOX_POLL_MS,
+  sandboxLiveRefetchInterval,
+  sandboxOverviewRefetchInterval,
+} from './sandbox-hooks';
+import {
   sandboxOverviewFixture,
   sandboxReportResponseFixture,
   sandboxRunDetailFixture,
@@ -153,9 +158,34 @@ describe('sandbox read api', () => {
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({});
   });
 
+  it.each([
+    ['SANDBOX_CLOSE_ALREADY_PENDING', 'уже запрошено'],
+    ['SANDBOX_POSITION_NOT_FOUND', 'позиция по этому токену не найдена'],
+    ['SANDBOX_RUN_NOT_RUNNING', 'Запуск не работает'],
+  ] as const)('maps the close 409 %s to Russian', (code, message) => {
+    const error = new ApiError(code, code);
+    expect(toRussianError(error, 'fallback')).toContain(message);
+  });
+
   it('keys paginated queries by limit and offset', () => {
     expect(sandboxQueryKeys.trades(runId, 50, 100)).toEqual(['sandbox', 'trades', runId, 50, 100]);
     expect(sandboxQueryKeys.events(runId, 200)).toEqual(['sandbox', 'events', runId, 200]);
+    expect(sandboxQueryKeys.eventTail(runId, 200, 799)).toEqual([
+      'sandbox',
+      'events-tail',
+      runId,
+      200,
+      799,
+    ]);
     expect(sandboxQueryKeys.report(runId)).toEqual(['sandbox', 'report', runId]);
+  });
+
+  it('polls live queries every 30 s and the overview only with a running run', () => {
+    expect(SANDBOX_POLL_MS).toBe(30_000);
+    expect(sandboxLiveRefetchInterval(true)).toBe(30_000);
+    expect(sandboxLiveRefetchInterval(false)).toBe(false);
+    expect(sandboxOverviewRefetchInterval(1)).toBe(30_000);
+    expect(sandboxOverviewRefetchInterval(0)).toBe(false);
+    expect(sandboxOverviewRefetchInterval(undefined)).toBe(false);
   });
 });

@@ -30,14 +30,22 @@ export function sandboxReportPeriodLabel(report: SandboxRunReport): string {
   return `${first} — ${last} · ${report.period.bars} бар. · ${report.period.tokens.length} ток.`;
 }
 
-export function sandboxReportHashShort(hash: string): string {
-  return `${hash.slice(0, 12)}…`;
-}
-
 function pnlTone(value: string): StatTone {
   const number = Number(value);
   if (!Number.isFinite(number) || number === 0) return 'sky';
   return number > 0 ? 'emerald' : 'rose';
+}
+
+/**
+ * A profit factor below 1 means gross losses exceed gross profits; it must not
+ * look positive. `null` (no closed trades) stays neutral.
+ */
+export function sandboxProfitFactorTone(value: string | null): StatTone {
+  if (value === null) return 'sky';
+  const factor = new Decimal(value);
+  if (factor.lessThan(1)) return 'rose';
+  if (factor.greaterThan(1)) return 'emerald';
+  return 'sky';
 }
 
 /** Percent without the positive sign, for rates/exposure magnitudes. */
@@ -151,7 +159,7 @@ export function sandboxReportSummaryCards(metrics: SandboxReportMetrics): Sandbo
       title: 'Profit factor',
       value: metrics.profitFactor === null ? '—' : formatTokenAmount(metrics.profitFactor, 2),
       description: 'Валовая прибыль / убыток',
-      tone: 'emerald',
+      tone: sandboxProfitFactorTone(metrics.profitFactor),
       icon: 'statistics',
     },
     {

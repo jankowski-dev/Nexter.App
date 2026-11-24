@@ -56,7 +56,7 @@ export function SandboxHealth() {
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="info">{data.executionMode} · виртуальные деньги</Badge>
           <Badge tone={stale > 0 ? 'danger' : 'success'}>
-            {stale > 0 ? `Устарело: ${stale}` : 'Данные свежие'}
+            {stale > 0 ? `Устарело во вселенной: ${stale}` : 'Данные свежие'}
           </Badge>
         </div>
       </div>

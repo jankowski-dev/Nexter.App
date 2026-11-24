@@ -5,10 +5,10 @@ import {
   formatSandboxPercentPlain,
   formatSandboxReportTimestamp,
   sandboxEquityCurveSummary,
+  sandboxProfitFactorTone,
   sandboxReportDownloadError,
   sandboxReportError,
   sandboxReportFileName,
-  sandboxReportHashShort,
   sandboxReportPeriodLabel,
   sandboxReportSummaryCards,
 } from './sandbox-report-helpers';
@@ -52,11 +52,10 @@ describe('sandbox report helpers', () => {
     expect(sandboxEquityCurveSummary([])).toMatchObject({ points: 0, firstEquityUsd: null });
   });
 
-  it('labels the report period and hash', () => {
+  it('labels the report period', () => {
     const report = sandboxReportResponseFixture().report;
     expect(sandboxReportPeriodLabel(report)).toContain('5 бар.');
     expect(sandboxReportPeriodLabel(report)).toContain('1 ток.');
-    expect(sandboxReportHashShort('a'.repeat(64))).toBe('aaaaaaaaaaaa…');
   });
 
   it('builds summary cards from contract strings without re-rounding', () => {
@@ -89,5 +88,19 @@ describe('sandbox report helpers', () => {
     expect(byTitle.get('Profit factor')?.value).toBe('—');
     expect(byTitle.get('Средняя прибыль')?.value).toBe('—');
     expect(byTitle.get('Средний убыток')?.value).toBe('—');
+  });
+
+  it('never paints a profit factor below 1 as positive', () => {
+    expect(sandboxProfitFactorTone('0.80')).toBe('rose');
+    expect(sandboxProfitFactorTone('1.50')).toBe('emerald');
+    expect(sandboxProfitFactorTone('1')).toBe('sky');
+    expect(sandboxProfitFactorTone(null)).toBe('sky');
+
+    const losing = {
+      ...sandboxReportResponseFixture().report.metrics,
+      profitFactor: '0.80',
+    };
+    const card = sandboxReportSummaryCards(losing).find((item) => item.title === 'Profit factor');
+    expect(card?.tone).toBe('rose');
   });
 });

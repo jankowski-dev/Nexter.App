@@ -59,7 +59,7 @@ describe('sandbox health', () => {
       }),
     );
     const html = renderToStaticMarkup(<SandboxHealth />);
-    expect(html).toContain('Устарело: 1');
+    expect(html).toContain('Устарело во вселенной: 1');
     expect(html).toContain('Нет свежих данных 1h');
     expect(html).toContain('Запусков пока нет');
   });

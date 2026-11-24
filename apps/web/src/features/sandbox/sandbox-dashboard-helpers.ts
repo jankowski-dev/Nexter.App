@@ -22,6 +22,34 @@ export function sandboxRunDrawdownPct(run: { equityUsd: string; peakEquityUsd: s
   return Decimal.max(drawdown, 0).toFixed(4);
 }
 
+/** `(equity - initialCapital)`, two decimals, exact decimal arithmetic. */
+export function sandboxAbsolutePnlUsd(run: {
+  equityUsd: string;
+  initialCapitalUsd: string;
+}): string {
+  return new Decimal(run.equityUsd).minus(run.initialCapitalUsd).toFixed(2);
+}
+
+/**
+ * Exclusive `afterSeq` for a latest-events tail read. The event chain is
+ * 0-based; when the run has more events than the page limit, skip to
+ * `eventCount - limit - 1` so `seq > afterSeq` returns the newest `limit`
+ * events. A run that fits entirely starts at 0 (`null` = omit the cursor).
+ */
+export function sandboxTailEventsAfterSeq(eventCount: number, limit: number): number | null {
+  if (!Number.isFinite(eventCount) || eventCount <= limit) return null;
+  return Math.max(0, Math.trunc(eventCount) - Math.trunc(limit) - 1);
+}
+
+/** Universe staleness filtered to the tokens of one run. */
+export function sandboxRunStaleTokens(
+  staleTokens: readonly string[],
+  tokenIds: readonly string[],
+): string[] {
+  const runTokens = new Set(tokenIds);
+  return staleTokens.filter((tokenId) => runTokens.has(tokenId));
+}
+
 export type SandboxPnlTone = 'positive' | 'negative' | 'flat';
 
 export interface SandboxPositionPnl {
@@ -115,13 +143,18 @@ export interface SandboxTokenStateView {
   reasonText: string | null;
   severity: SandboxEvent['severity'] | null;
   positionAmount: string | null;
+  riskStatus: 'passed' | 'failed' | null;
   failedRiskChecks: number;
 }
 
 /**
- * Per-token state derived from the latest journal event for that token plus the
- * open position. The API does not expose a "phase" field, so the UI reports the
- * honest blocks: regime, last decision, position and risk severity.
+ * Per-token state derived from the latest *relevant* journal events.
+ *
+ * A typical latest event (`strategy.evaluated`, `ledger.entry`) carries neither
+ * a decision, a regime nor risk checks, so each field comes from the latest
+ * event that actually has it; risk is only claimed from an event with
+ * `riskChecks`, never inferred from severity. The event time stays the latest
+ * event of the token.
  */
 export function sandboxTokenStates(input: {
   tokens: readonly SandboxRunToken[];
@@ -129,27 +162,51 @@ export function sandboxTokenStates(input: {
   positions: readonly SandboxPosition[];
 }): SandboxTokenStateView[] {
   const latestByToken = new Map<string, SandboxEvent>();
+  const regimeByToken = new Map<string, SandboxEvent>();
+  const decisionByToken = new Map<string, SandboxEvent>();
+  const riskByToken = new Map<string, SandboxEvent>();
+
   for (const event of input.events) {
     if (event.tokenId === null) continue;
-    const current = latestByToken.get(event.tokenId);
-    if (!current || event.seq > current.seq) latestByToken.set(event.tokenId, event);
+    const tokenId = event.tokenId;
+    const latest = latestByToken.get(tokenId);
+    if (!latest || event.seq > latest.seq) latestByToken.set(tokenId, event);
+
+    if (event.regime !== null) {
+      const current = regimeByToken.get(tokenId);
+      if (!current || event.seq > current.seq) regimeByToken.set(tokenId, event);
+    }
+    if (event.decision !== null) {
+      const current = decisionByToken.get(tokenId);
+      if (!current || event.seq > current.seq) decisionByToken.set(tokenId, event);
+    }
+    if (event.riskChecks.length > 0) {
+      const current = riskByToken.get(tokenId);
+      if (!current || event.seq > current.seq) riskByToken.set(tokenId, event);
+    }
   }
 
   const positionByToken = new Map(input.positions.map((position) => [position.tokenId, position]));
 
   return input.tokens.map((token) => {
-    const event = latestByToken.get(token.tokenKey) ?? null;
+    const latest = latestByToken.get(token.tokenKey) ?? null;
+    const regime = regimeByToken.get(token.tokenKey) ?? null;
+    const decision = decisionByToken.get(token.tokenKey) ?? null;
+    const risk = riskByToken.get(token.tokenKey) ?? null;
     const position = positionByToken.get(token.tokenKey) ?? null;
+    const failedRiskChecks = risk ? risk.riskChecks.filter((check) => !check.passed).length : 0;
+
     return {
       tokenId: token.tokenKey,
       symbol: token.symbol,
-      regime: event?.regime ?? null,
-      lastEventAt: event?.clockTime ?? null,
-      action: event?.decision?.action ?? null,
-      reasonText: event?.decision?.reasonText ?? event?.reasonText ?? null,
-      severity: event?.severity ?? null,
+      regime: regime?.regime ?? null,
+      lastEventAt: latest?.clockTime ?? null,
+      action: decision?.decision?.action ?? null,
+      reasonText: decision?.decision?.reasonText ?? decision?.reasonText ?? null,
+      severity: latest?.severity ?? null,
       positionAmount: position ? position.amount : null,
-      failedRiskChecks: event ? event.riskChecks.filter((check) => !check.passed).length : 0,
+      riskStatus: risk ? (failedRiskChecks > 0 ? 'failed' : 'passed') : null,
+      failedRiskChecks,
     };
   });
 }

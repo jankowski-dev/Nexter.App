@@ -4,9 +4,9 @@ import { Card, CardTitle } from '@/components/ui/card';
 import { StatCard } from '@/components/ui/stat-card';
 import { LineChart } from '@/components/charts/line-chart';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/ui/states';
-import { formatDateTime, formatPct, formatUsd, pnlTone } from '@/lib/format';
+import { formatDateTime, formatUsd, pnlTone } from '@/lib/format';
 import { downloadSandboxReportJson, downloadSandboxReportMarkdown } from './sandbox-api';
-import { useSandboxReport } from './sandbox-hooks';
+import { useSandboxReport, useSandboxRunDetail } from './sandbox-hooks';
 import {
   sandboxIntentSideLabels,
   sandboxIntentStatusLabels,
@@ -19,7 +19,6 @@ import {
   sandboxEquityCurveSummary,
   sandboxReportDownloadError,
   sandboxReportError,
-  sandboxReportHashShort,
   sandboxReportPeriodLabel,
   sandboxReportPrice,
   sandboxReportSummaryCards,
@@ -43,10 +42,16 @@ export function SandboxReports({
   selectedRunId,
   onSelectRun,
   onChangeTab,
+  selectionPending = false,
 }: SandboxTabSharedProps) {
   const report = useSandboxReport(selectedRunId);
+  // Read-only identity lookup; reports must not poll.
+  const detail = useSandboxRunDetail(selectedRunId, false);
   const [pending, setPending] = useState<'json' | 'md' | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const symbolByToken = new Map(
+    (detail.data?.tokens ?? []).map((token) => [token.tokenKey, token.symbol]),
+  );
 
   async function download(format: 'json' | 'md'): Promise<void> {
     if (!selectedRunId) return;
@@ -63,6 +68,7 @@ export function SandboxReports({
   }
 
   if (selectedRunId === null) {
+    if (selectionPending) return <LoadingRows rows={5} />;
     return (
       <EmptyState
         title="Нет выбранного запуска"
@@ -115,12 +121,18 @@ export function SandboxReports({
           onRetry={() => void report.refetch()}
         />
       ) : null}
-      {report.data ? <ReportBody response={report.data} /> : null}
+      {report.data ? <ReportBody response={report.data} symbolByToken={symbolByToken} /> : null}
     </div>
   );
 }
 
-function ReportBody({ response }: { response: SandboxReportResponse }) {
+function ReportBody({
+  response,
+  symbolByToken,
+}: {
+  response: SandboxReportResponse;
+  symbolByToken: ReadonlyMap<string, string>;
+}) {
   const { report } = response;
   const cards = sandboxReportSummaryCards(report.metrics);
   const curve = sandboxEquityCurveSummary(report.equityCurve);
@@ -144,14 +156,21 @@ function ReportBody({ response }: { response: SandboxReportResponse }) {
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
               <span className="break-all">Запуск: {report.runId}</span>
               <span>Событий: {report.eventCount}</span>
-              <span className="break-all">
-                Хеш цепочки: {sandboxReportHashShort(report.eventHash)}
-              </span>
-              <span className="break-all">
-                Хеш отчёта: {sandboxReportHashShort(report.reportHash)}
-              </span>
               <span>Записей учёта: {report.ledgerEntries}</span>
               <span>Ожидающих интентов: {response.pendingIntents}</span>
+              <span>
+                configVersion: <code className="break-all">{report.configVersion}</code>
+              </span>
+              <span>
+                dataSnapshotId: <code className="break-all">{report.dataSnapshotId}</code>
+              </span>
+              <span>
+                settingsVersion: <code className="break-all">{report.settingsVersion}</code>
+              </span>
+            </div>
+            <div className="mt-1 space-y-0.5 break-all font-mono text-[11px] text-zinc-500">
+              <div>eventHash: {report.eventHash}</div>
+              <div>reportHash: {report.reportHash}</div>
             </div>
             <div className="mt-1 text-xs text-zinc-500">{sandboxReportPeriodLabel(report)}</div>
             <div className="mt-1 text-[11px] text-zinc-400">
@@ -229,7 +248,7 @@ function ReportBody({ response }: { response: SandboxReportResponse }) {
               labelHeader="Токен"
               rows={report.metrics.perToken.map((row) => ({
                 key: row.tokenId,
-                label: row.tokenId,
+                label: symbolByToken.get(row.tokenId) ?? row.tokenId,
                 trades: row.tradeCount,
                 wins: row.wins,
                 losses: row.losses,
@@ -264,7 +283,9 @@ function ReportBody({ response }: { response: SandboxReportResponse }) {
               <tbody>
                 {report.positions.map((position) => (
                   <tr key={position.tokenId} className="border-t border-zinc-100">
-                    <td className="py-1 pr-2 text-zinc-800">{position.tokenId}</td>
+                    <td className="py-1 pr-2 text-zinc-800">
+                      {symbolByToken.get(position.tokenId) ?? position.tokenId}
+                    </td>
                     <td className="py-1 pr-2">{sandboxStrategyLabel(position.strategyKey)}</td>
                     <td className="py-1 pr-2 font-mono">{sandboxReportUnits(position.amount)}</td>
                     <td className="py-1 pr-2 font-mono">
@@ -314,7 +335,9 @@ function ReportBody({ response }: { response: SandboxReportResponse }) {
               <tbody>
                 {report.trades.map((trade) => (
                   <tr key={trade.tradeId} className="border-t border-zinc-100">
-                    <td className="py-1 pr-2 text-zinc-800">{trade.tokenId}</td>
+                    <td className="py-1 pr-2 text-zinc-800">
+                      {symbolByToken.get(trade.tokenId) ?? trade.tokenId}
+                    </td>
                     <td className="py-1 pr-2">{sandboxStrategyLabel(trade.strategyKey)}</td>
                     <td className="py-1 pr-2">{trade.status === 'open' ? 'Открыта' : 'Закрыта'}</td>
                     <td className="py-1 pr-2">{formatSandboxReportTimestamp(trade.entryAt)}</td>
@@ -358,7 +381,9 @@ function ReportBody({ response }: { response: SandboxReportResponse }) {
                   <Badge tone={intent.side === 'buy' ? 'success' : 'info'}>
                     {sandboxIntentSideLabels[intent.side]}
                   </Badge>
-                  <span className="font-medium text-zinc-800">{intent.tokenId}</span>
+                  <span className="font-medium text-zinc-800">
+                    {symbolByToken.get(intent.tokenId) ?? intent.tokenId}
+                  </span>
                   <span>{sandboxStrategyLabel(intent.strategyKey)}</span>
                   <span className="font-mono text-zinc-700">{formatUsd(intent.filledUsd)}</span>
                   <span>Код: {intent.reasonCode}</span>
@@ -420,7 +445,9 @@ function ReportMetricTable({
               <td className="py-1 pr-2">{row.wins}</td>
               <td className="py-1 pr-2">{row.losses}</td>
               <td className={`py-1 pr-2 font-mono ${pnlTone(row.pnl)}`}>{formatUsd(row.pnl)}</td>
-              <td className="py-1">{row.winRate === null ? '—' : formatPct(row.winRate)}</td>
+              <td className="py-1">
+                {row.winRate === null ? '—' : formatSandboxPercentPlain(row.winRate)}
+              </td>
             </tr>
           ))}
         </tbody>

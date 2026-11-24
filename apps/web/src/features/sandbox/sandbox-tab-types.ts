@@ -7,6 +7,8 @@ export interface SandboxTabSharedProps {
   selectedRunId: string | null;
   onSelectRun: (runId: string) => void;
   onChangeTab?: (tab: SandboxTab) => void;
+  /** True while the page is still resolving the default run. */
+  selectionPending?: boolean;
 }
 
 export interface SandboxDashboardProps extends SandboxTabSharedProps {

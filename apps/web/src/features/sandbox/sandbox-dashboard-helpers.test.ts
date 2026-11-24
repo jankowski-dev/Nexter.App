@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  sandboxAbsolutePnlUsd,
   sandboxCloseConfirmation,
   sandboxCloseEligibility,
   sandboxFreshnessTone,
@@ -9,6 +10,8 @@ import {
   sandboxRunCounts,
   sandboxRunDrawdownPct,
   sandboxRunReturnPct,
+  sandboxRunStaleTokens,
+  sandboxTailEventsAfterSeq,
   sandboxTokenStates,
 } from './sandbox-dashboard-helpers';
 import {
@@ -33,6 +36,30 @@ describe('sandbox dashboard derivations', () => {
     expect(sandboxRunDrawdownPct({ equityUsd: '1200.00', peakEquityUsd: '1080.00' })).toBe(
       '0.0000',
     );
+  });
+
+  it('derives the absolute P&L from equity minus initial capital', () => {
+    expect(sandboxAbsolutePnlUsd({ equityUsd: '1042.00', initialCapitalUsd: '1000.00' })).toBe(
+      '42.00',
+    );
+    expect(sandboxAbsolutePnlUsd({ equityUsd: '950.00', initialCapitalUsd: '1000.00' })).toBe(
+      '-50.00',
+    );
+  });
+
+  it('computes the exclusive afterSeq of the latest-events tail', () => {
+    expect(sandboxTailEventsAfterSeq(0, 200)).toBeNull();
+    expect(sandboxTailEventsAfterSeq(1, 200)).toBeNull();
+    expect(sandboxTailEventsAfterSeq(200, 200)).toBeNull();
+    expect(sandboxTailEventsAfterSeq(201, 200)).toBe(0);
+    expect(sandboxTailEventsAfterSeq(1000, 200)).toBe(799);
+  });
+
+  it('scopes universe staleness to the run tokens', () => {
+    expect(
+      sandboxRunStaleTokens(['bsc:0xaaa', 'bsc:0xbbb', 'bsc:0xccc'], ['bsc:0xbbb', 'bsc:0xccc']),
+    ).toEqual(['bsc:0xbbb', 'bsc:0xccc']);
+    expect(sandboxRunStaleTokens(['bsc:0xaaa'], ['bsc:0xbbb'])).toEqual([]);
   });
 
   it('derives position P&L from the cost basis and market value', () => {
@@ -129,8 +156,121 @@ describe('sandbox dashboard derivations', () => {
       reasonText: 'Позиция удерживается.',
       severity: 'warn',
       positionAmount: '10.00000000',
+      riskStatus: 'failed',
       failedRiskChecks: 1,
     });
+  });
+
+  it('reads regime/decision/risk from relevant events, not the latest unrelated event', () => {
+    const events = [
+      sandboxEventFixture({
+        seq: 2,
+        module: 'risk',
+        eventType: 'risk.passed',
+        severity: 'decision',
+        regime: 'TREND_UP',
+        clockTime: '2026-11-24T02:00:00.000Z',
+        decision: {
+          action: 'hold',
+          sizeUsd: null,
+          reasonCode: 'RISK_HOLD',
+          reasonText: 'Ждём подтверждения.',
+        },
+        riskChecks: [
+          { name: 'drawdown', value: '2%', limit: '15%', passed: true },
+          { name: 'liquidity', value: '$90k', limit: '$50k', passed: true },
+        ],
+      }),
+      sandboxEventFixture({
+        seq: 9,
+        module: 'strategy',
+        eventType: 'strategy.evaluated',
+        severity: 'info',
+        regime: null,
+        decision: null,
+        riskChecks: [],
+        alternatives: [],
+        clockTime: '2026-11-24T05:00:00.000Z',
+        reasonCode: null,
+        reasonText: null,
+      }),
+      sandboxEventFixture({
+        seq: 10,
+        module: 'ledger',
+        eventType: 'ledger.entry',
+        severity: 'info',
+        regime: null,
+        decision: null,
+        riskChecks: [],
+        alternatives: [],
+        clockTime: '2026-11-24T05:00:01.000Z',
+        reasonCode: null,
+        reasonText: null,
+      }),
+    ];
+
+    const [state] = sandboxTokenStates({
+      tokens: [
+        {
+          tokenKey: sandboxTokenId,
+          symbol: 'AAA',
+          chain: 'bsc',
+          contractAddress: null,
+          enabled: true,
+        },
+      ],
+      events,
+      positions: [],
+    });
+
+    expect(state).toMatchObject({
+      regime: 'TREND_UP',
+      action: 'hold',
+      reasonText: 'Ждём подтверждения.',
+      severity: 'info',
+      lastEventAt: '2026-11-24T05:00:01.000Z',
+      riskStatus: 'passed',
+      failedRiskChecks: 0,
+    });
+  });
+
+  it('does not claim a risk result when no event carries risk checks', () => {
+    const events = [
+      sandboxEventFixture({
+        seq: 3,
+        regime: 'RANGE',
+        decision: null,
+        riskChecks: [],
+        alternatives: [],
+      }),
+      sandboxEventFixture({
+        seq: 8,
+        module: 'strategy',
+        eventType: 'strategy.evaluated',
+        severity: 'info',
+        regime: null,
+        decision: null,
+        riskChecks: [],
+        alternatives: [],
+      }),
+    ];
+    const [state] = sandboxTokenStates({
+      tokens: [
+        {
+          tokenKey: sandboxTokenId,
+          symbol: 'AAA',
+          chain: 'bsc',
+          contractAddress: null,
+          enabled: true,
+        },
+      ],
+      events,
+      positions: [],
+    });
+    expect(state?.riskStatus).toBeNull();
+    expect(state?.failedRiskChecks).toBe(0);
+    expect(state?.action).toBeNull();
+    expect(state?.regime).toBe('RANGE');
   });
 
   it('reports an empty token state when there is no event or position yet', () => {

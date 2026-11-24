@@ -13,12 +13,10 @@ export function SandboxRunPicker({
   runs,
   selectedRunId,
   onChange,
-  disabled = false,
 }: {
   runs: readonly SandboxRunSummary[];
   selectedRunId: string | null;
   onChange: (runId: string) => void;
-  disabled?: boolean;
 }) {
   const options = sandboxRunPickerOptions(runs, selectedRunId);
   if (options.length === 0) return null;
@@ -30,7 +28,6 @@ export function SandboxRunPicker({
         aria-label="Выбор запуска песочницы"
         className="w-full sm:w-80"
         value={selectedRunId ?? ''}
-        disabled={disabled}
         onChange={(event) => {
           if (event.target.value) onChange(event.target.value);
         }}

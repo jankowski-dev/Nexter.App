@@ -8,8 +8,12 @@ import {
   filterSandboxTrades,
   flattenSandboxEventPages,
   sandboxEventWhyNot,
+  sandboxIntentFiltersActive,
+  sandboxIntentFiltersWithOffset,
   sandboxPageState,
   sandboxRiskEvents,
+  sandboxTradeFilterActive,
+  sandboxTradeFilterWithOffset,
 } from './sandbox-journal-helpers';
 import {
   sandboxEventFixture,
@@ -78,10 +82,12 @@ describe('sandbox journal filters', () => {
 
   it('flattens infinite pages with the same dedupe', () => {
     const flattened = flattenSandboxEventPages([
-      [sandboxEventFixture({ seq: 1 })],
       [sandboxEventFixture({ seq: 1 }), sandboxEventFixture({ seq: 2 })],
+      [sandboxEventFixture({ seq: 2, eventType: 'updated' }), sandboxEventFixture({ seq: 3 })],
+      [sandboxEventFixture({ seq: 3 }), sandboxEventFixture({ seq: 4 })],
     ]);
-    expect(flattened.map((event) => event.seq)).toEqual([1, 2]);
+    expect(flattened.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
+    expect(flattened[1]?.eventType).toBe('updated');
   });
 
   it('extracts risk-check events and why-not alternatives', () => {
@@ -144,5 +150,26 @@ describe('sandbox journal filters', () => {
     expect(clampSandboxPageLimit(0)).toBe(1);
     expect(clampSandboxPageLimit(9999)).toBe(500);
     expect(clampSandboxPageLimit(Number.NaN)).toBe(50);
+  });
+
+  it('resets offset paging whenever an intent/trade filter changes', () => {
+    const base = { status: 'all' as const, side: 'all' as const, tokenId: null };
+    expect(sandboxIntentFiltersActive(base)).toBe(false);
+    expect(sandboxIntentFiltersActive({ ...base, status: 'filled' })).toBe(true);
+    expect(sandboxIntentFiltersActive({ ...base, side: 'sell' })).toBe(true);
+    expect(sandboxIntentFiltersActive({ ...base, tokenId: sandboxTokenId })).toBe(true);
+
+    const changed = sandboxIntentFiltersWithOffset(
+      { ...base, status: 'filled' },
+      { status: 'rejected' },
+    );
+    expect(changed).toEqual({
+      filters: { ...base, status: 'rejected' },
+      offset: 0,
+    });
+
+    expect(sandboxTradeFilterActive('all')).toBe(false);
+    expect(sandboxTradeFilterActive('closed')).toBe(true);
+    expect(sandboxTradeFilterWithOffset('open')).toEqual({ status: 'open', offset: 0 });
   });
 });
