@@ -74,6 +74,7 @@ function makeTrade(input: {
     entryAmount: '1.00000000',
     entryNotionalUsd: '100.00',
     entryFeeUsd: '0.25',
+    entryCostBasisUsd: '100.25',
     entryIntentId: `${input.tradeId}:entry`,
     exitAt: T0 + HOUR,
     exitPriceUsd: '110.00000000',

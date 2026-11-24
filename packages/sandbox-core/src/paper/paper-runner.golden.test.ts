@@ -264,12 +264,15 @@ describe('golden 180-day paper run', () => {
     const { report } = first.run;
     const counts = statusCounts(report.intentJournal);
 
-    // Pinned contract values for this deterministic scenario.
+    // Pinned contract values for this deterministic scenario. Re-pinned once,
+    // deliberately, when the ledger gained exact-cents cost basis fields (C1):
+    // only the report/event hashes changed; every count, equity and metric pin
+    // stayed the same.
     expect(report.reportHash).toBe(
-      'ac2a0059068d3bb7bad49baeda1c563438f4217f650e0c1a89a548be6a4226f5',
+      'cabf8c7db10178d0f7aab0e1dc9de229e8ffe7cb51b3f18ee1aae7a588ccd295',
     );
     expect(report.eventHash).toBe(
-      'ef7da740575b165d1d712a76a17b894fdd2e9dc91cd848a52edf22df407cd8da',
+      'a8fcf7cf4a37f2df3511f7e1a867a063d4b586cdc08aa80569be2b3056251890',
     );
     expect(report.eventCount).toBe(49379);
     expect(report.dataSnapshotId).toBe(

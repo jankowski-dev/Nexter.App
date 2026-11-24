@@ -490,6 +490,15 @@ describe('PaperRunner input validation', () => {
       name: 'PaperRunError',
       code: 'PAPER_NO_CANDLES',
     });
+    const mixed = buildCandles(steadyCloses(5));
+    await expect(
+      runTrend({
+        candles: [...mixed, ...mixed.map((candle) => ({ ...candle, timeframe: '4h' }))],
+      }),
+    ).rejects.toMatchObject({
+      name: 'PaperRunError',
+      code: 'PAPER_MIXED_TIMEFRAMES',
+    });
   });
 
   it('rejects invalid paper settings', async () => {
@@ -505,15 +514,28 @@ describe('PaperRunner input validation', () => {
       name: 'PaperRunError',
       code: 'PAPER_BAD_SETTINGS',
     });
+    await expect(runTrend({ paper: { counterfactualHorizonHours: 0 } })).rejects.toMatchObject({
+      name: 'PaperRunError',
+      code: 'PAPER_BAD_SETTINGS',
+    });
+    await expect(runTrend({ paper: { cooldownHoursAfterStop: -1 } })).rejects.toMatchObject({
+      name: 'PaperRunError',
+      code: 'PAPER_BAD_SETTINGS',
+    });
   });
 
   it('rejects an invalid cash buffer percentage before the engine sees it', async () => {
-    for (const cashBufferPct of [0, 100.5, 101, Number.NaN]) {
+    for (const cashBufferPct of [-0.1, 100.5, 101, Number.NaN]) {
       await expect(runTrend({ settings: { cashBufferPct } })).rejects.toMatchObject({
         name: 'PaperRunError',
         code: 'PAPER_BAD_SETTINGS',
       });
     }
+  });
+
+  it('accepts a zero cash buffer (no buffer is valid)', async () => {
+    const { result } = await runTrend({ settings: { cashBufferPct: 0 } });
+    expect(result.ledger.entries.length).toBeGreaterThan(0);
   });
 
   it('rejects a non-positive or malformed initial capital', async () => {

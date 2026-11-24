@@ -1,5 +1,6 @@
 import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import Decimal from 'decimal.js';
 import { GENESIS_HASH } from '../events/event-types';
 import type { SandboxEvent } from '../events/event-types';
 import type { Timestamp } from '../types';
@@ -9,8 +10,11 @@ import { reconcileLedger } from './ledger';
 import { computeMetrics } from './metrics';
 import type {
   BuildReportInput,
+  FinalMarkProjection,
   PaperArtifactPaths,
+  PaperRunResult,
   PaperTrade,
+  RunMetrics,
   RunReport,
   WritePaperArtifactsInput,
 } from './types';
@@ -30,6 +34,18 @@ import type {
  */
 
 const ZERO_EVENTS_HASH = GENESIS_HASH;
+
+/** Static list of the identities `reconcileLedger` verifies; recorded in the report. */
+export const RECONCILIATION_CHECKS: readonly string[] = [
+  'cash = initial capital - buy cost + sell proceeds',
+  'position amount per token = buy amounts - sell amounts',
+  'position cost basis per token = buy cost - released cost',
+  'sell realized P&L = proceeds - released cost basis',
+  'fees paid = sum of ledger entry fees',
+  'trade aggregates and entry cost basis match the ledger entries',
+  'equity = cash + positions value',
+  'equity - initial capital = realized + unrealized P&L within one cent',
+];
 
 /** Typed report/artifact error reserved for caller or artifact-contract mistakes. */
 export class PaperReportError extends Error {
@@ -84,12 +100,45 @@ export function reportHash(report: RunReport | Omit<RunReport, 'reportHash'>): s
 }
 
 /**
+ * A caller-supplied metrics object must describe the same run as the final mark
+ * and the ledger; a mismatch would let the report quote numbers the ledger does
+ * not support. Only the values that must agree exactly are checked.
+ */
+function assertMetricsMatchRun(
+  metrics: RunMetrics,
+  result: PaperRunResult,
+  finalMark: FinalMarkProjection,
+): void {
+  const pairs: readonly [string, string, string][] = [
+    ['initialCapitalUsd', metrics.initialCapitalUsd, result.ledger.initialCapitalUsd],
+    ['finalEquityUsd', metrics.finalEquityUsd, finalMark.equityUsd],
+    ['finalCashUsd', metrics.finalCashUsd, result.ledger.cashUsd],
+    ['finalPositionsValueUsd', metrics.finalPositionsValueUsd, finalMark.positionsValueUsd],
+    ['unrealizedPnlUsd', metrics.unrealizedPnlUsd, finalMark.unrealizedPnlUsd],
+    ['realizedPnlUsd', metrics.realizedPnlUsd, result.ledger.realizedPnlUsd],
+    ['feesPaidUsd', metrics.feesPaidUsd, result.ledger.feesPaidUsd],
+  ];
+  for (const [name, supplied, derived] of pairs) {
+    const left = new Decimal(supplied).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    const right = new Decimal(derived).toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+    if (!left.equals(right)) {
+      throw new PaperReportError(
+        `Supplied metrics.${name} ${supplied} does not match the final mark/ledger value ${derived}`,
+      );
+    }
+  }
+}
+
+/**
  * Builds a `RunReport` from a finished run, its final marks and hindsight data.
  *
  * Metrics are derived from the ledger and the final marked projection unless the
- * caller already supplied them. Reconciliation compares the ledger with the same
- * final marks; its boolean result is recorded, while the detailed discrepancy
- * list stays out of the report so a corrupt run cannot bloat the artifact.
+ * caller already supplied them; supplied metrics are checked against the final
+ * mark and ledger. Reconciliation compares the ledger with the same final marks
+ * and is a hard gate: a discrepancy throws, so an unreconciled run produces no
+ * report or artifacts (design §6.3). The detailed discrepancy list stays out of
+ * the report; `reconciliationOk` is therefore always true in a produced report,
+ * and `reconciliationChecks` lists the identities that were verified.
  */
 export function buildReport(input: BuildReportInput): RunReport {
   const { result } = input;
@@ -100,6 +149,9 @@ export function buildReport(input: BuildReportInput): RunReport {
     throw new PaperReportError('A report needs at least one equity point');
   }
 
+  if (input.metrics !== undefined) {
+    assertMetricsMatchRun(input.metrics, result, input.finalMark);
+  }
   const metrics =
     input.metrics ??
     computeMetrics({
@@ -113,6 +165,11 @@ export function buildReport(input: BuildReportInput): RunReport {
     });
 
   const reconciliation = reconcileLedger(result.ledger, input.marks);
+  if (!reconciliation.ok) {
+    throw new PaperReportError(
+      `The paper run did not reconcile; no report was produced:\n${reconciliation.discrepancies.join('\n')}`,
+    );
+  }
   const lastEventHash = input.events[input.events.length - 1]?.hash ?? ZERO_EVENTS_HASH;
   if (result.eventCount !== input.events.length || result.eventHash !== lastEventHash) {
     throw new PaperReportError(
@@ -143,7 +200,8 @@ export function buildReport(input: BuildReportInput): RunReport {
     eventCount: result.eventCount,
     eventHash: result.eventHash,
     ledgerEntries: result.ledger.entries.length,
-    reconciliationOk: reconciliation.ok,
+    reconciliationOk: true,
+    reconciliationChecks: [...RECONCILIATION_CHECKS],
   };
 
   return { ...body, reportHash: reportHash(body) };
@@ -210,6 +268,48 @@ export function renderMarkdown(report: RunReport): string {
     ),
     '',
   );
+
+  lines.push('## Breakdown', '');
+
+  lines.push('### By strategy', '');
+  if (metrics.perStrategy.length === 0) {
+    lines.push('No closed trades.', '');
+  } else {
+    lines.push(
+      table(
+        ['Strategy', 'Trades', 'Wins', 'Losses', 'Realized P&L, USD', 'Win rate, %'],
+        metrics.perStrategy.map((entry) => [
+          entry.strategyKey,
+          String(entry.tradeCount),
+          String(entry.wins),
+          String(entry.losses),
+          entry.realizedPnlUsd,
+          entry.winRatePct ?? '-',
+        ]),
+      ),
+      '',
+    );
+  }
+
+  lines.push('### By token', '');
+  if (metrics.perToken.length === 0) {
+    lines.push('No closed trades.', '');
+  } else {
+    lines.push(
+      table(
+        ['Token', 'Trades', 'Wins', 'Losses', 'Realized P&L, USD', 'Win rate, %'],
+        metrics.perToken.map((entry) => [
+          entry.tokenId,
+          String(entry.tradeCount),
+          String(entry.wins),
+          String(entry.losses),
+          entry.realizedPnlUsd,
+          entry.winRatePct ?? '-',
+        ]),
+      ),
+      '',
+    );
+  }
 
   lines.push('## Configuration', '');
   lines.push(
@@ -363,6 +463,10 @@ export function renderMarkdown(report: RunReport): string {
     '> Hindsight only: these records are computed after the run with `hindsight: true` and `usedForDecisions: false`; they never influence a decision.',
     '',
   );
+  lines.push(
+    `Each counterfactual is a fixed-horizon diagnostic: it measures the configured ${config.counterfactualHorizonHours}h horizon from the entry bar, not the strategy's own exit rule, and it is never replayed through the ledger.`,
+    '',
+  );
   const outcomeCounts = new Map<string, number>();
   for (const record of report.counterfactuals) {
     outcomeCounts.set(record.outcome, (outcomeCounts.get(record.outcome) ?? 0) + 1);
@@ -409,8 +513,15 @@ export function renderMarkdown(report: RunReport): string {
     ),
     '',
   );
+  lines.push('Identities verified:', '');
+  for (const check of report.reconciliationChecks) lines.push(`- ${check}`);
+  lines.push('');
   lines.push(
-    `The append-only ledger has ${report.ledgerEntries} entries; they are reconstructible from \`ledger.entry\` events in the event journal.`,
+    'A reconciliation failure aborts the run: the report build throws with the discrepancies, so no report or artifacts are written for an unreconciled run.',
+    '',
+  );
+  lines.push(
+    `The append-only ledger has ${report.ledgerEntries} entries; they are reconstructible from \`ledger.entry\` events in the event journal. Each sell entry carries the exact cents of cost basis it released (\`costBasisReleasedUsd\`) and the remaining position cost basis (\`positionCostBasisAfterUsd\`), so P&L never depends on the 8-decimal average cost.`,
     '',
   );
 

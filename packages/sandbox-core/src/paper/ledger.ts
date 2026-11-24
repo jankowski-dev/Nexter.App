@@ -129,8 +129,9 @@ export function createLedger(initialCapitalUsd: string): PaperLedgerState {
  *
  * Adds are not allowed (the allocator and fill model already reject them), so a
  * token with an existing position is a programmer error. The cost basis is
- * `filledUsd + feeUsd`; the average cost is rounded once, to eight decimals,
- * and the entry opens a trade.
+ * `filledUsd + feeUsd` in cents and is the value P&L later uses; the average
+ * cost is a per-token display value rounded once, to eight decimals, and the
+ * entry opens a trade.
  */
 export function applyBuyFill(
   state: PaperLedgerState,
@@ -176,6 +177,7 @@ export function applyBuyFill(
   }
 
   const avgCostUsd = costUsd.div(amount);
+  const costBasisUsd = money(costUsd);
   const sequence = state.entries.length + 1;
 
   const entry: LedgerEntry = {
@@ -192,6 +194,8 @@ export function applyBuyFill(
     cashAfterUsd: money(cashAfterUsd),
     positionAmountAfter: units(amount),
     positionAvgCostAfter: units(avgCostUsd),
+    costBasisReleasedUsd: null,
+    positionCostBasisAfterUsd: costBasisUsd,
     realizedPnlUsd: null,
     reasonCode: Reason.LEDGER_BUY,
   };
@@ -201,6 +205,7 @@ export function applyBuyFill(
     strategyKey: intent.strategyKey,
     strategyVersion: intent.strategyVersion,
     amount: units(amount),
+    costBasisUsd,
     avgCostUsd: units(avgCostUsd),
     openedAt: clockTime,
     stopLossPct: intent.stopLossPct,
@@ -219,6 +224,7 @@ export function applyBuyFill(
     entryAmount: units(amount),
     entryNotionalUsd: money(filledUsd),
     entryFeeUsd: money(feeUsd),
+    entryCostBasisUsd: costBasisUsd,
     entryIntentId: intent.intentId,
     exitAt: null,
     exitPriceUsd: null,
@@ -252,8 +258,13 @@ export function applyBuyFill(
  * the 1e-8 rounding edge where a fill plan may emit a hair more than the
  * ledger holds. The plan's booked `notionalUsd`, `feeUsd` and `proceedsUsd`
  * are used as-is, so `notional - fee = proceeds` and the cash trail keep their
- * exact cents. A partial sell aggregates into the open trade; the trade closes
- * and moves to `closedTrades` when the position reaches zero. `exitAt`,
+ * exact cents.
+ *
+ * Realized P&L uses the position's exact cents cost basis, never
+ * `amount * avgCostUsd`: a full exit releases the whole remaining basis while a
+ * partial exit releases `costBasis * appliedAmount / positionAmount` rounded
+ * half-up to cents. A partial sell aggregates into the open trade; the trade
+ * closes and moves to `closedTrades` when the position reaches zero. `exitAt`,
  * `exitIntentId` and `exitReasonCode` are last-writer-wins across partial exits;
  * the exit price is the amount-weighted average of the fill prices.
  */
@@ -320,8 +331,24 @@ export function applySellFill(
     );
   }
   const remainingAmount = positionAmount.minus(appliedAmount);
-  const avgCostUsd = parseUnits(position.avgCostUsd, `position ${plan.tokenId}.avgCostUsd`);
-  const realizedUsd = money(proceedsUsd.minus(appliedAmount.times(avgCostUsd)));
+  const costBasis = parseUsd(position.costBasisUsd, `position ${plan.tokenId}.costBasisUsd`);
+  if (!costBasis.greaterThanOrEqualTo(0)) {
+    throw new PaperLedgerError(
+      `Cannot sell ${plan.tokenId}: the position cost basis is negative (${position.costBasisUsd})`,
+    );
+  }
+  const closed = remainingAmount.isZero();
+  // A full exit releases the whole remaining basis so partial sells always sum
+  // to it exactly; a partial exit releases its proportional share, rounded once.
+  const releasedUsd = closed ? costBasis : costBasis.times(appliedAmount).div(positionAmount);
+  const released = new Decimal(money(releasedUsd));
+  const remainingCostBasis = closed ? ZERO : costBasis.minus(released);
+  if (remainingCostBasis.isNegative()) {
+    throw new PaperLedgerError(
+      `Sell for ${plan.tokenId} (${plan.intentId}) would release ${money(released)} USD more cost basis than the ${position.costBasisUsd} USD held`,
+    );
+  }
+  const realizedUsd = money(proceedsUsd.minus(released));
 
   const cashAfterUsd = parseUsd(state.cashUsd, 'state.cashUsd').plus(proceedsUsd);
   const exitAmount = parseUnits(trade.exitAmount, 'trade.exitAmount').plus(appliedAmount);
@@ -342,7 +369,6 @@ export function applySellFill(
           .plus(priceUsd.times(appliedAmount))
           .div(exitAmount);
 
-  const closed = remainingAmount.isZero();
   const updatedTrade: PaperTrade = {
     ...trade,
     exitAt: clockTime,
@@ -364,7 +390,11 @@ export function applySellFill(
     delete positions[plan.tokenId];
     delete openTrades[plan.tokenId];
   } else {
-    positions[plan.tokenId] = { ...position, amount: units(remainingAmount) };
+    positions[plan.tokenId] = {
+      ...position,
+      amount: units(remainingAmount),
+      costBasisUsd: money(remainingCostBasis),
+    };
     openTrades[plan.tokenId] = updatedTrade;
   }
 
@@ -383,6 +413,8 @@ export function applySellFill(
     cashAfterUsd: money(cashAfterUsd),
     positionAmountAfter: units(remainingAmount),
     positionAvgCostAfter: closed ? null : position.avgCostUsd,
+    costBasisReleasedUsd: money(released),
+    positionCostBasisAfterUsd: money(remainingCostBasis),
     realizedPnlUsd: realizedUsd,
     reasonCode: Reason.LEDGER_SELL,
   };
@@ -438,10 +470,16 @@ export function markPortfolio(
     const markUsd = parseUnits(marks[tokenId] as string, `marks.${tokenId}`);
     const amount = parseUnits(position.amount, `position ${tokenId}.amount`);
     const avgCostUsd = parseUnits(position.avgCostUsd, `position ${tokenId}.avgCostUsd`);
+    if (!avgCostUsd.greaterThan(0)) {
+      throw new PaperLedgerError(`Position ${tokenId} has a non-positive average cost`);
+    }
+    const costBasisUsd = parseUsd(position.costBasisUsd, `position ${tokenId}.costBasisUsd`);
     const marketValueUsd = amount.times(markUsd);
 
     positionsValue = positionsValue.plus(marketValueUsd);
-    unrealizedPnl = unrealizedPnl.plus(markUsd.minus(avgCostUsd).times(amount));
+    // Unrealized P&L uses the exact cents cost basis, not the rounded average
+    // cost: `amount * avgCostUsd` loses dollars for low-priced tokens.
+    unrealizedPnl = unrealizedPnl.plus(marketValueUsd.minus(costBasisUsd));
     positions.push({
       tokenId,
       strategyKey: position.strategyKey,
@@ -481,6 +519,7 @@ interface LedgerTotals {
   readonly sellNotional: Decimal;
   readonly sellFee: Decimal;
   readonly sellRealized: Decimal;
+  readonly sellReleased: Decimal;
   readonly fees: Decimal;
   readonly buyCount: number;
 }
@@ -494,6 +533,7 @@ function scanEntries(entries: readonly LedgerEntry[], discrepancies: string[]): 
   let sellNotional = ZERO;
   let sellFee = ZERO;
   let sellRealized = ZERO;
+  let sellReleased = ZERO;
   let fees = ZERO;
   let buyCount = 0;
   const entryIds = new Set<string>();
@@ -533,6 +573,16 @@ function scanEntries(entries: readonly LedgerEntry[], discrepancies: string[]): 
     if (price !== null && !price.greaterThan(0)) {
       discrepancies.push(`${label}.priceUsd must be positive, received ${entry.priceUsd}`);
     }
+    const costBasisAfter = readDecimal(
+      entry.positionCostBasisAfterUsd,
+      `${label}.positionCostBasisAfterUsd`,
+      discrepancies,
+    );
+    if (costBasisAfter !== null && costBasisAfter.isNegative()) {
+      discrepancies.push(
+        `${label}.positionCostBasisAfterUsd must not be negative, received ${entry.positionCostBasisAfterUsd}`,
+      );
+    }
 
     if (amount !== null && notional !== null && fee !== null) {
       fees = fees.plus(fee);
@@ -544,6 +594,9 @@ function scanEntries(entries: readonly LedgerEntry[], discrepancies: string[]): 
         if (entry.realizedPnlUsd !== null) {
           discrepancies.push(`${label} is a buy but carries realizedPnlUsd`);
         }
+        if (entry.costBasisReleasedUsd !== null) {
+          discrepancies.push(`${label} is a buy but carries costBasisReleasedUsd`);
+        }
       } else {
         sellAmount = sellAmount.plus(amount);
         sellNotional = sellNotional.plus(notional);
@@ -554,6 +607,27 @@ function scanEntries(entries: readonly LedgerEntry[], discrepancies: string[]): 
           discrepancies,
         );
         if (realized !== null) sellRealized = sellRealized.plus(realized);
+        const released = readDecimal(
+          entry.costBasisReleasedUsd,
+          `${label}.costBasisReleasedUsd`,
+          discrepancies,
+        );
+        if (released !== null) {
+          sellReleased = sellReleased.plus(released);
+          if (released.isNegative()) {
+            discrepancies.push(
+              `${label}.costBasisReleasedUsd must not be negative, received ${entry.costBasisReleasedUsd}`,
+            );
+          }
+          if (realized !== null) {
+            const expectedRealized = notional.minus(fee).minus(released);
+            if (!realized.equals(expectedRealized)) {
+              discrepancies.push(
+                `${label} records realizedPnlUsd ${entry.realizedPnlUsd}, expected ${money(expectedRealized)} (proceeds minus released cost basis)`,
+              );
+            }
+          }
+        }
       }
     }
   }
@@ -566,6 +640,7 @@ function scanEntries(entries: readonly LedgerEntry[], discrepancies: string[]): 
     sellNotional,
     sellFee,
     sellRealized,
+    sellReleased,
     fees,
     buyCount,
   };
@@ -575,6 +650,7 @@ interface TradeTotals {
   entryAmount: Decimal;
   entryNotional: Decimal;
   entryFee: Decimal;
+  entryCostBasis: Decimal;
   exitAmount: Decimal;
   exitNotional: Decimal;
   exitFee: Decimal;
@@ -596,6 +672,11 @@ function accumulateTrade(
     discrepancies,
   );
   const entryFee = readDecimal(trade.entryFeeUsd, `${label}.entryFeeUsd`, discrepancies);
+  const entryCostBasis = readDecimal(
+    trade.entryCostBasisUsd,
+    `${label}.entryCostBasisUsd`,
+    discrepancies,
+  );
   const exitAmount = readDecimal(trade.exitAmount, `${label}.exitAmount`, discrepancies);
   const exitNotional = readDecimal(
     trade.exitNotionalUsd,
@@ -618,6 +699,21 @@ function accumulateTrade(
   }
   if (entryFee !== null && entryFee.isNegative()) {
     discrepancies.push(`${label}.entryFeeUsd must not be negative, received ${trade.entryFeeUsd}`);
+  }
+  if (entryCostBasis !== null) {
+    if (entryCostBasis.isNegative()) {
+      discrepancies.push(
+        `${label}.entryCostBasisUsd must not be negative, received ${trade.entryCostBasisUsd}`,
+      );
+    }
+    if (entryNotional !== null && entryFee !== null) {
+      const expectedCost = entryNotional.plus(entryFee);
+      if (!entryCostBasis.equals(expectedCost)) {
+        discrepancies.push(
+          `${label}.entryCostBasisUsd ${trade.entryCostBasisUsd} does not equal entry notional plus fee (${money(expectedCost)})`,
+        );
+      }
+    }
   }
   if (exitNotional !== null && exitNotional.isNegative()) {
     discrepancies.push(
@@ -653,6 +749,7 @@ function accumulateTrade(
   if (entryAmount !== null) totals.entryAmount = totals.entryAmount.plus(entryAmount);
   if (entryNotional !== null) totals.entryNotional = totals.entryNotional.plus(entryNotional);
   if (entryFee !== null) totals.entryFee = totals.entryFee.plus(entryFee);
+  if (entryCostBasis !== null) totals.entryCostBasis = totals.entryCostBasis.plus(entryCostBasis);
   if (exitAmount !== null) totals.exitAmount = totals.exitAmount.plus(exitAmount);
   if (exitNotional !== null) totals.exitNotional = totals.exitNotional.plus(exitNotional);
   if (exitFee !== null) totals.exitFee = totals.exitFee.plus(exitFee);
@@ -664,11 +761,13 @@ function accumulateTrade(
  * Verifies the ledger identities from design §6.3.
  *
  * Checks: cash = initial - buys + sell proceeds; per-token position amounts =
- * buys - sells; realized P&L = sum of sell entries; fees = sum of entry fees;
- * trade aggregates match the entries; equity = cash + positions value; and
- * `equity - initial = realized + unrealized` within one cent. Every issue is
- * returned as a message, so a caller can fail the run and print the report.
- * A missing mark is reported here rather than thrown.
+ * buys - sells; per-token cost basis = buys - released cost; realized P&L =
+ * proceeds minus released cost (and equals the sum of sell entries); fees = sum
+ * of entry fees; trade aggregates and trade entry cost match the entries;
+ * equity = cash + positions value; and `equity - initial = realized +
+ * unrealized` within one cent. Every issue is returned as a message, so a caller
+ * can fail the run and print the report. A missing mark is reported here rather
+ * than thrown.
  */
 export function reconcileLedger(
   state: PaperLedgerState,
@@ -696,6 +795,7 @@ export function reconcileLedger(
   const positionsByToken = new Map<string, Decimal>();
   const buyEntriesByIntent = new Map<string, LedgerEntry>();
   const runningAmounts = new Map<string, Decimal>();
+  const runningCostBasis = new Map<string, Decimal>();
   let previousClock: Timestamp | null = null;
   for (let index = 0; index < state.entries.length; index += 1) {
     const entry = state.entries[index];
@@ -709,6 +809,42 @@ export function reconcileLedger(
     previousClock = entry.clockTime;
 
     if (entry.side !== 'buy' && entry.side !== 'sell') continue;
+
+    // Cost-basis trail: a buy adds its booked cost, a sell subtracts the exact
+    // cents it released. The recorded `positionCostBasisAfterUsd` must match.
+    const notional = readDecimal(entry.notionalUsd, `${label}.notionalUsd`, discrepancies);
+    const fee = readDecimal(entry.feeUsd, `${label}.feeUsd`, discrepancies);
+    const recordedBasis = readDecimal(
+      entry.positionCostBasisAfterUsd,
+      `${label}.positionCostBasisAfterUsd`,
+      discrepancies,
+    );
+    const priorBasis = runningCostBasis.get(entry.tokenId) ?? ZERO;
+    let expectedBasis: Decimal | null = null;
+    if (entry.side === 'buy') {
+      if (notional !== null && fee !== null) expectedBasis = priorBasis.plus(notional).plus(fee);
+    } else {
+      const released = readDecimal(
+        entry.costBasisReleasedUsd,
+        `${label}.costBasisReleasedUsd`,
+        discrepancies,
+      );
+      if (released !== null) expectedBasis = priorBasis.minus(released);
+    }
+    if (expectedBasis !== null) {
+      runningCostBasis.set(entry.tokenId, expectedBasis);
+      if (expectedBasis.isNegative()) {
+        discrepancies.push(
+          `${label} drives the ${entry.tokenId} cost basis negative (${money(expectedBasis)})`,
+        );
+      }
+      if (recordedBasis !== null && !recordedBasis.equals(expectedBasis)) {
+        discrepancies.push(
+          `${label} records positionCostBasisAfterUsd ${entry.positionCostBasisAfterUsd} for ${entry.tokenId}, expected ${money(expectedBasis)}`,
+        );
+      }
+    }
+
     const amount = readDecimal(entry.amount, `${label}.amount`, discrepancies);
     if (amount === null) continue;
     const amountAfter = (runningAmounts.get(entry.tokenId) ?? ZERO).plus(
@@ -784,15 +920,28 @@ export function reconcileLedger(
     );
   }
 
-  // Per-token position amounts.
+  const realizedFromReleases = totals.sellNotional.minus(totals.sellFee).minus(totals.sellReleased);
+  if (!realizedFromReleases.equals(totals.sellRealized)) {
+    discrepancies.push(
+      `sell realized P&L ${money(totals.sellRealized)} does not equal sell proceeds minus released cost basis (${money(realizedFromReleases)})`,
+    );
+  }
+
+  // Per-token position amounts and cost basis.
   const tokenIds = new Set<string>([...positionsByToken.keys(), ...Object.keys(state.positions)]);
   for (const tokenId of [...tokenIds].sort()) {
     const position = state.positions[tokenId];
     const expected = positionsByToken.get(tokenId) ?? ZERO;
+    const expectedBasis = runningCostBasis.get(tokenId) ?? ZERO;
     if (position === undefined) {
       if (!expected.isZero()) {
         discrepancies.push(
           `ledger entries imply ${units(expected)} of ${tokenId}, but no position exists`,
+        );
+      }
+      if (!expectedBasis.isZero()) {
+        discrepancies.push(
+          `ledger entries leave ${money(expectedBasis)} of ${tokenId} cost basis, but no position exists`,
         );
       }
       continue;
@@ -801,6 +950,11 @@ export function reconcileLedger(
     const avgCost = readDecimal(
       position.avgCostUsd,
       `position ${tokenId}.avgCostUsd`,
+      discrepancies,
+    );
+    const costBasis = readDecimal(
+      position.costBasisUsd,
+      `position ${tokenId}.costBasisUsd`,
       discrepancies,
     );
     const positionFees = readDecimal(
@@ -822,6 +976,18 @@ export function reconcileLedger(
       discrepancies.push(
         `position ${tokenId} has a non-positive average cost ${position.avgCostUsd}`,
       );
+    }
+    if (costBasis !== null) {
+      if (costBasis.isNegative()) {
+        discrepancies.push(
+          `position ${tokenId} has a negative cost basis ${position.costBasisUsd}`,
+        );
+      }
+      if (!costBasis.equals(expectedBasis)) {
+        discrepancies.push(
+          `position ${tokenId} cost basis ${position.costBasisUsd} does not match buys minus released cost (${money(expectedBasis)})`,
+        );
+      }
     }
     if (positionFees !== null && positionFees.isNegative()) {
       discrepancies.push(`position ${tokenId} has negative fees ${position.feesPaidUsd}`);
@@ -869,6 +1035,7 @@ export function reconcileLedger(
     entryAmount: ZERO,
     entryNotional: ZERO,
     entryFee: ZERO,
+    entryCostBasis: ZERO,
     exitAmount: ZERO,
     exitNotional: ZERO,
     exitFee: ZERO,
@@ -914,6 +1081,11 @@ export function reconcileLedger(
   if (!tradeTotals.entryFee.equals(totals.buyFee)) {
     discrepancies.push(
       `trade entry fees ${money(tradeTotals.entryFee)} do not equal buy entry fees ${money(totals.buyFee)}`,
+    );
+  }
+  if (!tradeTotals.entryCostBasis.equals(totals.buyNotional.plus(totals.buyFee))) {
+    discrepancies.push(
+      `trade entry cost basis ${money(tradeTotals.entryCostBasis)} does not equal buy notional plus fees (${money(totals.buyNotional.plus(totals.buyFee))})`,
     );
   }
   if (!tradeTotals.exitAmount.equals(totals.sellAmount)) {

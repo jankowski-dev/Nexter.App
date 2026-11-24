@@ -1,6 +1,8 @@
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { Reason } from '../decision/reason-codes';
 import type { ReasonCode } from '../decision/reason-codes';
@@ -116,7 +118,7 @@ describe('parsePaperArgs', () => {
   });
 
   it('rejects invalid numbers', () => {
-    const invalidSeeds = ['abc', '1.5', '', '9007199254740992'];
+    const invalidSeeds = ['abc', '1.5', '', '9007199254740992', '1e3', '0x10', ' 7', '7 '];
     for (const seed of invalidSeeds) {
       expect(() => parsePaperArgs(['--file', 'a', '--out', 'out', '--seed', seed])).toThrow(
         PAPER_USAGE,
@@ -126,13 +128,20 @@ describe('parsePaperArgs', () => {
       ['--fee-bps', 'abc'],
       ['--fee-bps', '-1'],
       ['--fee-bps', '10000'],
+      ['--fee-bps', '1e3'],
+      ['--fee-bps', '0x10'],
       ['--slippage-bps', 'x'],
       ['--liquidity-pct', '0'],
       ['--liquidity-pct', '101'],
+      ['--liquidity-pct', ' 2.5'],
       ['--cooldown-hours', '-1'],
+      ['--cooldown-hours', '6.0e2'],
       ['--cf-horizon-hours', '0'],
+      ['--cf-horizon-hours', '24 '],
       ['--initial-capital', '0'],
       ['--initial-capital', '1.234'],
+      ['--initial-capital', '1e3'],
+      ['--initial-capital', ' 1000'],
     ] as const) {
       expect(() => parsePaperArgs(['--file', 'a', '--out', 'out', flag, value])).toThrow(
         PAPER_USAGE,
@@ -294,6 +303,37 @@ describe('runPaperFromFiles', () => {
       /not empty/,
     );
   });
+});
+
+describe('paper-main', () => {
+  it('exits non-zero and writes no artifacts when the run throws', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'paper-main-'));
+    const outputDir = join(dir, 'out');
+    await mkdir(outputDir);
+    await writeFile(join(outputDir, 'existing.txt'), 'occupied');
+
+    const script = fileURLToPath(new URL('./paper-main.ts', import.meta.url));
+    const cwd = fileURLToPath(new URL('../..', import.meta.url));
+    const result = spawnSync(
+      process.execPath,
+      [
+        '--import',
+        'tsx',
+        script,
+        '--file',
+        join(dir, 'missing.jsonl'),
+        '--out',
+        outputDir,
+        '--run-id',
+        'paper-main-fail',
+      ],
+      { cwd, encoding: 'utf8', timeout: 60_000 },
+    );
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('not empty');
+    expect(await readdir(outputDir)).toEqual(['existing.txt']);
+  }, 90_000);
 });
 
 type BlockedEventType = 'opportunity.dropped' | 'portfolio.dropped' | 'risk.checked';

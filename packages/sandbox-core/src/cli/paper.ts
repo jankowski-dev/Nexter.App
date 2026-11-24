@@ -97,13 +97,19 @@ function toReasonCode(value: unknown): ReasonCode | null {
   return typeof value === 'string' && REASON_CODES.has(value) ? (value as ReasonCode) : null;
 }
 
+const INTEGER = /^\d+$/;
+const DECIMAL = /^\d+(\.\d+)?$/;
+
+/** Parses a plain decimal flag; rejects exponents, hex, signs and whitespace. */
 function readNumber(value: string): number {
+  if (!DECIMAL.test(value)) throw new Error(PAPER_USAGE);
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) throw new Error(PAPER_USAGE);
   return parsed;
 }
 
 function readSafeInteger(value: string): number {
+  if (!INTEGER.test(value)) throw new Error(PAPER_USAGE);
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(PAPER_USAGE);
   return parsed;

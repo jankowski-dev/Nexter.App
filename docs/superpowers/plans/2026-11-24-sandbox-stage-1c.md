@@ -14,8 +14,6 @@
 
 **Base:** Stage 1B merged as `ef2f342`; Stage 1B design is signed off.
 
-**Status:** approved in principle under owner pre-approval; implementation not started.
-
 ## Global Constraints
 
 - Stage 1C only: paper fills, ledger, equity/P&L, metrics/report. No live data, UI, HTTP, DB/schema, wallets, signing, real money or real execution. Stage 2 stays blocked until Stage 1C is signed off.

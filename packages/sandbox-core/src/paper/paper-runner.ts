@@ -15,9 +15,11 @@ import { TIMEFRAME_MS } from '../timeframes';
 import type { Candle, Timestamp } from '../types';
 import { planBuyFill, planSellFill } from './execution';
 import { applyBuyFill, applySellFill, createLedger, markPortfolio } from './ledger';
+import { buildEquityCurve } from './metrics';
 import { PaperLogger } from './paper-logger';
 import type {
   BuyFillPlan,
+  EquityObservation,
   EquityPoint,
   FillStatus,
   IntentRecord,
@@ -57,7 +59,11 @@ const STOP_SELL_REASONS: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
 ]);
 
 export type PaperRunErrorCode =
-  'PAPER_NO_TOKENS' | 'PAPER_NO_CANDLES' | 'PAPER_NO_MARK' | 'PAPER_BAD_SETTINGS';
+  | 'PAPER_NO_TOKENS'
+  | 'PAPER_NO_CANDLES'
+  | 'PAPER_NO_MARK'
+  | 'PAPER_MIXED_TIMEFRAMES'
+  | 'PAPER_BAD_SETTINGS';
 
 /** Typed run-level failure: bad configuration, no data or no mark for a position. */
 export class PaperRunError extends Error {
@@ -134,22 +140,27 @@ function validateRunSettings(input: PaperRunInput): RunSettings {
       'paper.maxPendingBars must be >= 1 (a zero-bar queue would expire every intent before its first attempt)',
     );
   }
-  for (const [value, name] of [
-    [paper.cooldownHoursAfterStop, 'cooldownHoursAfterStop'],
-    [paper.counterfactualHorizonHours, 'counterfactualHorizonHours'],
-  ] as const) {
-    if (!Number.isFinite(value) || value < 0) {
-      throw new PaperRunError('PAPER_BAD_SETTINGS', `paper.${name} must be a non-negative number`);
-    }
+  if (!Number.isFinite(paper.cooldownHoursAfterStop) || paper.cooldownHoursAfterStop < 0) {
+    throw new PaperRunError(
+      'PAPER_BAD_SETTINGS',
+      'paper.cooldownHoursAfterStop must be a non-negative number',
+    );
+  }
+  if (!Number.isFinite(paper.counterfactualHorizonHours) || paper.counterfactualHorizonHours <= 0) {
+    throw new PaperRunError(
+      'PAPER_BAD_SETTINGS',
+      'paper.counterfactualHorizonHours must be a positive number (the analyzer rejects a zero horizon)',
+    );
   }
   const cashBufferPct = settings.cashBufferPct;
+  // `[0, 100]` matches the fill model's `assertCashBufferPct`: 0 means no buffer.
   if (
     typeof cashBufferPct !== 'number' ||
     !Number.isFinite(cashBufferPct) ||
-    cashBufferPct <= 0 ||
+    cashBufferPct < 0 ||
     cashBufferPct > 100
   ) {
-    throw new PaperRunError('PAPER_BAD_SETTINGS', 'settings.cashBufferPct must be in (0, 100]');
+    throw new PaperRunError('PAPER_BAD_SETTINGS', 'settings.cashBufferPct must be in [0, 100]');
   }
   const initialCapitalUsd = input.initialCapitalUsd ?? DEFAULT_INITIAL_CAPITAL_USD;
   if (
@@ -200,13 +211,6 @@ function applyCooldowns(
 
 function maxUsd(left: string, right: string): string {
   return new Decimal(left).greaterThanOrEqualTo(right) ? left : right;
-}
-
-function drawdownPct(peakUsd: string, equityUsd: string): string {
-  const peak = new Decimal(peakUsd);
-  if (!peak.greaterThan(0)) return '0.00';
-  const value = peak.minus(equityUsd).div(peak).times(100);
-  return (value.isNegative() ? new Decimal(0) : value).toFixed(2);
 }
 
 function priceOrNull(value: string): string | null {
@@ -299,6 +303,17 @@ export class PaperRunner {
       throw new PaperRunError('PAPER_NO_TOKENS', 'A paper run needs at least one token id');
     }
     const universe = new Set(tokenIds);
+    const suppliedTimeframes = [...new Set(input.candles.map((candle) => candle.timeframe))].sort(
+      compareCodeUnits,
+    );
+    // Mirror the CLI: a mixed-timeframe input is a caller error, not something to
+    // silently filter, because the extra frames would change the bar clock.
+    if (suppliedTimeframes.length > 1) {
+      throw new PaperRunError(
+        'PAPER_MIXED_TIMEFRAMES',
+        `Mixed timeframes are not supported: ${suppliedTimeframes.join(', ')}`,
+      );
+    }
     const candles = input.candles
       .filter((candle) => candle.timeframe === timeframe && universe.has(candle.tokenId))
       .slice()
@@ -334,7 +349,7 @@ export class PaperRunner {
     const cooldowns = new Map<string, Timestamp>();
     const pending: PendingIntent[] = [];
     const intents: IntentRecord[] = [];
-    const equityCurve: EquityPoint[] = [];
+    const observations: EquityObservation[] = [];
 
     let dayStartEquityUsd = ledger.initialCapitalUsd;
     let peakEquityUsd = ledger.initialCapitalUsd;
@@ -582,13 +597,12 @@ export class PaperRunner {
         pending.push({ intent, queuedAt: closeTime, queuedBarIndex: barIndex });
       }
 
-      // 5. Record the marked equity point for this decision bar.
-      equityCurve.push({
+      // 5. Record the marked equity observation for this decision bar.
+      observations.push({
         clockTime: closeTime,
         equityUsd: marked.equityUsd,
         cashUsd: ledger.cashUsd,
         positionsValueUsd: marked.positionsValueUsd,
-        drawdownPct: drawdownPct(peakEquityUsd, marked.equityUsd),
       });
     }
 
@@ -614,6 +628,10 @@ export class PaperRunner {
     }
     pending.length = 0;
 
+    const equityCurve: EquityPoint[] = buildEquityCurve({
+      initialCapitalUsd: ledger.initialCapitalUsd,
+      points: observations,
+    });
     const finalEquityUsd = equityCurve[equityCurve.length - 1]?.equityUsd ?? ledger.cashUsd;
     await logger.runCompleted({
       clockTime: lastClose,

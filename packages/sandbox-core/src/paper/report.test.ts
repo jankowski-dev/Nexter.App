@@ -295,10 +295,28 @@ describe('buildReport', () => {
     expect(buildReport(changedInput).reportHash).not.toBe(buildReport(base).reportHash);
   });
 
-  it('records a failed reconciliation when a position has no mark', () => {
-    const report = buildReport({ ...makeInput(), marks: {} });
-    expect(report.reconciliationOk).toBe(false);
-    expect(renderMarkdown(report)).toContain('| Reconciliation ok | false |');
+  it('throws instead of recording a failed reconciliation when a position has no mark', () => {
+    expect(() => buildReport({ ...makeInput(), marks: {} })).toThrow(PaperReportError);
+    expect(() => buildReport({ ...makeInput(), marks: {} })).toThrow(/did not reconcile/);
+  });
+
+  it('rejects supplied metrics that disagree with the final mark or ledger', () => {
+    const input = makeInput();
+    const metrics = buildReport(input).metrics;
+
+    expect(() =>
+      buildReport({
+        ...input,
+        metrics: { ...metrics, finalEquityUsd: '1010.00' },
+      }),
+    ).toThrow(/metrics.finalEquityUsd/);
+
+    expect(() =>
+      buildReport({
+        ...input,
+        metrics: { ...metrics, finalCashUsd: '1.00' },
+      }),
+    ).toThrow(/metrics.finalCashUsd/);
   });
 
   it('rejects an empty equity curve', () => {
@@ -337,6 +355,9 @@ describe('renderMarkdown', () => {
       '# Paper run report',
       '## Summary',
       '## Equity',
+      '## Breakdown',
+      '### By strategy',
+      '### By token',
       '## Configuration',
       '### Period',
       '## Open positions (1)',
@@ -351,6 +372,13 @@ describe('renderMarkdown', () => {
     }
 
     expect(markdown).toContain('reconstructible from `ledger.entry` events');
+    expect(markdown).toContain('costBasisReleasedUsd');
+    expect(markdown).toContain('Identities verified:');
+    expect(markdown).toContain('position cost basis per token = buy cost - released cost');
+    expect(markdown).toContain('A reconciliation failure aborts the run');
+    expect(markdown).toContain('fixed-horizon diagnostic');
+    expect(markdown).toContain('trend_pullback');
+    expect(report.reconciliationChecks.length).toBeGreaterThan(0);
 
     expect(markdown).toContain('Hindsight only');
     expect(markdown).toContain('hindsight: true');

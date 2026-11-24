@@ -351,6 +351,8 @@ export class PaperLogger {
         cashAfterUsd: entry.cashAfterUsd,
         positionAmountAfter: entry.positionAmountAfter,
         positionAvgCostAfter: entry.positionAvgCostAfter,
+        costBasisReleasedUsd: entry.costBasisReleasedUsd,
+        positionCostBasisAfterUsd: entry.positionCostBasisAfterUsd,
         realizedPnlUsd: entry.realizedPnlUsd,
         reasonCode: entry.reasonCode,
       },

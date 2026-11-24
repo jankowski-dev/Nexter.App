@@ -171,6 +171,7 @@ describe('applyBuyFill', () => {
       strategyKey: 'trend_pullback',
       strategyVersion: 1,
       amount: '1.99800200',
+      costBasisUsd: '200.50',
       // (200.00 + 0.50) / 1.99800200, rounded once to 8 decimals.
       avgCostUsd: '100.35024990',
       openedAt: T1,
@@ -192,6 +193,7 @@ describe('applyBuyFill', () => {
       entryAmount: '1.99800200',
       entryNotionalUsd: '200.00',
       entryFeeUsd: '0.50',
+      entryCostBasisUsd: '200.50',
       entryIntentId: 'intent-1',
       exitAt: null,
       exitPriceUsd: null,
@@ -219,6 +221,8 @@ describe('applyBuyFill', () => {
       cashAfterUsd: '799.50',
       positionAmountAfter: '1.99800200',
       positionAvgCostAfter: '100.35024990',
+      costBasisReleasedUsd: null,
+      positionCostBasisAfterUsd: '200.50',
       realizedPnlUsd: null,
       reasonCode: Reason.LEDGER_BUY,
     });
@@ -368,6 +372,8 @@ describe('applySellFill', () => {
       cashAfterUsd: '1038.66',
       positionAmountAfter: '0.00000000',
       positionAvgCostAfter: null,
+      costBasisReleasedUsd: '200.50',
+      positionCostBasisAfterUsd: '0.00',
       realizedPnlUsd: '38.66',
       reasonCode: Reason.LEDGER_SELL,
     });
@@ -599,6 +605,62 @@ describe('applySellFill', () => {
       realizedPnlUsd: '-15.00',
     });
     expect(reconcileLedger(second.state, {})).toEqual({ ok: true, discrepancies: [] });
+  });
+
+  it('realizes cents-exact P&L and reconciles at a 1e-6 price', () => {
+    const settings = makeSettings();
+    const buyIntent = makeIntent({ intentId: 'intent-low-buy', sizeUsd: '200' });
+    const buy = planBuyFill({
+      intent: buyIntent,
+      candle: makeCandle({ open: '0.000001', close: '0.000001' }),
+      cashUsd: '1000',
+      equityUsd: '1000',
+      cashBufferPct: 10,
+      settings,
+      hasPosition: false,
+    });
+    expect(buy).toMatchObject({
+      status: 'filled',
+      filledUsd: '200.00',
+      feeUsd: '0.50',
+      amount: '199800199.80019980',
+    });
+
+    const opened = applyBuyFill(createLedger('1000.00'), buy, buyIntent, T1);
+    expect(opened.state.positions.token?.costBasisUsd).toBe('200.50');
+    // The 8-decimal display average cost rounds to 0.00000100 and would lose
+    // about $0.70 of the $200.50 basis on this slice.
+    expect(opened.state.positions.token?.avgCostUsd).toBe('0.00000100');
+
+    const sellIntent = makeIntent({
+      intentId: 'intent-low-sell',
+      side: 'sell',
+      amount: buy.amount,
+      sizeUsd: '0',
+    });
+    const sell = planSellFill({
+      intent: sellIntent,
+      candle: makeCandle({ open: '0.000001', close: '0.000001' }),
+      positionAmount: buy.amount,
+      settings,
+    });
+    expect(sell).toMatchObject({
+      status: 'filled',
+      notionalUsd: '199.60',
+      feeUsd: '0.50',
+      proceedsUsd: '199.10',
+    });
+
+    const closed = applySellFill(opened.state, sell, sellIntent, T2);
+    // A flat round trip at 1e-6 loses exactly the two fees (0.50 + 0.50) and the
+    // 10 bps slippage on both sides (~0.40): $1.40. The old 8-decimal average
+    // cost reconstructed only -0.70 and could flip the sign of a small win.
+    expect(closed.state.realizedPnlUsd).toBe('-1.40');
+    expect(closed.state.closedTrades[0]?.realizedPnlUsd).toBe('-1.40');
+    expect(closed.state.closedTrades[0]?.entryCostBasisUsd).toBe('200.50');
+    expect(closed.entry.costBasisReleasedUsd).toBe('200.50');
+    expect(closed.entry.positionCostBasisAfterUsd).toBe('0.00');
+    expect(reconcileLedger(closed.state, {})).toEqual({ ok: true, discrepancies: [] });
   });
 
   it('refuses a clamp larger than the 1e-8 display edge', () => {
@@ -939,6 +1001,27 @@ describe('reconcileLedger', () => {
     const result = reconcileLedger(state, { token: '110' });
     expect(result.ok).toBe(false);
     expect(result.discrepancies.join('\n')).toMatch(/open trade/);
+  });
+
+  it('reports a tampered cost basis and cost-basis trail', () => {
+    const opened = boughtLedger();
+    const badPosition: PaperLedgerState = {
+      ...opened,
+      positions: {
+        token: { ...opened.positions.token!, costBasisUsd: '199.50' },
+      },
+    };
+    const positionResult = reconcileLedger(badPosition, { token: '110' });
+    expect(positionResult.ok).toBe(false);
+    expect(positionResult.discrepancies.join('\n')).toMatch(/cost basis/);
+
+    const badTrail: PaperLedgerState = {
+      ...opened,
+      entries: [{ ...opened.entries[0]!, positionCostBasisAfterUsd: '199.50' }],
+    };
+    const trailResult = reconcileLedger(badTrail, { token: '110' });
+    expect(trailResult.ok).toBe(false);
+    expect(trailResult.discrepancies.join('\n')).toMatch(/positionCostBasisAfterUsd/);
   });
 
   it('reports a missing mark instead of throwing', () => {

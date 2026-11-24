@@ -103,16 +103,20 @@ export interface SellFillPlan {
 /**
  * One open paper position.
  *
- * The sandbox never adds to a position, so `avgCostUsd` is the entry cost per
- * token including the buy fee and is only rounded once at entry. `amount` is an
- * 8-decimal token amount; `feesPaidUsd` is the entry fee.
+ * The sandbox never adds to a position. `costBasisUsd` is the exact remaining
+ * entry cost (filled USD plus the buy fee) in cents and is the only value
+ * realized/unrealized P&L may use; `avgCostUsd` is an 8-decimal per-token
+ * display/strategy value (it loses precision for low-priced tokens). `amount`
+ * is an 8-decimal token amount; `feesPaidUsd` is the entry fee.
  */
 export interface PaperPosition {
   readonly tokenId: string;
   readonly strategyKey: StrategyKey;
   readonly strategyVersion: number;
   readonly amount: string;
-  /** Entry cost per token including buy fees, 8 decimals. */
+  /** Exact remaining entry cost including buy fees, 2 decimals. */
+  readonly costBasisUsd: string;
+  /** Entry cost per token including buy fees, 8 decimals (display only). */
   readonly avgCostUsd: string;
   readonly openedAt: Timestamp;
   readonly stopLossPct: string | null;
@@ -129,7 +133,8 @@ export interface PaperPosition {
  * is the amount-weighted average of the exits.
  *
  * Entry/exit amounts are 8-decimal token amounts; USD strings have two
- * decimals. `realizedPnlUsd` is the sum of the sell fills' realized P&L.
+ * decimals. `realizedPnlUsd` is the sum of the sell fills' realized P&L, and
+ * `entryCostBasisUsd` is the exact entry cost (notional plus buy fee) in cents.
  */
 export interface PaperTrade {
   readonly tradeId: string;
@@ -141,6 +146,8 @@ export interface PaperTrade {
   readonly entryAmount: string;
   readonly entryNotionalUsd: string;
   readonly entryFeeUsd: string;
+  /** Exact entry cost including the buy fee, 2 decimals. */
+  readonly entryCostBasisUsd: string;
   readonly entryIntentId: string;
   readonly exitAt: Timestamp | null;
   readonly exitPriceUsd: string | null;
@@ -158,7 +165,9 @@ export interface PaperTrade {
  *
  * `entryId` is derived from the intent (`<intentId>:ledger`), so it is unique
  * per intent and deterministic across runs. `sequence` starts at 1 and grows
- * by one. `realizedPnlUsd` is `null` for buys.
+ * by one. `realizedPnlUsd` is `null` for buys. `costBasisReleasedUsd` records
+ * the exact cents of entry cost a sell releases (`null` for buys), and
+ * `positionCostBasisAfterUsd` is the remaining cost basis after the fill.
  */
 export interface LedgerEntry {
   readonly entryId: string;
@@ -174,6 +183,10 @@ export interface LedgerEntry {
   readonly cashAfterUsd: string;
   readonly positionAmountAfter: string;
   readonly positionAvgCostAfter: string | null;
+  /** Entry cost released by a sell, 2 decimals; `null` for a buy. */
+  readonly costBasisReleasedUsd: string | null;
+  /** Remaining entry cost after the fill, 2 decimals. */
+  readonly positionCostBasisAfterUsd: string;
   readonly realizedPnlUsd: string | null;
   readonly reasonCode: ReasonCode;
 }
@@ -181,9 +194,9 @@ export interface LedgerEntry {
 /**
  * Immutable paper ledger snapshot.
  *
- * Buy fees are capitalised in `avgCostUsd`; sell fees reduce proceeds. The
- * ledger only records fills, never marks: mark-to-market lives in
- * `markPortfolio`.
+ * Buy fees are capitalised in the position `costBasisUsd` (with `avgCostUsd` as
+ * an 8-decimal display value); sell fees reduce proceeds. The ledger only
+ * records fills, never marks: mark-to-market lives in `markPortfolio`.
  */
 export interface PaperLedgerState {
   readonly cashUsd: string;
@@ -475,7 +488,10 @@ export interface RunReport {
   readonly eventCount: number;
   readonly eventHash: string;
   readonly ledgerEntries: number;
+  /** True for every produced report: an unreconciled run throws instead. */
   readonly reconciliationOk: boolean;
+  /** Static list of the ledger identities `reconcileLedger` verified. */
+  readonly reconciliationChecks: readonly string[];
   readonly reportHash: string;
 }
 
