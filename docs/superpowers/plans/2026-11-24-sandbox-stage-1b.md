@@ -1359,7 +1359,7 @@ Do not silently repair input.
 
 - [ ] **Step 3: Orchestrate one decision cycle**
 
-1. Record `before = log.events().length`. Log `decision.cycle` with `{tokenIds, settingsVersion, equityUsd, cashUsd, openPositions}`.
+1. Record `before = log.events().length`. Log `decision.cycle` with `{tokenIds, evaluatedTokenIds, settingsVersion, equityUsd, cashUsd, openPositions}`: `tokenIds` is the sorted caller universe, `evaluatedTokenIds` the sorted union with position tokens.
 2. Build the evaluated token set from `tokenIds ∪ position tokenIds`, sorted by code unit. Extra position tokens outside the universe are still managed.
 3. For each token, sorted: read `market.candles(tokenId, settings.timeframe)`; run `classifyRegime` with the previous state; log `regime.evaluated`; log `regime.changed` if changed.
 4. Find the position; choose the runtime:
