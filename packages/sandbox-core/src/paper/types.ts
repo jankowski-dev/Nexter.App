@@ -1,6 +1,6 @@
 import type { ReasonCode } from '../decision/reason-codes';
-import type { StrategyKey } from '../decision/types';
-import type { Timestamp } from '../types';
+import type { EngineState, SandboxDecisionSettings, StrategyKey } from '../decision/types';
+import type { Candle, Timestamp } from '../types';
 
 /**
  * Execution settings for one paper run.
@@ -190,4 +190,82 @@ export interface LedgerApplyResult {
   readonly state: PaperLedgerState;
   readonly entry: LedgerEntry;
   readonly trade: PaperTrade | null;
+}
+
+/**
+ * Terminal journal row for exactly one emitted intent.
+ *
+ * Every intent the engine emits resolves to exactly one record (`filled`,
+ * `partial`, `rejected` or `expired`). `filledUsd` is the booked notional for a
+ * sell; `priceUsd` is `null` when no tradable bar priced the intent.
+ * `decisionTime` is the decision bar close; `fillTime` is the bar open where the
+ * fill attempt resolved, or `null` when the intent never reached a bar (a
+ * queue-time duplicate rejection).
+ */
+export interface IntentRecord {
+  readonly intentId: string;
+  readonly tokenId: string;
+  readonly side: 'buy' | 'sell';
+  readonly strategyKey: StrategyKey;
+  readonly strategyVersion: number;
+  readonly status: FillStatus;
+  readonly requestedUsd: string | null;
+  readonly requestedAmount: string | null;
+  readonly filledUsd: string;
+  readonly filledAmount: string;
+  readonly priceUsd: string | null;
+  readonly feeUsd: string;
+  readonly reasonCode: ReasonCode;
+  readonly reasonText: string;
+  readonly decisionTime: Timestamp;
+  readonly fillTime: Timestamp | null;
+}
+
+/**
+ * One marked equity observation at a decision bar close.
+ *
+ * `drawdownPct` is measured against the running equity peak at or before this
+ * bar, so it is never negative. All money values are 2-decimal USD strings.
+ */
+export interface EquityPoint {
+  readonly clockTime: Timestamp;
+  readonly equityUsd: string;
+  readonly cashUsd: string;
+  readonly positionsValueUsd: string;
+  readonly drawdownPct: string;
+}
+
+/**
+ * Input to one deterministic paper run.
+ *
+ * `initialCapitalUsd` is optional because the approved $1,000 paper capital is
+ * a default; a caller may supply a different starting balance.
+ */
+export interface PaperRunInput {
+  readonly runId: string;
+  readonly seed: number;
+  readonly configVersion: string;
+  readonly dataSnapshotId: string;
+  readonly tokenIds: readonly string[];
+  readonly candles: readonly Candle[];
+  readonly settings: SandboxDecisionSettings;
+  readonly paper: PaperRunSettings;
+  readonly initialState?: EngineState;
+  readonly initialCapitalUsd?: string;
+}
+
+/**
+ * Complete result of one paper run.
+ *
+ * `eventCount`/`eventHash` cover the whole supplied log (decision engine plus
+ * host), and the ledger is the final snapshot after the last bar.
+ */
+export interface PaperRunResult {
+  readonly config: PaperRunConfig;
+  readonly ledger: PaperLedgerState;
+  readonly state: EngineState;
+  readonly intents: readonly IntentRecord[];
+  readonly equityCurve: readonly EquityPoint[];
+  readonly eventCount: number;
+  readonly eventHash: string;
 }
