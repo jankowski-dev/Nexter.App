@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { errorEnvelopeSchema, healthResponseSchema, moneySchema } from './index';
+import {
+  errorEnvelopeSchema,
+  healthResponseSchema,
+  moneySchema,
+  sandboxCoverageSchema,
+  sandboxTokenSchema,
+} from './index';
 
 describe('contracts', () => {
   it('accepts decimal money strings', () => {
@@ -34,5 +40,10 @@ describe('contracts', () => {
     });
 
     expect(parsed.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('exports the sandbox contracts from the index', () => {
+    expect(typeof sandboxTokenSchema.parse).toBe('function');
+    expect(typeof sandboxCoverageSchema.parse).toBe('function');
   });
 });
