@@ -21,6 +21,7 @@ const SANDBOX_TABLES = [
   'sandbox_equity_points',
   'sandbox_intents',
   'sandbox_reports',
+  'sandbox_replays',
 ];
 
 const SANDBOX_INDEXES = [
@@ -41,6 +42,9 @@ const SANDBOX_INDEXES = [
   'sandbox_intents_pk',
   'sandbox_intents_run_decision_idx',
   'sandbox_reports_pk',
+  'sandbox_replays_user_created_idx',
+  'sandbox_replays_status_queued_idx',
+  'sandbox_replays_user_archived_idx',
 ];
 
 const EXPECTED_NUMERICS: Array<[string, string, number, number]> = [
@@ -54,6 +58,7 @@ const EXPECTED_NUMERICS: Array<[string, string, number, number]> = [
   ['sandbox_ledger_entries', 'cash_after_usd', 18, 2],
   ['sandbox_intents', 'requested_amount', 38, 8],
   ['sandbox_intents', 'filled_usd', 18, 2],
+  ['sandbox_replays', 'initial_capital_usd', 18, 2],
 ];
 
 describe.runIf(canRun)('sandbox stage 2 schema', () => {
@@ -131,6 +136,26 @@ describe.runIf(canRun)('sandbox stage 2 schema', () => {
     expect(columns.has('sandbox_positions.entry_intent_id')).toBe(true);
   });
 
+  it('stores the replay candle snapshot as bytea with text hashes', async () => {
+    const result = await db.execute(sql`
+      select column_name, data_type
+      from information_schema.columns
+      where table_schema = 'public' and table_name = 'sandbox_replays'
+    `);
+    const columns = new Map(
+      (result.rows as Array<{ column_name: string; data_type: string }>).map((row) => [
+        row.column_name,
+        row.data_type,
+      ]),
+    );
+
+    expect(columns.get('candle_snapshot')).toBe('bytea');
+    expect(columns.get('candle_snapshot_hash')).toBe('text');
+    expect(columns.get('report_hash')).toBe('text');
+    expect(columns.get('event_hash')).toBe('text');
+    expect(columns.get('data_snapshot_id')).toBe('text');
+  });
+
   it('gives the app role no DELETE on any sandbox table', async () => {
     const role = await db.execute(sql`select 1 from pg_roles where rolname = 'nexter_app'`);
     // CI provisions this role before the test step; a missing role means the
@@ -158,6 +183,12 @@ describe.runIf(canRun)('sandbox stage 2 schema', () => {
       .sort();
     expect(tokenPrivileges).toEqual(['INSERT', 'SELECT', 'UPDATE']);
 
+    const replayPrivileges = rows
+      .filter((row) => row.table_name === 'sandbox_replays')
+      .map((row) => row.privilege_type)
+      .sort();
+    expect(replayPrivileges).toEqual(['INSERT', 'SELECT', 'UPDATE']);
+
     const effective = await db.execute(sql`
       select
         has_table_privilege('nexter_app', 'public.sandbox_events', 'select') as event_select,
@@ -165,7 +196,11 @@ describe.runIf(canRun)('sandbox stage 2 schema', () => {
         has_table_privilege('nexter_app', 'public.sandbox_events', 'update') as event_update,
         has_table_privilege('nexter_app', 'public.sandbox_events', 'delete') as event_delete,
         has_table_privilege('nexter_app', 'public.sandbox_tokens', 'update') as token_update,
-        has_table_privilege('nexter_app', 'public.sandbox_tokens', 'delete') as token_delete
+        has_table_privilege('nexter_app', 'public.sandbox_tokens', 'delete') as token_delete,
+        has_table_privilege('nexter_app', 'public.sandbox_replays', 'select') as replay_select,
+        has_table_privilege('nexter_app', 'public.sandbox_replays', 'insert') as replay_insert,
+        has_table_privilege('nexter_app', 'public.sandbox_replays', 'update') as replay_update,
+        has_table_privilege('nexter_app', 'public.sandbox_replays', 'delete') as replay_delete
     `);
     expect(effective.rows[0]).toEqual({
       event_select: true,
@@ -174,6 +209,10 @@ describe.runIf(canRun)('sandbox stage 2 schema', () => {
       event_delete: false,
       token_update: true,
       token_delete: false,
+      replay_select: true,
+      replay_insert: true,
+      replay_update: true,
+      replay_delete: false,
     });
   });
 });
