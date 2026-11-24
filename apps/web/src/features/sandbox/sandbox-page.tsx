@@ -1,60 +1,33 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/ui/states';
 import { PageHeader } from '@/components/ui/page-header';
 import { TabGroup } from '@/components/ui/list-toolbar';
 import { toRussianError } from '@/lib/error-messages';
+import { SandboxDashboard } from './sandbox-dashboard';
+import { SandboxJournal } from './sandbox-journal';
+import { SandboxReports } from './sandbox-reports';
 import { SandboxRunsTab } from './sandbox-runs-tab';
-import { useSandboxStatus } from './sandbox-hooks';
+import { useSandboxOverview, useSandboxRuns, useSandboxStatus } from './sandbox-hooks';
 import {
-  SANDBOX_PATH,
-  sandboxHashForTab,
-  sandboxTabFromHash,
-  sandboxTabs,
-  type SandboxTab,
-} from './sandbox-tabs';
-import { useEffect, useState } from 'react';
-
-const placeholderCopy: Record<
-  Exclude<SandboxTab, 'runs'>,
-  { title: string; description: string }
-> = {
-  overview: {
-    title: 'Дашборд запуска',
-    description:
-      'Капитал, P&L, просадка, позиции, режимы токенов и свежесть данных активного запуска появятся в следующем шаге.',
-  },
-  journal: {
-    title: 'Журнал',
-    description:
-      'События, интенты, сделки, проверки риска и причины «почему не купили» появятся в следующем шаге.',
-  },
-  reports: {
-    title: 'Отчёты',
-    description:
-      'Скачивание JSON/Markdown и сводные карточки отчёта live-paper появятся в следующем шаге.',
-  },
-};
-
-function SandboxPlaceholder({ tab }: { tab: Exclude<SandboxTab, 'runs'> }) {
-  const copy = placeholderCopy[tab];
-
-  return (
-    <Card className="border-dashed bg-zinc-50">
-      <CardTitle>{copy.title}</CardTitle>
-      <CardDescription>{copy.description}</CardDescription>
-      <p className="mt-3 inline-flex rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-500">
-        Будет в следующем шаге
-      </p>
-    </Card>
-  );
-}
+  sandboxDefaultRunId,
+  sandboxMergeRuns,
+  sandboxRunIdFromSearch,
+  sandboxUrlForSelection,
+} from './sandbox-selection';
+import { sandboxTabFromHash, sandboxTabs, type SandboxTab } from './sandbox-tabs';
+import { useEffect, useMemo, useState } from 'react';
 
 export function SandboxPage() {
   const status = useSandboxStatus();
+  const enabled = status.data?.enabled === true;
+  const overview = useSandboxOverview(enabled);
+  const runsQuery = useSandboxRuns(true, enabled);
   const [tab, setTab] = useState<SandboxTab>(() =>
     sandboxTabFromHash(typeof window === 'undefined' ? undefined : window.location.hash),
+  );
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : sandboxRunIdFromSearch(window.location.search),
   );
 
   useEffect(() => {
@@ -65,9 +38,27 @@ export function SandboxPage() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  const allRuns = useMemo(
+    () => sandboxMergeRuns(overview.data?.activeRuns ?? [], runsQuery.data?.runs ?? []),
+    [overview.data?.activeRuns, runsQuery.data?.runs],
+  );
+  // No `?run=` means the dashboard/журнал/отчёты open the first active run.
+  const effectiveRunId = selectedRunId ?? sandboxDefaultRunId(allRuns);
+
   function changeTab(next: SandboxTab): void {
     setTab(next);
-    window.history.replaceState(null, '', `${SANDBOX_PATH}${sandboxHashForTab(next)}`);
+    window.history.replaceState(null, '', sandboxUrlForSelection(next, effectiveRunId));
+  }
+
+  function selectRun(runId: string): void {
+    setSelectedRunId(runId);
+    window.history.replaceState(null, '', sandboxUrlForSelection(tab, runId));
+  }
+
+  function openRun(runId: string): void {
+    setSelectedRunId(runId);
+    setTab('overview');
+    window.history.replaceState(null, '', sandboxUrlForSelection('overview', runId));
   }
 
   const header = (
@@ -116,6 +107,13 @@ export function SandboxPage() {
     );
   }
 
+  const sharedProps = {
+    runs: allRuns,
+    selectedRunId: effectiveRunId,
+    onSelectRun: selectRun,
+    onChangeTab: changeTab,
+  };
+
   return (
     <div className="space-y-6">
       {header}
@@ -125,7 +123,12 @@ export function SandboxPage() {
         onChange={changeTab}
         ariaLabel="Разделы песочницы"
       />
-      {tab === 'runs' ? <SandboxRunsTab /> : <SandboxPlaceholder tab={tab} />}
+      {tab === 'overview' ? (
+        <SandboxDashboard {...sharedProps} selectedRunId={effectiveRunId} />
+      ) : null}
+      {tab === 'runs' ? <SandboxRunsTab onOpenRun={openRun} /> : null}
+      {tab === 'journal' ? <SandboxJournal {...sharedProps} /> : null}
+      {tab === 'reports' ? <SandboxReports {...sharedProps} /> : null}
     </div>
   );
 }

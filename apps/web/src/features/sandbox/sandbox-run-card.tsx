@@ -12,9 +12,10 @@ import {
 import { sandboxStatusLabels, sandboxStatusTones } from './sandbox-tabs';
 import type { SandboxRunSummary } from '@nexter/contracts';
 
-export type SandboxRunAction = 'edit' | 'start' | 'pause' | 'resume' | 'stop' | 'archive';
+export type SandboxRunAction = 'open' | 'edit' | 'start' | 'pause' | 'resume' | 'stop' | 'archive';
 
 const actionLabels: Record<SandboxRunAction, string> = {
+  open: 'Открыть',
   edit: 'Изменить',
   start: 'Запустить',
   pause: 'Пауза',
@@ -99,6 +100,9 @@ export function SandboxRunCard({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => onAction(run, 'open')}>
+            {actionLabels.open}
+          </Button>
           {actions.map((action) => (
             <Button
               key={action}

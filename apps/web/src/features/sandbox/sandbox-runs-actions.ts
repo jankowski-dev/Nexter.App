@@ -10,6 +10,7 @@ export interface SandboxConfirmCopy {
 
 export type SandboxRunActionPlan =
   | { kind: 'edit' }
+  | { kind: 'open' }
   | {
       kind: 'control';
       action: 'start' | 'pause' | 'resume';
@@ -30,6 +31,8 @@ export type SandboxRunActionPlan =
  */
 export function planSandboxRunAction(action: SandboxRunAction): SandboxRunActionPlan {
   switch (action) {
+    case 'open':
+      return { kind: 'open' };
     case 'edit':
       return { kind: 'edit' };
     case 'start':
@@ -66,4 +69,39 @@ export function planSandboxRunAction(action: SandboxRunAction): SandboxRunAction
 /** A partial-coverage start needs an explicit owner confirmation before retry. */
 export function isSandboxPartialCoverageError(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'SANDBOX_COVERAGE_PARTIAL';
+}
+
+export type SandboxConfirm = (
+  options: SandboxConfirmCopy & { cancelLabel?: string },
+) => Promise<boolean>;
+
+/**
+ * Starts a run, offering the explicit reduced-confidence confirmation when the
+ * API rejects a partial 1h warmup. Shared by `Запуски` and the dashboard so both
+ * control surfaces behave identically.
+ */
+export async function startSandboxRunWithCoverage(input: {
+  start: () => Promise<unknown>;
+  startAllowPartial: () => Promise<unknown>;
+  confirm: SandboxConfirm;
+}): Promise<boolean> {
+  try {
+    await input.start();
+    return true;
+  } catch (error) {
+    if (!isSandboxPartialCoverageError(error)) throw error;
+  }
+
+  const accepted = await input.confirm({
+    title: 'История неполная',
+    description:
+      'Для выбранных токенов доступна не вся история 1h. Запуск начнётся с предупреждением и сниженной уверенностью режима.',
+    confirmLabel: 'Всё равно запустить',
+    cancelLabel: 'Отмена',
+    variant: 'primary',
+  });
+  if (!accepted) return false;
+
+  await input.startAllowPartial();
+  return true;
 }

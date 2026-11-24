@@ -33,19 +33,20 @@ export function isSandboxVisible(status: SandboxStatus | undefined): boolean {
 }
 
 /**
- * `Запуски` is the working tab while the dashboard, journal and reports arrive
- * in the next step, so an unhashed `/sandbox` opens it directly.
+ * `Обзор` is the default owner landing tab (design §10); `#runs`, `#journal`
+ * and `#reports` remain deep-linkable, and any unknown hash falls back to the
+ * dashboard.
  */
 export function sandboxTabFromHash(hash: string | undefined): SandboxTab {
   switch (hash) {
-    case '#overview':
-      return 'overview';
+    case '#runs':
+      return 'runs';
     case '#journal':
       return 'journal';
     case '#reports':
       return 'reports';
     default:
-      return 'runs';
+      return 'overview';
   }
 }
 

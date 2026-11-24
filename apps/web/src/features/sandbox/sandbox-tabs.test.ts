@@ -28,10 +28,11 @@ describe('sandbox navigation and tabs', () => {
     expect(isSandboxVisible({ enabled: true, version: 'v1' })).toBe(true);
   });
 
-  it('deep-links tabs through the hash and falls back to Запуски', () => {
-    expect(sandboxTabFromHash(undefined)).toBe('runs');
-    expect(sandboxTabFromHash('')).toBe('runs');
-    expect(sandboxTabFromHash('#unknown')).toBe('runs');
+  it('deep-links tabs through the hash and falls back to Обзор', () => {
+    expect(sandboxTabFromHash(undefined)).toBe('overview');
+    expect(sandboxTabFromHash('')).toBe('overview');
+    expect(sandboxTabFromHash('#unknown')).toBe('overview');
+    expect(sandboxTabFromHash('#runs')).toBe('runs');
     for (const tab of sandboxTabs) {
       expect(sandboxTabFromHash(sandboxHashForTab(tab.value))).toBe(tab.value);
     }

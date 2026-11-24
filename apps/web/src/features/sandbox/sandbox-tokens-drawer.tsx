@@ -18,8 +18,13 @@ import {
   validateSandboxTokenForm,
   type SandboxTokenFormValues,
 } from './sandbox-token-form';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SandboxChain, SandboxToken } from '@nexter/contracts';
+
+interface SandboxTokenNotice {
+  text: string;
+  tone: 'status' | 'error';
+}
 
 export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const tokens = useSandboxTokens(open);
@@ -29,7 +34,16 @@ export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose:
   const refreshToken = useRefreshSandboxToken();
   const [form, setForm] = useState<SandboxTokenFormValues>(sandboxTokenFormDefaults);
   const [errors, setErrors] = useState<string[]>([]);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<SandboxTokenNotice | null>(null);
+
+  // A closed drawer must not keep a stale success/error banner or a half-typed
+  // form; the next open starts from a clean state.
+  useEffect(() => {
+    if (open) return;
+    setForm(sandboxTokenFormDefaults());
+    setErrors([]);
+    setNotice(null);
+  }, [open]);
 
   const coverageByKey = useMemo(
     () => new Map((coverage.data?.tokens ?? []).map((entry) => [entry.tokenKey, entry])),
@@ -56,9 +70,15 @@ export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose:
     try {
       await createToken.mutateAsync(sandboxTokenCreatePayload(form));
       setForm(sandboxTokenFormDefaults());
-      setNotice('Токен добавлен. Он сразу доступен в настройках запуска.');
+      setNotice({
+        text: 'Токен добавлен. Он сразу доступен в настройках запуска.',
+        tone: 'status',
+      });
     } catch (error) {
-      setNotice(toRussianError(error, 'Не удалось добавить токен'));
+      setNotice({
+        text: toRussianError(error, 'Не удалось добавить токен'),
+        tone: 'error',
+      });
     }
   }
 
@@ -66,9 +86,15 @@ export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose:
     setNotice(null);
     try {
       await updateToken.mutateAsync({ tokenId: token.id, body: { enabled } });
-      setNotice(enabled ? `${token.symbol} включён.` : `${token.symbol} отключён.`);
+      setNotice({
+        text: enabled ? `${token.symbol} включён.` : `${token.symbol} отключён.`,
+        tone: 'status',
+      });
     } catch (error) {
-      setNotice(toRussianError(error, 'Не удалось изменить токен'));
+      setNotice({
+        text: toRussianError(error, 'Не удалось изменить токен'),
+        tone: 'error',
+      });
     }
   }
 
@@ -76,11 +102,15 @@ export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose:
     setNotice(null);
     try {
       const result = await refreshToken.mutateAsync(token.id);
-      setNotice(
-        `Загружено свечей: ${result.fetched}. Покрытие: ${sandboxCoverageLabels[result.coverage.status].toLowerCase()}.`,
-      );
+      setNotice({
+        text: `Загружено свечей: ${result.fetched}. Покрытие: ${sandboxCoverageLabels[result.coverage.status].toLowerCase()}.`,
+        tone: 'status',
+      });
     } catch (error) {
-      setNotice(toRussianError(error, 'Не удалось обновить историю токена'));
+      setNotice({
+        text: toRussianError(error, 'Не удалось обновить историю токена'),
+        tone: 'error',
+      });
     }
   }
 
@@ -206,10 +236,14 @@ export function SandboxTokensDrawer({ open, onClose }: { open: boolean; onClose:
 
         {notice ? (
           <div
-            role="status"
-            className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700"
+            role={notice.tone === 'error' ? 'alert' : 'status'}
+            className={`rounded-xl border px-4 py-3 text-sm ${
+              notice.tone === 'error'
+                ? 'border-red-200 bg-red-50 text-red-700'
+                : 'border-zinc-200 bg-zinc-50 text-zinc-700'
+            }`}
           >
-            {notice}
+            {notice.text}
           </div>
         ) : null}
 

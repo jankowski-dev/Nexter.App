@@ -64,7 +64,7 @@ describe('sandbox token list', () => {
     expect(html).toContain('Alpha');
     expect(html).toContain('BSC');
     expect(html).toContain(tokenKey);
-    expect(html).toContain('История неполная');
+    expect(html).toContain('Частично');
     expect(html).toContain('1200 из 4320');
     expect(html).toContain('Включён');
     expect(html).toContain('Отключить AAA');
@@ -75,6 +75,37 @@ describe('sandbox token list', () => {
     const html = render({ tokens: [token] });
     expect(html).toContain('Покрытие неизвестно');
     expect(html).not.toContain('История полная');
+  });
+
+  it('never shows a green full-history badge for synthetic, stale or partial data', () => {
+    const synthetic = render({
+      tokens: [token],
+      coverageByKey: new Map([[tokenKey, { ...coverage, status: 'ok', synthetic: true }]]),
+    });
+    expect(synthetic).toContain('Синтетика');
+    expect(synthetic).not.toContain('История полная');
+
+    const stale = render({
+      tokens: [token],
+      coverageByKey: new Map([[tokenKey, { ...coverage, status: 'ok', stale: true }]]),
+    });
+    expect(stale).toContain('Устарело');
+    expect(stale).not.toContain('История полная');
+
+    const partial = render({
+      tokens: [token],
+      coverageByKey: new Map([[tokenKey, coverage]]),
+    });
+    expect(partial).toContain('Частично');
+    expect(partial).not.toContain('История полная');
+  });
+
+  it('shows full history only for a complete, fresh, real series', () => {
+    const html = render({
+      tokens: [token],
+      coverageByKey: new Map([[tokenKey, { ...coverage, status: 'ok', gaps: 0, available: 4320 }]]),
+    });
+    expect(html).toContain('История полная');
   });
 
   it('shows loading and error states', () => {

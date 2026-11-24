@@ -49,6 +49,7 @@ describe('sandbox run card', () => {
     const html = render(run());
     expect(html).toContain('Изменить');
     expect(html).toContain('Запустить');
+    expect(html).toContain('Открыть');
     expect(html).not.toContain('Купить');
     expect(html).not.toContain('Добавить');
     expect(html).not.toContain('Пополнить');

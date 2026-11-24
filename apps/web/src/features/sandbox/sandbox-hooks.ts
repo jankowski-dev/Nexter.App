@@ -1,11 +1,19 @@
 import {
+  closeSandboxTrade,
   createSandboxRun,
   createSandboxToken,
   fetchSandboxCoverage,
+  fetchSandboxEquity,
+  fetchSandboxEvents,
+  fetchSandboxIntents,
+  fetchSandboxOverview,
+  fetchSandboxPositions,
+  fetchSandboxReport,
   fetchSandboxRun,
   fetchSandboxRuns,
   fetchSandboxStatus,
   fetchSandboxTokens,
+  fetchSandboxTrades,
   refreshSandboxToken,
   runSandboxLifecycle,
   sandboxQueryKeys,
@@ -19,7 +27,13 @@ import type {
   SandboxTokenCreateRequest,
   SandboxTokenUpdateRequest,
 } from '@nexter/contracts';
-import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 
 /** Invalidates every sandbox query after a mutation (list, detail and counts). */
 export function invalidateSandboxQueries(queryClient: QueryClient): Promise<void> {
@@ -79,6 +93,100 @@ export function useSandboxRunDetail(runId: string | null) {
     queryFn: () => fetchSandboxRun(runId as string),
     enabled: runId !== null,
     refetchOnWindowFocus: false,
+    // Live runs refresh every 30 s; draft, paused, terminal and archived runs
+    // never poll.
+    refetchInterval: (query) => {
+      const run = query.state.data;
+      return run && run.status === 'running' && run.archivedAt === null ? 30_000 : false;
+    },
+  });
+}
+
+export function useSandboxOverview(enabled = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.overview,
+    queryFn: fetchSandboxOverview,
+    enabled,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSandboxPositions(runId: string | null, live: boolean) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.positions(runId ?? 'none'),
+    queryFn: () => fetchSandboxPositions(runId as string),
+    enabled: runId !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: live ? 30_000 : false,
+  });
+}
+
+export function useSandboxEquity(runId: string | null, live: boolean, limit = 500, offset = 0) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.equity(runId ?? 'none', limit, offset),
+    queryFn: () => fetchSandboxEquity(runId as string, limit, offset),
+    enabled: runId !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: live ? 30_000 : false,
+  });
+}
+
+export function useSandboxTrades(runId: string | null, limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.trades(runId ?? 'none', limit, offset),
+    queryFn: () => fetchSandboxTrades(runId as string, limit, offset),
+    enabled: runId !== null,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSandboxIntents(runId: string | null, limit = 50, offset = 0) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.intents(runId ?? 'none', limit, offset),
+    queryFn: () => fetchSandboxIntents(runId as string, limit, offset),
+    enabled: runId !== null,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Event pages append by `afterSeq`. The query key includes the page size so a
+ * different limit never mixes pages; `refetchInterval` is disabled for
+ * non-running runs.
+ */
+export function useSandboxEvents(runId: string | null, live: boolean, limit = 200) {
+  return useInfiniteQuery({
+    queryKey: sandboxQueryKeys.events(runId ?? 'none', limit),
+    queryFn: ({ pageParam }) =>
+      fetchSandboxEvents(runId as string, {
+        afterSeq: pageParam ?? undefined,
+        limit,
+      }),
+    initialPageParam: null as number | null,
+    getNextPageParam: (last) => (last.hasMore ? (last.nextAfterSeq ?? undefined) : undefined),
+    enabled: runId !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: live ? 30_000 : false,
+  });
+}
+
+export function useSandboxReport(runId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.report(runId ?? 'none'),
+    queryFn: () => fetchSandboxReport(runId as string),
+    enabled: runId !== null && enabled,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+export function useCloseSandboxTrade() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { runId: string; tokenId: string }) =>
+      closeSandboxTrade(input.runId, input.tokenId),
+    onSuccess: () => invalidateSandboxQueries(queryClient),
   });
 }
 

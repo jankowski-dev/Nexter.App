@@ -16,11 +16,24 @@ export const sandboxCoverageLabels: Record<SandboxCoverage['status'], string> = 
   missing: 'Истории нет',
 };
 
-const coverageTone: Record<SandboxCoverage['status'], 'success' | 'warning' | 'danger'> = {
-  ok: 'success',
-  partial: 'warning',
-  missing: 'danger',
-};
+export interface SandboxCoverageBadge {
+  label: string;
+  tone: 'neutral' | 'success' | 'warning' | 'danger';
+}
+
+/**
+ * Coverage badge for the token list. A green "История полная" is only honest
+ * when the series is complete, non-synthetic and fresh; otherwise the badge
+ * names the actual problem.
+ */
+export function sandboxCoverageBadge(coverage: SandboxCoverage | undefined): SandboxCoverageBadge {
+  if (!coverage) return { label: 'Покрытие неизвестно', tone: 'neutral' };
+  if (coverage.status === 'missing') return { label: 'Истории нет', tone: 'danger' };
+  if (coverage.stale) return { label: 'Устарело', tone: 'warning' };
+  if (coverage.synthetic) return { label: 'Синтетика', tone: 'warning' };
+  if (coverage.status === 'partial') return { label: 'Частично', tone: 'warning' };
+  return { label: 'История полная', tone: 'success' };
+}
 
 export function SandboxTokenRow({
   token,
@@ -37,6 +50,8 @@ export function SandboxTokenRow({
   onToggle: (enabled: boolean) => void;
   onRefresh: () => void;
 }) {
+  const badge = sandboxCoverageBadge(coverage);
+
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
@@ -44,13 +59,7 @@ export function SandboxTokenRow({
           <span className="font-medium text-zinc-900">{token.symbol}</span>
           <span className="text-sm text-zinc-500">{token.name}</span>
           <Badge tone="neutral">{sandboxChainLabels[token.chain]}</Badge>
-          {coverage ? (
-            <Badge tone={coverageTone[coverage.status]}>
-              {sandboxCoverageLabels[coverage.status]}
-            </Badge>
-          ) : (
-            <Badge tone="neutral">Покрытие неизвестно</Badge>
-          )}
+          <Badge tone={badge.tone}>{badge.label}</Badge>
         </div>
         <code className="mt-1 block break-all text-[11px] text-zinc-500">{token.tokenKey}</code>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">

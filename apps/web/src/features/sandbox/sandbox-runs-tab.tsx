@@ -10,7 +10,7 @@ import { SandboxRunCard, type SandboxRunAction } from './sandbox-run-card';
 import { SandboxRunDrawer } from './sandbox-run-drawer';
 import { SandboxTokensDrawer } from './sandbox-tokens-drawer';
 import { useSandboxLifecycle, useSandboxRuns } from './sandbox-hooks';
-import { isSandboxPartialCoverageError, planSandboxRunAction } from './sandbox-runs-actions';
+import { planSandboxRunAction, startSandboxRunWithCoverage } from './sandbox-runs-actions';
 import { sandboxStatusLabels } from './sandbox-tabs';
 import { useState } from 'react';
 import type { SandboxRunStatus, SandboxRunSummary } from '@nexter/contracts';
@@ -30,11 +30,11 @@ const actionNotices: Partial<Record<SandboxRunAction, string>> = {
   start: 'Запуск стартовал: первое решение появится на следующем закрытом баре 1h.',
   pause: 'Запуск приостановлен: открытые позиции остаются отмеченными.',
   resume: 'Запуск продолжен со следующего закрытого бара 1h.',
-  stop: 'Запуск остановлен: состояние зафиксировано по последнему закрытому бару.',
+  stop: 'Запуск остановлен. Итоговый отчёт доступен в разделе «Отчёты».',
   archive: 'Запуск отправлен в архив.',
 };
 
-export function SandboxRunsTab() {
+export function SandboxRunsTab({ onOpenRun }: { onOpenRun?: (runId: string) => void }) {
   const confirm = useConfirm();
   const [includeArchived, setIncludeArchived] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -65,33 +65,14 @@ export function SandboxRunsTab() {
     setDrawerOpen(true);
   }
 
-  async function startWithCoverageConfirmation(run: SandboxRunSummary): Promise<boolean> {
-    try {
-      await lifecycle.mutateAsync({ runId: run.id, action: 'start' });
-      return true;
-    } catch (error) {
-      if (!isSandboxPartialCoverageError(error)) {
-        throw error;
-      }
-
-      const accepted = await confirm({
-        title: 'История неполная',
-        description:
-          'Для выбранных токенов доступна не вся история 1h. Запуск начнётся с предупреждением и сниженной уверенностью режима.',
-        confirmLabel: 'Всё равно запустить',
-        cancelLabel: 'Отмена',
-        variant: 'primary',
-      });
-      if (!accepted) return false;
-
-      await lifecycle.mutateAsync({ runId: run.id, action: 'start', allowPartial: true });
-      return true;
-    }
-  }
-
   async function handleAction(run: SandboxRunSummary, action: SandboxRunAction): Promise<void> {
     setNotice(null);
     const plan = planSandboxRunAction(action);
+
+    if (plan.kind === 'open') {
+      onOpenRun?.(run.id);
+      return;
+    }
 
     if (plan.kind === 'edit') {
       openEdit(run.id);
@@ -105,7 +86,12 @@ export function SandboxRunsTab() {
 
     try {
       if (plan.action === 'start') {
-        const started = await startWithCoverageConfirmation(run);
+        const started = await startSandboxRunWithCoverage({
+          start: () => lifecycle.mutateAsync({ runId: run.id, action: 'start' }),
+          startAllowPartial: () =>
+            lifecycle.mutateAsync({ runId: run.id, action: 'start', allowPartial: true }),
+          confirm,
+        });
         if (!started) return;
       } else {
         await lifecycle.mutateAsync({ runId: run.id, action: plan.action });
@@ -212,7 +198,10 @@ export function SandboxRunsTab() {
         open={drawerOpen}
         runId={drawerRunId}
         onClose={() => setDrawerOpen(false)}
-        onManageTokens={() => setTokensOpen(true)}
+        onManageTokens={() => {
+          setDrawerOpen(false);
+          setTokensOpen(true);
+        }}
         onSaved={() => {
           setDrawerOpen(false);
           setNotice(
