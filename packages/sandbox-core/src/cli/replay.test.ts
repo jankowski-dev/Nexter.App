@@ -230,6 +230,13 @@ describe('parseReplayArgs', () => {
     expect(() => parseReplayArgs(['--file', 'a.jsonl', '--seed', '--out'])).toThrow(REPLAY_USAGE);
   });
 
+  it('rejects empty --out and --run-id values', () => {
+    expect(() => parseReplayArgs(['--file', 'a.jsonl', '--out', ''])).toThrow(REPLAY_USAGE);
+    expect(() => parseReplayArgs(['--file', 'a.jsonl', '--out', '   '])).toThrow(REPLAY_USAGE);
+    expect(() => parseReplayArgs(['--file', 'a.jsonl', '--run-id', ''])).toThrow(REPLAY_USAGE);
+    expect(() => parseReplayArgs(['--file', 'a.jsonl', '--run-id', '  '])).toThrow(REPLAY_USAGE);
+  });
+
   it('rejects a non-integer or non-numeric seed', () => {
     for (const seed of ['abc', '1.5', '', '9007199254740992']) {
       expect(() => parseReplayArgs(['--file', 'a.jsonl', '--seed', seed])).toThrow(REPLAY_USAGE);

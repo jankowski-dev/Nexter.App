@@ -6,6 +6,7 @@ import { makeSeries } from '../fixtures.test-helpers';
 import { Reason } from '../reason-codes';
 import type { Regime, StrategyKey } from '../types';
 import {
+  STRATEGY_KEYS,
   createStrategySet,
   eligibleStrategyFor,
   rangeReversionStrategy,
@@ -50,6 +51,20 @@ describe('eligibleStrategyFor', () => {
     for (const regime of ALL_REGIMES) {
       expect(eligibleStrategyFor(regime)).toBe(expected[regime]);
     }
+  });
+});
+
+describe('STRATEGY_KEYS', () => {
+  it('lists every registry key once in sorted order', () => {
+    expect(STRATEGY_KEYS).toEqual(['range_reversion', 'recovery', 'trend_pullback']);
+    expect([...STRATEGY_KEYS]).toEqual([...STRATEGY_KEYS].sort());
+    expect(new Set(STRATEGY_KEYS).size).toBe(STRATEGY_KEYS.length);
+  });
+
+  it('stays in sync with createStrategySet', () => {
+    const registryKeys = Object.keys(createStrategySet(DEFAULT_STRATEGY_SETTINGS)) as StrategyKey[];
+
+    expect([...registryKeys].sort()).toEqual([...STRATEGY_KEYS]);
   });
 });
 

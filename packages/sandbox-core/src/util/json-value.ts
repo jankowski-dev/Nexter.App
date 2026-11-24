@@ -40,7 +40,15 @@ function walk(value: unknown, path: string, seen: WeakSet<object>): void {
   seen.add(container);
   try {
     if (Array.isArray(container)) {
-      container.forEach((item, index) => walk(item, `${path}[${index}]`, seen));
+      // `forEach`/`map` skip holes, which would let a sparse array through as if
+      // the missing slots were absent. JSON serializes a hole as `null`, so walk
+      // by index and reject the hole explicitly.
+      for (let index = 0; index < container.length; index += 1) {
+        if (!(index in container)) {
+          throw new NonJsonValueError(`${path}[${index}]`, 'sparse array hole');
+        }
+        walk(container[index], `${path}[${index}]`, seen);
+      }
       return;
     }
     const prototype = Object.getPrototypeOf(container) as object | null;

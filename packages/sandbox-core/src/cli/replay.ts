@@ -44,7 +44,9 @@ export function parseReplayArgs(argv: readonly string[]): ReplayArgs {
     const index = tokens.indexOf(name);
     if (index === -1) return undefined;
     const value = tokens[index + 1];
-    if (value === undefined || value.startsWith('--')) throw new Error(REPLAY_USAGE);
+    if (value === undefined || value.startsWith('--') || value.trim() === '') {
+      throw new Error(REPLAY_USAGE);
+    }
     return value;
   };
 

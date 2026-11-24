@@ -17,4 +17,30 @@ describe('Reason', () => {
   it('is frozen', () => {
     expect(Object.isFrozen(Reason)).toBe(true);
   });
+
+  it('reserves the ranking, execution, ledger and paper families', () => {
+    const codes = [
+      'RANK_COOLDOWN',
+      'RANK_BLOCKED',
+      'FILL_FILLED',
+      'FILL_PARTIAL',
+      'FILL_REJECTED',
+      'FILL_EXPIRED',
+      'FILL_NO_DATA',
+      'FILL_INSUFFICIENT_CASH',
+      'FILL_LIQUIDITY',
+      'FILL_POSITION_EXISTS',
+      'FILL_NO_POSITION',
+      'FILL_DUPLICATE',
+      'LEDGER_BUY',
+      'LEDGER_SELL',
+      'PAPER_RUN_STARTED',
+      'PAPER_RUN_COMPLETED',
+      'COOLDOWN_AFTER_STOP',
+    ] as const;
+
+    for (const code of codes) {
+      expect(Reason[code]).toBe(code);
+    }
+  });
 });

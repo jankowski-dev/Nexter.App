@@ -43,7 +43,7 @@ export const recoveryStrategy: StrategyDefinition<RecoveryParams> = {
     const close = prices.length > 0 ? (prices[prices.length - 1] as number) : null;
     const fast = sma(prices, params.fastPeriod);
 
-    if (close === null || fast === null) {
+    if (close === null || fast === null || !Number.isFinite(fast)) {
       return signal(
         'hold',
         Reason.STRATEGY_NO_DATA,
@@ -88,6 +88,16 @@ export const recoveryStrategy: StrategyDefinition<RecoveryParams> = {
     }
 
     const avgCost = Number(position.avgCostUsd);
+    if (!Number.isFinite(avgCost) || avgCost <= 0) {
+      return signal(
+        'hold',
+        Reason.STRATEGY_NO_DATA,
+        'Recovery: position average cost (avgCostUsd) is not a finite positive number',
+        ctx.state,
+        params.riskWeight,
+      );
+    }
+
     const stopLevel = avgCost * (1 - params.stopPct / 100);
     if (close <= stopLevel) {
       return signal(

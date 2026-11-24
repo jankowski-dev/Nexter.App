@@ -99,6 +99,25 @@ describe('MemoryEventLog', () => {
     expect(event.reasonCode).toBe('FAMILY_REASON');
   });
 
+  it.each([
+    { module: 'execution', eventType: 'execution.filled' },
+    { module: 'ledger', eventType: 'ledger.entry' },
+    { module: 'run', eventType: 'paper.run_started' },
+  ] as const)('requires a reasonCode for $eventType', async ({ module, eventType }) => {
+    const log = new MemoryEventLog();
+    await expect(log.append({ ...base, module, eventType, severity: 'info' })).rejects.toThrow(
+      /reasonCode/,
+    );
+    const event = await log.append({
+      ...base,
+      module,
+      eventType,
+      severity: 'info',
+      reasonCode: 'FAMILY_REASON',
+    });
+    expect(event.reasonCode).toBe('FAMILY_REASON');
+  });
+
   it('rejects a decision event without alternatives', async () => {
     const log = new MemoryEventLog();
     await expect(

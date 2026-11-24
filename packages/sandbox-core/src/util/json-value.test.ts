@@ -46,6 +46,24 @@ describe('assertJsonValue', () => {
     expect(() => assertJsonValue({ big: 1n })).toThrow(NonJsonValueError);
   });
 
+  it('rejects sparse array holes', () => {
+    const sparse: unknown[] = [];
+    sparse.length = 2;
+    sparse[1] = 1;
+
+    expect(() => assertJsonValue(sparse)).toThrow(NonJsonValueError);
+    expect(() => assertJsonValue(sparse)).toThrow(/sparse array hole/);
+    expect(() => assertJsonValue([1, 2])).not.toThrow();
+  });
+
+  it('reports a nested sparse array by path', () => {
+    const nested: unknown[] = [1];
+    nested.length = 3;
+    nested[2] = 3;
+
+    expect(() => assertJsonValue({ a: nested })).toThrow(/\$\.a\[1\]: sparse array hole/);
+  });
+
   it('rejects circular references', () => {
     const circular: Record<string, unknown> = { id: 'a' };
     circular.self = circular;

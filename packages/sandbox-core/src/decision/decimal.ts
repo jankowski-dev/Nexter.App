@@ -3,6 +3,12 @@ import Decimal from 'decimal.js';
 // One global configuration for the package: 28 significant digits is more than
 // enough for USD amounts and percentages, and half-up rounding matches the
 // way money is displayed and persisted elsewhere in Nexter.
+//
+// `Decimal.set` mutates the constructor shared by every importer in the process.
+// Stage 1C is a standalone headless package, so the global is intentional. If
+// the API ever imports this package, replace this call with a module-local
+// `Decimal.clone({ precision: 28, rounding: Decimal.ROUND_HALF_UP })` and use
+// the clone everywhere instead of changing the application-wide configuration.
 Decimal.set({ precision: 28, rounding: Decimal.ROUND_HALF_UP });
 
 const DECIMAL = /^\d+(\.\d+)?$/;
