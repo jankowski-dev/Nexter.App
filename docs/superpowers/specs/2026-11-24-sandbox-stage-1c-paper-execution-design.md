@@ -147,7 +147,7 @@ A buy is rejected if paying notional + fee would take cash below the Stage 1B ca
 When a sell fill's intent reason is a hard-stop reason (`TREND_PULLBACK_STOP`, `RANGE_REVERSION_STOP`, `RECOVERY_STOP`), the host sets:
 
 ```
-cooldownUntil = fill close time + cooldownHoursAfterStop * 3600_000
+cooldownUntil = fill time (bar open) + cooldownHoursAfterStop * 3600_000
 ```
 
 in the token's `EngineState`. The Stage 1B engine will see a `COOLDOWN` phase. This is the design-owner decision for Stage 1B finding F2: the sandbox may buy a pullback before a crash is confirmed, but after a stop it must wait 24h before re-entering the same token. The cooldown is an execution policy, not a strategy change; the strategy/regime behavior is unchanged.
@@ -235,7 +235,7 @@ The run fails if reconciliation returns discrepancies; tests assert a clean ledg
    c. Build the `PortfolioSnapshot` (positions with current marks) and call `DecisionEngine.decide` once with all token ids, the state, the portfolio, settings and `clockTime = T`.
    d. Queue `result.intents` for the next bar open; keep `result.state` (with host cooldown overlays).
    e. Append the decision engine's events; record the equity point.
-5. After the last bar: expire pending intents; mark the final portfolio; log `paper.run_completed` with final equity, fills, trades, event count/hash.
+5. After the last bar: expire pending intents; mark the final portfolio; log `paper.run_completed` with final equity, fills and trades. The result and report carry the whole-log event count and hash; the event cannot contain its own hash.
 6. Build the report and write `events.jsonl`, `report.json`, `report.md`; return the result.
 
 The loop is deterministic: bar times come from candles, no wall clock, no random, token ids sorted by code unit in the engine.
