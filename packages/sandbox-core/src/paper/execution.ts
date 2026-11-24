@@ -190,9 +190,12 @@ function rejectSell(
 /**
  * Plans a buy at the next bar open.
  *
- * The fill is `min(intent.sizeUsd, liquidityCapUsd)`, the fee is charged on the
- * filled notional, and the whole fill is rejected if its cost would take cash
- * below `equity * cashBufferPct / 100`. The unfilled remainder is not retried.
+ * The fill is `min(intent.sizeUsd, liquidityCapUsd)`, floored to cents so the
+ * emitted `filledUsd` never exceeds the exact cap. The fee is charged on that
+ * booked fill and rounded to cents; the cash-floor veto compares the booked
+ * values (`filledUsd + feeUsd`) against `cash - equity * cashBufferPct / 100`,
+ * because those strings are what the ledger will actually book. The unfilled
+ * remainder is not retried.
  */
 export function planBuyFill(input: BuyFillInput): BuyFillPlan {
   assertIntentSide(input.intent, input.candle, 'buy');
@@ -250,22 +253,15 @@ export function planBuyFill(input: BuyFillInput): BuyFillPlan {
     );
   }
 
+  // The ledger books the emitted 2-decimal strings, not the exact Decimal. Floor
+  // the fill to cents so the booked cost can never exceed the exact liquidity
+  // cap, then charge the fee on the booked fill and round that fee to cents. The
+  // cash-floor check below uses exactly these booked values; checking the exact
+  // values would let rounding push the booked cost (or cash itself) negative.
   const fillUsd = minDecimal(positiveRequested, pricing.liquidityCapUsd);
-  const fee = fillUsd.times(input.settings.feeBps).div(BPS);
-  const cashFloor = equity.times(input.cashBufferPct).div(HUNDRED);
-  const available = cash.minus(cashFloor);
-  if (fillUsd.plus(fee).greaterThan(available)) {
-    return rejectBuy(
-      input,
-      positiveRequested,
-      pricing,
-      Reason.FILL_INSUFFICIENT_CASH,
-      `Buy rejected: ${usd(fillUsd)} USD plus ${usd(fee)} USD fee exceeds ${usd(available)} USD available above the cash floor`,
-    );
-  }
-
-  const filledAmount = units(fillUsd.div(pricing.fillPrice));
-  if (filledAmount === ZERO_UNITS) {
+  const bookedFillStr = fillUsd.toFixed(2, Decimal.ROUND_DOWN);
+  const bookedFill = new Decimal(bookedFillStr);
+  if (bookedFillStr === ZERO_USD) {
     return rejectBuy(
       input,
       positiveRequested,
@@ -275,21 +271,47 @@ export function planBuyFill(input: BuyFillInput): BuyFillPlan {
     );
   }
 
-  const partial = fillUsd.lessThan(positiveRequested);
+  const bookedFeeStr = usd(bookedFill.times(input.settings.feeBps).div(BPS));
+  const bookedFee = new Decimal(bookedFeeStr);
+  const cashFloor = equity.times(input.cashBufferPct).div(HUNDRED);
+  const available = cash.minus(cashFloor);
+  if (bookedFill.plus(bookedFee).greaterThan(available)) {
+    return rejectBuy(
+      input,
+      positiveRequested,
+      pricing,
+      Reason.FILL_INSUFFICIENT_CASH,
+      `Buy rejected: ${bookedFillStr} USD plus ${bookedFeeStr} USD fee exceeds ${available.toFixed(2, Decimal.ROUND_DOWN)} USD available above the cash floor`,
+    );
+  }
+
+  const filledAmount = units(bookedFill.div(pricing.fillPrice));
+  if (filledAmount === ZERO_UNITS) {
+    return rejectBuy(
+      input,
+      positiveRequested,
+      pricing,
+      Reason.FILL_LIQUIDITY,
+      `Buy rejected: the liquidity-capped fill for ${input.intent.tokenId} rounds to zero units`,
+    );
+  }
+
+  const requestedUsd = usd(positiveRequested);
+  const partial = bookedFill.lessThan(requestedUsd);
   return {
     status: partial ? 'partial' : 'filled',
     tokenId: input.intent.tokenId,
     intentId: input.intent.intentId,
-    requestedUsd: usd(positiveRequested),
-    filledUsd: usd(fillUsd),
-    unfilledUsd: usd(positiveRequested.minus(fillUsd)),
+    requestedUsd,
+    filledUsd: bookedFillStr,
+    unfilledUsd: usd(positiveRequested.minus(bookedFill)),
     amount: filledAmount,
     priceUsd: pricing.exactPrice,
-    feeUsd: usd(fee),
+    feeUsd: bookedFeeStr,
     reasonCode: partial ? Reason.FILL_PARTIAL : Reason.FILL_FILLED,
     reasonText: partial
-      ? `Partially bought ${usd(fillUsd)} of ${usd(positiveRequested)} USD of ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`
-      : `Bought ${usd(fillUsd)} USD of ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open`,
+      ? `Partially bought ${bookedFillStr} of ${requestedUsd} USD of ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`
+      : `Bought ${bookedFillStr} USD of ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open`,
   };
 }
 
@@ -297,8 +319,11 @@ export function planBuyFill(input: BuyFillInput): BuyFillPlan {
  * Plans a sell at the next bar open.
  *
  * The fill is `min(intent.amount, positionAmount, liquidityCapUsd / fillPrice)`.
- * A zero fill is rejected as `FILL_LIQUIDITY`; a smaller-than-requested fill is
- * an IOC partial and the position keeps the remainder.
+ * The booked notional is rounded once (half-up); the fee is derived from the
+ * booked notional and proceeds are `bookedNotional - bookedFee`, so the emitted
+ * cents satisfy `notionalUsd - feeUsd = proceedsUsd` by construction. A zero
+ * fill is rejected as `FILL_LIQUIDITY`; a smaller-than-requested fill is an IOC
+ * partial and the position keeps the remainder.
  */
 export function planSellFill(input: SellFillInput): SellFillPlan {
   assertIntentSide(input.intent, input.candle, 'sell');
@@ -368,34 +393,44 @@ export function planSellFill(input: SellFillInput): SellFillPlan {
     );
   }
 
-  const notional = fillAmount.times(pricing.fillPrice);
-  const fee = notional.times(input.settings.feeBps).div(BPS);
-  const proceeds = notional.minus(fee);
-  if (proceeds.lessThan(ZERO)) {
+  // Round the notional once, then derive the fee from the booked notional and
+  // proceeds as `bookedNotional - bookedFee`. Rounding all three independently
+  // would break `notional - fee = proceeds` by a cent in the report/ledger.
+  const bookedNotionalStr = usd(fillAmount.times(pricing.fillPrice));
+  const bookedNotional = new Decimal(bookedNotionalStr);
+  const bookedFeeStr = usd(bookedNotional.times(input.settings.feeBps).div(BPS));
+  const bookedFee = new Decimal(bookedFeeStr);
+  const bookedProceeds = bookedNotional.minus(bookedFee);
+  // Defensive: with a fee below 100% this cannot go negative, but the guard keeps
+  // a pathological configuration from booking a negative payout.
+  if (bookedProceeds.lessThan(ZERO)) {
     return rejectSell(
       input,
       positiveRequested,
       pricing,
       Reason.FILL_LIQUIDITY,
-      'Sell rejected: the fee exceeds the fill notional',
+      'Sell rejected: the booked fee exceeds the booked notional',
     );
   }
 
-  const partial = fillAmount.lessThan(positiveRequested);
+  const requestedAmount = units(positiveRequested);
+  // Compare the displayed 8-decimal amounts so a sub-8-decimal remainder cannot
+  // produce `partial` with an all-zero `unfilledAmount`.
+  const partial = new Decimal(filledAmount).lessThan(requestedAmount);
   return {
     status: partial ? 'partial' : 'filled',
     tokenId: input.intent.tokenId,
     intentId: input.intent.intentId,
-    requestedAmount: units(positiveRequested),
+    requestedAmount,
     filledAmount,
-    unfilledAmount: units(positiveRequested.minus(fillAmount)),
+    unfilledAmount: units(new Decimal(requestedAmount).minus(filledAmount)),
     priceUsd: pricing.exactPrice,
-    notionalUsd: usd(notional),
-    feeUsd: usd(fee),
-    proceedsUsd: usd(proceeds),
+    notionalUsd: bookedNotionalStr,
+    feeUsd: bookedFeeStr,
+    proceedsUsd: bookedProceeds.toFixed(2),
     reasonCode: partial ? Reason.FILL_PARTIAL : Reason.FILL_FILLED,
     reasonText: partial
-      ? `Partially sold ${filledAmount} of ${units(positiveRequested)} ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`
+      ? `Partially sold ${filledAmount} of ${requestedAmount} ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`
       : `Sold ${filledAmount} ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open`,
   };
 }

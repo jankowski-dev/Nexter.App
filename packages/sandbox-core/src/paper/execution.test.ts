@@ -1,3 +1,4 @@
+import Decimal from 'decimal.js';
 import { describe, expect, it } from 'vitest';
 import { Reason } from '../decision/reason-codes';
 import {
@@ -92,6 +93,71 @@ describe('planBuyFill', () => {
       feeUsd: '0.00',
       reasonCode: Reason.FILL_INSUFFICIENT_CASH,
     });
+  });
+
+  it('rejects when the booked (rounded) cost breaks the cash floor', () => {
+    // Reviewer reproduction: the exact cost 202.505 passes, but the booked cost
+    // 202.00 + 0.51 = 202.51 exceeds the 202.506 USD available above the floor.
+    const plan = planBuyFill(
+      buyInput({
+        intent: makeIntent({ sizeUsd: '202' }),
+        candle: makeCandle({ open: '1', volumeUsd: '30000' }),
+        cashUsd: '302.50',
+        equityUsd: '999.94',
+      }),
+    );
+    expect(plan).toMatchObject({
+      status: 'rejected',
+      requestedUsd: '202.00',
+      filledUsd: '0.00',
+      unfilledUsd: '202.00',
+      amount: '0.00000000',
+      priceUsd: '1.00100000',
+      feeUsd: '0.00',
+      reasonCode: Reason.FILL_INSUFFICIENT_CASH,
+    });
+  });
+
+  it('fills when the booked cost exactly equals the available cash', () => {
+    const plan = planBuyFill(
+      buyInput({
+        intent: makeIntent({ sizeUsd: '100' }),
+        candle: makeCandle({ open: '1', volumeUsd: '100000' }),
+        cashUsd: '200.50',
+        equityUsd: '1002.50',
+      }),
+    );
+    // Floor = 1002.50 * 10% = 100.25; available = 200.50 - 100.25 = 100.25.
+    expect(plan).toMatchObject({
+      status: 'filled',
+      requestedUsd: '100.00',
+      filledUsd: '100.00',
+      unfilledUsd: '0.00',
+      priceUsd: '1.00100000',
+      amount: '99.90009990',
+      feeUsd: '0.25',
+      reasonCode: Reason.FILL_FILLED,
+    });
+  });
+
+  it('floors the booked fill to cents and keeps the USD fields additive', () => {
+    const plan = planBuyFill(
+      buyInput({
+        intent: makeIntent({ sizeUsd: '200.567' }),
+        cashUsd: '100000',
+        equityUsd: '100000',
+      }),
+    );
+    expect(plan).toMatchObject({
+      status: 'partial',
+      requestedUsd: '200.57',
+      filledUsd: '200.56',
+      unfilledUsd: '0.01',
+      amount: '2.00359640',
+      feeUsd: '0.50',
+      reasonCode: Reason.FILL_PARTIAL,
+    });
+    expect(new Decimal(plan.requestedUsd).minus(plan.filledUsd).toFixed(2)).toBe(plan.unfilledUsd);
   });
 
   it('applies the cash check after the liquidity cap', () => {
@@ -199,6 +265,48 @@ describe('planSellFill', () => {
       reasonCode: Reason.FILL_FILLED,
     });
     expect(plan.reasonText.length).toBeGreaterThan(0);
+  });
+
+  it('keeps notional - fee = proceeds on the emitted cents', () => {
+    // Reviewer reproduction: independent rounding gave 100.01 - 0.25 = 99.76
+    // only when proceeds is derived from the booked notional.
+    const plan = planSellFill(
+      sellInput({
+        intent: makeIntent({ side: 'sell', amount: '1', sizeUsd: '0' }),
+        candle: makeCandle({ open: '100.005', close: '50' }),
+        positionAmount: '1',
+        settings: makeSettings({ slippageBps: 0 }),
+      }),
+    );
+    expect(plan).toMatchObject({
+      status: 'filled',
+      requestedAmount: '1.00000000',
+      filledAmount: '1.00000000',
+      unfilledAmount: '0.00000000',
+      priceUsd: '100.00500000',
+      notionalUsd: '100.01',
+      feeUsd: '0.25',
+      proceedsUsd: '99.76',
+    });
+    expect(new Decimal(plan.notionalUsd).minus(plan.feeUsd).toFixed(2)).toBe(plan.proceedsUsd);
+  });
+
+  it('compares partial fills on the displayed 8-decimal amounts', () => {
+    const plan = planSellFill(
+      sellInput({
+        intent: makeIntent({ side: 'sell', amount: '1.000000004', sizeUsd: '0' }),
+        candle: makeCandle({ open: '100', close: '50' }),
+        positionAmount: '1.000000003',
+        settings: makeSettings({ slippageBps: 0 }),
+      }),
+    );
+    expect(plan).toMatchObject({
+      status: 'filled',
+      requestedAmount: '1.00000000',
+      filledAmount: '1.00000000',
+      unfilledAmount: '0.00000000',
+      reasonCode: Reason.FILL_FILLED,
+    });
   });
 
   it('uses the candle open, never the decision close', () => {
