@@ -95,7 +95,7 @@ export function SandboxRunCard({
             Просадка
           </div>
           <div className="font-mono text-sm tabular-nums text-zinc-700">
-            {formatPct(run.drawdownPct)}
+            {formatPct(run.drawdownPct).replace(/^[-+]/, '')}
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">

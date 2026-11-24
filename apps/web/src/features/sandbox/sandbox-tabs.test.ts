@@ -108,10 +108,20 @@ describe('sandbox coverage warnings', () => {
     expect(result.label).toBe('Истории нет');
   });
 
-  it('flags a selected token without coverage information', () => {
+  it('treats a selected token without coverage information as partial', () => {
     const result = sandboxCoverageWarnings([], ['bsc:0xaaa'], symbols);
-    expect(result.status).toBe('ok');
+    expect(result.status).toBe('partial');
     expect(result.warnings.join(' ')).toContain('AAA');
+    expect(result.label).toContain('потребует подтверждения');
+  });
+
+  it('treats an unavailable coverage query as partial', () => {
+    const result = sandboxCoverageWarnings([coverage({})], ['bsc:0xaaa'], symbols, {
+      coverageAvailable: false,
+    });
+    expect(result.status).toBe('partial');
+    expect(result.label).toBe('Покрытие неизвестно');
+    expect(result.warnings.join(' ')).toContain('Не удалось проверить покрытие');
   });
 
   it('reports a missing selection', () => {

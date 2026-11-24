@@ -40,6 +40,8 @@ describe('sandbox run card', () => {
     expect(html).toContain('Доходность');
     expect(html).toContain('Просадка');
     expect(html).toContain('+4,20%');
+    expect(html).toContain('3,52%');
+    expect(html).not.toContain('+3,52%');
     expect(html).toContain('2 токена');
   });
 
@@ -77,6 +79,16 @@ describe('sandbox run card', () => {
     const stopped = render(run({ status: 'stopped' }));
     expect(stopped).toContain('Остановлен');
     expect(stopped).toContain('В архив');
+  });
+
+  it('shows drawdown as an unsigned magnitude', () => {
+    const html = render(run({ drawdownPct: '3.5185' }));
+    expect(html).toContain('3,52%');
+    expect(html).not.toContain('+3,52%');
+
+    const negative = render(run({ drawdownPct: '-3.5185' }));
+    expect(negative).toContain('3,52%');
+    expect(negative).not.toContain('-3,52%');
   });
 
   it('marks archived rows read-only', () => {

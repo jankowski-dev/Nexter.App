@@ -6,6 +6,9 @@ import {
   sandboxRunSchema,
   sandboxRunsResponseSchema,
   sandboxStatusSchema,
+  sandboxTokenCreateRequestSchema,
+  sandboxTokenRefreshResponseSchema,
+  sandboxTokenSchema,
   sandboxTokensResponseSchema,
   type SandboxCoverageResponse,
   type SandboxRun,
@@ -15,7 +18,11 @@ import {
   type SandboxRunUpdateRequest,
   type SandboxRunsResponse,
   type SandboxStatus,
+  type SandboxToken,
+  type SandboxTokenCreateRequest,
+  type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
+  type SandboxTokenUpdateRequest,
 } from '@nexter/contracts';
 
 /** React Query keys for the sandbox section; one prefix invalidates the page. */
@@ -39,6 +46,29 @@ export function fetchSandboxTokens(): Promise<SandboxTokensResponse> {
 
 export function fetchSandboxCoverage(): Promise<SandboxCoverageResponse> {
   return apiFetch('/api/v1/sandbox/coverage', {}, sandboxCoverageResponseSchema);
+}
+
+export function createSandboxToken(body: SandboxTokenCreateRequest): Promise<SandboxToken> {
+  return apiPost(
+    '/api/v1/sandbox/tokens',
+    sandboxTokenCreateRequestSchema.parse(body),
+    sandboxTokenSchema,
+  );
+}
+
+export function updateSandboxToken(
+  tokenId: string,
+  body: SandboxTokenUpdateRequest,
+): Promise<SandboxToken> {
+  return apiPatch(`/api/v1/sandbox/tokens/${tokenId}`, body, sandboxTokenSchema);
+}
+
+export function refreshSandboxToken(tokenId: string): Promise<SandboxTokenRefreshResponse> {
+  return apiPost(
+    `/api/v1/sandbox/tokens/${tokenId}/refresh`,
+    {},
+    sandboxTokenRefreshResponseSchema,
+  );
 }
 
 export function fetchSandboxRuns(includeArchived = false): Promise<SandboxRunsResponse> {

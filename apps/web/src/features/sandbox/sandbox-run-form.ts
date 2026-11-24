@@ -257,6 +257,59 @@ function parseFinite(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function decimalEquals(left: string, right: string): boolean {
+  try {
+    return new Decimal(left.trim() || '0').equals(new Decimal(right.trim() || '0'));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when every editable Stage 1B/1C field still equals the approved
+ * defaults. An untouched create request omits `settings`/`paper` entirely so
+ * the server, not the UI mirror, applies the engine defaults.
+ */
+export function sandboxRunSettingsMatchDefaults(
+  values: SandboxRunFormValues,
+  defaults: SandboxRunFormValues = sandboxRunFormDefaults(),
+): boolean {
+  return sandboxSettingFields.every((field) =>
+    field.decimalString
+      ? decimalEquals(values[field.key], defaults[field.key])
+      : parseFinite(values[field.key]) === parseFinite(defaults[field.key]),
+  );
+}
+
+export interface SandboxRunSaveState {
+  busy: boolean;
+  editing: boolean;
+  detailPending: boolean;
+  detailError: boolean;
+  notDraft: boolean;
+  tokensPending: boolean;
+}
+
+/** Save is blocked while detail/tokens load, on detail error, and for non-drafts. */
+export function sandboxRunSaveDisabled(state: SandboxRunSaveState): boolean {
+  if (state.busy || state.notDraft || state.tokensPending) return true;
+  if (!state.editing) return false;
+  return state.detailPending || state.detailError;
+}
+
+/**
+ * The drawer seeds the form once per opened run. A refetch of `detail` (focus,
+ * invalidation) must not overwrite what the owner is typing.
+ */
+export function sandboxRunFormShouldHydrate(input: {
+  editing: boolean;
+  hydratedRunId: string | null;
+  detailRunId: string | null;
+}): boolean {
+  if (!input.editing) return input.hydratedRunId !== 'new';
+  return input.detailRunId !== null && input.hydratedRunId !== input.detailRunId;
+}
+
 /** Validates the setup form; returns Russian messages, empty when valid. */
 export function validateSandboxRunForm(values: SandboxRunFormValues): string[] {
   const errors: string[] = [];
@@ -348,21 +401,37 @@ export function sandboxPaperFromForm(
 
 export function sandboxRunCreatePayload(
   values: SandboxRunFormValues,
-  baseSettings: SandboxDecisionSettings = SANDBOX_DEFAULT_SETTINGS,
-  basePaper: SandboxPaperSettings = SANDBOX_DEFAULT_PAPER_SETTINGS,
+  defaults: SandboxRunFormValues = sandboxRunFormDefaults(),
 ): SandboxRunCreateRequest {
-  return {
+  const base: SandboxRunCreateRequest = {
     name: values.name.trim(),
     initialCapitalUsd: new Decimal(values.initialCapitalUsd.trim()).toFixed(2),
     tokenKeys: [...values.tokenKeys],
-    settings: sandboxSettingsFromForm(values, baseSettings),
-    paper: sandboxPaperFromForm(values, basePaper),
+  };
+
+  if (sandboxRunSettingsMatchDefaults(values, defaults)) return base;
+
+  return {
+    ...base,
+    settings: sandboxSettingsFromForm(values),
+    paper: sandboxPaperFromForm(values),
   };
 }
 
+/**
+ * Draft edits always send the full settings: the run snapshot may contain
+ * Stage 1B/1C fields (regime/strategy tuning) the owner did not see, so they are
+ * merged forward from the persisted run instead of being reset to UI defaults.
+ */
 export function sandboxRunUpdatePayload(
   values: SandboxRunFormValues,
   run: SandboxRun | SandboxRunDetail,
 ): SandboxRunUpdateRequest {
-  return sandboxRunCreatePayload(values, run.settings, run.paper);
+  return {
+    name: values.name.trim(),
+    initialCapitalUsd: new Decimal(values.initialCapitalUsd.trim()).toFixed(2),
+    tokenKeys: [...values.tokenKeys],
+    settings: sandboxSettingsFromForm(values, run.settings),
+    paper: sandboxPaperFromForm(values, run.paper),
+  };
 }

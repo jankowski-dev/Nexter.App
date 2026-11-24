@@ -4,6 +4,9 @@ import {
   sandboxRunCreatePayload,
   sandboxRunFormDefaults,
   sandboxRunFormFromRun,
+  sandboxRunFormShouldHydrate,
+  sandboxRunSaveDisabled,
+  sandboxRunSettingsMatchDefaults,
   sandboxRunUpdatePayload,
   sandboxSettingsFromForm,
   validateSandboxRunForm,
@@ -140,16 +143,33 @@ describe('sandbox run setup form', () => {
     );
   });
 
-  it('builds a decimal-string create payload with the frozen defaults', () => {
+  it('omits settings and paper from an untouched create request', () => {
     const payload = sandboxRunCreatePayload(validForm());
-    expect(payload.name).toBe('Базовый 1h');
-    expect(payload.initialCapitalUsd).toBe('1000.00');
-    expect(payload.tokenKeys).toEqual([tokenKey]);
+    expect(payload).toEqual({
+      name: 'Базовый 1h',
+      initialCapitalUsd: '1000.00',
+      tokenKeys: [tokenKey],
+    });
+    expect(payload.settings).toBeUndefined();
+    expect(payload.paper).toBeUndefined();
+  });
+
+  it('sends the full config once an editable setting changes', () => {
+    const changed = { ...validForm(), feeBps: '40' };
+    expect(sandboxRunSettingsMatchDefaults(changed)).toBe(false);
+
+    const payload = sandboxRunCreatePayload(changed);
     expect(payload.settings?.timeframe).toBe('1h');
     expect(payload.settings?.maxPositions).toBe(5);
     expect(payload.settings?.strategies).toEqual(SANDBOX_DEFAULT_SETTINGS.strategies);
-    expect(payload.paper?.feeBps).toBe(25);
-    expect(payload.paper?.maxPendingBars).toBe(1);
+    expect(payload.paper?.feeBps).toBe(40);
+    expect(payload.paper?.cooldownHoursAfterStop).toBe(24);
+  });
+
+  it('treats equivalent decimal strings and numbers as defaults', () => {
+    expect(sandboxRunSettingsMatchDefaults({ ...validForm(), minOrderUsd: '10.00' })).toBe(true);
+    expect(sandboxRunSettingsMatchDefaults({ ...validForm(), maxPositions: '5.0' })).toBe(true);
+    expect(sandboxRunSettingsMatchDefaults({ ...validForm(), minOrderUsd: '11' })).toBe(false);
   });
 
   it('keeps hidden Stage 1B/1C fields from the edited run', () => {
@@ -187,5 +207,51 @@ describe('sandbox run setup form', () => {
     const settings = sandboxSettingsFromForm({ ...validForm(), liquidityCapPct: '3' });
     expect(settings.liquidityCapPct).toBe(3);
     expect(settings.regime).toEqual(SANDBOX_DEFAULT_SETTINGS.regime);
+  });
+
+  it('blocks save while detail is pending or failed', () => {
+    const base = {
+      busy: false,
+      editing: true,
+      detailPending: false,
+      detailError: false,
+      notDraft: false,
+      tokensPending: false,
+    };
+    expect(sandboxRunSaveDisabled(base)).toBe(false);
+    expect(sandboxRunSaveDisabled({ ...base, detailPending: true })).toBe(true);
+    expect(sandboxRunSaveDisabled({ ...base, detailError: true })).toBe(true);
+    expect(sandboxRunSaveDisabled({ ...base, notDraft: true })).toBe(true);
+    expect(sandboxRunSaveDisabled({ ...base, busy: true })).toBe(true);
+    expect(sandboxRunSaveDisabled({ ...base, editing: false })).toBe(false);
+  });
+
+  it('hydrates a draft form once per run id and not on refetch', () => {
+    expect(
+      sandboxRunFormShouldHydrate({ editing: true, hydratedRunId: null, detailRunId: 'run-a' }),
+    ).toBe(true);
+    expect(
+      sandboxRunFormShouldHydrate({
+        editing: true,
+        hydratedRunId: 'run-a',
+        detailRunId: 'run-a',
+      }),
+    ).toBe(false);
+    expect(
+      sandboxRunFormShouldHydrate({
+        editing: true,
+        hydratedRunId: 'run-a',
+        detailRunId: 'run-b',
+      }),
+    ).toBe(true);
+    expect(
+      sandboxRunFormShouldHydrate({ editing: true, hydratedRunId: null, detailRunId: null }),
+    ).toBe(false);
+    expect(
+      sandboxRunFormShouldHydrate({ editing: false, hydratedRunId: null, detailRunId: null }),
+    ).toBe(true);
+    expect(
+      sandboxRunFormShouldHydrate({ editing: false, hydratedRunId: 'new', detailRunId: null }),
+    ).toBe(false);
   });
 });

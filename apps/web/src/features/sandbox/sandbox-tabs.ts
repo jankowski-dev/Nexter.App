@@ -89,6 +89,7 @@ export function sandboxCoverageWarnings(
   coverage: readonly SandboxCoverage[],
   tokenKeys: readonly string[],
   symbolByKey: ReadonlyMap<string, string>,
+  options: { coverageAvailable?: boolean } = {},
 ): { status: 'ok' | 'partial' | 'missing'; warnings: string[]; label: string } {
   const selected = new Set(tokenKeys);
   const entries = coverage.filter((entry) => selected.has(entry.tokenKey));
@@ -101,13 +102,23 @@ export function sandboxCoverageWarnings(
     };
   }
 
+  if (options.coverageAvailable === false) {
+    return {
+      status: 'partial',
+      warnings: ['Не удалось проверить покрытие истории 1h. Запуск потребует подтверждения.'],
+      label: 'Покрытие неизвестно',
+    };
+  }
+
   const coveredKeys = new Set(entries.map((entry) => entry.tokenKey));
   const missingMembership = tokenKeys.filter((key) => !coveredKeys.has(key));
   const warnings: string[] = missingMembership.map(
-    (key) => `Токен ${symbolByKey.get(key) ?? key} не проверен: нет данных о покрытии.`,
+    (key) => `Токен ${symbolByKey.get(key) ?? key}: покрытие неизвестно.`,
   );
 
   let status: 'ok' | 'partial' | 'missing' = 'ok';
+  if (missingMembership.length > 0) status = 'partial';
+
   for (const entry of entries) {
     if (entry.status === 'missing') status = 'missing';
     else if (entry.status === 'partial' && status === 'ok') status = 'partial';

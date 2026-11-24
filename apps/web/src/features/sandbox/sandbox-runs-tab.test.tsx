@@ -13,6 +13,10 @@ vi.mock('./sandbox-run-drawer', () => ({
   SandboxRunDrawer: () => null,
 }));
 
+vi.mock('./sandbox-tokens-drawer', () => ({
+  SandboxTokensDrawer: () => null,
+}));
+
 import { SandboxRunsTab } from './sandbox-runs-tab';
 import { useSandboxLifecycle, useSandboxRuns } from './sandbox-hooks';
 
@@ -94,6 +98,7 @@ describe('sandbox runs tab', () => {
     const html = renderTab();
     expect(html).toContain('Запусков пока нет');
     expect(html).toContain('Новый запуск');
+    expect(html).toContain('Токены песочницы');
     expect(html).toContain('live-paper');
   });
 

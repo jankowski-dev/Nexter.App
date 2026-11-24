@@ -2,21 +2,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   archiveSandboxRun,
   createSandboxRun,
+  createSandboxToken,
   fetchSandboxRuns,
   fetchSandboxStatus,
   fetchSandboxTokens,
   pauseSandboxRun,
+  refreshSandboxToken,
   resumeSandboxRun,
   runSandboxLifecycle,
   sandboxQueryKeys,
   startSandboxRun,
   stopSandboxRun,
   updateSandboxRun,
+  updateSandboxToken,
 } from './sandbox-api';
-import { invalidateSandboxQueries } from './sandbox-hooks';
+import { invalidateSandboxQueries, invalidateSandboxUniverseQueries } from './sandbox-hooks';
 import { sandboxRunFormDefaults } from './sandbox-run-form';
 import { QueryClient } from '@tanstack/react-query';
-import type { SandboxRun, SandboxRunSummary } from '@nexter/contracts';
+import type { SandboxRun, SandboxRunSummary, SandboxToken } from '@nexter/contracts';
 
 const runId = '11111111-1111-4111-8111-111111111111';
 const tokenKey = 'bsc:0x1111111111111111111111111111111111111111';
@@ -123,6 +126,19 @@ const run: SandboxRun = {
   archivedAt: null,
 };
 
+const token: SandboxToken = {
+  id: '22222222-2222-4222-8222-222222222222',
+  tokenKey,
+  symbol: 'AAA',
+  name: 'Alpha',
+  chain: 'bsc',
+  contractAddress: '0x1111111111111111111111111111111111111111',
+  coingeckoId: null,
+  enabled: true,
+  createdAt,
+  updatedAt: createdAt,
+};
+
 interface FetchCall {
   url: string;
   init: RequestInit;
@@ -176,6 +192,58 @@ describe('sandbox api', () => {
     payload = { tokens: [] };
     await expect(fetchSandboxTokens()).resolves.toEqual({ tokens: [] });
     expect(calls[0]?.url).toBe('/api/v1/sandbox/tokens');
+  });
+
+  it('adds a token to the universe', async () => {
+    payload = token;
+    const created = await createSandboxToken({
+      tokenKey,
+      symbol: 'AAA',
+      name: 'Alpha',
+      enabled: true,
+    });
+    expect(created.id).toBe(token.id);
+    expect(calls[0]?.url).toBe('/api/v1/sandbox/tokens');
+    expect(calls[0]?.init.method).toBe('POST');
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
+      tokenKey,
+      symbol: 'AAA',
+      name: 'Alpha',
+      enabled: true,
+    });
+  });
+
+  it('enables or disables a token with PATCH', async () => {
+    payload = { ...token, enabled: false };
+    const updated = await updateSandboxToken(token.id, { enabled: false });
+    expect(updated.enabled).toBe(false);
+    expect(calls[0]?.url).toBe(`/api/v1/sandbox/tokens/${token.id}`);
+    expect(calls[0]?.init.method).toBe('PATCH');
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ enabled: false });
+  });
+
+  it('refreshes token history', async () => {
+    payload = {
+      token,
+      coverage: {
+        tokenKey,
+        timeframe: '1h',
+        available: 4320,
+        required: 4320,
+        firstOpenTime: createdAt,
+        lastOpenTime: createdAt,
+        gaps: 0,
+        synthetic: false,
+        stale: false,
+        status: 'ok',
+        warning: null,
+      },
+      fetched: 4320,
+    };
+    const refreshed = await refreshSandboxToken(token.id);
+    expect(refreshed.fetched).toBe(4320);
+    expect(calls[0]?.url).toBe(`/api/v1/sandbox/tokens/${token.id}/refresh`);
+    expect(calls[0]?.init.method).toBe('POST');
   });
 
   it('creates a draft with the decimal payload', async () => {
@@ -244,5 +312,18 @@ describe('sandbox cache invalidation', () => {
     expect(queryClient.getQueryState(sandboxQueryKeys.runs(false))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(sandboxQueryKeys.run(runId))?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(['portfolio-token-summaries'])?.isInvalidated).toBeFalsy();
+  });
+
+  it('invalidates tokens and coverage after a universe mutation', async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(sandboxQueryKeys.tokens, { tokens: [] });
+    queryClient.setQueryData(sandboxQueryKeys.coverage, { tokens: [] });
+    queryClient.setQueryData(sandboxQueryKeys.runs(false), { runs: [] });
+
+    await invalidateSandboxUniverseQueries(queryClient);
+
+    expect(queryClient.getQueryState(sandboxQueryKeys.tokens)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(sandboxQueryKeys.coverage)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(sandboxQueryKeys.runs(false))?.isInvalidated).toBeFalsy();
   });
 });

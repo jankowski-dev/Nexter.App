@@ -4,12 +4,13 @@ import { ListToolbar } from '@/components/ui/list-toolbar';
 import { Select } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useConfirm } from '@/lib/confirm';
-import { ApiError } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { useAutoDismissNotice } from '@/lib/use-auto-dismiss-notice';
 import { SandboxRunCard, type SandboxRunAction } from './sandbox-run-card';
 import { SandboxRunDrawer } from './sandbox-run-drawer';
+import { SandboxTokensDrawer } from './sandbox-tokens-drawer';
 import { useSandboxLifecycle, useSandboxRuns } from './sandbox-hooks';
+import { isSandboxPartialCoverageError, planSandboxRunAction } from './sandbox-runs-actions';
 import { sandboxStatusLabels } from './sandbox-tabs';
 import { useState } from 'react';
 import type { SandboxRunStatus, SandboxRunSummary } from '@nexter/contracts';
@@ -29,7 +30,7 @@ const actionNotices: Partial<Record<SandboxRunAction, string>> = {
   start: 'Запуск стартовал: первое решение появится на следующем закрытом баре 1h.',
   pause: 'Запуск приостановлен: открытые позиции остаются отмеченными.',
   resume: 'Запуск продолжен со следующего закрытого бара 1h.',
-  stop: 'Запуск остановлен, итоговый отчёт доступен в разделе «Отчёты».',
+  stop: 'Запуск остановлен: состояние зафиксировано по последнему закрытому бару.',
   archive: 'Запуск отправлен в архив.',
 };
 
@@ -40,6 +41,7 @@ export function SandboxRunsTab() {
   const [search, setSearch] = useState('');
   const [drawerRunId, setDrawerRunId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [tokensOpen, setTokensOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const runs = useSandboxRuns(includeArchived);
   const lifecycle = useSandboxLifecycle();
@@ -68,7 +70,7 @@ export function SandboxRunsTab() {
       await lifecycle.mutateAsync({ runId: run.id, action: 'start' });
       return true;
     } catch (error) {
-      if (!(error instanceof ApiError) || error.code !== 'SANDBOX_COVERAGE_PARTIAL') {
+      if (!isSandboxPartialCoverageError(error)) {
         throw error;
       }
 
@@ -89,40 +91,24 @@ export function SandboxRunsTab() {
 
   async function handleAction(run: SandboxRunSummary, action: SandboxRunAction): Promise<void> {
     setNotice(null);
+    const plan = planSandboxRunAction(action);
 
-    if (action === 'edit') {
+    if (plan.kind === 'edit') {
       openEdit(run.id);
       return;
     }
 
-    if (action === 'stop') {
-      const accepted = await confirm({
-        title: 'Остановить запуск?',
-        description:
-          'Решения и сделки прекратятся, открытые позиции будут отмечены по последнему закрытому бару, будет сформирован итоговый отчёт.',
-        confirmLabel: 'Остановить',
-        variant: 'danger',
-      });
-      if (!accepted) return;
-    }
-
-    if (action === 'archive') {
-      const accepted = await confirm({
-        title: 'Отправить запуск в архив?',
-        description:
-          'Запуск скроется из списка. Данные, журнал и отчёты сохранятся и останутся доступными.',
-        confirmLabel: 'В архив',
-        variant: 'danger',
-      });
+    if (plan.confirmation) {
+      const accepted = await confirm({ ...plan.confirmation, cancelLabel: 'Отмена' });
       if (!accepted) return;
     }
 
     try {
-      if (action === 'start') {
+      if (plan.action === 'start') {
         const started = await startWithCoverageConfirmation(run);
         if (!started) return;
       } else {
-        await lifecycle.mutateAsync({ runId: run.id, action });
+        await lifecycle.mutateAsync({ runId: run.id, action: plan.action });
       }
       setNotice(actionNotices[action] ?? null);
     } catch (error) {
@@ -150,7 +136,14 @@ export function SandboxRunsTab() {
         onSearch={setSearch}
         searchPlaceholder="Поиск по названию"
         searchAriaLabel="Поиск запусков песочницы"
-        actions={<Button onClick={openCreate}>Новый запуск</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setTokensOpen(true)}>
+              Токены песочницы
+            </Button>
+            <Button onClick={openCreate}>Новый запуск</Button>
+          </>
+        }
       >
         <Select
           aria-label="Фильтр по статусу"
@@ -219,6 +212,7 @@ export function SandboxRunsTab() {
         open={drawerOpen}
         runId={drawerRunId}
         onClose={() => setDrawerOpen(false)}
+        onManageTokens={() => setTokensOpen(true)}
         onSaved={() => {
           setDrawerOpen(false);
           setNotice(
@@ -228,6 +222,8 @@ export function SandboxRunsTab() {
           );
         }}
       />
+
+      <SandboxTokensDrawer open={tokensOpen} onClose={() => setTokensOpen(false)} />
     </div>
   );
 }

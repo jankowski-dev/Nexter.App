@@ -14,13 +14,15 @@ import {
   sandboxRunCreatePayload,
   sandboxRunFormDefaults,
   sandboxRunFormFromRun,
+  sandboxRunFormShouldHydrate,
+  sandboxRunSaveDisabled,
   sandboxRunUpdatePayload,
   sandboxSettingFields,
   validateSandboxRunForm,
   type SandboxRunFormValues,
 } from './sandbox-run-form';
 import { sandboxCoverageWarnings, sandboxStatusLabels } from './sandbox-tabs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SandboxToken } from '@nexter/contracts';
 
 const chainLabels: Record<SandboxToken['chain'], string> = {
@@ -70,16 +72,34 @@ function SettingField({
   );
 }
 
+/**
+ * Empty-universe prompt of the run setup. Extracted so the owner-facing
+ * instruction and its "Добавить токены" action can be rendered in tests without
+ * a DOM (the drawer itself portals).
+ */
+export function SandboxRunTokenEmptyPrompt({ onManageTokens }: { onManageTokens: () => void }) {
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+      <p>В песочнице пока нет токенов.</p>
+      <Button className="mt-2" variant="secondary" onClick={onManageTokens}>
+        Добавить токены
+      </Button>
+    </div>
+  );
+}
+
 export function SandboxRunDrawer({
   open,
   runId,
   onClose,
   onSaved,
+  onManageTokens,
 }: {
   open: boolean;
   runId: string | null;
   onClose: () => void;
   onSaved: () => void;
+  onManageTokens: () => void;
 }) {
   const editing = runId !== null;
   const tokens = useSandboxTokens(open);
@@ -90,16 +110,37 @@ export function SandboxRunDrawer({
   const [values, setValues] = useState<SandboxRunFormValues>(sandboxRunFormDefaults);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const hydratedRunId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      hydratedRunId.current = null;
+      return;
+    }
+    setErrors([]);
+    setSubmitError(null);
+  }, [open, runId]);
 
   useEffect(() => {
     if (!open) return;
-    setErrors([]);
-    setSubmitError(null);
-    if (detail.data) {
-      setValues(sandboxRunFormFromRun(detail.data));
+    if (
+      !sandboxRunFormShouldHydrate({
+        editing,
+        hydratedRunId: hydratedRunId.current,
+        detailRunId: detail.data?.id ?? null,
+      })
+    ) {
       return;
     }
-    if (!editing) setValues(sandboxRunFormDefaults());
+    if (detail.data) {
+      setValues(sandboxRunFormFromRun(detail.data));
+      hydratedRunId.current = detail.data.id;
+      return;
+    }
+    if (!editing) {
+      setValues(sandboxRunFormDefaults());
+      hydratedRunId.current = 'new';
+    }
   }, [open, editing, detail.data]);
 
   const tokenList = tokens.data?.tokens ?? [];
@@ -111,11 +152,18 @@ export function SandboxRunDrawer({
     coverage.data?.tokens ?? [],
     values.tokenKeys,
     symbolByKey,
+    { coverageAvailable: !coverage.isError },
   );
   const busy = createRun.isPending || updateRun.isPending;
-  const loadingDetail = editing && detail.isPending;
   const notDraft = detail.data !== undefined && detail.data.status !== 'draft';
-  const saveDisabled = busy || notDraft || tokens.isPending || loadingDetail;
+  const saveDisabled = sandboxRunSaveDisabled({
+    busy,
+    editing,
+    detailPending: detail.isPending,
+    detailError: detail.isError,
+    notDraft,
+    tokensPending: tokens.isPending,
+  });
 
   function update<K extends keyof SandboxRunFormValues>(
     key: K,
@@ -137,7 +185,11 @@ export function SandboxRunDrawer({
   }
 
   async function save(): Promise<void> {
-    if (loadingDetail || (editing && !detail.data)) return;
+    if (detail.isError) {
+      setSubmitError('Не удалось загрузить запуск. Закройте окно и попробуйте снова.');
+      return;
+    }
+    if (saveDisabled) return;
     const validationErrors = validateSandboxRunForm(values);
     setErrors(validationErrors);
     setSubmitError(null);
@@ -244,9 +296,7 @@ export function SandboxRunDrawer({
               {toRussianError(tokens.error, 'Не удалось загрузить токены песочницы')}
             </div>
           ) : tokenList.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
-              В песочнице пока нет токенов. Добавьте токены в песочницу и обновите страницу.
-            </div>
+            <SandboxRunTokenEmptyPrompt onManageTokens={onManageTokens} />
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               {tokenList.map((token) => {
@@ -295,6 +345,11 @@ export function SandboxRunDrawer({
           <div className="font-medium">{preflight.label}</div>
           {coverage.isPending && values.tokenKeys.length > 0 ? (
             <div className="mt-1 text-xs">Проверяю историю 1h…</div>
+          ) : null}
+          {coverage.isError ? (
+            <div className="mt-1 text-xs font-medium">
+              Не удалось проверить покрытие истории 1h. Запуск потребует подтверждения.
+            </div>
           ) : null}
           {preflight.warnings.length > 0 ? (
             <ul className="mt-1 list-disc space-y-1 pl-4 text-xs">
