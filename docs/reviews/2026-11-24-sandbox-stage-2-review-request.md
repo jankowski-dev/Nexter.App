@@ -5,9 +5,9 @@ Branch: `feat/sandbox-stage-2`
 Stage 1C base: `3771b67` (accepted by the owner on 2026-11-24)
 Stage 2 docs base: `67c8c32` (design, ADR 0084, plan)
 Task 8 base: `efb28e4`
-Frozen code head: `4acc900` (Stage 2 review fixes; CI green) plus the final
-docs/packet commit. The previous frozen head `5fe93cf`/`b4b1e03` predates this
-review-fix round.
+Frozen code head: `2e631c4` (Stage 2 review fixes + deterministic core
+fail-closed fix; CI green) plus the final docs/packet commit. Previous heads
+`4acc900`/`e4dadda` and `5fe93cf`/`b4b1e03` predate this scoped re-review fix.
 Status: **Stage 2 implemented; independent review gate**
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
@@ -17,8 +17,9 @@ runners get HTTP 451 from Binance; the smoke became environment-aware
 (CAKE/GeckoTerminal strict, Binance skipped when unreachable) and passed on
 `05082b6` and `cd31bca` (CAKE 4320/4320, tick fill, report, stop). That temporary
 step was removed in `b4b1e03`. The whole-branch review fixes are in `4acc900`
-(CI green) and include provisioning `nexter_app` in CI so the runtime grant
-suite executes.
+(CI green); the scoped re-review's deterministic-core finding is fixed in
+`2e631c4` (CI green), which also provisions `nexter_app` in CI so the runtime
+grant suite executes.
 
 Review this as one whole-branch Stage 2 review. The scope is paper only: no real
 money, exchange orders, wallets, keys, signing or real-ledger writes.
@@ -47,19 +48,19 @@ money, exchange orders, wallets, keys, signing or real-ledger writes.
 
 ## Tasks and commits
 
-| Task | Scope                                            | Commits                                                                 | Review                            |
-| ---- | ------------------------------------------------ | ----------------------------------------------------------------------- | --------------------------------- |
-| Docs | Design, ADR 0084, plan                           | `67c8c32`                                                               | n/a                               |
-| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                                                    | complete (scoped re-review clean) |
-| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                                                    | complete (scoped re-review clean) |
-| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                                         | complete (scoped re-review clean) |
-| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                                                    | complete (scoped re-review clean) |
-| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                                                    | complete (scoped re-review clean) |
-| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                                                    | complete (scoped re-review clean) |
-| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                                                    | complete (scoped re-review clean) |
-| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6`, `b4b1e03`, `4acc900` + docs | **awaiting whole-branch review**  |
+| Task | Scope                                            | Commits                                                                            | Review                            |
+| ---- | ------------------------------------------------ | ---------------------------------------------------------------------------------- | --------------------------------- |
+| Docs | Design, ADR 0084, plan                           | `67c8c32`                                                                          | n/a                               |
+| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                                                               | complete (scoped re-review clean) |
+| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                                                               | complete (scoped re-review clean) |
+| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                                                    | complete (scoped re-review clean) |
+| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                                                               | complete (scoped re-review clean) |
+| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                                                               | complete (scoped re-review clean) |
+| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                                                               | complete (scoped re-review clean) |
+| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                                                               | complete (scoped re-review clean) |
+| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6`, `b4b1e03`, `4acc900`, `2e631c4` + docs | **awaiting whole-branch review**  |
 
-Branch diff from `3771b67` through `4acc900`: 148 files, +40,392/−111
+Branch diff from `3771b67` through `2e631c4`: 148 files, +40,553/−111
 (including tests, fixtures, docs, contracts, core helpers, the migration
 snapshot and the test typecheck/CI/review fixes); this packet adds documentation
 only. No production data or production configuration was changed by this branch.
@@ -69,7 +70,7 @@ only. No production data or production configuration was changed by this branch.
 | Command                                                               | Result                                                                                                                                                                                                    |
 | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npx pnpm@10.20.0 test`                                               | exit 0 (full gate before the final review-fix round): API **73 files passed / 25 skipped; 468 passed / 151 skipped**. Core **552 passed**. Contracts **55 passed**. Web **258 passed**. DB **1 passed**.  |
-| Review-fix focused API tests                                          | **57 passed** (runner, run service, report service, token coverage), plus typecheck/build/lint/format green; CI's full API run is **621 passed / 4 skipped** on `4acc900`.                                |
+| Review-fix focused API tests                                          | **35 unit tests passed** (runner/run/report; the DB event-log test ran in CI), plus typecheck/build/lint/format green; CI's full API run is **624 passed / 4 skipped** on `2e631c4`.                      |
 | `npx pnpm@10.20.0 typecheck`                                          | all packages/apps pass; **API now also typechecks `test/**/*.ts`** via `apps/api/tsconfig.test.json` (262 pre-existing test type errors fixed mechanically)                                               |
 | `npx pnpm@10.20.0 build`                                              | web + sandbox-core + API pass (existing chunk-size warning only)                                                                                                                                          |
 | `npx pnpm@10.20.0 lint`                                               | clean                                                                                                                                                                                                     |
@@ -99,6 +100,7 @@ real database execution.
 | `8983bde` | [run 45468500668](https://github.com/jankowski-dev/Nexter.App/actions/runs/45468500668) | **success**: interim docs head (superseded)                                                    |
 | `4acc900` | [run 45479363737](https://github.com/jankowski-dev/Nexter.App/actions/runs/45479363737) | **success**: Stage 2 review fixes; app role provisioned, grant suite runs, API 621 passed      |
 | `4422dbe` | [run 45481336585](https://github.com/jankowski-dev/Nexter.App/actions/runs/45481336585) | **success**: docs/packet head before this final head correction                                |
+| `2e631c4` | [run 45486431945](https://github.com/jankowski-dev/Nexter.App/actions/runs/45486431945) | **success**: deterministic core fail-closed fix; API 624 passed, event-log/grant suites green  |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
@@ -173,11 +175,30 @@ smoke assertions, and the manual live-tick workflow.
   when `insertPendingIntents` persists fewer rows than queued, making the
   manual-close-vs-engine same-tick race visible without changing behavior; the
   partial unique index remains the guard. The exact race stays in deferred items.
-- **Minor 8 — packet head/evidence** is this update: code head `4acc900`, CI run
-  [45479363737](https://github.com/jankowski-dev/Nexter.App/actions/runs/45479363737),
-  runtime grant suite green (API 621 passed / 4 skipped).
+- **Minor 8 — packet head/evidence** is this update: code head `2e631c4`, CI run
+  [45486431945](https://github.com/jankowski-dev/Nexter.App/actions/runs/45486431945),
+  runtime grant suite green (API 624 passed / 4 skipped).
 
-DB-gated suites executed by CI (all green in `e01c5cd` and `4acc900`):
+### Scoped re-review fix (`2e631c4`)
+
+The scoped re-review found that the transient classifier retried deterministic
+core failures forever. Fixed by:
+
+- wrapping the core `buildEvent`/schema/JSON validation in
+  `SandboxEventLog.append`; a `ZodError`/`NonJsonValueError` now becomes the typed
+  `SANDBOX_EVENT_PAYLOAD_INVALID` persistence error and the run fails closed;
+- extending the explicit terminal list with `PaperLedgerError`,
+  `PaperExecutionInputError`, `PaperRunError`, `CandleValidationError`,
+  `ClockBackwardsError`, `EventChainError`, `NonJsonValueError`,
+  `DecisionInputError`, `DecimalInputError`, `ZodError` and
+  `SandboxLiveBrokerError`; `SANDBOX_RUN_NOT_FOUND` stays transient;
+- focused tests: invalid event schema/JSON at the log level, a typed payload
+  error from the tick, and a `PaperLedgerError` from the tick all mark the run
+  `failed` and expire intents; the transient DB tests still keep it `running`;
+- the runbook now states that deterministic engine/event/persistence errors
+  mark `failed`, while DB/provider/unknown infrastructure errors retry.
+
+DB-gated suites executed by CI (all green in `e01c5cd`, `4acc900` and `2e631c4`):
 
 - `sandbox-schema.e2e.spec.ts` — tables/indexes/precision plus the **runtime**
   `nexter_app` grant checks (role provisioned in CI).
@@ -310,9 +331,10 @@ JSON/Markdown download). No manual buy/add/override and no real execution.
 
 - 552 core tests, including the unchanged Stage 1B/1C goldens and event-chain replay.
 - 55 contract tests (sandbox lifecycle/read/report schemas).
-- 468 API tests locally (focused review-fix run: 57 passed); 151 skipped locally,
-  and the full DB-gated set ran green in CI on `4acc900` (API **621 passed /
-  4 skipped**, including the new fake-clock e2e and review-fix tests).
+- 468 API tests locally (focused review-fix unit run: 35 passed); 151 skipped
+  locally, and the full DB-gated set ran green in CI on `2e631c4` (API **624
+  passed / 4 skipped**, including the fake-clock e2e, deterministic-error tests
+  and event-log suite).
 - 258 web tests (SSR/pure helpers, no DOM stack) including sandbox boundary checks.
 - API `typecheck` now covers `test/**/*.ts` (`tsconfig.test.json`), so the new
   e2e suites are type-checked on every gate; the 262 pre-existing test type
