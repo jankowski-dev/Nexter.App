@@ -158,6 +158,7 @@ function rejectBuy(
     amount: ZERO_UNITS,
     priceUsd: pricing === null ? ZERO_UNITS : pricing.exactPrice,
     feeUsd: ZERO_USD,
+    liquidityCapUsd: pricing === null ? ZERO_USD : usd(pricing.liquidityCapUsd),
     reasonCode,
     reasonText,
   };
@@ -182,6 +183,7 @@ function rejectSell(
     notionalUsd: ZERO_USD,
     feeUsd: ZERO_USD,
     proceedsUsd: ZERO_USD,
+    liquidityCapUsd: pricing === null ? ZERO_USD : usd(pricing.liquidityCapUsd),
     reasonCode,
     reasonText,
   };
@@ -308,6 +310,7 @@ export function planBuyFill(input: BuyFillInput): BuyFillPlan {
     amount: filledAmount,
     priceUsd: pricing.exactPrice,
     feeUsd: bookedFeeStr,
+    liquidityCapUsd: usd(pricing.liquidityCapUsd),
     reasonCode: partial ? Reason.FILL_PARTIAL : Reason.FILL_FILLED,
     reasonText: partial
       ? `Partially bought ${bookedFillStr} of ${requestedUsd} USD of ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`
@@ -440,6 +443,7 @@ export function planSellFill(input: SellFillInput): SellFillPlan {
     notionalUsd: bookedNotionalStr,
     feeUsd: bookedFeeStr,
     proceedsUsd: bookedProceeds.toFixed(2),
+    liquidityCapUsd: usd(pricing.liquidityCapUsd),
     reasonCode: partial ? Reason.FILL_PARTIAL : Reason.FILL_FILLED,
     reasonText: partial
       ? `Partially sold ${filledAmount} of ${requestedAmount} ${input.intent.tokenId} at ${pricing.exactPrice} USD on the next bar open; the remainder is not retried`

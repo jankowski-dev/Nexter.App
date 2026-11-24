@@ -81,6 +81,7 @@ interface PendingIntent {
 interface RunSettings {
   readonly timeframe: string;
   readonly step: number;
+  readonly initialCapitalUsd: string;
 }
 
 function compareCodeUnits(left: string, right: string): number {
@@ -127,10 +128,10 @@ function validateRunSettings(input: PaperRunInput): RunSettings {
   ) {
     throw new PaperRunError('PAPER_BAD_SETTINGS', 'paper.liquidityCapPct must be in (0, 100]');
   }
-  if (!Number.isInteger(paper.maxPendingBars) || paper.maxPendingBars < 0) {
+  if (!Number.isInteger(paper.maxPendingBars) || paper.maxPendingBars < 1) {
     throw new PaperRunError(
       'PAPER_BAD_SETTINGS',
-      'paper.maxPendingBars must be a non-negative integer',
+      'paper.maxPendingBars must be >= 1 (a zero-bar queue would expire every intent before its first attempt)',
     );
   }
   for (const [value, name] of [
@@ -141,18 +142,53 @@ function validateRunSettings(input: PaperRunInput): RunSettings {
       throw new PaperRunError('PAPER_BAD_SETTINGS', `paper.${name} must be a non-negative number`);
     }
   }
-  return { timeframe: settings.timeframe, step };
+  const cashBufferPct = settings.cashBufferPct;
+  if (
+    typeof cashBufferPct !== 'number' ||
+    !Number.isFinite(cashBufferPct) ||
+    cashBufferPct <= 0 ||
+    cashBufferPct > 100
+  ) {
+    throw new PaperRunError('PAPER_BAD_SETTINGS', 'settings.cashBufferPct must be in (0, 100]');
+  }
+  const initialCapitalUsd = input.initialCapitalUsd ?? DEFAULT_INITIAL_CAPITAL_USD;
+  if (
+    typeof initialCapitalUsd !== 'string' ||
+    !/^\d+(\.\d{1,2})?$/.test(initialCapitalUsd) ||
+    !new Decimal(initialCapitalUsd).greaterThan(0)
+  ) {
+    throw new PaperRunError(
+      'PAPER_BAD_SETTINGS',
+      'initialCapitalUsd must be a positive decimal string with at most two decimals',
+    );
+  }
+  return { timeframe: settings.timeframe, step, initialCapitalUsd };
 }
 
-/** Returns a new state with the host cooldowns overlaid; never mutates the input. */
+/**
+ * Returns a new state with the active host cooldowns overlaid and expired
+ * deadlines cleared; never mutates the input. A deadline at or before `now` is
+ * removed from the token state, so `result.state` never carries a stale
+ * cooldown.
+ */
 function applyCooldowns(
   state: EngineState,
   cooldowns: ReadonlyMap<string, Timestamp>,
+  now: Timestamp,
 ): EngineState {
-  if (cooldowns.size === 0) return state;
   const tokens: Record<string, TokenRuntimeState> = { ...state.tokens };
   let changed = false;
+  for (const tokenId of Object.keys(tokens)) {
+    const token = tokens[tokenId];
+    if (token === undefined) continue;
+    const until = token.cooldownUntil;
+    if (until !== null && until <= now && !cooldowns.has(tokenId)) {
+      tokens[tokenId] = { ...token, cooldownUntil: null };
+      changed = true;
+    }
+  }
   for (const [tokenId, until] of cooldowns) {
+    if (until <= now) continue;
     const token = tokens[tokenId];
     if (token === undefined) continue;
     if (token.cooldownUntil !== null && token.cooldownUntil >= until) continue;
@@ -192,6 +228,7 @@ function buyRecord(intent: OrderIntent, plan: BuyFillPlan, fillTime: Timestamp):
     priceUsd: priceOrNull(plan.priceUsd),
     feeUsd: plan.feeUsd,
     reasonCode: plan.reasonCode,
+    strategyReasonCode: intent.reasonCode,
     reasonText: plan.reasonText,
     decisionTime: intent.clockTime,
     fillTime,
@@ -213,6 +250,7 @@ function sellRecord(intent: OrderIntent, plan: SellFillPlan, fillTime: Timestamp
     priceUsd: priceOrNull(plan.priceUsd),
     feeUsd: plan.feeUsd,
     reasonCode: plan.reasonCode,
+    strategyReasonCode: intent.reasonCode,
     reasonText: plan.reasonText,
     decisionTime: intent.clockTime,
     fillTime,
@@ -240,6 +278,7 @@ function unresolvedRecord(
     priceUsd: null,
     feeUsd: ZERO_USD,
     reasonCode,
+    strategyReasonCode: intent.reasonCode,
     reasonText,
     decisionTime: intent.clockTime,
     fillTime,
@@ -252,7 +291,7 @@ export class PaperRunner {
   async run(input: PaperRunInput): Promise<PaperRunResult> {
     const { runId, seed, configVersion, dataSnapshotId, settings } = input;
     const runSettings = validateRunSettings(input);
-    const { timeframe, step } = runSettings;
+    const { timeframe, step, initialCapitalUsd } = runSettings;
     const paper = input.paper;
 
     const tokenIds = [...input.tokenIds].sort(compareCodeUnits);
@@ -289,10 +328,7 @@ export class PaperRunner {
     const logger = new PaperLogger(this.log, { runId, seed, configVersion, dataSnapshotId });
     const engine = new DecisionEngine(this.log);
 
-    let ledger = createLedger(input.initialCapitalUsd ?? DEFAULT_INITIAL_CAPITAL_USD);
-    if (!new Decimal(ledger.initialCapitalUsd).greaterThan(0)) {
-      throw new PaperRunError('PAPER_BAD_SETTINGS', 'initialCapitalUsd must be greater than zero');
-    }
+    let ledger = createLedger(initialCapitalUsd);
 
     let state: EngineState = input.initialState ?? { tokens: {} };
     const cooldowns = new Map<string, Timestamp>();
@@ -391,6 +427,7 @@ export class PaperRunner {
               requestedUsd: plan.requestedUsd,
               requestedAmount: null,
               priceUsd: priceOrNull(plan.priceUsd),
+              liquidityCapUsd: plan.liquidityCapUsd,
               cashAfterUsd: ledger.cashUsd,
               positionAmountAfter: position?.amount ?? ZERO_UNITS,
             });
@@ -434,6 +471,7 @@ export class PaperRunner {
             requestedUsd: null,
             requestedAmount: plan.requestedAmount,
             priceUsd: priceOrNull(plan.priceUsd),
+            liquidityCapUsd: plan.liquidityCapUsd,
             cashAfterUsd: ledger.cashUsd,
             positionAmountAfter: position?.amount ?? ZERO_UNITS,
           });
@@ -477,6 +515,9 @@ export class PaperRunner {
 
       // 2. Mark the portfolio at the bar close and advance the day/peak state.
       clock.advanceTo(closeTime);
+      for (const [tokenId, until] of cooldowns) {
+        if (until <= closeTime) cooldowns.delete(tokenId);
+      }
       const marked = markPortfolio(ledger, marksFor());
       const dateKey = utcDateKey(closeTime);
       if (previousDateKey !== null && dateKey !== previousDateKey) {
@@ -502,10 +543,10 @@ export class PaperRunner {
         tokenIds,
         market,
         portfolio,
-        state: applyCooldowns(state, cooldowns),
+        state: applyCooldowns(state, cooldowns, closeTime),
         settings,
       });
-      state = applyCooldowns(decision.state, cooldowns);
+      state = applyCooldowns(decision.state, cooldowns, closeTime);
 
       // 4. Queue the next-bar intents; a second pending intent for the same
       //    token and side cannot execute and is rejected as a duplicate.
@@ -532,6 +573,7 @@ export class PaperRunner {
             requestedUsd: intent.side === 'buy' ? intent.sizeUsd : null,
             requestedAmount: intent.side === 'sell' ? intent.amount : null,
             priceUsd: intent.decisionPriceUsd,
+            liquidityCapUsd: ZERO_USD,
             cashAfterUsd: ledger.cashUsd,
             positionAmountAfter: ledger.positions[intent.tokenId]?.amount ?? ZERO_UNITS,
           });

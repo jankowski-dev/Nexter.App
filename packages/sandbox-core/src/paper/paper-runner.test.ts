@@ -158,6 +158,7 @@ describe('PaperRunner next-open fills', () => {
     const buy = firstRecord(result, 'buy');
 
     expect(buy.status).toBe('filled');
+    expect(buy.strategyReasonCode).toBe('TREND_PULLBACK_ENTRY');
     expect(buy.filledUsd).toBe('200.00');
     expect(buy.feeUsd).toBe('0.50');
     expect(buy.fillTime).toBe(buy.decisionTime);
@@ -223,6 +224,7 @@ describe('PaperRunner next-open fills', () => {
     const sell = firstRecord(result, 'sell');
 
     expect(sell.status).toBe('filled');
+    expect(sell.strategyReasonCode).toBe('TREND_PULLBACK_STOP');
     expect(sell.fillTime).toBe(sell.decisionTime);
     expect(sell.filledAmount).toBe(buy.filledAmount);
 
@@ -273,6 +275,7 @@ describe('PaperRunner partial fills', () => {
       requestedUsd: '200.00',
       filledUsd: '150.00',
       unfilledUsd: '50.00',
+      liquidityCapUsd: '150.00',
     });
   });
 });
@@ -356,6 +359,21 @@ describe('PaperRunner expiry', () => {
     );
     expect(expired).toHaveLength(1);
     expect(expired[0]?.inputs).toMatchObject({ barsPending: 2 });
+  });
+});
+
+describe('PaperRunner expired cooldown cleanup', () => {
+  it('clears an expired host cooldown from the final state', async () => {
+    const candles = buildCandles(flatAfterCrashCloses(30), { gapIndex: 201, gapPct: 0.5 });
+    const { result, log } = await runTrend({ candles });
+    const cooldowns = eventsOfType(log, 'paper.cooldown_set');
+    expect(cooldowns).toHaveLength(1);
+    const deadline = new Date(cooldowns[0]?.inputs.cooldownUntil as string).getTime();
+    const lastBar = result.equityCurve.at(-1)?.clockTime ?? 0;
+
+    expect(lastBar).toBeGreaterThan(deadline);
+    expect(result.state.tokens.token?.cooldownUntil).toBeNull();
+    expect(result.state.tokens.token?.phase).not.toBe('COOLDOWN');
   });
 });
 
@@ -479,17 +497,32 @@ describe('PaperRunner input validation', () => {
       name: 'PaperRunError',
       code: 'PAPER_BAD_SETTINGS',
     });
+    await expect(runTrend({ paper: { maxPendingBars: 0 } })).rejects.toMatchObject({
+      name: 'PaperRunError',
+      code: 'PAPER_BAD_SETTINGS',
+    });
     await expect(runTrend({ paper: { feeBps: 10_000 } })).rejects.toMatchObject({
       name: 'PaperRunError',
       code: 'PAPER_BAD_SETTINGS',
     });
   });
 
-  it('rejects a non-positive initial capital', async () => {
-    await expect(runTrend({ initialCapitalUsd: '0.00' })).rejects.toMatchObject({
-      name: 'PaperRunError',
-      code: 'PAPER_BAD_SETTINGS',
-    });
+  it('rejects an invalid cash buffer percentage before the engine sees it', async () => {
+    for (const cashBufferPct of [0, 100.5, 101, Number.NaN]) {
+      await expect(runTrend({ settings: { cashBufferPct } })).rejects.toMatchObject({
+        name: 'PaperRunError',
+        code: 'PAPER_BAD_SETTINGS',
+      });
+    }
+  });
+
+  it('rejects a non-positive or malformed initial capital', async () => {
+    for (const initialCapitalUsd of ['0.00', '0', '-5.00', '10.123', '1e3', 'abc']) {
+      await expect(runTrend({ initialCapitalUsd })).rejects.toMatchObject({
+        name: 'PaperRunError',
+        code: 'PAPER_BAD_SETTINGS',
+      });
+    }
   });
 
   it('uses the supplied initial capital in the ledger and config', async () => {
@@ -541,7 +574,7 @@ describe('PaperRunner defensive queue paths', () => {
     );
   }
 
-  function scriptedIntent(intentId: string): OrderIntent {
+  function scriptedIntent(intentId: string, overrides: Partial<OrderIntent> = {}): OrderIntent {
     return {
       intentId,
       tokenId: 'token',
@@ -555,6 +588,7 @@ describe('PaperRunner defensive queue paths', () => {
       takeProfitPct: null,
       decisionPriceUsd: '100.00000000',
       clockTime: START,
+      ...overrides,
     };
   }
 
@@ -613,6 +647,7 @@ describe('PaperRunner defensive queue paths', () => {
     expect(sell).toMatchObject({
       status: 'rejected',
       reasonCode: 'FILL_LIQUIDITY',
+      strategyReasonCode: 'TREND_PULLBACK_STOP',
       filledUsd: '0.00',
     });
     expect(result.ledger.entries).toHaveLength(1);
@@ -631,6 +666,7 @@ describe('PaperRunner defensive queue paths', () => {
     expect(duplicate).toMatchObject({
       status: 'rejected',
       reasonCode: 'FILL_DUPLICATE',
+      strategyReasonCode: 'TREND_PULLBACK_ENTRY',
       fillTime: null,
       filledUsd: '0.00',
     });
@@ -655,6 +691,28 @@ describe('PaperRunner defensive queue paths', () => {
     });
     expect(result.ledger.entries).toHaveLength(1);
     expect(result.ledger.positions.token?.entryIntentId).toBe('intent-a');
+  });
+
+  it('sizes the buy cash floor from the previous-close equity (one-bar convention)', async () => {
+    const aaa = buildCandles([100, 100, 100], { tokenId: 'aaa' }).map((candle, index) =>
+      index === 2 ? { ...candle, open: '200', high: '200.2', low: '99.9' } : candle,
+    );
+    const bbb = buildCandles([50, 50, 50], { tokenId: 'bbb' });
+    mockDecisions([
+      [scriptedIntent('intent-aaa', { tokenId: 'aaa', sizeUsd: '100' })],
+      [scriptedIntent('intent-bbb', { tokenId: 'bbb', sizeUsd: '795' })],
+    ]);
+
+    const { result } = await runTrend({ tokenIds: ['aaa', 'bbb'], candles: [...aaa, ...bbb] });
+    const buy = result.intents.find((intent) => intent.intentId === 'intent-bbb');
+
+    // Equity at the fill open is cash + aaa marked at the previous close (100),
+    // not aaa's gapped open (200). Floor = 999.65 * 10% = 99.965, so 795 + fee
+    // fits; marking at the open would have raised the floor and rejected it.
+    expect(buy?.status).toBe('filled');
+    expect(buy?.strategyReasonCode).toBe('TREND_PULLBACK_ENTRY');
+    const entry = result.ledger.entries.find((row) => row.intentId === 'intent-bbb');
+    expect(entry?.cashAfterUsd).toBe('102.76');
   });
 });
 

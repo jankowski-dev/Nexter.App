@@ -161,6 +161,7 @@ describe('PaperLogger', () => {
       amount: '1.99800200',
       priceUsd: '100.10000000',
       feeUsd: '0.50',
+      liquidityCapUsd: '1000.00',
       cashAfterUsd: '799.50',
       positionAmountAfter: '1.99800200',
     });
@@ -193,6 +194,7 @@ describe('PaperLogger', () => {
       requestedUsd: '200.00',
       filledUsd: '10.00',
       unfilledUsd: '190.00',
+      liquidityCapUsd: '10.00',
     });
     expect(event?.decision?.action).toBe('buy');
     expect(event?.alternatives.length).toBeGreaterThanOrEqual(1);
@@ -209,6 +211,7 @@ describe('PaperLogger', () => {
       requestedUsd: plan.requestedUsd,
       requestedAmount: null,
       priceUsd: null,
+      liquidityCapUsd: plan.liquidityCapUsd,
       cashAfterUsd: '1000.00',
       positionAmountAfter: '1.99800200',
     });
@@ -218,6 +221,11 @@ describe('PaperLogger', () => {
     expect(event?.module).toBe('execution');
     expect(event?.severity).toBe('warn');
     expect(event?.reasonCode).toBe(Reason.FILL_POSITION_EXISTS);
+    expect(event?.inputs).toMatchObject({
+      filledUsd: '0.00',
+      filledAmount: '0.00000000',
+      liquidityCapUsd: '1000.00',
+    });
     expect(event?.decision?.action).toBe('block');
     expect(event?.decision?.reasonCode).toBe(Reason.FILL_POSITION_EXISTS);
     expect(event?.alternatives).toHaveLength(1);
@@ -244,6 +252,9 @@ describe('PaperLogger', () => {
       intentId: 'intent-1',
       queuedAt: new Date(T0).toISOString(),
       barsPending: 3,
+      filledUsd: '0.00',
+      filledAmount: '0.00000000',
+      liquidityCapUsd: '0.00',
     });
     expect(event?.alternatives).toHaveLength(1);
     expect(event?.alternatives[0]?.action).toBe('hold');
@@ -347,6 +358,7 @@ describe('PaperLogger', () => {
       requestedUsd: '200.00',
       requestedAmount: null,
       priceUsd: '100.10000000',
+      liquidityCapUsd: '1000.00',
       cashAfterUsd: '1.00',
       positionAmountAfter: '0.00000000',
     });

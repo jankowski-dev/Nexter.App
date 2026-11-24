@@ -56,6 +56,7 @@ export interface PaperRejectionLogInput {
   readonly requestedUsd: string | null;
   readonly requestedAmount: string | null;
   readonly priceUsd: string | null;
+  readonly liquidityCapUsd: string;
   readonly cashAfterUsd: string;
   readonly positionAmountAfter: string;
 }
@@ -91,6 +92,9 @@ export interface PaperRunCompletedLogInput {
 }
 
 type EventBody = Omit<SandboxEventInput, 'runId' | 'seed' | 'configVersion' | 'dataSnapshotId'>;
+
+const ZERO_USD = '0.00';
+const ZERO_UNITS = '0.00000000';
 
 function iso(timestamp: Timestamp): string {
   return new Date(timestamp).toISOString();
@@ -137,6 +141,7 @@ function fillInputs(
     decisionTime: iso(intent.clockTime),
     priceUsd: plan.priceUsd,
     feeUsd: plan.feeUsd,
+    liquidityCapUsd: plan.liquidityCapUsd,
     reasonCode: plan.reasonCode,
     cashAfterUsd,
     positionAmountAfter,
@@ -259,7 +264,10 @@ export class PaperLogger {
         decisionTime: iso(input.intent.clockTime),
         requestedUsd: input.requestedUsd,
         requestedAmount: input.requestedAmount,
+        filledUsd: ZERO_USD,
+        filledAmount: ZERO_UNITS,
         priceUsd: input.priceUsd,
+        liquidityCapUsd: input.liquidityCapUsd,
         cashAfterUsd: input.cashAfterUsd,
         positionAmountAfter: input.positionAmountAfter,
         reasonCode: input.reasonCode,
@@ -298,6 +306,9 @@ export class PaperLogger {
         decisionTime: iso(input.intent.clockTime),
         queuedAt: iso(input.queuedAt),
         barsPending: input.barsPending,
+        filledUsd: ZERO_USD,
+        filledAmount: ZERO_UNITS,
+        liquidityCapUsd: ZERO_USD,
       },
       decision: decision(
         'noop',

@@ -468,6 +468,41 @@ describe('planSellFill', () => {
   });
 });
 
+describe('liquidityCapUsd', () => {
+  it('reports the bar cap in USD on filled buy and sell plans', () => {
+    const buy = planBuyFill(buyInput());
+    const sell = planSellFill(sellInput());
+
+    // 100000 volume * 1% = 1000.00 USD for both sides.
+    expect(buy.liquidityCapUsd).toBe('1000.00');
+    expect(sell.liquidityCapUsd).toBe('1000.00');
+  });
+
+  it('reports the cap on partial plans derived from a thinner bar', () => {
+    const buy = planBuyFill(buyInput({ candle: makeCandle({ open: '100', volumeUsd: '1500' }) }));
+    const sell = planSellFill(sellInput({ candle: makeCandle({ open: '90', volumeUsd: '1500' }) }));
+
+    expect(buy.status).toBe('partial');
+    expect(buy.liquidityCapUsd).toBe('15.00');
+    expect(sell.liquidityCapUsd).toBe('15.00');
+  });
+
+  it('reports the cap on rejected plans and zero when the bar is not tradable', () => {
+    const cashRejected = planBuyFill(buyInput({ intent: makeIntent({ sizeUsd: '2000' }) }));
+    expect(cashRejected.status).toBe('rejected');
+    expect(cashRejected.liquidityCapUsd).toBe('1000.00');
+
+    const positionRejected = planBuyFill(buyInput({ hasPosition: true }));
+    expect(positionRejected.liquidityCapUsd).toBe('1000.00');
+
+    const noData = planBuyFill(buyInput({ candle: makeCandle({ volumeUsd: '0' }) }));
+    expect(noData.liquidityCapUsd).toBe('0.00');
+
+    const noPosition = planSellFill(sellInput({ positionAmount: '0' }));
+    expect(noPosition.liquidityCapUsd).toBe('1000.00');
+  });
+});
+
 describe('programmer misuse', () => {
   it('throws when the intent side does not match the planner', () => {
     expect(() =>

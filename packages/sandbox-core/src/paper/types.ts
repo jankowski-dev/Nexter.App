@@ -65,6 +65,8 @@ export interface BuyFillPlan {
   readonly amount: string;
   readonly priceUsd: string;
   readonly feeUsd: string;
+  /** Bar liquidity cap in USD (2 decimals); `0.00` when the bar was not tradable. */
+  readonly liquidityCapUsd: string;
   readonly reasonCode: ReasonCode;
   readonly reasonText: string;
 }
@@ -86,6 +88,8 @@ export interface SellFillPlan {
   readonly notionalUsd: string;
   readonly feeUsd: string;
   readonly proceedsUsd: string;
+  /** Bar liquidity cap in USD (2 decimals); `0.00` when the bar was not tradable. */
+  readonly liquidityCapUsd: string;
   readonly reasonCode: ReasonCode;
   readonly reasonText: string;
 }
@@ -215,7 +219,10 @@ export interface IntentRecord {
   readonly filledAmount: string;
   readonly priceUsd: string | null;
   readonly feeUsd: string;
+  /** Fill outcome reason (`FILL_*`). */
   readonly reasonCode: ReasonCode;
+  /** Strategy reason that produced the intent (`TREND_PULLBACK_STOP`, `RANGE_REVERSION_ENTRY`, ...). */
+  readonly strategyReasonCode: ReasonCode;
   readonly reasonText: string;
   readonly decisionTime: Timestamp;
   readonly fillTime: Timestamp | null;
