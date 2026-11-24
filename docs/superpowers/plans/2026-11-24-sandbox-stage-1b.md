@@ -639,7 +639,8 @@ const DECIMAL = /^\d+(\.\d+)?$/;
 
 export class DecimalInputError extends Error {}
 export function toDecimal(value: string, label: string): Decimal;
-export function money(value: Decimal): string; // toFixed(2)
+export function money(value: Decimal): string; // toFixed(2), half-up
+export function moneyDown(value: Decimal): string; // toFixed(2), floor
 export function percent(value: Decimal): string; // toFixed(2)
 export function minDecimal(...values: Decimal[]): Decimal;
 export function maxDecimal(...values: Decimal[]): Decimal;
@@ -1105,7 +1106,7 @@ For each candidate:
 10. If any of the five caps is `<= 0`, drop with the matching reason in fixed order: token, strategy, cash, risk, liquidity.
 11. `size = min(tokenCap, strategyCap, cashAvailable, sizeByRisk, liquidityCap)`.
 12. If `size < minOrderUsd` → drop `ALLOC_SIZE_TOO_SMALL`.
-13. Otherwise accept: `sizeUsd = money(size)`, `bindingConstraint` = the constraint equal to the minimum (first in the fixed order), then increment open positions, token value, strategy value and decrement cash available by `size`.
+13. Otherwise accept: `sizeUsd = moneyDown(size)` (floor to cents so an emitted order can never exceed a cap after rounding), run the minimum-order check against the floored size, set `bindingConstraint` to the exact constraint equal to the minimum (first in the fixed order), then increment open positions, token value, strategy value and decrement cash available by the floored emitted size, not the unrounded one.
 
 Sells never enter this function.
 
