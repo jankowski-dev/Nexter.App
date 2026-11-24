@@ -243,6 +243,99 @@ export interface EquityPoint {
 }
 
 /**
+ * One raw equity observation before drawdown is derived.
+ *
+ * The mark projection (`markPortfolio`) supplies the three money strings; the
+ * initial capital is the starting peak that `buildEquityCurve` uses for the
+ * first bar.
+ */
+export interface EquityObservation {
+  readonly clockTime: Timestamp;
+  readonly equityUsd: string;
+  readonly cashUsd: string;
+  readonly positionsValueUsd: string;
+}
+
+/** Input to `buildEquityCurve`: raw marks plus the starting peak. */
+export interface BuildEquityCurveInput {
+  readonly initialCapitalUsd: string;
+  readonly points: readonly EquityObservation[];
+}
+
+/** Closed-trade summary for one strategy key. */
+export interface StrategyMetric {
+  readonly strategyKey: StrategyKey;
+  readonly tradeCount: number;
+  readonly wins: number;
+  readonly losses: number;
+  readonly realizedPnlUsd: string;
+  /** `wins / tradeCount * 100`, or `null` when the strategy has no closed trades. */
+  readonly winRatePct: string | null;
+}
+
+/** Closed-trade summary for one token. */
+export interface TokenMetric {
+  readonly tokenId: string;
+  readonly tradeCount: number;
+  readonly wins: number;
+  readonly losses: number;
+  readonly realizedPnlUsd: string;
+  /** `wins / tradeCount * 100`, or `null` when the token has no closed trades. */
+  readonly winRatePct: string | null;
+}
+
+/**
+ * Summary metrics for one finished paper run.
+ *
+ * Money and percent values are decimal strings with two decimals; counts are
+ * integers. Undefined ratios are `null`, never `Infinity` or `NaN`. Per-strategy
+ * and per-token summaries cover closed trades only; open positions contribute
+ * to `finalPositionsValueUsd` and `unrealizedPnlUsd` instead.
+ */
+export interface RunMetrics {
+  readonly initialCapitalUsd: string;
+  readonly finalEquityUsd: string;
+  readonly totalReturnPct: string;
+  readonly maxDrawdownPct: string;
+  readonly peakEquityUsd: string;
+  readonly finalCashUsd: string;
+  readonly finalPositionsValueUsd: string;
+  readonly realizedPnlUsd: string;
+  readonly unrealizedPnlUsd: string;
+  readonly feesPaidUsd: string;
+  readonly tradeCount: number;
+  readonly wins: number;
+  readonly losses: number;
+  readonly winRatePct: string | null;
+  readonly profitFactor: string | null;
+  readonly averageWinUsd: string | null;
+  readonly averageLossUsd: string | null;
+  readonly timeInMarketPct: string;
+  readonly averageExposurePct: string;
+  readonly perStrategy: readonly StrategyMetric[];
+  readonly perToken: readonly TokenMetric[];
+}
+
+/**
+ * Input to `computeMetrics`.
+ *
+ * Marks cannot be re-derived from the ledger, so the caller passes the final
+ * `markPortfolio` projection explicitly: `finalEquityUsd`,
+ * `finalPositionsValueUsd` and `unrealizedPnlUsd`. `closedTrades` is the trade
+ * journal (normally `ledger.closedTrades`); the ledger supplies cash, realized
+ * P&L and fees.
+ */
+export interface MetricsInput {
+  readonly initialCapitalUsd: string;
+  readonly finalEquityUsd: string;
+  readonly finalPositionsValueUsd: string;
+  readonly unrealizedPnlUsd: string;
+  readonly equityCurve: readonly EquityPoint[];
+  readonly ledger: PaperLedgerState;
+  readonly closedTrades: readonly PaperTrade[];
+}
+
+/**
  * Input to one deterministic paper run.
  *
  * `initialCapitalUsd` is optional because the approved $1,000 paper capital is
