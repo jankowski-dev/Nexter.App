@@ -3,6 +3,8 @@ import { NavIcon } from '@/components/nav-icon';
 import { NexterLogo } from '@/components/nexter-logo';
 import { useLiveRefreshing } from '@/components/live-refresh-indicator';
 import { useRuntimeSettings } from '@/features/settings/use-settings';
+import { useSandboxStatus } from '@/features/sandbox/sandbox-hooks';
+import { isSandboxVisible, sandboxNavItem } from '@/features/sandbox/sandbox-tabs';
 import { Button } from '@/components/ui/button';
 import { apiFetch, apiPost, fetchNotificationUnreadCount } from '@/lib/api';
 import { UNAUTHORIZED_EVENT } from '@/lib/auth-events';
@@ -219,6 +221,8 @@ function RootLayoutContent() {
     return subscribeUiPreference('nexter-theme', () => setTheme(readTheme()));
   }, []);
   const wallet = useWallet();
+  const sandboxStatus = useSandboxStatus();
+  const sandboxVisible = isSandboxVisible(sandboxStatus.data);
   const unreadNotifications = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: fetchNotificationUnreadCount,
@@ -319,6 +323,17 @@ function RootLayoutContent() {
               <NavIcon name="crypto" className="h-4 w-4 shrink-0" />
               <span>{messages.nav.crypto}</span>
             </Link>
+            {sandboxVisible ? (
+              <Link
+                to={sandboxNavItem.to}
+                activeProps={activeLinkProps}
+                inactiveProps={inactiveLinkProps}
+                className="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors"
+              >
+                <NavIcon name={sandboxNavItem.icon} className="h-4 w-4 shrink-0" />
+                <span>{sandboxNavItem.label}</span>
+              </Link>
+            ) : null}
             {afterCryptoNavigation.map((item) => (
               <Link
                 key={item.to}
@@ -474,6 +489,17 @@ function RootLayoutContent() {
                 <NavIcon name="crypto" className="h-3.5 w-3.5 shrink-0" />
                 <span>{messages.nav.crypto}</span>
               </Link>
+              {sandboxVisible ? (
+                <Link
+                  to={sandboxNavItem.to}
+                  activeProps={activeLinkProps}
+                  inactiveProps={{ className: 'text-zinc-300' }}
+                  className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+                >
+                  <NavIcon name={sandboxNavItem.icon} className="h-3.5 w-3.5 shrink-0" />
+                  <span>{sandboxNavItem.label}</span>
+                </Link>
+              ) : null}
               {afterCryptoNavigation.map((item) => (
                 <Link
                   key={item.to}

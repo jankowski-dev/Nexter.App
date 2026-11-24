@@ -17,6 +17,17 @@ const BINANCE_KEY_PATTERN = /^binance:([A-Z0-9]{2,20}USDT)$/;
 export const sandboxChainSchema = z.enum(['bsc', 'ethereum', 'binance']);
 export type SandboxChain = z.infer<typeof sandboxChainSchema>;
 
+/**
+ * Owner-facing feature availability. `enabled` mirrors `SANDBOX_ENABLED`;
+ * the web app hides the navigation and shows a neutral disabled state when it
+ * is false. The status endpoint stays reachable while the flag is off.
+ */
+export const sandboxStatusSchema = z.object({
+  enabled: z.boolean(),
+  version: z.string().min(1).max(80),
+});
+export type SandboxStatus = z.infer<typeof sandboxStatusSchema>;
+
 export const sandboxCoverageStatusSchema = z.enum(['ok', 'partial', 'missing']);
 export type SandboxCoverageStatus = z.infer<typeof sandboxCoverageStatusSchema>;
 

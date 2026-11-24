@@ -22,6 +22,7 @@ import {
   sandboxRunUpdateRequestSchema,
   sandboxRunsQuerySchema,
   sandboxRunsResponseSchema,
+  sandboxStatusSchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenKeySchema,
   sandboxTokenRefreshResponseSchema,
@@ -31,6 +32,24 @@ import {
 } from './sandbox';
 
 const bscKey = 'bsc:0x1111111111111111111111111111111111111111';
+
+describe('sandbox status', () => {
+  it('parses the feature flag payload', () => {
+    expect(sandboxStatusSchema.parse({ enabled: true, version: 'sandbox-stage-2' })).toEqual({
+      enabled: true,
+      version: 'sandbox-stage-2',
+    });
+    expect(sandboxStatusSchema.parse({ enabled: false, version: 'sandbox-stage-2' }).enabled).toBe(
+      false,
+    );
+  });
+
+  it('rejects a missing flag or version', () => {
+    expect(sandboxStatusSchema.safeParse({ enabled: true }).success).toBe(false);
+    expect(sandboxStatusSchema.safeParse({ version: 'v1' }).success).toBe(false);
+    expect(sandboxStatusSchema.safeParse({ enabled: 'yes', version: 'v1' }).success).toBe(false);
+  });
+});
 
 describe('sandbox token keys', () => {
   it('parses EVM and Binance provider keys', () => {

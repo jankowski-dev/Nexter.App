@@ -1,6 +1,6 @@
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
-import { sandboxRunConfigSchema } from '@nexter/contracts';
+import { sandboxRunConfigSchema, type SandboxStatus } from '@nexter/contracts';
 import {
   DEFAULT_PAPER_SETTINGS,
   DEFAULT_SETTINGS,
@@ -30,10 +30,7 @@ export const SANDBOX_ENABLED = 'SANDBOX_ENABLED';
 export const SANDBOX_VERSION = 'sandbox-stage-2';
 
 /** Owner-facing sandbox availability. */
-export interface SandboxStatus {
-  enabled: boolean;
-  version: string;
-}
+export type { SandboxStatus };
 
 export const SANDBOX_RUN_STATUSES = ['draft', 'running', 'paused', 'stopped', 'failed'] as const;
 export type SandboxRunStatus = (typeof SANDBOX_RUN_STATUSES)[number];
