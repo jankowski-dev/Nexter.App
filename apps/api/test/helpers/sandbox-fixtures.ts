@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import Decimal from 'decimal.js';
 import { sandboxRunTokens, sandboxRuns, users, type Database } from '@nexter/db';
 import {
   applyBuyFill,
@@ -208,11 +209,16 @@ export function makeTick(
   intents: readonly IntentRecord[] = [],
   overrides: Partial<SandboxTickInput> = {},
 ): SandboxTickInput {
+  const equityUsd = overrides.equityUsd ?? marked.equityUsd;
+  const peakEquityUsd = new Decimal(equityUsd).greaterThan(ledger.initialCapitalUsd)
+    ? equityUsd
+    : ledger.initialCapitalUsd;
+
   return {
     status: 'running',
     cashUsd: ledger.cashUsd,
-    equityUsd: marked.equityUsd,
-    peakEquityUsd: ledger.initialCapitalUsd,
+    equityUsd,
+    peakEquityUsd,
     dayStartEquityUsd: ledger.initialCapitalUsd,
     engineState: makeEngineState(),
     ledgerState: ledger,
@@ -258,20 +264,30 @@ export async function seedSandboxRun(
   if (!user) throw new Error('sandbox fixture user insert returned no row');
 
   const capital = options.initialCapitalUsd ?? '1000.00';
+  const status = options.status ?? 'running';
+  const draft = status === 'draft';
   const [run] = await db
     .insert(sandboxRuns)
     .values({
       userId: user.id,
       name: options.name ?? 'Sandbox fixture run',
-      status: options.status ?? 'running',
+      status,
       initialCapitalUsd: capital,
       cashUsd: options.cashUsd ?? capital,
       equityUsd: options.equityUsd ?? capital,
       peakEquityUsd: options.peakEquityUsd ?? capital,
       dayStartEquityUsd: options.dayStartEquityUsd ?? capital,
       settings: options.settings ?? {},
-      engineState: (options.engineState ?? {}) as Record<string, unknown>,
-      ledgerState: (options.ledgerState ?? {}) as Record<string, unknown>,
+      // A non-draft run must carry a valid empty engine state and an initial
+      // ledger; only a draft may still have the schema-default `{}`.
+      engineState: (options.engineState ?? (draft ? {} : { tokens: {} })) as Record<
+        string,
+        unknown
+      >,
+      ledgerState: (options.ledgerState ?? (draft ? {} : createLedger(capital))) as Record<
+        string,
+        unknown
+      >,
       lastBarClose: options.lastBarClose ?? null,
       eventSeq: options.eventSeq ?? 0,
       eventHash: options.eventHash ?? '0'.repeat(64),

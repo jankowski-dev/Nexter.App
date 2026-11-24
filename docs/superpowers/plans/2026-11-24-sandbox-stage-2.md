@@ -259,7 +259,7 @@ Use Stage 1C `planBuyFill`/`planSellFill`/`applyBuyFill`/`applySellFill` with a 
 
 - [ ] **Step 3: Lifecycle/controls**
 
-Draft create/edit; start validates config/tokens/coverage, freezes config, initializes the ledger/state, sets running; pause/resume/stop; archive only terminal; close trade queues a manual sell for the next tick; invalid transitions return 409; every mutation audits. No manual buy/add.
+Draft create/edit; start validates config/tokens/coverage, freezes config, initializes the ledger (`createLedger(initial)`) and the engine state (`{ tokens: {} }`) in the same transaction that sets `running` (a non-draft run with `{}` must fail closed), then pause/resume/stop; archive only terminal; close trade queues a manual sell for the next tick; invalid transitions return 409; every mutation audits. No manual buy/add.
 
 - [ ] **Step 4: Tests**
 

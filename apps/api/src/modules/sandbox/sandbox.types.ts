@@ -567,6 +567,12 @@ export function assertSandboxTickConsistency(tick: SandboxTickInput): void {
   if (!decimalEquals(tick.equityUsd, equity.toFixed(2))) {
     invalid('equityUsd', 'must equal equityPoint equityUsd');
   }
+  if (new Decimal(tick.peakEquityUsd).lessThan(tick.equityUsd)) {
+    invalid('peakEquityUsd', 'must be at least the current equityUsd');
+  }
+  if (new Decimal(tick.dayStartEquityUsd).lessThanOrEqualTo(0)) {
+    invalid('dayStartEquityUsd', 'must be positive');
+  }
 }
 
 function assertDecimal(value: string, path: string): void {

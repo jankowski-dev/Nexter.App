@@ -110,7 +110,11 @@ describe.runIf(canRun)('sandbox run store', () => {
   });
 
   it('rejects the empty JSONB default once a run is no longer a draft', async () => {
-    const { runId } = await seedSandboxRun(db, { status: 'running' });
+    const { runId } = await seedSandboxRun(db, {
+      status: 'running',
+      engineState: {},
+      ledgerState: {},
+    });
 
     await expect(repository.loadRun(runId)).rejects.toMatchObject({
       code: 'SANDBOX_STATE_INVALID',

@@ -115,13 +115,15 @@ The engine/ledger JSONB is the source of truth; projection tables serve the UI a
 Statuses: `draft`, `running`, `paused`, `stopped`, `failed`.
 
 - **draft:** owner edits name, universe, capital and Stage 1B/1C settings. No money, no data snapshot yet.
-- **start:** validate config/tokens/coverage; freeze the config/token snapshot; warm up the data; create the ledger ($initial), empty engine state, running status; the next tick at the next closed 1h bar. Audit `sandbox.run_started`.
+- **start:** validate config/tokens/coverage; freeze the config/token snapshot; warm up the data; create the ledger ($initial) and a valid empty engine state (`{ tokens: {} }`) **before** the status becomes `running`; the next tick at the next closed 1h bar. Audit `sandbox.run_started`.
 - **running:** the runner ticks; decisions/fills/events/equity persist; owner cannot edit config, only pause/stop/close a trade.
 - **pause:** no new decisions or fills; open positions stay marked; status paused; the runner skips. Audit `sandbox.run_paused`.
 - **resume:** continue from the next closed bar; no gap fill. Audit `sandbox.run_resumed`.
 - **stop:** stop decisions, generate the final report, mark positions/open trades at the last close, status stopped. Audit `sandbox.run_stopped`.
 - **failed:** a data/engine/reconciliation error that cannot be recovered; error stored; no further ticks; report with the last good state. Audit `sandbox.run_failed`.
 - **archive:** soft hide a terminal run; no DELETE. Audit `sandbox.run_archived`.
+
+`loadRun` fails closed when a non-draft run still has the schema-default `{}` state, so the start transaction must persist the initial ledger and `{ tokens: {} }` together with the status change; the first tick depends on both.
 
 The owner can close one token: a manual close request is queued; the next tick emits a sell intent at the current quote, bypassing strategy exits but still applying the sell risk checks (data/liquidity). This is the only manual trade action. Audit `sandbox.trade_close_requested`.
 

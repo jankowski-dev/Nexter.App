@@ -177,8 +177,8 @@ describe.runIf(canRun)('sandbox projections', () => {
       equityUsd: open.marked.equityUsd,
       cashUsd: open.ledger.cashUsd,
       positionsValueUsd: open.marked.positionsValueUsd,
-      drawdownPct: '0.00',
     });
+    expectDecimal(equityRow?.drawdownPct, '0.00');
     expect(equityRow?.clockTime.getTime()).toBe(SANDBOX_TEST_AT);
   });
 

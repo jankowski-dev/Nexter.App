@@ -12,6 +12,7 @@ import {
   sandboxTrades,
   type Database,
   type DbExecutor,
+  type DbTransaction,
 } from '@nexter/db';
 import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
 import type { SandboxEvent } from '@nexter/sandbox-core';
@@ -326,7 +327,7 @@ export class SandboxRepository {
    * head explicitly and never invents a chain.
    */
   async persistTickInTransaction(
-    executor: DbExecutor,
+    executor: DbTransaction,
     runId: string,
     tick: SandboxTickInput,
   ): Promise<SandboxTickSummary> {
@@ -548,7 +549,7 @@ export class SandboxRepository {
 
 /** Session handed to `commitTick`; the log is bound to the tick transaction. */
 export interface SandboxTickSession {
-  readonly tx: DbExecutor;
+  readonly tx: DbTransaction;
   readonly run: SandboxRunSnapshot;
   readonly eventLog: SandboxEventLog;
 }

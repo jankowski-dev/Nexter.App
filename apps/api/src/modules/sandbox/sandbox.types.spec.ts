@@ -220,7 +220,7 @@ describe('sandbox tick validation', () => {
       status: 'running',
       cashUsd: ledger.cashUsd,
       equityUsd: marked.equityUsd,
-      peakEquityUsd: '1000.00',
+      peakEquityUsd: '2000.00',
       dayStartEquityUsd: '1000.00',
       engineState: engineState(),
       ledgerState: ledger,
@@ -283,6 +283,14 @@ describe('sandbox tick validation', () => {
     const positions = tick();
     (positions.equityPoint as { positionsValueUsd: string }).positionsValueUsd = '1.00';
     expect(() => assertSandboxTickConsistency(positions)).toThrow(/sum of marked position/);
+
+    const peak = tick();
+    (peak as { peakEquityUsd: string }).peakEquityUsd = '1.00';
+    expect(() => assertSandboxTickConsistency(peak)).toThrow(/peakEquityUsd/);
+
+    const dayStart = tick();
+    (dayStart as { dayStartEquityUsd: string }).dayStartEquityUsd = '0.00';
+    expect(() => assertSandboxTickConsistency(dayStart)).toThrow(/dayStartEquityUsd/);
   });
 });
 

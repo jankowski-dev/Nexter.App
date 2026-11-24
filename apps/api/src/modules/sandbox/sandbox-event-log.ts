@@ -19,7 +19,10 @@ import { SandboxPersistenceError } from './sandbox.types';
 /** Outcome of recomputing a stored chain against the persisted run head. */
 export interface SandboxEventChainVerification {
   readonly ok: boolean;
-  /** Number of persisted events = the sequence the next event receives. */
+  /**
+   * Number of event rows read. When `ok`, this equals `event_seq` and is the
+   * sequence the next event receives; error paths report the rows examined.
+   */
   readonly count: number;
   /** Last stored sequence, or `null` for an empty chain. */
   readonly lastSeq: number | null;
