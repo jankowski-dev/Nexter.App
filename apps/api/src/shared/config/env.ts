@@ -105,9 +105,9 @@ export const envSchema = z.object({
   SWAP_ETHEREUM_EXECUTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SWAP_SELECTOR_ALLOWLIST: z.preprocess(emptyToUndefined, z.string().optional()),
   SANDBOX_ENABLED: z
-    .enum(['true', 'false'])
+    .enum(['true', 'false', '1', '0'])
     .default('true')
-    .transform((value) => value === 'true'),
+    .transform((value) => value === 'true' || value === '1'),
   RECONCILIATION_ENABLED: z
     .enum(['true', 'false'])
     .default('false')

@@ -1843,10 +1843,7 @@ export const sandboxTokens = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    uniqueIndex('sandbox_tokens_user_token_unique').on(table.userId, table.tokenKey),
-    index('sandbox_tokens_user_idx').on(table.userId),
-  ],
+  (table) => [uniqueIndex('sandbox_tokens_user_token_unique').on(table.userId, table.tokenKey)],
 );
 
 export const sandboxCandles = pgTable(
@@ -1967,6 +1964,7 @@ export const sandboxPositions = pgTable(
     openedAt: timestamp('opened_at', { withTimezone: true }).notNull(),
     stopLossPct: numeric('stop_loss_pct', { precision: 9, scale: 4 }),
     takeProfitPct: numeric('take_profit_pct', { precision: 9, scale: 4 }),
+    entryIntentId: text('entry_intent_id').notNull(),
     feesPaidUsd: numeric('fees_paid_usd', { precision: 18, scale: 2 }).notNull().default('0'),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

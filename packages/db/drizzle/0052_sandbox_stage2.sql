@@ -98,6 +98,7 @@ CREATE TABLE "sandbox_positions" (
 	"opened_at" timestamp with time zone NOT NULL,
 	"stop_loss_pct" numeric(9, 4),
 	"take_profit_pct" numeric(9, 4),
+	"entry_intent_id" text NOT NULL,
 	"fees_paid_usd" numeric(18, 2) DEFAULT '0' NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "sandbox_positions_pk" PRIMARY KEY("run_id","token_id")
@@ -206,15 +207,28 @@ CREATE UNIQUE INDEX "sandbox_ledger_entries_run_entry_unique" ON "sandbox_ledger
 CREATE INDEX "sandbox_runs_user_status_archived_idx" ON "sandbox_runs" USING btree ("user_id","status","archived_at");--> statement-breakpoint
 CREATE INDEX "sandbox_runs_status_idx" ON "sandbox_runs" USING btree ("status");--> statement-breakpoint
 CREATE UNIQUE INDEX "sandbox_tokens_user_token_unique" ON "sandbox_tokens" USING btree ("user_id","token_key");--> statement-breakpoint
-CREATE INDEX "sandbox_tokens_user_idx" ON "sandbox_tokens" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "sandbox_trades_run_token_idx" ON "sandbox_trades" USING btree ("run_id","token_id");
--- Sandbox Stage 2 grants. Events are append-only; projection tables are upserted
--- by the runner. No DELETE on any sandbox table. No sequences are used (uuid keys).
+-- Sandbox Stage 2 grants. Mutable projection tables are upserted by the runner;
+-- `sandbox_events` is append-only (no UPDATE/DELETE). No DELETE on any sandbox
+-- table. No sequences are used (uuid keys). The event-log revoke is repeated by
+-- packages/db/scripts/provision-app-role.mjs and by the unguarded block below,
+-- because the role may not exist when this migration runs.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nexter_app') THEN
     GRANT SELECT, INSERT, UPDATE ON sandbox_tokens, sandbox_candles, sandbox_runs, sandbox_run_tokens, sandbox_positions, sandbox_trades, sandbox_ledger_entries, sandbox_equity_points, sandbox_intents, sandbox_reports TO nexter_app;
     GRANT SELECT, INSERT ON sandbox_events TO nexter_app;
     REVOKE DELETE ON sandbox_tokens, sandbox_candles, sandbox_runs, sandbox_run_tokens, sandbox_events, sandbox_positions, sandbox_trades, sandbox_ledger_entries, sandbox_equity_points, sandbox_intents, sandbox_reports FROM nexter_app;
+    REVOKE UPDATE, DELETE ON sandbox_events FROM nexter_app;
   END IF;
+END $$;
+--> statement-breakpoint
+
+-- The append-only event-log revoke is attempted even when the role does not exist
+-- yet (fresh CI/database), so it does not depend on the guarded block above.
+DO $$
+BEGIN
+  REVOKE UPDATE, DELETE ON sandbox_events FROM nexter_app;
+EXCEPTION
+  WHEN undefined_object THEN NULL;
 END $$;

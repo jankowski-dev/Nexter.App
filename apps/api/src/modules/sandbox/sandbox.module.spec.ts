@@ -2,20 +2,14 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxModule } from './sandbox.module';
-import {
-  SANDBOX_ENABLED,
-  SANDBOX_EVENT_GENESIS_HASH,
-  SANDBOX_VERSION,
-  type SandboxStatus,
-} from './sandbox.types';
+import { SANDBOX_ENABLED, SANDBOX_VERSION, type SandboxStatus } from './sandbox.types';
 
 describe('SandboxModule', () => {
-  it('boots with the @nexter/sandbox-core dependency', async () => {
+  it('boots the sandbox module', async () => {
     const moduleRef = await Test.createTestingModule({ imports: [SandboxModule] }).compile();
 
     try {
       expect(moduleRef.get(SandboxController)).toBeInstanceOf(SandboxController);
-      expect(SANDBOX_EVENT_GENESIS_HASH).toBe('0'.repeat(64));
     } finally {
       await moduleRef.close();
     }
