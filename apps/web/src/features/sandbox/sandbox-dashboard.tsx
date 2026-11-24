@@ -277,16 +277,18 @@ function DashboardRun({
   const tokenStates = sandboxTokenStates({ tokens: run.tokens, events, positions });
   const lastDecision = sandboxLastDecision(events);
   const archived = run.archivedAt !== null;
-  const freshness =
-    run.status === 'running' && !archived
-      ? sandboxFreshnessWarnings({
-          lastBarClose: run.lastBarClose,
-          lastTickAt: run.lastTickAt,
-          lastCandleAt: overview?.universe.lastCandleAt ?? null,
-          staleTokens: sandboxRunStaleTokens(overview?.universe.staleTokens ?? [], run.tokenKeys),
-          now: new Date(),
-        })
-      : [];
+  // Freshness only means something while the runner is advancing the run. A
+  // paused/stopped/draft/archived run must not claim that its data is fresh.
+  const freshnessChecked = run.status === 'running' && !archived;
+  const freshness = freshnessChecked
+    ? sandboxFreshnessWarnings({
+        lastBarClose: run.lastBarClose,
+        lastTickAt: run.lastTickAt,
+        lastCandleAt: overview?.universe.lastCandleAt ?? null,
+        staleTokens: sandboxRunStaleTokens(overview?.universe.staleTokens ?? [], run.tokenKeys),
+        now: new Date(),
+      })
+    : [];
   const freshnessTone = sandboxFreshnessTone(freshness);
   const controls: DashboardControl[] = archived
     ? []
@@ -313,9 +315,13 @@ function DashboardRun({
               <Badge tone={sandboxStatusTones[run.status]}>{sandboxStatusLabels[run.status]}</Badge>
               {archived ? <Badge tone="neutral">Архив</Badge> : null}
               <Badge tone="info">{run.executionMode}</Badge>
-              <Badge tone={freshnessTone === 'ok' ? 'success' : freshnessTone}>
-                {freshnessTone === 'ok' ? 'Данные свежие' : 'Данные требуют внимания'}
-              </Badge>
+              {freshnessChecked ? (
+                <Badge tone={freshnessTone === 'ok' ? 'success' : freshnessTone}>
+                  {freshnessTone === 'ok' ? 'Данные свежие' : 'Данные требуют внимания'}
+                </Badge>
+              ) : (
+                <Badge tone="neutral">Свежесть не проверяется</Badge>
+              )}
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">
               <span>{counts.positions} откр. позиций</span>

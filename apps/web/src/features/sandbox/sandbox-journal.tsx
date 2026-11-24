@@ -92,23 +92,18 @@ export function SandboxJournal({
   onSelectRun,
   onChangeTab,
   selectionPending = false,
-  initialSection = 'events',
-  initialIntentFilters = defaultSandboxIntentFilters,
-  initialTradeStatus = 'all',
-}: SandboxTabSharedProps & {
-  initialSection?: JournalSection;
-  initialIntentFilters?: SandboxIntentFilters;
-  initialTradeStatus?: SandboxTradeFilter;
-}) {
+}: SandboxTabSharedProps) {
   const detail = useSandboxRunDetail(selectedRunId);
   const live = detail.data?.status === 'running' && detail.data.archivedAt === null;
   const eventsQuery = useSandboxEvents(selectedRunId, live, 200);
-  const [section, setSection] = useState<JournalSection>(initialSection);
+  const [section, setSection] = useState<JournalSection>('events');
   const [eventFilters, setEventFilters] = useState<SandboxEventFilters>(defaultSandboxEventFilters);
   const [riskTokenId, setRiskTokenId] = useState<string | null>(null);
-  const [intentFilters, setIntentFilters] = useState<SandboxIntentFilters>(initialIntentFilters);
+  const [intentFilters, setIntentFilters] = useState<SandboxIntentFilters>(
+    defaultSandboxIntentFilters,
+  );
   const [intentOffset, setIntentOffset] = useState(0);
-  const [tradeStatus, setTradeStatus] = useState<SandboxTradeFilter>(initialTradeStatus);
+  const [tradeStatus, setTradeStatus] = useState<SandboxTradeFilter>('all');
   const [tradeOffset, setTradeOffset] = useState(0);
   const intentsQuery = useSandboxIntents(selectedRunId, JOURNAL_PAGE_SIZE, intentOffset, live);
   const tradesQuery = useSandboxTrades(selectedRunId, JOURNAL_PAGE_SIZE, tradeOffset, live);
@@ -219,53 +214,15 @@ export function SandboxJournal({
       ) : null}
 
       {section === 'risk' ? (
-        <Card>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle>Проверки риска</CardTitle>
-            <Select
-              aria-label="Фильтр проверок по токену"
-              className="w-52"
-              value={riskTokenId ?? ''}
-              onChange={(event) => setRiskTokenId(event.target.value || null)}
-            >
-              <option value="">Все токены</option>
-              {tokenOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <p className="mt-1 text-xs text-zinc-500">
-            События с проверками риска из загруженной части журнала: имя, значение, лимит и
-            результат.
-          </p>
-          {eventsQuery.isPending ? (
-            <div className="mt-3">
-              <LoadingRows rows={3} />
-            </div>
-          ) : eventsQuery.isError ? (
-            <div className="mt-3">
-              <ErrorState
-                message="Не удалось загрузить проверки риска"
-                onRetry={() => void eventsQuery.refetch()}
-              />
-            </div>
-          ) : riskEvents.length === 0 ? (
-            <p className="mt-3 text-sm text-zinc-600">Проверок риска пока нет.</p>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {riskEvents.map((event) => (
-                <RiskCheckRow
-                  key={event.seq}
-                  event={event}
-                  symbol={event.tokenId ? (symbolByToken.get(event.tokenId) ?? event.tokenId) : '—'}
-                />
-              ))}
-            </div>
-          )}
-          <EventLoadMore query={eventsQuery} events={events} />
-        </Card>
+        <RiskBlock
+          query={eventsQuery}
+          events={events}
+          riskEvents={riskEvents}
+          riskTokenId={riskTokenId}
+          onRiskTokenId={setRiskTokenId}
+          tokenOptions={tokenOptions}
+          symbolByToken={symbolByToken}
+        />
       ) : null}
 
       {section === 'intents' ? (
@@ -295,6 +252,73 @@ export function SandboxJournal({
         />
       ) : null}
     </div>
+  );
+}
+
+export function RiskBlock({
+  query,
+  events,
+  riskEvents,
+  riskTokenId,
+  onRiskTokenId,
+  tokenOptions,
+  symbolByToken,
+}: {
+  query: ReturnType<typeof useSandboxEvents>;
+  events: readonly SandboxEvent[];
+  riskEvents: readonly SandboxEvent[];
+  riskTokenId: string | null;
+  onRiskTokenId: (tokenId: string | null) => void;
+  tokenOptions: ReadonlyArray<{ value: string; label: string }>;
+  symbolByToken: ReadonlyMap<string, string>;
+}) {
+  return (
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CardTitle>Проверки риска</CardTitle>
+        <Select
+          aria-label="Фильтр проверок по токену"
+          className="w-52"
+          value={riskTokenId ?? ''}
+          onChange={(event) => onRiskTokenId(event.target.value || null)}
+        >
+          <option value="">Все токены</option>
+          {tokenOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <p className="mt-1 text-xs text-zinc-500">
+        События с проверками риска из загруженной части журнала: имя, значение, лимит и результат.
+      </p>
+      {query.isPending ? (
+        <div className="mt-3">
+          <LoadingRows rows={3} />
+        </div>
+      ) : query.isError ? (
+        <div className="mt-3">
+          <ErrorState
+            message="Не удалось загрузить проверки риска"
+            onRetry={() => void query.refetch()}
+          />
+        </div>
+      ) : riskEvents.length === 0 ? (
+        <p className="mt-3 text-sm text-zinc-600">Проверок риска пока нет.</p>
+      ) : (
+        <div className="mt-3 space-y-2">
+          {riskEvents.map((event) => (
+            <RiskCheckRow
+              key={event.seq}
+              event={event}
+              symbol={event.tokenId ? (symbolByToken.get(event.tokenId) ?? event.tokenId) : '—'}
+            />
+          ))}
+        </div>
+      )}
+      <EventLoadMore query={query} events={events} />
+    </Card>
   );
 }
 
@@ -618,7 +642,7 @@ function OffsetPager({
   );
 }
 
-function IntentsBlock({
+export function IntentsBlock({
   query,
   intents,
   filters,
@@ -777,7 +801,7 @@ function IntentsBlock({
   );
 }
 
-function TradesBlock({
+export function TradesBlock({
   query,
   trades,
   status,

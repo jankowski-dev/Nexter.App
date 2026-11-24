@@ -14,7 +14,7 @@ vi.mock('./sandbox-hooks', () => ({
   useSandboxTrades: vi.fn(),
 }));
 
-import { SandboxJournal } from './sandbox-journal';
+import { SandboxJournal, IntentsBlock, RiskBlock, TradesBlock } from './sandbox-journal';
 import {
   useSandboxEvents,
   useSandboxIntents,
@@ -22,11 +22,18 @@ import {
   useSandboxTrades,
 } from './sandbox-hooks';
 import {
+  defaultSandboxIntentFilters,
+  filterSandboxIntents,
+  filterSandboxTrades,
+  sandboxRiskEvents,
+} from './sandbox-journal-helpers';
+import {
   sandboxEventFixture,
   sandboxIntentFixture,
   sandboxRunDetailFixture,
   sandboxRunId,
   sandboxRunSummaryFixture,
+  sandboxTokenId,
   sandboxTradeFixture,
 } from './sandbox-test-fixtures';
 
@@ -61,16 +68,7 @@ function eventsResult(events = [sandboxEventFixture()]): ReturnType<typeof useSa
 
 function renderJournal(
   selectedRunId: string | null = sandboxRunId,
-  options: {
-    selectionPending?: boolean;
-    initialSection?: 'events' | 'intents' | 'trades' | 'risk';
-    initialIntentFilters?: {
-      status: 'all' | 'pending' | 'filled' | 'partial' | 'rejected' | 'expired';
-      side: 'all' | 'buy' | 'sell';
-      tokenId: string | null;
-    };
-    initialTradeStatus?: 'all' | 'open' | 'closed';
-  } = {},
+  options: { selectionPending?: boolean } = {},
 ): string {
   return renderToStaticMarkup(
     <SandboxJournal
@@ -79,9 +77,76 @@ function renderJournal(
       onSelectRun={() => undefined}
       onChangeTab={() => undefined}
       selectionPending={options.selectionPending}
-      initialSection={options.initialSection}
-      initialIntentFilters={options.initialIntentFilters}
-      initialTradeStatus={options.initialTradeStatus}
+    />,
+  );
+}
+
+const symbolByToken = new Map([[sandboxTokenId, 'AAA']]);
+
+function renderIntentsSection(): string {
+  const filters = { ...defaultSandboxIntentFilters, status: 'filled' as const };
+  const intents = filterSandboxIntents([sandboxIntentFixture()], filters);
+  return renderToStaticMarkup(
+    <IntentsBlock
+      query={
+        queryResult({
+          intents,
+          total: 1,
+          limit: 50,
+          offset: 0,
+        }) as unknown as ReturnType<typeof useSandboxIntents>
+      }
+      intents={intents}
+      filters={filters}
+      onFilters={() => undefined}
+      tokenOptions={[]}
+      symbolByToken={symbolByToken}
+      offset={0}
+      onOffset={() => undefined}
+      onRefresh={() => undefined}
+    />,
+  );
+}
+
+function renderTradesSection(): string {
+  const trades = filterSandboxTrades([sandboxTradeFixture()], 'closed');
+  return renderToStaticMarkup(
+    <TradesBlock
+      query={
+        queryResult({
+          trades,
+          total: 1,
+          limit: 50,
+          offset: 0,
+        }) as unknown as ReturnType<typeof useSandboxTrades>
+      }
+      trades={trades}
+      status="closed"
+      onStatus={() => undefined}
+      symbolByToken={symbolByToken}
+      offset={0}
+      onOffset={() => undefined}
+      onRefresh={() => undefined}
+    />,
+  );
+}
+
+function renderRiskSection(hasNextPage = false): string {
+  const event = sandboxEventFixture();
+  return renderToStaticMarkup(
+    <RiskBlock
+      query={
+        {
+          ...eventsResult([event]),
+          hasNextPage,
+        } as unknown as ReturnType<typeof useSandboxEvents>
+      }
+      events={[event]}
+      riskEvents={sandboxRiskEvents([event])}
+      riskTokenId={null}
+      onRiskTokenId={() => undefined}
+      tokenOptions={[]}
+      symbolByToken={symbolByToken}
     />,
   );
 }
@@ -187,10 +252,7 @@ describe('sandbox journal', () => {
   });
 
   it('renders the intents section with a loaded-page filter caveat', () => {
-    const html = renderJournal(sandboxRunId, {
-      initialSection: 'intents',
-      initialIntentFilters: { status: 'filled', side: 'all', tokenId: null },
-    });
+    const html = renderIntentsSection();
     expect(html).toContain('Фильтр интентов по статусу');
     expect(html).toContain('Фильтры применяются к загруженной странице');
     expect(html).toContain('показано 1 из 1 загруженных');
@@ -198,10 +260,7 @@ describe('sandbox journal', () => {
   });
 
   it('renders the trades section with its filter and loaded-page caveat', () => {
-    const html = renderJournal(sandboxRunId, {
-      initialSection: 'trades',
-      initialTradeStatus: 'closed',
-    });
+    const html = renderTradesSection();
     expect(html).toContain('Фильтр сделок');
     expect(html).toContain('Фильтры применяются к загруженной странице');
     expect(html).toContain('показано 1 из 1 загруженных');
@@ -209,7 +268,7 @@ describe('sandbox journal', () => {
   });
 
   it('renders the risk-check section with expanded evidence', () => {
-    const html = renderJournal(sandboxRunId, { initialSection: 'risk' });
+    const html = renderRiskSection();
     expect(html).toContain('Проверки риска');
     expect(html).toContain('Проверка');
     expect(html).toContain('Не пройдено');
@@ -217,20 +276,7 @@ describe('sandbox journal', () => {
   });
 
   it('offers a load-more control for older risk checks', () => {
-    mockedEvents.mockReturnValue({
-      isPending: false,
-      isError: false,
-      error: null,
-      data: {
-        pages: [{ events: [sandboxEventFixture()], hasMore: true, nextAfterSeq: 1 }],
-        pageParams: [null],
-      },
-      hasNextPage: true,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-      refetch: vi.fn(),
-    } as unknown as ReturnType<typeof useSandboxEvents>);
-    const html = renderJournal(sandboxRunId, { initialSection: 'risk' });
+    const html = renderRiskSection(true);
     expect(html).toContain('Загрузить ещё');
   });
 

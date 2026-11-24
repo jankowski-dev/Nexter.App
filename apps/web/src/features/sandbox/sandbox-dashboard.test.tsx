@@ -314,8 +314,25 @@ describe('sandbox dashboard', () => {
       ),
     );
     const html = renderDashboard();
-    expect(html).toContain('Данные свежие');
+    const runCard = html.slice(html.indexOf('Базовый 1h</h2>'));
+    expect(runCard).toContain('Свежесть не проверяется');
+    expect(runCard).not.toContain('Данные свежие');
     expect(html).not.toContain('Последний закрытый бар старше двух часов');
+  });
+
+  it('does not claim freshness for an archived run', () => {
+    mockedDetail.mockReturnValue(
+      queryResult<SandboxRunDetail>(
+        sandboxRunDetailFixture({
+          status: 'stopped',
+          archivedAt: '2026-11-24T12:00:00.000Z',
+        }),
+      ),
+    );
+    const html = renderDashboard();
+    const runCard = html.slice(html.indexOf('Базовый 1h</h2>'));
+    expect(runCard).toContain('Свежесть не проверяется');
+    expect(runCard).not.toContain('Данные свежие');
   });
 
   it('does not claim risk checks for an event without risk evidence', () => {

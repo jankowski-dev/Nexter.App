@@ -62,6 +62,14 @@ describe('sandbox stage 2 isolation', () => {
     expect(contractsSource).not.toMatch(/ai-trading|trading-bots|market_candles|\bai_/);
   });
 
+  it('uses one advisory lock for the live runner and releases it', () => {
+    const runner = sandboxSources.find((entry) => entry.file === 'sandbox-runner.service.ts');
+    expect(runner).toBeDefined();
+    expect(runner?.source).toContain('pg_try_advisory_lock');
+    expect(runner?.source).toContain("'nexter:sandbox-runner'");
+    expect(runner?.source).toContain('pg_advisory_unlock');
+  });
+
   it('reuses only the HTTP market-data clients', () => {
     const dataService = sandboxSources.find((entry) => entry.file === 'sandbox-data.service.ts');
     expect(dataService).toBeDefined();

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
@@ -32,5 +33,16 @@ describe('Sandbox module with SANDBOX_ENABLED=0', () => {
     } finally {
       await moduleRef.close();
     }
+  });
+
+  it('guards every route except status and gates the runner behind the flag', () => {
+    const controller = readFileSync(new URL('./sandbox.controller.ts', import.meta.url), 'utf8');
+    const guarded = controller.match(/@UseGuards\(SandboxEnabledGuard\)/g) ?? [];
+    // 23 data/read/control routes; only `GET /status` stays reachable when off.
+    expect(guarded).toHaveLength(23);
+    expect(controller).toContain("@Get('status')");
+
+    const runner = readFileSync(new URL('./sandbox-runner.service.ts', import.meta.url), 'utf8');
+    expect(runner).toContain("if (env.NODE_ENV === 'test' || !this.enabled) return;");
   });
 });

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
+import type { SandboxEventsResponse } from '@nexter/contracts';
 import {
   closeSandboxTrade,
   downloadSandboxReportJson,
@@ -16,6 +17,7 @@ import {
 } from './sandbox-api';
 import {
   SANDBOX_POLL_MS,
+  sandboxEventTailQueryOptions,
   sandboxLiveRefetchInterval,
   sandboxOverviewRefetchInterval,
 } from './sandbox-hooks';
@@ -187,5 +189,28 @@ describe('sandbox read api', () => {
     expect(sandboxOverviewRefetchInterval(1)).toBe(30_000);
     expect(sandboxOverviewRefetchInterval(0)).toBe(false);
     expect(sandboxOverviewRefetchInterval(undefined)).toBe(false);
+  });
+
+  it('keeps the previous event tail while a refetch is in flight', async () => {
+    const previous: SandboxEventsResponse = { events: [], hasMore: false, nextAfterSeq: null };
+    const fetchEvents = vi.fn(async () => previous) as unknown as typeof fetchSandboxEvents;
+    const options = sandboxEventTailQueryOptions({
+      runId,
+      live: true,
+      eventCount: 900,
+      limit: 200,
+      fetchEvents,
+    });
+
+    expect(options.queryKey).toEqual(['sandbox', 'events-tail', runId, 200, 699]);
+    expect(options.refetchInterval).toBe(30_000);
+    expect(typeof options.placeholderData).toBe('function');
+    const placeholder = options.placeholderData as unknown as (
+      value: SandboxEventsResponse,
+    ) => SandboxEventsResponse;
+    expect(placeholder(previous)).toBe(previous);
+
+    await (options.queryFn as unknown as (context: unknown) => Promise<unknown>)({});
+    expect(fetchEvents).toHaveBeenCalledWith(runId, { afterSeq: 699, limit: 200 });
   });
 });

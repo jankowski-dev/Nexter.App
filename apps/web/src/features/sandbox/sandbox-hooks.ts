@@ -23,6 +23,7 @@ import {
 } from './sandbox-api';
 import { sandboxTailEventsAfterSeq } from './sandbox-dashboard-helpers';
 import type {
+  SandboxEventsResponse,
   SandboxRunCreateRequest,
   SandboxRunUpdateRequest,
   SandboxTokenCreateRequest,
@@ -34,6 +35,7 @@ import {
   useQuery,
   useQueryClient,
   type QueryClient,
+  type UseQueryOptions,
 } from '@tanstack/react-query';
 
 export const SANDBOX_POLL_MS = 30_000;
@@ -191,25 +193,48 @@ export function useSandboxEvents(runId: string | null, live: boolean, limit = 20
 /**
  * Dashboard tail: the newest events of a run, seeded from the run detail's
  * persisted `eventCount`. This never reuses the journal's append pagination.
+ *
+ * `placeholderData` keeps the previous tail visible while a refetch is in
+ * flight, so a new event does not blank the dashboard cards for a frame.
  */
+export function sandboxEventTailQueryOptions(input: {
+  runId: string | null;
+  live: boolean;
+  eventCount: number | null;
+  limit: number;
+  fetchEvents: typeof fetchSandboxEvents;
+}): UseQueryOptions<SandboxEventsResponse> {
+  const afterSeq =
+    input.eventCount === null ? null : sandboxTailEventsAfterSeq(input.eventCount, input.limit);
+  return {
+    queryKey: sandboxQueryKeys.eventTail(input.runId ?? 'none', input.limit, afterSeq),
+    queryFn: () =>
+      input.fetchEvents(input.runId as string, {
+        afterSeq: afterSeq ?? undefined,
+        limit: input.limit,
+      }),
+    enabled: input.runId !== null && input.eventCount !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: sandboxLiveRefetchInterval(input.live),
+    placeholderData: (previous) => previous,
+  };
+}
+
 export function useSandboxEventTail(
   runId: string | null,
   live: boolean,
   eventCount: number | null,
   limit = 200,
 ) {
-  const afterSeq = eventCount === null ? null : sandboxTailEventsAfterSeq(eventCount, limit);
-  return useQuery({
-    queryKey: sandboxQueryKeys.eventTail(runId ?? 'none', limit, afterSeq),
-    queryFn: () =>
-      fetchSandboxEvents(runId as string, {
-        afterSeq: afterSeq ?? undefined,
-        limit,
-      }),
-    enabled: runId !== null && eventCount !== null,
-    refetchOnWindowFocus: false,
-    refetchInterval: sandboxLiveRefetchInterval(live),
-  });
+  return useQuery(
+    sandboxEventTailQueryOptions({
+      runId,
+      live,
+      eventCount,
+      limit,
+      fetchEvents: fetchSandboxEvents,
+    }),
+  );
 }
 
 export function useSandboxReport(runId: string | null, enabled = true) {

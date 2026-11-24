@@ -1,7 +1,7 @@
 # Sandbox Stage 2 — Песочница UI, live paper loop and persistence design
 
 Date: 2026-11-24
-Status: **Stage 2 in progress** (Task 1 schema/scaffold; Stage 1C signed off and accepted)
+Status: **Stage 2 implemented; independent review gate** (Stage 1C signed off and accepted)
 Scope: Stage 2 only. No real money, exchange execution, wallets, signing or live trading. Stage 3 (4–8 week forward paper run) starts only after Stage 2 is signed off and the owner accepts it.
 
 Base: Stage 1C design `docs/superpowers/specs/2026-11-24-sandbox-stage-1c-paper-execution-design.md` (signed off; merged as `3771b67`).

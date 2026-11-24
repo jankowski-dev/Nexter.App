@@ -14,7 +14,7 @@
 
 **Base:** Stage 1C merged as `3771b67`; owner accepted the Stage 1 report on 2026-11-24.
 
-**Status:** Stage 1C accepted; Stage 2 implementation not started.
+**Status:** Stage 2 implemented; independent review gate.
 
 ## Global Constraints
 
