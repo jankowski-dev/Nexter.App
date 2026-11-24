@@ -5,16 +5,19 @@ Branch: `feat/sandbox-stage-2`
 Stage 1C base: `3771b67` (accepted by the owner on 2026-11-24)
 Stage 2 docs base: `67c8c32` (design, ADR 0084, plan)
 Task 8 base: `efb28e4`
-Frozen code head: `05082b6` (CI green, including the one-off live smoke) plus the
-final packet/docs commit
+Frozen code head: `b4b1e03` (final CI green, after removing the temporary
+one-off CI step; code/test tree identical to `cd31bca`/`05082b6`) plus this
+packet/docs commit (docs-only; no code or test changes after `b4b1e03`).
 Status: **Stage 2 implemented; independent review gate**
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
-in `b1f8bf2` (CI green) and the review findings in `e01c5cd` (CI green). The
+in `b1f8bf2` (CI green) and the review findings in `e01c5cd` (CI green). A
 temporary one-off live-smoke step failed once on `2b49bf5` because GitHub's US
-runners get HTTP 451 from Binance; the smoke is now environment-aware
+runners get HTTP 451 from Binance; the smoke became environment-aware
 (CAKE/GeckoTerminal strict, Binance skipped when unreachable) and passed on
-`05082b6` (CAKE 4320/4320, tick fill, report, stop).
+`05082b6` and `cd31bca` (CAKE 4320/4320, tick fill, report, stop). That temporary
+step was removed in `b4b1e03`, and the final output-only CI run on `b4b1e03`
+is green.
 
 Review this as one whole-branch Stage 2 review. The scope is paper only: no real
 money, exchange orders, wallets, keys, signing or real-ledger writes.
@@ -43,19 +46,19 @@ money, exchange orders, wallets, keys, signing or real-ledger writes.
 
 ## Tasks and commits
 
-| Task | Scope                                            | Commits                                           | Review                            |
-| ---- | ------------------------------------------------ | ------------------------------------------------- | --------------------------------- |
-| Docs | Design, ADR 0084, plan                           | `67c8c32`                                         | n/a                               |
-| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                              | complete (scoped re-review clean) |
-| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                              | complete (scoped re-review clean) |
-| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                   | complete (scoped re-review clean) |
-| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                              | complete (scoped re-review clean) |
-| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                              | complete (scoped re-review clean) |
-| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                              | complete (scoped re-review clean) |
-| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                              | complete (scoped re-review clean) |
-| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6` + docs | **awaiting whole-branch review**  |
+| Task | Scope                                            | Commits                                                      | Review                            |
+| ---- | ------------------------------------------------ | ------------------------------------------------------------ | --------------------------------- |
+| Docs | Design, ADR 0084, plan                           | `67c8c32`                                                    | n/a                               |
+| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                                         | complete (scoped re-review clean) |
+| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                                         | complete (scoped re-review clean) |
+| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                              | complete (scoped re-review clean) |
+| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                                         | complete (scoped re-review clean) |
+| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                                         | complete (scoped re-review clean) |
+| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                                         | complete (scoped re-review clean) |
+| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                                         | complete (scoped re-review clean) |
+| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6`, `b4b1e03` + docs | **awaiting whole-branch review**  |
 
-Branch diff from `3771b67` through `05082b6`: 148 files, +40,023/−111
+Branch diff from `3771b67` through `b4b1e03`: 147 files, +40,027/−111
 (including tests, fixtures, docs, contracts, core helpers, the migration
 snapshot and the test typecheck/CI fixes); this packet adds documentation only.
 No production data or production configuration was changed by this branch.
@@ -80,14 +83,16 @@ real database execution.
 
 ### CI evidence — draft PR #324
 
-| Head      | Run                                                                                     | Result                                                          |
-| --------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| `6d21ed9` | [run 45438632692](https://github.com/jankowski-dev/Nexter.App/actions/runs/45438632692) | **failure**: first DB execution, 5 files / 10 tests             |
-| `b1f8bf2` | [run 45442051125](https://github.com/jankowski-dev/Nexter.App/actions/runs/45442051125) | **success** after the 10 CI test defects were fixed             |
-| `e01c5cd` | [run 45450320973](https://github.com/jankowski-dev/Nexter.App/actions/runs/45450320973) | **success** after the independent-review test/evidence findings |
-| `4b20fcd` | [run 45454768964](https://github.com/jankowski-dev/Nexter.App/actions/runs/45454768964) | **success** (final docs/packet head before this note)           |
-| `2b49bf5` | [run 45458959683](https://github.com/jankowski-dev/Nexter.App/actions/runs/45458959683) | **failure**: one-off live smoke, Binance HTTP 451/0 rows        |
-| `05082b6` | [run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183) | **success**: one-off live smoke (CAKE strict, Binance skipped)  |
+| Head      | Run                                                                                     | Result                                                                                         |
+| --------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `6d21ed9` | [run 45438632692](https://github.com/jankowski-dev/Nexter.App/actions/runs/45438632692) | **failure**: first DB execution, 5 files / 10 tests                                            |
+| `b1f8bf2` | [run 45442051125](https://github.com/jankowski-dev/Nexter.App/actions/runs/45442051125) | **success** after the 10 CI test defects were fixed                                            |
+| `e01c5cd` | [run 45450320973](https://github.com/jankowski-dev/Nexter.App/actions/runs/45450320973) | **success** after the independent-review test/evidence findings                                |
+| `4b20fcd` | [run 45454768964](https://github.com/jankowski-dev/Nexter.App/actions/runs/45454768964) | **success** (final docs/packet head before this note)                                          |
+| `2b49bf5` | [run 45458959683](https://github.com/jankowski-dev/Nexter.App/actions/runs/45458959683) | **failure**: one-off live smoke, Binance HTTP 451/0 rows                                       |
+| `05082b6` | [run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183) | **success**: one-off live smoke (CAKE strict, Binance skipped)                                 |
+| `cd31bca` | [run 45463903353](https://github.com/jankowski-dev/Nexter.App/actions/runs/45463903353) | **success**: one-off live smoke repeated; CAKE 4320/4320, fill, report, stop                   |
+| `b4b1e03` | [run 45466287752](https://github.com/jankowski-dev/Nexter.App/actions/runs/45466287752) | **success**: final code head, temporary one-off step removed (output-only CI; DB suites green) |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
@@ -151,9 +156,11 @@ tick smoke needs both a disposable Postgres and real providers and is manual:
 `.github/workflows/sandbox-live-smoke.yml` (`workflow_dispatch` only; Postgres 17
 with migrations). A dispatch attempt with the available agent token returned
 `403 Resource not accessible by personal access token` (needs `actions:write`),
-so the workflow itself was not dispatched; the owner's temporary one-off CI step
-runs the same two files and **passed** on `05082b6`
-([run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183)).
+so the workflow itself was not dispatched. A temporary one-off CI step ran the
+same two files and **passed** on `05082b6` and `cd31bca`
+([run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183),
+[run 45463903353](https://github.com/jankowski-dev/Nexter.App/actions/runs/45463903353));
+that step was removed in `b4b1e03`, so normal CI does not depend on providers.
 
 ## Schema, migration and grants
 
