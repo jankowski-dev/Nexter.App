@@ -5,14 +5,16 @@ Branch: `feat/sandbox-stage-2`
 Stage 1C base: `3771b67` (accepted by the owner on 2026-11-24)
 Stage 2 docs base: `67c8c32` (design, ADR 0084, plan)
 Task 8 base: `efb28e4`
-Frozen code head: `e01c5cd` (CI green) plus this final packet/docs commit
+Frozen code head: `05082b6` (CI green, including the one-off live smoke) plus the
+final packet/docs commit
 Status: **Stage 2 implemented; independent review gate**
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
-in `b1f8bf2` (CI run 45442051125, green) and the review findings in `e01c5cd`
-(CI run 45450320973, green). The manual live-tick workflow is added; the
-available agent token cannot dispatch workflows (`403 actions:write`), so its
-manual run is pending the owner dispatch (see CI evidence below).
+in `b1f8bf2` (CI green) and the review findings in `e01c5cd` (CI green). The
+temporary one-off live-smoke step failed once on `2b49bf5` because GitHub's US
+runners get HTTP 451 from Binance; the smoke is now environment-aware
+(CAKE/GeckoTerminal strict, Binance skipped when unreachable) and passed on
+`05082b6` (CAKE 4320/4320, tick fill, report, stop).
 
 Review this as one whole-branch Stage 2 review. The scope is paper only: no real
 money, exchange orders, wallets, keys, signing or real-ledger writes.
@@ -41,36 +43,36 @@ money, exchange orders, wallets, keys, signing or real-ledger writes.
 
 ## Tasks and commits
 
-| Task | Scope                                            | Commits                                            | Review                            |
-| ---- | ------------------------------------------------ | -------------------------------------------------- | --------------------------------- |
-| Docs | Design, ADR 0084, plan                           | `67c8c32`                                          | n/a                               |
-| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                               | complete (scoped re-review clean) |
-| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                               | complete (scoped re-review clean) |
-| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                    | complete (scoped re-review clean) |
-| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                               | complete (scoped re-review clean) |
-| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                               | complete (scoped re-review clean) |
-| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                               | complete (scoped re-review clean) |
-| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                               | complete (scoped re-review clean) |
-| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd` + this docs commit | **awaiting whole-branch review**  |
+| Task | Scope                                            | Commits                                           | Review                            |
+| ---- | ------------------------------------------------ | ------------------------------------------------- | --------------------------------- |
+| Docs | Design, ADR 0084, plan                           | `67c8c32`                                         | n/a                               |
+| 1    | Schema/migration/module flag                     | `3aa78c4`, `777ff89`                              | complete (scoped re-review clean) |
+| 2    | Token universe, 1h ingestion, coverage           | `2e5752a`, `8c3560d`                              | complete (scoped re-review clean) |
+| 3    | Event log, run store, projections                | `dcafb66`, `6216dc2`, `68a5933`                   | complete (scoped re-review clean) |
+| 4    | Live broker/runner/lifecycle/controls            | `03d8e80`, `8d945bd`                              | complete (scoped re-review clean) |
+| 5    | Read API, contracts, reports                     | `ee33db6`, `a6844b9`                              | complete (scoped re-review clean) |
+| 6    | UI shell, run list/setup, controls               | `69a907a`, `09d09c0`                              | complete (scoped re-review clean) |
+| 7    | UI dashboard/journal/reports/close               | `88b414b`, `efb28e4`                              | complete (scoped re-review clean) |
+| 8    | Fake-clock e2e, live smoke, security/ops, packet | `e1da565`, `b1f8bf2`, `e01c5cd`, `05082b6` + docs | **awaiting whole-branch review**  |
 
-Branch diff from `3771b67` through `e01c5cd`: 147 files, +39,924/−111
+Branch diff from `3771b67` through `05082b6`: 148 files, +40,023/−111
 (including tests, fixtures, docs, contracts, core helpers, the migration
 snapshot and the test typecheck/CI fixes); this packet adds documentation only.
 No production data or production configuration was changed by this branch.
 
 ## Commands and outputs (local, 2026-11-24)
 
-| Command                                                               | Result                                                                                                                                                                |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npx pnpm@10.20.0 test`                                               | exit 0. API **73 files passed / 25 skipped; 468 passed / 151 skipped**. Core **552 passed**. Contracts **55 passed**. Web **258 passed**. DB **1 passed**.            |
-| `npx pnpm@10.20.0 typecheck`                                          | all packages/apps pass; **API now also typechecks `test/**/*.ts`** via `apps/api/tsconfig.test.json` (262 pre-existing test type errors fixed mechanically)           |
-| `npx pnpm@10.20.0 build`                                              | web + sandbox-core + API pass (existing chunk-size warning only)                                                                                                      |
-| `npx pnpm@10.20.0 lint`                                               | clean                                                                                                                                                                 |
-| `npx pnpm@10.20.0 format:check`                                       | “All matched files use Prettier code style!”                                                                                                                          |
-| Stage 1B/1C goldens (`decision-engine.golden`, `paper-runner.golden`) | **2 files / 6 tests passed**; goldens unchanged                                                                                                                       |
-| Fake-clock e2e                                                        | **green in CI** (3/3 on `e01c5cd`); locally only the unauthenticated 401 route test runs, the two DB-gated tests skip (no Postgres)                                   |
-| Live provider ingestion smoke                                         | passed locally with strict assertions: Binance **4320/4320 `ok`** and GeckoTerminal **4320/4320 `ok`**, gaps 0, not stale, not synthetic (after provider 429 retries) |
-| Live tick smoke (`sandbox-live-tick-smoke.e2e.spec.ts`)               | added, DB+provider gated; **not yet executed** — requires the manual workflow below (no local Postgres and no provider quote control)                                 |
+| Command                                                               | Result                                                                                                                                                                                                    |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx pnpm@10.20.0 test`                                               | exit 0. API **73 files passed / 25 skipped; 468 passed / 151 skipped**. Core **552 passed**. Contracts **55 passed**. Web **258 passed**. DB **1 passed**.                                                |
+| `npx pnpm@10.20.0 typecheck`                                          | all packages/apps pass; **API now also typechecks `test/**/*.ts`** via `apps/api/tsconfig.test.json` (262 pre-existing test type errors fixed mechanically)                                               |
+| `npx pnpm@10.20.0 build`                                              | web + sandbox-core + API pass (existing chunk-size warning only)                                                                                                                                          |
+| `npx pnpm@10.20.0 lint`                                               | clean                                                                                                                                                                                                     |
+| `npx pnpm@10.20.0 format:check`                                       | “All matched files use Prettier code style!”                                                                                                                                                              |
+| Stage 1B/1C goldens (`decision-engine.golden`, `paper-runner.golden`) | **2 files / 6 tests passed**; goldens unchanged                                                                                                                                                           |
+| Fake-clock e2e                                                        | **green in CI** (3/3 on `e01c5cd`); locally only the unauthenticated 401 route test runs, the two DB-gated tests skip (no Postgres)                                                                       |
+| Live provider ingestion smoke                                         | local: Binance **4320/4320 `ok`** and GeckoTerminal **4320/4320 `ok`**; one-off CI: Gecko **4320/4320 `ok`**, Binance **HTTP 451 → unavailable, BTC assertions skipped** (environment-aware by design)    |
+| Live tick smoke (`sandbox-live-tick-smoke.e2e.spec.ts`)               | **passed** in one-off CI run 45461431183: CAKE 4320/4320 `ok`, two real closed bars (17:00→18:00 UTC), sell **filled**, 17 events, report `af725870…`, run stopped; Binance is not required by this smoke |
 
 Environment fact: this workspace has no PostgreSQL server or Docker, so every
 `NEXTER_TEST_DB=1` suite is skipped locally. Draft PR #324 supplied the first
@@ -84,6 +86,8 @@ real database execution.
 | `b1f8bf2` | [run 45442051125](https://github.com/jankowski-dev/Nexter.App/actions/runs/45442051125) | **success** after the 10 CI test defects were fixed             |
 | `e01c5cd` | [run 45450320973](https://github.com/jankowski-dev/Nexter.App/actions/runs/45450320973) | **success** after the independent-review test/evidence findings |
 | `4b20fcd` | [run 45454768964](https://github.com/jankowski-dev/Nexter.App/actions/runs/45454768964) | **success** (final docs/packet head before this note)           |
+| `2b49bf5` | [run 45458959683](https://github.com/jankowski-dev/Nexter.App/actions/runs/45458959683) | **failure**: one-off live smoke, Binance HTTP 451/0 rows        |
+| `05082b6` | [run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183) | **success**: one-off live smoke (CAKE strict, Binance skipped)  |
 
 All 10 first-run failures were test defects/isolation, not product behavior:
 
@@ -105,6 +109,18 @@ All 10 first-run failures were test defects/isolation, not product behavior:
    `sandbox_trades.realized_pnl_usd numeric(18,2)` overflow (the run JSONB
    update succeeds), then assert the whole tick — run state, events, positions
    and equity — rolled back.
+
+The temporary one-off live-smoke step first failed on `2b49bf5` only because
+GitHub's US runners receive **HTTP 451** from Binance before the CAKE leg. The
+smoke was made environment-aware: CAKE/GeckoTerminal is fetched first and stays
+strict (`available === required`, `status === 'ok'`, `gaps 0`, `stale false`,
+`4320` rows, 18dp/contiguous); a zero-row or mixed-source Binance response is
+logged as unavailable and only the BTC assertions are skipped, never a partial
+or synthetic BTC series. The live tick smoke now trades CAKE only. On `05082b6`
+the one-off step passed: Gecko **4320/4320 `ok`**, Binance **HTTP 451 → skipped**,
+tick smoke bars `17:00→18:00 UTC`, **sell filled**, **17 events**, report
+`af7258708f3606176de12b5c576c87532eee553c26dacf7a68984ea52791ae08`, run
+stopped. The normal test step remained green.
 
 Review follow-ups included in `e01c5cd`: test typecheck (`tsconfig.test.json`
 wired into `pnpm --filter @nexter/api typecheck`), a real `SANDBOX_ENABLED=false`
@@ -133,11 +149,11 @@ The live provider smokes are never run by the normal CI workflow. The ingestion
 smoke is opt-in via `SANDBOX_LIVE_SMOKE=1` + `NODE_ENV=development`. The live
 tick smoke needs both a disposable Postgres and real providers and is manual:
 `.github/workflows/sandbox-live-smoke.yml` (`workflow_dispatch` only; Postgres 17
-
-- migrations). A dispatch attempt with the available agent token returned
-  `403 Resource not accessible by personal access token` (needs `actions:write`),
-  so the owner must trigger it once and record the run URL/counts. It is not
-  claimed as executed here.
+with migrations). A dispatch attempt with the available agent token returned
+`403 Resource not accessible by personal access token` (needs `actions:write`),
+so the workflow itself was not dispatched; the owner's temporary one-off CI step
+runs the same two files and **passed** on `05082b6`
+([run 45461431183](https://github.com/jankowski-dev/Nexter.App/actions/runs/45461431183)).
 
 ## Schema, migration and grants
 
@@ -254,16 +270,16 @@ JSON/Markdown download). No manual buy/add/override and no real execution.
 
 Unverified due to environment (explicit):
 
-1. The **manual live-tick smoke** (`sandbox-live-tick-smoke.e2e.spec.ts`) has not
-   been executed yet: it needs Postgres + real providers. The workflow is
-   committed and CI is green, but the available agent token cannot dispatch
-   workflows (`403 actions:write`); the owner must run
-   `.github/workflows/sandbox-live-smoke.yml` once. No run URL/counts are claimed.
+1. The manual `workflow_dispatch` live-smoke workflow was not dispatched by the
+   agent (no `actions:write`); the equivalent test ran in the temporary one-off
+   CI step on `05082b6` and passed (CAKE strict, Binance HTTP 451 skipped, tick
+   fill + report + stop). Binance data itself remains unverified from the CI
+   network; the local run verified Binance 4320/4320.
 2. A full live paper tick on a deployed environment; deferred to post-deploy
    verification with owner approval, and no production run is left started.
 3. Production migration `0052` apply/rollback; not applied, no production access
    was used.
-4. Real provider behavior beyond the local ingestion smoke (public rate limits).
+4. Real provider behavior beyond these smoke runs (public rate limits/geo rules).
 
 ## Deferred items (not blocking Stage 2, recorded for Stage 3/ops)
 
