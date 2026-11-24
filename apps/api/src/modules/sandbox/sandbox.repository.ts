@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   sandboxCandles,
   sandboxEquityPoints,
@@ -18,6 +18,7 @@ import type { SandboxEvent } from '@nexter/sandbox-core';
 import { DB } from '../../shared/db/db.module';
 import { listSandboxEvents, SandboxEventLog } from './sandbox-event-log';
 import {
+  assertSandboxTickConsistency,
   assertSandboxTickInput,
   buildSandboxClosedPositionTokenIds,
   buildSandboxEquityPointRow,
@@ -262,8 +263,8 @@ export class SandboxRepository {
       peakEquityUsd: row.peakEquityUsd,
       dayStartEquityUsd: row.dayStartEquityUsd,
       settings: row.settings,
-      engineState: parseOptionalEngineState(row.engineState),
-      ledgerState: parseOptionalLedgerState(row.ledgerState),
+      engineState: parseOptionalEngineState(row.engineState, row.status),
+      ledgerState: parseOptionalLedgerState(row.ledgerState, row.status),
       lastBarClose: row.lastBarClose ?? null,
       eventSeq: row.eventSeq,
       eventHash: row.eventHash,
@@ -330,6 +331,7 @@ export class SandboxRepository {
     tick: SandboxTickInput,
   ): Promise<SandboxTickSummary> {
     assertSandboxTickInput(tick);
+    assertSandboxTickConsistency(tick);
     const engineState = parseEngineState(tick.engineState);
     const ledgerState = parsePaperLedgerState(tick.ledgerState);
 
@@ -404,9 +406,16 @@ export class SandboxRepository {
       await executor
         .update(sandboxPositions)
         .set({
+          // A zero position must not advertise a stop, take-profit, mark or
+          // fee; the row is a delete-free "closed" marker only.
           amount: '0.00000000',
+          avgCostUsd: '0.000000000000000000',
           costBasisUsd: '0.00',
+          marketPriceUsd: '0.000000000000000000',
           marketValueUsd: '0.00',
+          stopLossPct: null,
+          takeProfitPct: null,
+          feesPaidUsd: '0.00',
           updatedAt: now,
         })
         .where(
@@ -449,10 +458,29 @@ export class SandboxRepository {
     // The ledger is append-only: re-persisting an existing sequence is a no-op
     // and never overwrites a booked entry.
     const [ledgerHead] = await executor
-      .select({ sequence: sql<number | null>`max(${sandboxLedgerEntries.sequence})` })
+      .select({
+        sequence: sandboxLedgerEntries.sequence,
+        entryId: sandboxLedgerEntries.entryId,
+      })
       .from(sandboxLedgerEntries)
-      .where(eq(sandboxLedgerEntries.runId, runId));
+      .where(eq(sandboxLedgerEntries.runId, runId))
+      .orderBy(desc(sandboxLedgerEntries.sequence))
+      .limit(1);
     const lastSequence = ledgerHead?.sequence ?? 0;
+    if (ledgerHead) {
+      // A restored-older ledger (or a divergent entry id) cannot be projected
+      // onto a newer journal: appending would silently fork the run history.
+      const persistedHead = ledgerState.entries.find(
+        (entry) => entry.sequence === ledgerHead.sequence,
+      );
+      if (!persistedHead || persistedHead.entryId !== ledgerHead.entryId) {
+        throw new SandboxPersistenceError(
+          'SANDBOX_STATE_INVALID',
+          `Sandbox run ${runId} ledger state does not contain persisted entry ` +
+            `${ledgerHead.entryId}#${ledgerHead.sequence}; refusing to project a restored-older ledger`,
+        );
+      }
+    }
     const entryRows = buildSandboxLedgerEntryRows(runId, ledgerState).filter(
       (row) => row.sequence > lastSequence,
     );

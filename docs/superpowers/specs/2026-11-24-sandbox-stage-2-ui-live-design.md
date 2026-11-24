@@ -144,10 +144,11 @@ Live fills are a paper approximation: the decision uses closed candles; the fill
 `SandboxEventLog implements EventLog` over `sandbox_events`:
 
 - `append` validates via the Stage 1A schema, computes the next hash/prevHash/seq from the run's `event_seq`/`event_hash`, inserts, and updates the run row in the same transaction.
+- `sandbox_runs.event_seq` stores the number of persisted events (the sequence the next event receives; 0 for an empty chain), not the last sequence. `event_hash` is the head hash (`GENESIS_HASH` when empty).
 - `events`/`hash` read the run's chain; the run is the single writer (advisory lock + status).
 - Events are append-only; no update/delete grant.
 - `sandbox_events.payload` stores the full canonical event (including `recordedAt`/`timing` metadata; the hash excludes them).
-- A replay verifier can recompute every hash and the final chain from the stored payload.
+- A replay verifier recomputes every hash and the final chain from the stored payload and compares the recomputed event count/head with the run row, so a truncated `event_seq`/`event_hash` fails closed.
 
 `SandboxRunStore` reads/writes `engine_state`, `ledger_state` and the projections in one transaction. The JSONB state is validated by the package types on read; unknown strategy/regime keys fail closed.
 
@@ -250,3 +251,8 @@ Stage 3 (4–8 week forward paper run) must not start until Stage 2 is signed of
 - The existing `market-data` HTTP clients are reusable; no old AI service/table is imported.
 - Live fills are paper approximations at the first quote after the close; not exchange fills.
 - Reports are JSON/Markdown; a PDF export is a later enhancement.
+
+## 15.1 Stage 3 follow-ups (not addressed in Stage 2)
+
+- The event log replays/copies the full run chain on every tick, which is O(n²) I/O over a long forward run; a snapshot/checkpoint or incremental chain loader is a Stage 3 item.
+- Event payloads are hashed after JSONB storage; the current canonical stringify/round-trip is stable, but any future change to JSON canonicalization or hash-visible fields needs an explicit replay/migration plan.

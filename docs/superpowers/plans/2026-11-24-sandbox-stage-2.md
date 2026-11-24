@@ -210,7 +210,8 @@ git commit -m "feat(sandbox): add token universe and candle data"
 `SandboxEventLog implements EventLog` over `sandbox_events`:
 
 - `append(input)`: validate with the Stage 1A schema; read the run's `eventSeq`/`eventHash` (or the last event) inside the tick transaction; build the chained event with the Stage 1A hash; insert; update the run's seq/hash. The runner is the single writer (advisory lock).
-- `events()`/`hash()` load the run's chain; a `verify()` helper recomputes every hash and the final hash from the stored payload.
+- `eventSeq` is the event count / next sequence (0 for empty), not the last seq; `eventHash` is the head hash (genesis when empty).
+- `events()`/`hash()` load the run's chain; a `verify()` helper recomputes every hash and the final hash from the stored payload and compares the count/head with the run row.
 - Events append-only; no update/delete.
 
 - [ ] **Step 2: Run store**

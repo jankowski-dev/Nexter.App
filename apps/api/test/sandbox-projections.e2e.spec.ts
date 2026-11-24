@@ -9,6 +9,7 @@ import {
   type Database,
 } from '@nexter/db';
 import { Reason } from '@nexter/sandbox-core';
+import Decimal from 'decimal.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SandboxRepository } from '../src/modules/sandbox/sandbox.repository';
 import { assertDisposableTestDatabase } from './helpers/test-database';
@@ -23,6 +24,23 @@ import {
 } from './helpers/sandbox-fixtures';
 
 const canRun = Boolean(process.env.NEXTER_TEST_DB === '1' && process.env.DATABASE_URL);
+
+/**
+ * Projection columns have fixed Postgres scales (numeric(38,8), numeric(30,18),
+ * numeric(9,4), numeric(18,2)), and Drizzle returns the padded scale. Compare
+ * numerically so a core 8-decimal string matches its 18-decimal storage form.
+ *
+ * NOTE for Task 5: API/UI reads of these columns must normalize the padded
+ * strings before comparing or displaying them.
+ */
+function expectDecimal(actual: string | null | undefined, expected: string | null): void {
+  if (expected === null) {
+    expect(actual).toBeNull();
+    return;
+  }
+  expect(actual).not.toBeNull();
+  expect(new Decimal(actual as string).equals(expected)).toBe(true);
+}
 
 if (canRun) {
   assertDisposableTestDatabase(process.env.DATABASE_URL);
@@ -70,16 +88,16 @@ describe.runIf(canRun)('sandbox projections', () => {
       tokenId: SANDBOX_TEST_TOKEN,
       strategyKey: position.strategyKey,
       strategyVersion: position.strategyVersion,
-      amount: position.amount,
-      avgCostUsd: position.avgCostUsd,
-      costBasisUsd: position.costBasisUsd,
-      marketPriceUsd: mark.marketPriceUsd,
-      marketValueUsd: mark.marketValueUsd,
-      stopLossPct: position.stopLossPct,
-      takeProfitPct: position.takeProfitPct,
       entryIntentId: position.entryIntentId,
-      feesPaidUsd: position.feesPaidUsd,
     });
+    expectDecimal(positionRow?.amount, position.amount);
+    expectDecimal(positionRow?.avgCostUsd, position.avgCostUsd);
+    expectDecimal(positionRow?.costBasisUsd, position.costBasisUsd);
+    expectDecimal(positionRow?.marketPriceUsd, mark.marketPriceUsd);
+    expectDecimal(positionRow?.marketValueUsd, mark.marketValueUsd);
+    expectDecimal(positionRow?.stopLossPct, position.stopLossPct);
+    expectDecimal(positionRow?.takeProfitPct, position.takeProfitPct);
+    expectDecimal(positionRow?.feesPaidUsd, position.feesPaidUsd);
     expect(positionRow?.openedAt.getTime()).toBe(position.openedAt);
 
     const [tradeRow] = await db.select().from(sandboxTrades).where(eq(sandboxTrades.runId, runId));
@@ -89,18 +107,18 @@ describe.runIf(canRun)('sandbox projections', () => {
       strategyKey: trade.strategyKey,
       status: 'open',
       entryIntentId: trade.entryIntentId,
-      entryPriceUsd: trade.entryPriceUsd,
-      entryAmount: trade.entryAmount,
-      entryNotionalUsd: trade.entryNotionalUsd,
-      entryFeeUsd: trade.entryFeeUsd,
-      entryCostBasisUsd: trade.entryCostBasisUsd,
       exitAt: null,
       exitPriceUsd: null,
-      exitAmount: '0.00000000',
-      exitNotionalUsd: '0.00',
-      exitFeeUsd: '0.00',
-      realizedPnlUsd: '0.00',
     });
+    expectDecimal(tradeRow?.entryPriceUsd, trade.entryPriceUsd);
+    expectDecimal(tradeRow?.entryAmount, trade.entryAmount);
+    expectDecimal(tradeRow?.entryNotionalUsd, trade.entryNotionalUsd);
+    expectDecimal(tradeRow?.entryFeeUsd, trade.entryFeeUsd);
+    expectDecimal(tradeRow?.entryCostBasisUsd, trade.entryCostBasisUsd);
+    expectDecimal(tradeRow?.exitAmount, '0.00000000');
+    expectDecimal(tradeRow?.exitNotionalUsd, '0.00');
+    expectDecimal(tradeRow?.exitFeeUsd, '0.00');
+    expectDecimal(tradeRow?.realizedPnlUsd, '0.00');
     expect(tradeRow?.entryAt.getTime()).toBe(trade.entryAt);
 
     const [entryRow] = await db
@@ -113,18 +131,18 @@ describe.runIf(canRun)('sandbox projections', () => {
       tokenId: SANDBOX_TEST_TOKEN,
       side: entry.side,
       intentId: entry.intentId,
-      amount: entry.amount,
-      priceUsd: entry.priceUsd,
-      notionalUsd: entry.notionalUsd,
-      feeUsd: entry.feeUsd,
-      cashAfterUsd: entry.cashAfterUsd,
-      positionAmountAfter: entry.positionAmountAfter,
-      positionAvgCostAfter: entry.positionAvgCostAfter,
-      positionCostBasisAfterUsd: entry.positionCostBasisAfterUsd,
       costBasisReleasedUsd: null,
       realizedPnlUsd: null,
       reasonCode: Reason.LEDGER_BUY,
     });
+    expectDecimal(entryRow?.amount, entry.amount);
+    expectDecimal(entryRow?.priceUsd, entry.priceUsd);
+    expectDecimal(entryRow?.notionalUsd, entry.notionalUsd);
+    expectDecimal(entryRow?.feeUsd, entry.feeUsd);
+    expectDecimal(entryRow?.cashAfterUsd, entry.cashAfterUsd);
+    expectDecimal(entryRow?.positionAmountAfter, entry.positionAmountAfter);
+    expectDecimal(entryRow?.positionAvgCostAfter, entry.positionAvgCostAfter);
+    expectDecimal(entryRow?.positionCostBasisAfterUsd, entry.positionCostBasisAfterUsd);
     expect(entryRow?.clockTime.getTime()).toBe(entry.clockTime);
 
     const [intentRow] = await db
@@ -138,16 +156,16 @@ describe.runIf(canRun)('sandbox projections', () => {
       strategyKey: 'trend_pullback',
       strategyVersion: 1,
       status: 'filled',
-      requestedUsd: '200.00',
       requestedAmount: null,
-      filledUsd: intent.filledUsd,
-      filledAmount: intent.filledAmount,
-      priceUsd: intent.priceUsd,
-      feeUsd: intent.feeUsd,
       reasonCode: Reason.FILL_FILLED,
       strategyReasonCode: Reason.TREND_PULLBACK_ENTRY,
       reasonText: intent.reasonText,
     });
+    expectDecimal(intentRow?.requestedUsd, '200.00');
+    expectDecimal(intentRow?.filledUsd, intent.filledUsd);
+    expectDecimal(intentRow?.filledAmount, intent.filledAmount);
+    expectDecimal(intentRow?.priceUsd, intent.priceUsd);
+    expectDecimal(intentRow?.feeUsd, intent.feeUsd);
     expect(intentRow?.decisionTime.getTime()).toBe(SANDBOX_TEST_AT);
     expect(intentRow?.fillTime?.getTime()).toBe(SANDBOX_TEST_AT);
 
@@ -194,14 +212,14 @@ describe.runIf(canRun)('sandbox projections', () => {
     expect(trades[0]).toMatchObject({
       tradeId: closedTrade.tradeId,
       status: 'closed',
-      exitPriceUsd: closedTrade.exitPriceUsd,
-      exitAmount: closedTrade.exitAmount,
-      exitNotionalUsd: closedTrade.exitNotionalUsd,
-      exitFeeUsd: closedTrade.exitFeeUsd,
       exitReasonCode: closedTrade.exitReasonCode,
       exitIntentId: closedTrade.exitIntentId,
-      realizedPnlUsd: closedTrade.realizedPnlUsd,
     });
+    expectDecimal(trades[0]?.exitPriceUsd, closedTrade.exitPriceUsd);
+    expectDecimal(trades[0]?.exitAmount, closedTrade.exitAmount);
+    expectDecimal(trades[0]?.exitNotionalUsd, closedTrade.exitNotionalUsd);
+    expectDecimal(trades[0]?.exitFeeUsd, closedTrade.exitFeeUsd);
+    expectDecimal(trades[0]?.realizedPnlUsd, closedTrade.realizedPnlUsd);
     expect(trades[0]?.exitAt?.getTime()).toBe(closedTrade.exitAt);
 
     const positions = await db
@@ -211,10 +229,15 @@ describe.runIf(canRun)('sandbox projections', () => {
     expect(positions).toHaveLength(1);
     expect(positions[0]).toMatchObject({
       tokenId: SANDBOX_TEST_TOKEN,
-      amount: '0.00000000',
-      costBasisUsd: '0.00',
-      marketValueUsd: '0.00',
+      stopLossPct: null,
+      takeProfitPct: null,
     });
+    expectDecimal(positions[0]?.amount, '0.00000000');
+    expectDecimal(positions[0]?.avgCostUsd, '0.00000000');
+    expectDecimal(positions[0]?.marketPriceUsd, '0.00000000');
+    expectDecimal(positions[0]?.costBasisUsd, '0.00');
+    expectDecimal(positions[0]?.marketValueUsd, '0.00');
+    expectDecimal(positions[0]?.feesPaidUsd, '0.00');
 
     const entries = await db
       .select()

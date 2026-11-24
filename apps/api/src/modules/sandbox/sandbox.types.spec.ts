@@ -13,6 +13,7 @@ import {
   type TokenPhase,
 } from '@nexter/sandbox-core';
 import {
+  assertSandboxTickConsistency,
   assertSandboxTickInput,
   buildSandboxClosedPositionTokenIds,
   buildSandboxEquityPointRow,
@@ -174,11 +175,39 @@ describe('sandbox state validation', () => {
     expect(() => parsePaperLedgerState(raw)).toThrow(/cashUsd/);
   });
 
-  it('treats the empty JSONB default as uninitialised and fails closed otherwise', () => {
-    expect(parseOptionalEngineState({})).toBeNull();
-    expect(parseOptionalLedgerState({})).toBeNull();
-    expect(() => parseOptionalEngineState({ tokens: 'nope' })).toThrow(SandboxPersistenceError);
-    expect(() => parseOptionalLedgerState({ cashUsd: '1000.00' })).toThrow(SandboxPersistenceError);
+  it('treats the empty JSONB default as uninitialised only for a draft run', () => {
+    expect(parseOptionalEngineState({}, 'draft')).toBeNull();
+    expect(parseOptionalLedgerState({}, 'draft')).toBeNull();
+    expect(() => parseOptionalEngineState({}, 'running')).toThrow(/only allowed for a draft/);
+    expect(() => parseOptionalLedgerState({}, 'paused')).toThrow(/only allowed for a draft/);
+    expect(() => parseOptionalEngineState({ tokens: 'nope' }, 'draft')).toThrow(
+      SandboxPersistenceError,
+    );
+    expect(() => parseOptionalLedgerState({ cashUsd: '1000.00' }, 'draft')).toThrow(
+      SandboxPersistenceError,
+    );
+  });
+
+  it('fails loudly on unknown top-level state fields (strict schemas)', () => {
+    const engine = clone(engineState()) as Record<string, unknown>;
+    engine.extra = true;
+    expect(() => parseEngineState(engine)).toThrow(/extra/);
+
+    const ledger = clone(buyLedger()) as Record<string, unknown>;
+    ledger.extra = true;
+    expect(() => parsePaperLedgerState(ledger)).toThrow(/extra/);
+  });
+
+  it('fails loudly on unknown nested state fields (strict schemas)', () => {
+    const engine = clone(engineState()) as {
+      tokens: Record<string, { regime: Record<string, unknown> }>;
+    };
+    engine.tokens[TOKEN]!.regime.extra = true;
+    expect(() => parseEngineState(engine)).toThrow(/extra/);
+
+    const ledger = clone(buyLedger()) as { positions: Record<string, Record<string, unknown>> };
+    ledger.positions[TOKEN]!.extra = true;
+    expect(() => parsePaperLedgerState(ledger)).toThrow(/extra/);
   });
 });
 
@@ -226,6 +255,34 @@ describe('sandbox tick validation', () => {
     raw.equityUsd = '1000.5.5';
 
     expect(() => assertSandboxTickInput(raw as unknown as SandboxTickInput)).toThrow(/equityUsd/);
+  });
+
+  it('rejects NaN-like numeric strings Postgres would otherwise accept', () => {
+    const raw = tick();
+    (raw.equityPoint as { cashUsd: string }).cashUsd = 'NaN';
+    expect(() => assertSandboxTickInput(raw)).toThrow(/equityPoint.cashUsd/);
+
+    const mark = tick();
+    (mark.markedPositions[0] as { marketValueUsd: string }).marketValueUsd = 'NaN';
+    expect(() => assertSandboxTickInput(mark)).toThrow(/marketValueUsd/);
+  });
+
+  it('accepts the marked ledger identities and rejects mismatches', () => {
+    expect(() => assertSandboxTickConsistency(tick())).not.toThrow();
+
+    const cash = tick() as { cashUsd: string };
+    cash.cashUsd = '1.00';
+    expect(() => assertSandboxTickConsistency(cash as SandboxTickInput)).toThrow(
+      /must equal ledgerState.cashUsd/,
+    );
+
+    const equity = tick();
+    (equity.equityPoint as { equityUsd: string }).equityUsd = '9999.00';
+    expect(() => assertSandboxTickConsistency(equity)).toThrow(/persisted equityUsd/);
+
+    const positions = tick();
+    (positions.equityPoint as { positionsValueUsd: string }).positionsValueUsd = '1.00';
+    expect(() => assertSandboxTickConsistency(positions)).toThrow(/sum of marked position/);
   });
 });
 
@@ -294,6 +351,46 @@ describe('sandbox projection builders', () => {
       costBasisReleasedUsd: null,
     });
     expect(entries[0]?.clockTime.getTime()).toBe(AT);
+  });
+
+  it('rejects duplicate trade ids before they reach Postgres', () => {
+    const ledger = buyLedger();
+    const trade = ledger.openTrades[TOKEN];
+    if (!trade) throw new Error('fixture has no open trade');
+    const duplicated = {
+      ...ledger,
+      closedTrades: [{ ...trade, status: 'closed' as const }],
+    };
+
+    expect(() => buildSandboxTradeRows('run-1', duplicated)).toThrow(
+      /duplicate tradeId across closed and open trades/,
+    );
+  });
+
+  it('rejects duplicate intent ids before they reach Postgres', () => {
+    const intent = {
+      intentId: 'intent-1',
+      tokenId: TOKEN,
+      side: 'buy' as const,
+      strategyKey: 'trend_pullback' as const,
+      strategyVersion: 1,
+      status: 'filled' as const,
+      requestedUsd: '200.00',
+      requestedAmount: null,
+      filledUsd: '199.50',
+      filledAmount: '1.99500000',
+      priceUsd: '100.00000000',
+      feeUsd: '0.50',
+      reasonCode: Reason.FILL_FILLED,
+      strategyReasonCode: Reason.TREND_PULLBACK_ENTRY,
+      reasonText: 'filled',
+      decisionTime: AT,
+      fillTime: AT,
+    };
+
+    expect(() => buildSandboxIntentRows('run-1', [intent, intent])).toThrow(
+      /duplicate intentId in one tick/,
+    );
   });
 
   it('projects intents and the equity point', () => {

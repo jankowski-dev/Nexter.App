@@ -1,5 +1,11 @@
 import { and, asc, eq, gt } from 'drizzle-orm';
-import { sandboxEvents, sandboxRuns, type DbExecutor, type SandboxEventRecord } from '@nexter/db';
+import {
+  sandboxEvents,
+  sandboxRuns,
+  type DbExecutor,
+  type DbTransaction,
+  type SandboxEventRecord,
+} from '@nexter/db';
 import {
   EventChainError,
   MemoryEventLog,
@@ -10,13 +16,14 @@ import {
 } from '@nexter/sandbox-core';
 import { SandboxPersistenceError } from './sandbox.types';
 
-/** Outcome of recomputing a stored chain. */
+/** Outcome of recomputing a stored chain against the persisted run head. */
 export interface SandboxEventChainVerification {
   readonly ok: boolean;
+  /** Number of persisted events = the sequence the next event receives. */
   readonly count: number;
   /** Last stored sequence, or `null` for an empty chain. */
-  readonly headSeq: number | null;
-  /** Last stored hash, or `null` for an empty chain. */
+  readonly lastSeq: number | null;
+  /** Last stored hash, or `null` when the chain could not be read. */
   readonly headHash: string | null;
   readonly errors: readonly string[];
 }
@@ -35,6 +42,10 @@ export interface SandboxEventChainVerification {
  * 3. insert the event row and advance the run head in the same transaction;
  * 4. only then commit the event to the in-memory chain.
  *
+ * The executor is typed as a transaction (`DbTransaction`), not the root
+ * database: appending outside a transaction could persist an event without the
+ * matching run state.
+ *
  * A failed insert therefore never advances the cache. The instance is bound to
  * one transaction; on rollback it must be discarded, not reused.
  *
@@ -44,7 +55,7 @@ export interface SandboxEventChainVerification {
  */
 export class SandboxEventLog extends MemoryEventLog {
   private constructor(
-    private readonly executor: DbExecutor,
+    private readonly tx: DbTransaction,
     readonly runId: string,
   ) {
     super();
@@ -54,15 +65,10 @@ export class SandboxEventLog extends MemoryEventLog {
    * Loads and verifies the run's persisted chain, then returns a log positioned
    * at its head. A corrupt chain throws instead of silently continuing it.
    */
-  static async load(executor: DbExecutor, runId: string): Promise<SandboxEventLog> {
-    const rows = await executor
-      .select()
-      .from(sandboxEvents)
-      .where(eq(sandboxEvents.runId, runId))
-      .orderBy(asc(sandboxEvents.seq));
-
-    const events = rows.map((row) => eventFromRow(row));
-    const log = new SandboxEventLog(executor, runId);
+  static async load(tx: DbTransaction, runId: string): Promise<SandboxEventLog> {
+    const head = await readRunHead(tx, runId);
+    const events = (await readEventRows(tx, runId)).map((row) => eventFromRow(row));
+    const log = new SandboxEventLog(tx, runId);
     try {
       log.restore(events);
     } catch (error) {
@@ -73,6 +79,14 @@ export class SandboxEventLog extends MemoryEventLog {
         );
       }
       throw error;
+    }
+
+    if (head.eventSeq !== log.events().length || head.eventHash !== log.hash()) {
+      throw new SandboxPersistenceError(
+        'SANDBOX_EVENT_CHAIN_DESYNC',
+        `Sandbox run ${runId} persisted head is seq ${head.eventSeq} / ${head.eventHash}, ` +
+          `loaded chain has count ${log.events().length} / ${log.hash()}`,
+      );
     }
 
     return log;
@@ -98,8 +112,8 @@ export class SandboxEventLog extends MemoryEventLog {
       );
     }
 
-    await this.executor.insert(sandboxEvents).values(toRow(this.runId, event));
-    await this.executor
+    await this.tx.insert(sandboxEvents).values(toRow(this.runId, event));
+    await this.tx
       .update(sandboxRuns)
       .set({ eventSeq: event.seq + 1, eventHash: event.hash })
       .where(eq(sandboxRuns.id, this.runId));
@@ -111,31 +125,12 @@ export class SandboxEventLog extends MemoryEventLog {
 
   /**
    * Re-reads every persisted row and recomputes the chain from the stored
-   * payload. Column/payload mismatches, gaps, broken links and bad hashes all
-   * surface as `ok: false` with a message instead of throwing.
+   * payload, then compares the recomputed count/head with the run row. Gaps,
+   * broken links, bad hashes, column/payload mismatches and a truncated run
+   * head all surface as `ok: false` with a message instead of throwing.
    */
   async verify(): Promise<SandboxEventChainVerification> {
-    let rows: SandboxEventRecord[] = [];
-    try {
-      rows = await this.readRows();
-      const events = rows.map((row) => eventFromRow(row));
-      const { headHash } = replayEventChain(events);
-      return {
-        ok: true,
-        count: events.length,
-        headSeq: events.at(-1)?.seq ?? null,
-        headHash,
-        errors: [],
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        count: rows.length,
-        headSeq: null,
-        headHash: null,
-        errors: [error instanceof Error ? error.message : String(error)],
-      };
-    }
+    return verifyChain(this.tx, this.runId);
   }
 
   /** Throws `SANDBOX_EVENT_CHAIN_DESYNC` when the persisted chain is invalid. */
@@ -151,39 +146,39 @@ export class SandboxEventLog extends MemoryEventLog {
 
   /**
    * Verifies a run's persisted chain without loading it into a mutable log.
-   * Used by reports and health checks that must not continue the chain.
+   * Read-only, so it accepts the root database as well as a transaction. Used by
+   * reports and health checks that must not continue the chain.
    */
   static async verifyRun(
     executor: DbExecutor,
     runId: string,
   ): Promise<SandboxEventChainVerification> {
-    return new SandboxEventLog(executor, runId).verify();
+    return verifyChain(executor, runId);
   }
 
   private async readRunHead(): Promise<{ eventSeq: number; eventHash: string }> {
-    const [row] = await this.executor
-      .select({ eventSeq: sandboxRuns.eventSeq, eventHash: sandboxRuns.eventHash })
-      .from(sandboxRuns)
-      .where(eq(sandboxRuns.id, this.runId))
-      .limit(1);
+    return readRunHead(this.tx, this.runId);
+  }
+}
 
-    if (!row) {
-      throw new SandboxPersistenceError(
-        'SANDBOX_RUN_NOT_FOUND',
-        `Sandbox run ${this.runId} does not exist`,
-      );
-    }
+async function readRunHead(
+  executor: DbExecutor,
+  runId: string,
+): Promise<{ eventSeq: number; eventHash: string }> {
+  const [row] = await executor
+    .select({ eventSeq: sandboxRuns.eventSeq, eventHash: sandboxRuns.eventHash })
+    .from(sandboxRuns)
+    .where(eq(sandboxRuns.id, runId))
+    .limit(1);
 
-    return row;
+  if (!row) {
+    throw new SandboxPersistenceError(
+      'SANDBOX_RUN_NOT_FOUND',
+      `Sandbox run ${runId} does not exist`,
+    );
   }
 
-  private async readRows(): Promise<SandboxEventRecord[]> {
-    return this.executor
-      .select()
-      .from(sandboxEvents)
-      .where(eq(sandboxEvents.runId, this.runId))
-      .orderBy(asc(sandboxEvents.seq));
-  }
+  return row;
 }
 
 /** Reads a bounded slice of the persisted chain, oldest first. */
@@ -204,6 +199,70 @@ export async function listSandboxEvents(
     .limit(limit);
 
   return rows.map((row) => eventFromRow(row));
+}
+
+async function readEventRows(executor: DbExecutor, runId: string): Promise<SandboxEventRecord[]> {
+  return executor
+    .select()
+    .from(sandboxEvents)
+    .where(eq(sandboxEvents.runId, runId))
+    .orderBy(asc(sandboxEvents.seq));
+}
+
+/**
+ * Verifies the stored chain and its persisted run head. The run row is the
+ * commit record of the chain, so a truncated `event_seq`/`event_hash` (for
+ * example after a partial restore) must fail even when the rows link cleanly.
+ */
+async function verifyChain(
+  executor: DbExecutor,
+  runId: string,
+): Promise<SandboxEventChainVerification> {
+  let rows: SandboxEventRecord[] = [];
+  try {
+    const [run] = await executor
+      .select({ eventSeq: sandboxRuns.eventSeq, eventHash: sandboxRuns.eventHash })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId))
+      .limit(1);
+    if (!run) {
+      return {
+        ok: false,
+        count: 0,
+        lastSeq: null,
+        headHash: null,
+        errors: [`Sandbox run ${runId} does not exist`],
+      };
+    }
+
+    rows = await readEventRows(executor, runId);
+    const events = rows.map((row) => eventFromRow(row));
+    const { headHash } = replayEventChain(events);
+    const lastSeq = events.at(-1)?.seq ?? null;
+
+    if (run.eventSeq !== events.length || run.eventHash !== headHash) {
+      return {
+        ok: false,
+        count: events.length,
+        lastSeq,
+        headHash,
+        errors: [
+          `Sandbox run ${runId} persisted head is seq ${run.eventSeq} / ${run.eventHash}, ` +
+            `chain has count ${events.length} / ${headHash}`,
+        ],
+      };
+    }
+
+    return { ok: true, count: events.length, lastSeq, headHash, errors: [] };
+  } catch (error) {
+    return {
+      ok: false,
+      count: rows.length,
+      lastSeq: null,
+      headHash: null,
+      errors: [error instanceof Error ? error.message : String(error)],
+    };
+  }
 }
 
 /**

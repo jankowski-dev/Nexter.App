@@ -1,3 +1,4 @@
+import { Decimal } from 'decimal.js';
 import { z } from 'zod';
 import {
   Reason,
@@ -260,107 +261,123 @@ const timestampMs = z.number().int().nonnegative();
 const nullableTimestampMs = timestampMs.nullable();
 const reasonCodeSchema = z.enum(Object.values(Reason) as [ReasonCode, ...ReasonCode[]]);
 
-const regimeFeaturesSchema = z.object({
-  bars: z.number().int().nonnegative(),
-  lastClose: nullableDecimalString,
-  fastSma: nullableDecimalString,
-  slowSma: nullableDecimalString,
-  longSma: nullableDecimalString,
-  atrPct: nullableDecimalString,
-  recentHigh: nullableDecimalString,
-  recentLow: nullableDecimalString,
-  avgVolumeUsd: nullableDecimalString,
-  drawdownPct: nullableDecimalString,
-  staleBars: z.number().int().nonnegative(),
-}) satisfies z.ZodType<RegimeFeatures>;
+const regimeFeaturesSchema = z
+  .object({
+    bars: z.number().int().nonnegative(),
+    lastClose: nullableDecimalString,
+    fastSma: nullableDecimalString,
+    slowSma: nullableDecimalString,
+    longSma: nullableDecimalString,
+    atrPct: nullableDecimalString,
+    recentHigh: nullableDecimalString,
+    recentLow: nullableDecimalString,
+    avgVolumeUsd: nullableDecimalString,
+    drawdownPct: nullableDecimalString,
+    staleBars: z.number().int().nonnegative(),
+  })
+  .strict() satisfies z.ZodType<RegimeFeatures>;
 
-const tokenRuntimeStateSchema = z.object({
-  tokenId: z.string().min(1),
-  regime: z.object({
-    regime: z.enum(SANDBOX_REGIMES),
+const tokenRuntimeStateSchema = z
+  .object({
+    tokenId: z.string().min(1),
+    regime: z
+      .object({
+        regime: z.enum(SANDBOX_REGIMES),
+        reasonCode: reasonCodeSchema,
+        candidate: z.enum(SANDBOX_REGIMES).nullable(),
+        candidateBars: z.number().int().nonnegative(),
+        since: timestampMs,
+        rulesVersion: z.string().min(1),
+        features: regimeFeaturesSchema,
+      })
+      .strict(),
+    phase: z.enum(SANDBOX_TOKEN_PHASES),
+    cooldownUntil: nullableTimestampMs,
+    strategyState: z.record(z.string(), z.unknown()),
+  })
+  .strict() satisfies z.ZodType<TokenRuntimeState>;
+
+const engineStateSchema = z
+  .object({
+    tokens: z.record(z.string(), tokenRuntimeStateSchema),
+  })
+  .strict();
+
+const paperPositionSchema = z
+  .object({
+    tokenId: z.string().min(1),
+    strategyKey: z.enum(SANDBOX_STRATEGY_KEYS),
+    strategyVersion: z.number().int().positive(),
+    amount: decimalString,
+    costBasisUsd: decimalString,
+    avgCostUsd: decimalString,
+    openedAt: timestampMs,
+    stopLossPct: nullableDecimalString,
+    takeProfitPct: nullableDecimalString,
+    entryIntentId: z.string().min(1),
+    feesPaidUsd: decimalString,
+  })
+  .strict() satisfies z.ZodType<PaperPosition>;
+
+const paperTradeSchema = z
+  .object({
+    tradeId: z.string().min(1),
+    tokenId: z.string().min(1),
+    strategyKey: z.enum(SANDBOX_STRATEGY_KEYS),
+    strategyVersion: z.number().int().positive(),
+    entryAt: timestampMs,
+    entryPriceUsd: decimalString,
+    entryAmount: decimalString,
+    entryNotionalUsd: decimalString,
+    entryFeeUsd: decimalString,
+    entryCostBasisUsd: decimalString,
+    entryIntentId: z.string().min(1),
+    exitAt: nullableTimestampMs,
+    exitPriceUsd: nullableDecimalString,
+    exitAmount: decimalString,
+    exitNotionalUsd: decimalString,
+    exitFeeUsd: decimalString,
+    exitReasonCode: reasonCodeSchema.nullable(),
+    exitIntentId: z.string().min(1).nullable(),
+    realizedPnlUsd: decimalString,
+    status: z.enum(['open', 'closed']),
+  })
+  .strict() satisfies z.ZodType<PaperTrade>;
+
+const ledgerEntrySchema = z
+  .object({
+    entryId: z.string().min(1),
+    sequence: z.number().int().positive(),
+    clockTime: timestampMs,
+    tokenId: z.string().min(1),
+    side: z.enum(['buy', 'sell']),
+    intentId: z.string().min(1),
+    amount: decimalString,
+    priceUsd: decimalString,
+    notionalUsd: decimalString,
+    feeUsd: decimalString,
+    cashAfterUsd: decimalString,
+    positionAmountAfter: decimalString,
+    positionAvgCostAfter: nullableDecimalString,
+    costBasisReleasedUsd: nullableDecimalString,
+    positionCostBasisAfterUsd: decimalString,
+    realizedPnlUsd: nullableDecimalString,
     reasonCode: reasonCodeSchema,
-    candidate: z.enum(SANDBOX_REGIMES).nullable(),
-    candidateBars: z.number().int().nonnegative(),
-    since: timestampMs,
-    rulesVersion: z.string().min(1),
-    features: regimeFeaturesSchema,
-  }),
-  phase: z.enum(SANDBOX_TOKEN_PHASES),
-  cooldownUntil: nullableTimestampMs,
-  strategyState: z.record(z.string(), z.unknown()),
-}) satisfies z.ZodType<TokenRuntimeState>;
+  })
+  .strict() satisfies z.ZodType<LedgerEntry>;
 
-const engineStateSchema = z.object({
-  tokens: z.record(z.string(), tokenRuntimeStateSchema),
-});
-
-const paperPositionSchema = z.object({
-  tokenId: z.string().min(1),
-  strategyKey: z.enum(SANDBOX_STRATEGY_KEYS),
-  strategyVersion: z.number().int().positive(),
-  amount: decimalString,
-  costBasisUsd: decimalString,
-  avgCostUsd: decimalString,
-  openedAt: timestampMs,
-  stopLossPct: nullableDecimalString,
-  takeProfitPct: nullableDecimalString,
-  entryIntentId: z.string().min(1),
-  feesPaidUsd: decimalString,
-}) satisfies z.ZodType<PaperPosition>;
-
-const paperTradeSchema = z.object({
-  tradeId: z.string().min(1),
-  tokenId: z.string().min(1),
-  strategyKey: z.enum(SANDBOX_STRATEGY_KEYS),
-  strategyVersion: z.number().int().positive(),
-  entryAt: timestampMs,
-  entryPriceUsd: decimalString,
-  entryAmount: decimalString,
-  entryNotionalUsd: decimalString,
-  entryFeeUsd: decimalString,
-  entryCostBasisUsd: decimalString,
-  entryIntentId: z.string().min(1),
-  exitAt: nullableTimestampMs,
-  exitPriceUsd: nullableDecimalString,
-  exitAmount: decimalString,
-  exitNotionalUsd: decimalString,
-  exitFeeUsd: decimalString,
-  exitReasonCode: reasonCodeSchema.nullable(),
-  exitIntentId: z.string().min(1).nullable(),
-  realizedPnlUsd: decimalString,
-  status: z.enum(['open', 'closed']),
-}) satisfies z.ZodType<PaperTrade>;
-
-const ledgerEntrySchema = z.object({
-  entryId: z.string().min(1),
-  sequence: z.number().int().positive(),
-  clockTime: timestampMs,
-  tokenId: z.string().min(1),
-  side: z.enum(['buy', 'sell']),
-  intentId: z.string().min(1),
-  amount: decimalString,
-  priceUsd: decimalString,
-  notionalUsd: decimalString,
-  feeUsd: decimalString,
-  cashAfterUsd: decimalString,
-  positionAmountAfter: decimalString,
-  positionAvgCostAfter: nullableDecimalString,
-  costBasisReleasedUsd: nullableDecimalString,
-  positionCostBasisAfterUsd: decimalString,
-  realizedPnlUsd: nullableDecimalString,
-  reasonCode: reasonCodeSchema,
-}) satisfies z.ZodType<LedgerEntry>;
-
-const ledgerStateSchema = z.object({
-  cashUsd: decimalString,
-  initialCapitalUsd: decimalString,
-  positions: z.record(z.string(), paperPositionSchema),
-  entries: z.array(ledgerEntrySchema),
-  realizedPnlUsd: decimalString,
-  feesPaidUsd: decimalString,
-  closedTrades: z.array(paperTradeSchema),
-  openTrades: z.record(z.string(), paperTradeSchema),
-});
+const ledgerStateSchema = z
+  .object({
+    cashUsd: decimalString,
+    initialCapitalUsd: decimalString,
+    positions: z.record(z.string(), paperPositionSchema),
+    entries: z.array(ledgerEntrySchema),
+    realizedPnlUsd: decimalString,
+    feesPaidUsd: decimalString,
+    closedTrades: z.array(paperTradeSchema),
+    openTrades: z.record(z.string(), paperTradeSchema),
+  })
+  .strict();
 
 function invalid(path: string, message: string): never {
   throw new SandboxPersistenceError('SANDBOX_STATE_INVALID', `${path}: ${message}`);
@@ -431,16 +448,33 @@ export function parsePaperLedgerState(value: unknown): PaperLedgerState {
 /**
  * Parses an uninitialised JSONB state column.
  *
- * A draft run starts with the schema default `{}`; that is the only allowed
- * empty shape. Any other object must validate.
+ * Only a draft run may still carry the schema default `{}`; a started (or
+ * terminal) run with an empty state is a persistence bug and fails closed.
+ * Any other object must validate against the strict engine/ledger schema.
  */
-export function parseOptionalEngineState(value: unknown): EngineState | null {
-  if (isEmptyObject(value)) return null;
+export function parseOptionalEngineState(
+  value: unknown,
+  status: SandboxRunStatus,
+): EngineState | null {
+  if (isEmptyObject(value)) {
+    if (status !== 'draft') {
+      invalid('engineState', `an empty state is only allowed for a draft run (status ${status})`);
+    }
+    return null;
+  }
   return parseEngineState(value);
 }
 
-export function parseOptionalLedgerState(value: unknown): PaperLedgerState | null {
-  if (isEmptyObject(value)) return null;
+export function parseOptionalLedgerState(
+  value: unknown,
+  status: SandboxRunStatus,
+): PaperLedgerState | null {
+  if (isEmptyObject(value)) {
+    if (status !== 'draft') {
+      invalid('ledgerState', `an empty state is only allowed for a draft run (status ${status})`);
+    }
+    return null;
+  }
   return parsePaperLedgerState(value);
 }
 
@@ -459,9 +493,7 @@ export function assertSandboxTickInput(tick: SandboxTickInput): void {
     invalid('status', `unknown sandbox run status ${String(tick.status)}`);
   }
   for (const field of ['cashUsd', 'equityUsd', 'peakEquityUsd', 'dayStartEquityUsd'] as const) {
-    if (!DECIMAL_STRING.test(tick[field])) {
-      invalid(field, 'must be a decimal string');
-    }
+    assertDecimal(tick[field], field);
   }
   for (const field of ['lastBarClose', 'lastTickAt'] as const) {
     if (Number.isNaN(tick[field].getTime())) {
@@ -471,12 +503,85 @@ export function assertSandboxTickInput(tick: SandboxTickInput): void {
   if (Number.isNaN(new Date(tick.equityPoint.clockTime).getTime())) {
     invalid('equityPoint.clockTime', 'must be a valid timestamp');
   }
-  if (!DECIMAL_STRING.test(tick.equityPoint.equityUsd)) {
-    invalid('equityPoint.equityUsd', 'must be a decimal string');
+  for (const field of ['equityUsd', 'cashUsd', 'positionsValueUsd', 'drawdownPct'] as const) {
+    assertDecimal(tick.equityPoint[field], `equityPoint.${field}`);
   }
-  if (!DECIMAL_STRING.test(tick.equityPoint.drawdownPct)) {
-    invalid('equityPoint.drawdownPct', 'must be a decimal string');
+  for (const [index, mark] of tick.markedPositions.entries()) {
+    const path = `markedPositions.${index}`;
+    if (!mark.tokenId) invalid(`${path}.tokenId`, 'must not be empty');
+    if (!(SANDBOX_STRATEGY_KEYS as readonly string[]).includes(mark.strategyKey)) {
+      invalid(`${path}.strategyKey`, `unknown strategy key "${String(mark.strategyKey)}"`);
+    }
+    if (!Number.isInteger(mark.strategyVersion) || mark.strategyVersion < 1) {
+      invalid(`${path}.strategyVersion`, 'must be a positive integer');
+    }
+    assertDecimal(mark.amount, `${path}.amount`);
+    assertDecimal(mark.avgCostUsd, `${path}.avgCostUsd`);
+    assertDecimal(mark.marketPriceUsd, `${path}.marketPriceUsd`);
+    assertDecimal(mark.marketValueUsd, `${path}.marketValueUsd`);
+    assertNullableDecimal(mark.stopLossPct, `${path}.stopLossPct`);
+    assertNullableDecimal(mark.takeProfitPct, `${path}.takeProfitPct`);
   }
+}
+
+/**
+ * Cross-checks the identities a tick must satisfy before it is persisted.
+ *
+ * The JSONB ledger/mark state is the source of truth, so a caller that hands in
+ * a mismatched run total, equity point or position mark is a bug: fail closed
+ * rather than persist a projection that disagrees with the ledger.
+ */
+export function assertSandboxTickConsistency(tick: SandboxTickInput): void {
+  const ledger = tick.ledgerState;
+  if (!decimalEquals(tick.cashUsd, ledger.cashUsd)) {
+    invalid('cashUsd', 'must equal ledgerState.cashUsd');
+  }
+
+  const markedValue = tick.markedPositions.reduce(
+    (total, mark) => total.plus(new Decimal(mark.marketValueUsd)),
+    new Decimal(0),
+  );
+  // `markPortfolio` sums unrounded position values and rounds the total, while
+  // each projected position is rounded to cents; allow one cent per position.
+  const positionRoundingTolerance = new Decimal('0.01').times(
+    Math.max(tick.markedPositions.length, 1),
+  );
+  if (
+    new Decimal(tick.equityPoint.positionsValueUsd)
+      .minus(markedValue)
+      .abs()
+      .greaterThan(positionRoundingTolerance)
+  ) {
+    invalid('equityPoint.positionsValueUsd', 'must equal the sum of marked position market values');
+  }
+  if (!decimalEquals(tick.equityPoint.cashUsd, ledger.cashUsd)) {
+    invalid('equityPoint.cashUsd', 'must equal ledgerState.cashUsd');
+  }
+  if (!decimalEquals(tick.equityPoint.equityUsd, tick.equityUsd)) {
+    invalid('equityPoint.equityUsd', 'must equal the persisted equityUsd');
+  }
+  const equity = new Decimal(tick.equityPoint.cashUsd).plus(tick.equityPoint.positionsValueUsd);
+  if (!equity.equals(new Decimal(tick.equityPoint.equityUsd))) {
+    invalid('equityPoint.equityUsd', 'must equal cashUsd + positionsValueUsd');
+  }
+  if (!decimalEquals(tick.equityUsd, equity.toFixed(2))) {
+    invalid('equityUsd', 'must equal equityPoint equityUsd');
+  }
+}
+
+function assertDecimal(value: string, path: string): void {
+  if (typeof value !== 'string' || !DECIMAL_STRING.test(value)) {
+    invalid(path, 'must be a decimal string');
+  }
+}
+
+function assertNullableDecimal(value: string | null, path: string): void {
+  if (value === null) return;
+  assertDecimal(value, path);
+}
+
+function decimalEquals(left: string, right: string): boolean {
+  return new Decimal(left).equals(new Decimal(right));
 }
 
 /**
@@ -539,6 +644,16 @@ export function buildSandboxClosedPositionTokenIds(
 /** Builds `sandbox_trades` rows for closed and open trades. */
 export function buildSandboxTradeRows(runId: string, ledger: PaperLedgerState): SandboxTradeRow[] {
   const trades = [...ledger.closedTrades, ...Object.values(ledger.openTrades)];
+  const seen = new Set<string>();
+  for (const trade of trades) {
+    if (seen.has(trade.tradeId)) {
+      invalid(
+        `ledgerState.trades.${trade.tradeId}`,
+        'duplicate tradeId across closed and open trades',
+      );
+    }
+    seen.add(trade.tradeId);
+  }
 
   return trades
     .slice()
@@ -605,6 +720,14 @@ export function buildSandboxIntentRows(
   runId: string,
   intents: readonly IntentRecord[],
 ): SandboxIntentRow[] {
+  const seen = new Set<string>();
+  for (const intent of intents) {
+    if (seen.has(intent.intentId)) {
+      invalid(`sandboxTick.intents.${intent.intentId}`, 'duplicate intentId in one tick');
+    }
+    seen.add(intent.intentId);
+  }
+
   return intents.map((intent) => ({
     runId,
     intentId: intent.intentId,

@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { createDb, sandboxEquityPoints, sandboxEvents, sandboxPositions } from '@nexter/db';
 import { GENESIS_HASH, type SandboxEventInput } from '@nexter/sandbox-core';
+import Decimal from 'decimal.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { SandboxRepository } from '../src/modules/sandbox/sandbox.repository';
 import { SandboxPersistenceError } from '../src/modules/sandbox/sandbox.types';
@@ -108,6 +109,15 @@ describe.runIf(canRun)('sandbox run store', () => {
     });
   });
 
+  it('rejects the empty JSONB default once a run is no longer a draft', async () => {
+    const { runId } = await seedSandboxRun(db, { status: 'running' });
+
+    await expect(repository.loadRun(runId)).rejects.toMatchObject({
+      code: 'SANDBOX_STATE_INVALID',
+    });
+    await expect(repository.loadRun(runId)).rejects.toThrow(/only allowed for a draft/);
+  });
+
   it('commits run state, events and projections in one tick', async () => {
     const { runId } = await seedSandboxRun(db, { status: 'draft' });
     const open = makeOpenLedger();
@@ -181,25 +191,20 @@ describe.runIf(canRun)('sandbox run store', () => {
     // Postgres rejects a NUL byte in text, so this row fails after the run
     // update and must roll the whole tick back.
     const badTokenId = 'bad\u0000token';
-    const badTick = makeTick(
-      {
-        ...open.ledger,
-        positions: {
-          ...open.ledger.positions,
-          [badTokenId]: { ...realPosition, tokenId: badTokenId },
-        },
-      },
-      {
-        ...open.marked,
-        positions: [...open.marked.positions, { ...realMark, tokenId: badTokenId }],
-      },
-      open.intents,
-      {
-        cashUsd: '1.00',
-        engineState: makeEngineState(),
-        lastBarClose: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
-      },
-    );
+    // Keep the tick identities consistent so the failure comes from Postgres,
+    // not from the pre-write consistency guard.
+    const badLedger = {
+      ...open.ledger,
+      positions: { [badTokenId]: { ...realPosition, tokenId: badTokenId } },
+    };
+    const badMarked = {
+      ...open.marked,
+      positions: [{ ...realMark, tokenId: badTokenId }],
+    };
+    const badTick = makeTick(badLedger, badMarked, open.intents, {
+      engineState: makeEngineState(),
+      lastBarClose: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+    });
 
     await expect(repository.persistTick(runId, badTick)).rejects.toThrow(
       /invalid byte sequence|0x00/i,
@@ -233,6 +238,83 @@ describe.runIf(canRun)('sandbox run store', () => {
     expect(await db.select().from(sandboxEquityPoints)).toHaveLength(0);
   });
 
+  it('rolls back appended events, state and projections when the projection fails', async () => {
+    const { runId } = await seedSandboxRun(db);
+    const open = makeOpenLedger();
+    const realPosition = open.ledger.positions[SANDBOX_TEST_TOKEN];
+    const realMark = open.marked.positions[0];
+    if (realPosition === undefined || realMark === undefined) {
+      throw new Error('fixture is missing its position');
+    }
+    const badTokenId = 'bad\u0000token';
+    const badLedger = {
+      ...open.ledger,
+      positions: { [badTokenId]: { ...realPosition, tokenId: badTokenId } },
+    };
+    const badMarked = {
+      ...open.marked,
+      positions: [{ ...realMark, tokenId: badTokenId }],
+    };
+    const badTick = makeTick(badLedger, badMarked, open.intents);
+
+    await expect(
+      repository.commitTick(runId, async ({ eventLog }) => {
+        await eventLog.append(eventInput(runId, 'run.started'));
+        return badTick;
+      }),
+    ).rejects.toThrow(/invalid byte sequence|0x00/i);
+
+    expect(await db.select().from(sandboxEvents)).toHaveLength(0);
+    const run = await repository.loadRun(runId);
+    expect(run).toMatchObject({ eventSeq: 0, eventHash: GENESIS_HASH, status: 'running' });
+    expect(await db.select().from(sandboxPositions)).toHaveLength(0);
+    expect(await db.select().from(sandboxEquityPoints)).toHaveLength(0);
+  });
+
+  it('persists and clears the last error and updates lastTickAt', async () => {
+    const { runId } = await seedSandboxRun(db);
+    const open = makeOpenLedger();
+    const first = makeTick(open.ledger, open.marked, open.intents, {
+      error: 'stale market data',
+    });
+
+    await repository.persistTick(runId, first);
+    let run = await repository.loadRun(runId);
+    expect(run).toMatchObject({ error: 'stale market data' });
+    expect(run?.lastTickAt?.getTime()).toBe(first.lastTickAt.getTime());
+
+    const second = makeTick(open.ledger, open.marked, open.intents, {
+      error: null,
+      lastBarClose: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+      lastTickAt: new Date(SANDBOX_TEST_AT + SANDBOX_TEST_HOUR),
+    });
+    await repository.persistTick(runId, second);
+    run = await repository.loadRun(runId);
+    expect(run).toMatchObject({ error: null });
+    expect(run?.lastTickAt?.getTime()).toBe(second.lastTickAt.getTime());
+  });
+
+  it('refuses to project a ledger that no longer matches the persisted journal', async () => {
+    const { runId } = await seedSandboxRun(db);
+    const open = makeOpenLedger();
+    await repository.persistTick(runId, makeTick(open.ledger, open.marked, open.intents));
+
+    const entry = open.ledger.entries[0];
+    if (!entry) throw new Error('fixture has no ledger entry');
+    // A restored-older state would carry a different entry at the same sequence.
+    const olderLedger = {
+      ...open.ledger,
+      entries: [{ ...entry, entryId: 'other-intent:ledger' }],
+    };
+
+    await expect(
+      repository.persistTick(runId, makeTick(olderLedger, open.marked, [])),
+    ).rejects.toMatchObject({ code: 'SANDBOX_STATE_INVALID' });
+    await expect(
+      repository.persistTick(runId, makeTick(olderLedger, open.marked, [])),
+    ).rejects.toThrow(/persisted entry/);
+  });
+
   it('persists a closed position as a zero tombstone and keeps its trade', async () => {
     const { runId } = await seedSandboxRun(db);
     const open = makeOpenLedger();
@@ -261,7 +343,12 @@ describe.runIf(canRun)('sandbox run store', () => {
       amount: '0.00000000',
       costBasisUsd: '0.00',
       marketValueUsd: '0.00',
+      stopLossPct: null,
+      takeProfitPct: null,
     });
+    expect(position && new Decimal(position.avgCostUsd).equals(0)).toBe(true);
+    expect(position && new Decimal(position.marketPriceUsd).equals(0)).toBe(true);
+    expect(position && new Decimal(position.feesPaidUsd).equals(0)).toBe(true);
     expect(await db.select().from(sandboxPositions)).toHaveLength(1);
   });
 });

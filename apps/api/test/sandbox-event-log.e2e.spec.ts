@@ -99,7 +99,7 @@ describe.runIf(canRun)('sandbox db event log', () => {
       expect(verification).toMatchObject({
         ok: true,
         count: 2,
-        headSeq: 1,
+        lastSeq: 1,
         headHash: original[1]?.hash,
         errors: [],
       });
@@ -110,7 +110,7 @@ describe.runIf(canRun)('sandbox db event log', () => {
     });
 
     const staticVerification = await SandboxEventLog.verifyRun(db, runId);
-    expect(staticVerification).toMatchObject({ ok: true, count: 3, headSeq: 2 });
+    expect(staticVerification).toMatchObject({ ok: true, count: 3, lastSeq: 2 });
 
     const page = await listSandboxEvents(db, runId, { afterSeq: 0, limit: 1 });
     expect(page.map((event) => event.seq)).toEqual([1]);
@@ -131,7 +131,7 @@ describe.runIf(canRun)('sandbox db event log', () => {
             set payload = jsonb_set(payload, '{eventType}', '"run.tampered"')
           where run_id = ${runId} and seq = 1`,
     );
-    await expect(SandboxEventLog.load(db, runId)).rejects.toMatchObject({
+    await expect(db.transaction((tx) => SandboxEventLog.load(tx, runId))).rejects.toMatchObject({
       code: 'SANDBOX_EVENT_PAYLOAD_INVALID',
     });
 
@@ -145,7 +145,29 @@ describe.runIf(canRun)('sandbox db event log', () => {
     const verification = await SandboxEventLog.verifyRun(db, runId);
     expect(verification.ok).toBe(false);
     expect(verification.errors[0]).toMatch(/hash mismatch/);
-    await expect(SandboxEventLog.load(db, runId)).rejects.toMatchObject({
+    await expect(db.transaction((tx) => SandboxEventLog.load(tx, runId))).rejects.toMatchObject({
+      code: 'SANDBOX_EVENT_CHAIN_DESYNC',
+    });
+  });
+
+  it('detects a chain whose persisted run head was truncated', async () => {
+    const { runId } = await seedSandboxRun(db);
+    await withLog(runId, async (log) => {
+      await log.append(eventInput(runId, 'run.started'));
+      await log.append(eventInput(runId, 'run.ticked'));
+    });
+
+    // The rows still link cleanly, but the run row no longer describes their
+    // head. This is what a partial restore would look like.
+    await db.execute(
+      sql`update sandbox_runs set event_seq = 1, event_hash = ${GENESIS_HASH} where id = ${runId}`,
+    );
+
+    const verification = await SandboxEventLog.verifyRun(db, runId);
+    expect(verification).toMatchObject({ ok: false, count: 2, lastSeq: 1 });
+    expect(verification.errors[0]).toMatch(/persisted head is seq 1/);
+
+    await expect(db.transaction((tx) => SandboxEventLog.load(tx, runId))).rejects.toMatchObject({
       code: 'SANDBOX_EVENT_CHAIN_DESYNC',
     });
   });
@@ -187,7 +209,7 @@ describe.runIf(canRun)('sandbox db event log', () => {
     expect(run).toEqual({ eventSeq: 0, eventHash: GENESIS_HASH });
   });
 
-  it('fails closed when the persisted run head disagrees with the loaded chain', async () => {
+  it('fails closed when the persisted run head disagrees with the stored chain', async () => {
     const { runId } = await seedSandboxRun(db, { eventSeq: 5 });
 
     await expect(
@@ -198,7 +220,7 @@ describe.runIf(canRun)('sandbox db event log', () => {
     expect(rows).toHaveLength(0);
   });
 
-  it('rejects an append for an unknown run', async () => {
+  it('rejects an unknown run before it can append', async () => {
     const missingRunId = '33333333-3333-4333-8333-333333333333';
 
     await expect(
