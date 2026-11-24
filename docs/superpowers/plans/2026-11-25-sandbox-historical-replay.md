@@ -128,7 +128,7 @@ Expected: FAIL for the missing `evaluateFrom`/helper.
 
 - [ ] **Step 3: Implement `evaluateFrom` and the helper**
 
-In `paper-runner.ts`: build `allBarCloses`; compute `startIndex` (`0` when undefined, else the first close `>= evaluateFrom`); throw `PaperRunError('PAPER_EVALUATE_FROM_OUT_OF_RANGE', ...)` when none; use `barCloses = allBarCloses.slice(startIndex)` for the loop/runStarted/period, while `candles`/`candleByOpen`/`ClockedMarketView` keep the full input. Preserve goldens when `evaluateFrom` is undefined.
+In `paper-runner.ts`: build `allBarCloses`; compute `startIndex` (`0` when undefined, else the first bar whose **open** `>= evaluateFrom`); throw `PaperRunError('PAPER_EVALUATE_FROM_OUT_OF_RANGE', ...)` when none; use `barCloses = allBarCloses.slice(startIndex)` for the loop/runStarted/period, while `candles`/`candleByOpen`/`ClockedMarketView` keep the full input. Preserve goldens when `evaluateFrom` is undefined.
 
 In `run-paper.ts`: create `MemoryEventLog`, call `PaperRunner`, compute final marks from the latest closed candle per token at/after the last equity point, build the report with `buildReport`/`buildEquityCurve`/`computeMetrics`/counterfactuals exactly as the CLI does today, and return `{ report, result }`. Export from `packages/sandbox-core/src/index.ts`.
 
@@ -349,6 +349,16 @@ git commit -m "feat(sandbox): add sandbox_replays schema and migration"
 
   Owner-only, `SandboxEnabledGuard`, no-store, Zod body/query pipes.
 
+Create body: `name`, `tokenKeys` (1–3), `periodDays` (30/90/180),
+`initialCapitalUsd` (decimal string), optional `seed`, `settings`, `paper`,
+`allowPartial`. The API freezes the config, computes `to_time` from the latest
+common closed candle and `from_time = to - periodDays` as the first evaluation
+candle **open** (never `report.period.firstBar`, which is a close), checks
+window coverage, inserts `queued`, audits `sandbox.replay_created` and returns
+the row. `allowPartial` moves `from_time` to the earliest available candle and
+requires at least 240 evaluation bars; the actual window is stored and shown.
+No manual buy/add; no token mutation.
+
 - [ ] **Step 1: Write failing contract/coverage/service tests**
 
 Cover: period/token/capital validation; preflight `to` = earliest latest close; eval window bars/gaps/prefix; `allowPartial` moves `from` and records actual; missing blocks; create owner token validation; audit action; foreign id 404; cancel queued → cancelled; cancel running 409; archive only terminal; list filter/pagination.
@@ -392,7 +402,7 @@ git commit -m "feat(sandbox): add historical replay contracts and service"
   export interface ReplayExecutionInput {
     runId: string; seed: number; configVersion: string; dataSnapshotId: string;
     tokenIds: readonly string[]; candles: readonly Candle[];
-    settings: SandboxDecisionSettings; paper: SandboxPaperSettings;
+    settings: SandboxDecisionSettings; paper: PaperRunSettings;
     initialCapitalUsd: string; evaluateFrom: number;
   }
   export interface ReplayExecutor { run(input: ReplayExecutionInput): Promise<RunReport>; }
