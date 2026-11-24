@@ -16,3 +16,4 @@ export * from './events/jsonl-event-log';
 export * from './runner/context';
 export * from './runner/replay-runner';
 export * from './decision';
+export * from './paper';
