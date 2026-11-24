@@ -1,4 +1,6 @@
 import type { ReasonCode } from '../decision/reason-codes';
+import type { StrategyKey } from '../decision/types';
+import type { Timestamp } from '../types';
 
 /**
  * Execution settings for one paper run.
@@ -86,4 +88,103 @@ export interface SellFillPlan {
   readonly proceedsUsd: string;
   readonly reasonCode: ReasonCode;
   readonly reasonText: string;
+}
+
+/**
+ * One open paper position.
+ *
+ * The sandbox never adds to a position, so `avgCostUsd` is the entry cost per
+ * token including the buy fee and is only rounded once at entry. `amount` is an
+ * 8-decimal token amount; `feesPaidUsd` is the entry fee.
+ */
+export interface PaperPosition {
+  readonly tokenId: string;
+  readonly strategyKey: StrategyKey;
+  readonly strategyVersion: number;
+  readonly amount: string;
+  /** Entry cost per token including buy fees, 8 decimals. */
+  readonly avgCostUsd: string;
+  readonly openedAt: Timestamp;
+  readonly stopLossPct: string | null;
+  readonly takeProfitPct: string | null;
+  readonly entryIntentId: string;
+  readonly feesPaidUsd: string;
+}
+
+/**
+ * One round trip: opened by a buy fill and closed when the position reaches
+ * zero. Partial sells aggregate into the open trade until then.
+ *
+ * Entry/exit amounts are 8-decimal token amounts; USD strings have two
+ * decimals. `realizedPnlUsd` is the sum of the sell fills' realized P&L.
+ */
+export interface PaperTrade {
+  readonly tradeId: string;
+  readonly tokenId: string;
+  readonly strategyKey: StrategyKey;
+  readonly strategyVersion: number;
+  readonly entryAt: Timestamp;
+  readonly entryPriceUsd: string;
+  readonly entryAmount: string;
+  readonly entryNotionalUsd: string;
+  readonly entryFeeUsd: string;
+  readonly entryIntentId: string;
+  readonly exitAt: Timestamp | null;
+  readonly exitPriceUsd: string | null;
+  readonly exitAmount: string;
+  readonly exitNotionalUsd: string;
+  readonly exitFeeUsd: string;
+  readonly exitReasonCode: ReasonCode | null;
+  readonly exitIntentId: string | null;
+  readonly realizedPnlUsd: string;
+  readonly status: 'open' | 'closed';
+}
+
+/**
+ * One append-only ledger row per booked fill.
+ *
+ * `entryId` is derived from the intent (`<intentId>:ledger`), so it is unique
+ * per intent and deterministic across runs. `sequence` starts at 1 and grows
+ * by one. `realizedPnlUsd` is `null` for buys.
+ */
+export interface LedgerEntry {
+  readonly entryId: string;
+  readonly sequence: number;
+  readonly clockTime: Timestamp;
+  readonly tokenId: string;
+  readonly side: 'buy' | 'sell';
+  readonly intentId: string;
+  readonly amount: string;
+  readonly priceUsd: string;
+  readonly notionalUsd: string;
+  readonly feeUsd: string;
+  readonly cashAfterUsd: string;
+  readonly positionAmountAfter: string;
+  readonly positionAvgCostAfter: string | null;
+  readonly realizedPnlUsd: string | null;
+  readonly reasonCode: ReasonCode;
+}
+
+/**
+ * Immutable paper ledger snapshot.
+ *
+ * Buy fees are capitalised in `avgCostUsd`; sell fees reduce proceeds. The
+ * ledger only records fills, never marks: mark-to-market lives in
+ * `markPortfolio`.
+ */
+export interface PaperLedgerState {
+  readonly cashUsd: string;
+  readonly initialCapitalUsd: string;
+  readonly positions: Readonly<Record<string, PaperPosition>>;
+  readonly entries: readonly LedgerEntry[];
+  readonly realizedPnlUsd: string;
+  readonly feesPaidUsd: string;
+  readonly closedTrades: readonly PaperTrade[];
+  readonly openTrades: Readonly<Record<string, PaperTrade>>;
+}
+
+export interface LedgerApplyResult {
+  readonly state: PaperLedgerState;
+  readonly entry: LedgerEntry;
+  readonly trade: PaperTrade | null;
 }
