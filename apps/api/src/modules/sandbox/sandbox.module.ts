@@ -6,6 +6,8 @@ import { SandboxDataService } from './sandbox-data.service';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
 import { SandboxReportService } from './sandbox-report.service';
+import { SandboxReplayRepository } from './sandbox-replay.repository';
+import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRepository } from './sandbox.repository';
 import { SandboxRunnerService } from './sandbox-runner.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -23,6 +25,8 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxRunnerService,
     SandboxReadService,
     SandboxReportService,
+    SandboxReplayRepository,
+    SandboxReplayService,
     SandboxEnabledGuard,
     { provide: SANDBOX_ENABLED, useValue: env.SANDBOX_ENABLED },
   ],
@@ -34,6 +38,8 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxRunnerService,
     SandboxReadService,
     SandboxReportService,
+    SandboxReplayRepository,
+    SandboxReplayService,
   ],
 })
 export class SandboxModule {}

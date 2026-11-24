@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import {
   sandboxCandles,
   sandboxEquityPoints,
@@ -18,7 +18,7 @@ import {
   type SandboxPositionRecord,
   type SandboxTradeRecord,
 } from '@nexter/db';
-import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
+import { SANDBOX_TIMEFRAME, SANDBOX_TIMEFRAME_MS } from '@nexter/contracts';
 import {
   Reason,
   type Candle,
@@ -323,6 +323,92 @@ export class SandboxRepository {
           syntheticCandles: Number(row.syntheticCandles ?? 0),
         },
       ]),
+    );
+  }
+
+  /**
+   * Candle summary for an explicit half-open window `[from, to)`.
+   *
+   * Used by the historical replay preflight: coverage is window-specific, so a
+   * fully covered evaluation window is `ok` even when older history is missing.
+   * Candles are shared by provider key; callers scope the keys through the
+   * owner's token universe first.
+   */
+  async candleStatsBetween(
+    tokenKeys: readonly string[],
+    from: Date,
+    to: Date,
+  ): Promise<Map<string, SandboxCandleStats>> {
+    const unique = [...new Set(tokenKeys)];
+    if (unique.length === 0 || from.getTime() >= to.getTime()) return new Map();
+
+    const rows = await this.db
+      .select({
+        tokenKey: sandboxCandles.tokenKey,
+        available: sql<number>`count(*)::int`,
+        firstOpenTime: sql<Date | null>`min(${sandboxCandles.openTime})`,
+        lastOpenTime: sql<Date | null>`max(${sandboxCandles.openTime})`,
+        syntheticCandles: sql<number>`(count(*) filter (where ${sandboxCandles.source} = 'coingecko'))::int`,
+      })
+      .from(sandboxCandles)
+      .where(
+        and(
+          eq(sandboxCandles.timeframe, SANDBOX_TIMEFRAME),
+          inArray(sandboxCandles.tokenKey, unique),
+          gte(sandboxCandles.openTime, from),
+          lt(sandboxCandles.openTime, to),
+        ),
+      )
+      .groupBy(sandboxCandles.tokenKey);
+
+    return new Map(
+      rows.map((row) => [
+        row.tokenKey,
+        {
+          available: Number(row.available ?? 0),
+          firstOpenTime: row.firstOpenTime ? new Date(row.firstOpenTime) : null,
+          lastOpenTime: row.lastOpenTime ? new Date(row.lastOpenTime) : null,
+          syntheticCandles: Number(row.syntheticCandles ?? 0),
+        },
+      ]),
+    );
+  }
+
+  /**
+   * Latest candle **open** per token whose close is not in the future.
+   *
+   * A replay ends at the earliest of these across the selected tokens, so every
+   * token has data at the end; the stored `to_time` is that open plus one bar.
+   */
+  async latestClosedOpenTimes(
+    tokenKeys: readonly string[],
+    now: Date = new Date(),
+  ): Promise<Map<string, Date>> {
+    const unique = [...new Set(tokenKeys)];
+    if (unique.length === 0) return new Map();
+
+    const cutoff = new Date(now.getTime() - SANDBOX_TIMEFRAME_MS);
+    const rows = await this.db
+      .select({
+        tokenKey: sandboxCandles.tokenKey,
+        latestOpenTime: sql<Date | null>`max(${sandboxCandles.openTime})`,
+      })
+      .from(sandboxCandles)
+      .where(
+        and(
+          eq(sandboxCandles.timeframe, SANDBOX_TIMEFRAME),
+          inArray(sandboxCandles.tokenKey, unique),
+          lte(sandboxCandles.openTime, cutoff),
+        ),
+      )
+      .groupBy(sandboxCandles.tokenKey);
+
+    return new Map(
+      rows
+        .filter(
+          (row): row is { tokenKey: string; latestOpenTime: Date } => row.latestOpenTime !== null,
+        )
+        .map((row) => [row.tokenKey, new Date(row.latestOpenTime)]),
     );
   }
 

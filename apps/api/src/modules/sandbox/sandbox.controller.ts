@@ -20,6 +20,9 @@ import {
   sandboxEquityQuerySchema,
   sandboxEventsQuerySchema,
   sandboxPageQuerySchema,
+  sandboxReplayCreateRequestSchema,
+  sandboxReplayListQuerySchema,
+  sandboxReplayPreflightRequestSchema,
   sandboxRunCreateRequestSchema,
   sandboxRunStartRequestSchema,
   sandboxRunUpdateRequestSchema,
@@ -36,6 +39,12 @@ import {
   type SandboxOverview,
   type SandboxPageQuery,
   type SandboxPositionsResponse,
+  type SandboxReplayCreateRequest,
+  type SandboxReplayDetail,
+  type SandboxReplayListQuery,
+  type SandboxReplayListResponse,
+  type SandboxReplayPreflightRequest,
+  type SandboxReplayPreflightResponse,
   type SandboxReportResponse,
   type SandboxRun,
   type SandboxRunCreateRequest,
@@ -57,6 +66,7 @@ import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED, SANDBOX_VERSION, type SandboxStatus } from './sandbox.types';
@@ -69,6 +79,7 @@ export class SandboxController {
     private readonly tokens: SandboxTokensService,
     private readonly runs: SandboxRunService,
     private readonly read: SandboxReadService,
+    private readonly replay: SandboxReplayService,
   ) {}
 
   @Get('status')
@@ -139,6 +150,75 @@ export class SandboxController {
   @Header('Cache-Control', 'no-store')
   overview(@CurrentAuth() auth: AuthContext): Promise<SandboxOverview> {
     return this.read.overview(auth.user.id);
+  }
+
+  @Post('replays/preflight')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayPreflight(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(sandboxReplayPreflightRequestSchema))
+    body: SandboxReplayPreflightRequest,
+  ): Promise<SandboxReplayPreflightResponse> {
+    return this.replay.preflight(auth.user.id, body);
+  }
+
+  @Post('replays')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  createReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(sandboxReplayCreateRequestSchema))
+    body: SandboxReplayCreateRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.create(auth.user.id, body, auditMeta(request));
+  }
+
+  @Get('replays')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  listReplays(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(sandboxReplayListQuerySchema)) query: SandboxReplayListQuery,
+  ): Promise<SandboxReplayListResponse> {
+    return this.replay.list(auth.user.id, query);
+  }
+
+  @Get('replays/:id')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  getReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.detail(auth.user.id, id);
+  }
+
+  @Post('replays/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  cancelReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.cancel(auth.user.id, id, auditMeta(request));
+  }
+
+  @Post('replays/:id/archive')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  archiveReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.archive(auth.user.id, id, auditMeta(request));
   }
 
   @Get('runs')
