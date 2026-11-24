@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import {
   parseSandboxTokenKey,
+  SANDBOX_STALE_AFTER_MS,
   SANDBOX_TIMEFRAME,
   SANDBOX_TIMEFRAME_MS,
   SANDBOX_WARMUP_DAYS,
 } from '@nexter/contracts';
-import { decimal, priceString } from '../../shared/money/decimal';
+import { decimal, priceString, type Decimal } from '../../shared/money/decimal';
 import type { RawCandle } from '../market-data/candle.types';
 import { BinanceClient } from '../market-data/binance.client';
 import { CoinGeckoClient } from '../market-data/coingecko.client';
@@ -36,6 +37,26 @@ export interface SandboxRefreshResult {
   synthetic: boolean;
 }
 
+/** The provider fields a sandbox candle fetch needs; run snapshots satisfy it. */
+export type SandboxDataSourceToken = Pick<
+  SandboxTokenRecord,
+  'tokenKey' | 'symbol' | 'chain' | 'contractAddress' | 'coingeckoId'
+>;
+
+/**
+ * First live quote after a closed bar.
+ *
+ * `priceUsd` is the newest raw provider candle close (the in-progress hour while
+ * it is open), never the historical decision close. `volumeUsd` is the last
+ * closed bar's USD volume, the base of the Stage 1C liquidity cap.
+ */
+export interface SandboxLivePrice {
+  tokenId: string;
+  priceUsd: string;
+  volumeUsd: string;
+  asOf: Date;
+}
+
 /**
  * 1h candle ingestion for the sandbox universe.
  *
@@ -53,7 +74,7 @@ export class SandboxDataService {
   ) {}
 
   async refreshToken(
-    token: SandboxTokenRecord,
+    token: SandboxDataSourceToken,
     options: SandboxRefreshOptions = {},
   ): Promise<SandboxRefreshResult> {
     const now = options.now ?? new Date();
@@ -83,8 +104,70 @@ export class SandboxDataService {
     };
   }
 
+  /**
+   * Fetches the first live quote after a closed bar and upserts the newly closed
+   * candles in the same provider round-trip.
+   *
+   * The quote close may belong to the in-progress hour; that is intentional, it
+   * is the first current price after the decision bar. A missing or non-positive
+   * close/volume returns `null` so the runner keeps the intent pending and never
+   * fabricates a fill.
+   */
+  async latestPrice(
+    token: SandboxDataSourceToken,
+    options: SandboxRefreshOptions = {},
+  ): Promise<SandboxLivePrice | null> {
+    const now = options.now ?? new Date();
+    const raw = await this.loadCandles(token, 1, 3);
+    if (raw.length === 0) return null;
+
+    const sorted = raw
+      .filter(
+        (candle) => candle.openTime instanceof Date && !Number.isNaN(candle.openTime.getTime()),
+      )
+      .sort((left, right) => left.openTime.getTime() - right.openTime.getTime());
+    if (sorted.length === 0) return null;
+
+    const newest = sorted[sorted.length - 1];
+    if (newest === undefined) return null;
+    const newestClose = safePositiveDecimal(newest.close);
+    if (newestClose === null) return null;
+    // A provider that stopped updating must not fill a paper order at a stale
+    // price; the runner keeps the intent pending and warns through last-tick
+    // health instead.
+    if (newest.openTime.getTime() + SANDBOX_TIMEFRAME_MS < now.getTime() - SANDBOX_STALE_AFTER_MS) {
+      return null;
+    }
+
+    const closed = sorted.filter(
+      (candle) => candle.openTime.getTime() + SANDBOX_TIMEFRAME_MS <= now.getTime(),
+    );
+    const lastClosed = closed[closed.length - 1];
+    if (lastClosed === undefined) return null;
+    const volume = safePositiveDecimal(lastClosed.volumeUsd);
+
+    const normalized = normalizeCandles(token.tokenKey, closed, now);
+    if (normalized.length > 0) {
+      const synthetic = normalized.every((row) => row.source === 'coingecko');
+      for (let index = 0; index < normalized.length; index += SANDBOX_CANDLE_UPSERT_CHUNK) {
+        await this.repository.upsertCandles(
+          normalized.slice(index, index + SANDBOX_CANDLE_UPSERT_CHUNK),
+          { protectPrimaryRows: synthetic },
+        );
+      }
+    }
+
+    if (volume === null) return null;
+    return {
+      tokenId: token.tokenKey,
+      priceUsd: priceString(newestClose),
+      volumeUsd: volume.toFixed(18),
+      asOf: now,
+    };
+  }
+
   private async loadCandles(
-    token: SandboxTokenRecord,
+    token: SandboxDataSourceToken,
     days: number,
     limit: number,
   ): Promise<RawCandle[]> {
@@ -153,6 +236,16 @@ export function normalizeCandles(
   }
 
   return rows;
+}
+
+function safePositiveDecimal(value: string | null): Decimal | null {
+  if (value === null) return null;
+  try {
+    const parsed = decimal(value);
+    return parsed.greaterThan(0) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalizePrices(

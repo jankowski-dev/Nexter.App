@@ -193,3 +193,208 @@ export const sandboxTokenRefreshResponseSchema = z.object({
   fetched: z.number().int().nonnegative(),
 });
 export type SandboxTokenRefreshResponse = z.infer<typeof sandboxTokenRefreshResponseSchema>;
+
+/** Decimal string used for sandbox money fields (no exponent, no grouping). */
+const sandboxDecimalSchema = z.string().regex(/^-?\d+(\.\d+)?$/, 'Ожидается десятичное число');
+/** Non-negative decimal string for settings that the decision engine rejects if negative. */
+const sandboxNonNegativeDecimalSchema = z
+  .string()
+  .regex(/^\d+(\.\d+)?$/, 'Ожидается неотрицательное десятичное число');
+const sandboxPositiveUsdSchema = z
+  .string()
+  .regex(/^(?:0|[1-9]\d{0,15})(?:\.\d{1,2})?$/, 'Ожидается положительная сумма USD')
+  .refine((value) => Number(value) > 0, 'Сумма должна быть больше нуля');
+
+const sandboxBpsSchema = z.number().int().min(0).max(9_999);
+const sandboxPctSchema = z.number().min(0).max(100);
+
+export const sandboxPaperSettingsSchema = z
+  .object({
+    feeBps: sandboxBpsSchema,
+    slippageBps: sandboxBpsSchema,
+    liquidityCapPct: z.number().gt(0).max(100),
+    maxPendingBars: z.number().int().min(1).max(24),
+    cooldownHoursAfterStop: z.number().min(0).max(720),
+    counterfactualHorizonHours: z.number().gt(0).max(720),
+  })
+  .strict();
+export type SandboxPaperSettings = z.infer<typeof sandboxPaperSettingsSchema>;
+
+const sandboxPositiveInteger = z.number().int().positive();
+const sandboxNonNegativeNumber = z.number().min(0);
+
+export const sandboxRegimeSettingsSchema = z
+  .object({
+    fastHours: sandboxPositiveInteger,
+    slowHours: sandboxPositiveInteger,
+    longHours: sandboxPositiveInteger,
+    atrPeriod: sandboxPositiveInteger,
+    rangeWindowHours: sandboxPositiveInteger,
+    liquidityWindowHours: sandboxPositiveInteger,
+    trendSpreadPct: sandboxNonNegativeNumber,
+    trendMaxAtrPct: sandboxNonNegativeNumber,
+    rangeSpreadPct: sandboxNonNegativeNumber,
+    rangeMaxAtrPct: sandboxNonNegativeNumber,
+    crashDrawdownPct: sandboxNonNegativeNumber,
+    crashAtrPct: sandboxNonNegativeNumber,
+    recoveryConfirmBars: sandboxPositiveInteger,
+    regimeDwellBars: sandboxPositiveInteger,
+    minLiquidityUsd: sandboxNonNegativeDecimalSchema,
+  })
+  .strict();
+
+export const sandboxStrategySettingsSchema = z
+  .object({
+    trendPullback: z
+      .object({
+        fastPeriod: sandboxPositiveInteger,
+        slowPeriod: sandboxPositiveInteger,
+        pullbackPct: sandboxNonNegativeNumber,
+        atrStopMult: z.number().positive(),
+        trailActivationPct: sandboxNonNegativeNumber,
+        trailPct: sandboxNonNegativeNumber,
+      })
+      .strict(),
+    rangeReversion: z
+      .object({
+        lookback: sandboxPositiveInteger,
+        bandAtrMult: sandboxNonNegativeNumber,
+        stopAtrMult: z.number().positive(),
+      })
+      .strict(),
+    recovery: z
+      .object({
+        fastPeriod: sandboxPositiveInteger,
+        confirmBars: sandboxPositiveInteger,
+        stopPct: z.number().positive(),
+        riskWeight: z.number().gt(0).max(1),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const sandboxDecisionSettingsSchema = z
+  .object({
+    timeframe: z.literal(SANDBOX_TIMEFRAME),
+    maxPositions: z.number().int().min(0).max(50),
+    maxTokenExposurePct: sandboxPctSchema,
+    maxStrategyExposurePct: sandboxPctSchema,
+    cashBufferPct: sandboxPctSchema,
+    dailyLossLimitPct: sandboxPctSchema,
+    maxDrawdownPct: sandboxPctSchema,
+    perTradeRiskPct: sandboxPctSchema,
+    minOrderUsd: sandboxNonNegativeDecimalSchema,
+    liquidityCapPct: z.number().gt(0).max(100),
+    defaultStopPct: z.number().gt(0).max(100),
+    regime: sandboxRegimeSettingsSchema,
+    strategies: sandboxStrategySettingsSchema,
+  })
+  .strict();
+export type SandboxDecisionSettings = z.infer<typeof sandboxDecisionSettingsSchema>;
+
+/**
+ * Frozen run configuration persisted in `sandbox_runs.settings`.
+ *
+ * `tokenKeys` is the universe snapshot and `settings`/`paper` are the Stage
+ * 1B/1C defaults frozen at start; no owner edit is allowed while running.
+ */
+function uniqueTokenKeys(value: { tokenKeys: string[] }): boolean {
+  return new Set(value.tokenKeys).size === value.tokenKeys.length;
+}
+
+export const sandboxRunConfigSchema = z
+  .object({
+    tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(50),
+    seed: z.number().int().min(0).max(2_147_483_647),
+    settings: sandboxDecisionSettingsSchema,
+    paper: sandboxPaperSettingsSchema,
+  })
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
+export type SandboxRunConfig = z.infer<typeof sandboxRunConfigSchema>;
+
+export const sandboxRunCreateRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    initialCapitalUsd: sandboxPositiveUsdSchema,
+    tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(50),
+    settings: sandboxDecisionSettingsSchema.optional(),
+    paper: sandboxPaperSettingsSchema.optional(),
+  })
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
+export type SandboxRunCreateRequest = z.infer<typeof sandboxRunCreateRequestSchema>;
+
+export const sandboxRunUpdateRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    initialCapitalUsd: sandboxPositiveUsdSchema.optional(),
+    tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(50).optional(),
+    settings: sandboxDecisionSettingsSchema.optional(),
+    paper: sandboxPaperSettingsSchema.optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, 'Нужно передать хотя бы одно поле')
+  .refine(
+    (value) => value.tokenKeys === undefined || uniqueTokenKeys({ tokenKeys: value.tokenKeys }),
+    {
+      path: ['tokenKeys'],
+      message: 'Ключи токенов не должны повторяться',
+    },
+  );
+export type SandboxRunUpdateRequest = z.infer<typeof sandboxRunUpdateRequestSchema>;
+
+/**
+ * Start confirmation. A partial warmup may start only when the owner explicitly
+ * accepts the reduced regime confidence; a missing series never starts.
+ */
+export const sandboxRunStartRequestSchema = z
+  .object({
+    allowPartial: z.boolean().optional(),
+  })
+  .strict()
+  .default({});
+export type SandboxRunStartRequest = z.infer<typeof sandboxRunStartRequestSchema>;
+
+export const sandboxRunStatusSchema = z.enum(['draft', 'running', 'paused', 'stopped', 'failed']);
+export type SandboxRunStatus = z.infer<typeof sandboxRunStatusSchema>;
+
+export const sandboxRunTokenSchema = z.object({
+  tokenKey: z.string().min(1).max(80),
+  symbol: z.string().min(1).max(40),
+  chain: sandboxChainSchema,
+  contractAddress: z.string().nullable(),
+  enabled: z.boolean(),
+});
+export type SandboxRunToken = z.infer<typeof sandboxRunTokenSchema>;
+
+export const sandboxRunSchema = z.object({
+  id: z.uuid(),
+  name: z.string().min(1).max(80),
+  status: sandboxRunStatusSchema,
+  initialCapitalUsd: sandboxDecimalSchema,
+  cashUsd: sandboxDecimalSchema,
+  equityUsd: sandboxDecimalSchema,
+  peakEquityUsd: sandboxDecimalSchema,
+  dayStartEquityUsd: sandboxDecimalSchema,
+  tokenKeys: z.array(z.string().min(1).max(80)).min(1).max(50),
+  tokens: z.array(sandboxRunTokenSchema),
+  settings: sandboxDecisionSettingsSchema,
+  paper: sandboxPaperSettingsSchema,
+  lastBarClose: z.iso.datetime().nullable(),
+  lastTickAt: z.iso.datetime().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+  startedAt: z.iso.datetime().nullable(),
+  pausedAt: z.iso.datetime().nullable(),
+  stoppedAt: z.iso.datetime().nullable(),
+  archivedAt: z.iso.datetime().nullable(),
+});
+export type SandboxRun = z.infer<typeof sandboxRunSchema>;

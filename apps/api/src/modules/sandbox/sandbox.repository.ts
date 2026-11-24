@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import {
   sandboxCandles,
   sandboxEquityPoints,
@@ -15,7 +15,13 @@ import {
   type DbTransaction,
 } from '@nexter/db';
 import { SANDBOX_TIMEFRAME } from '@nexter/contracts';
-import type { SandboxEvent } from '@nexter/sandbox-core';
+import {
+  Reason,
+  type Candle,
+  type OrderIntent,
+  type SandboxEvent,
+  type StrategyKey,
+} from '@nexter/sandbox-core';
 import { DB } from '../../shared/db/db.module';
 import { listSandboxEvents, SandboxEventLog } from './sandbox-event-log';
 import {
@@ -96,6 +102,58 @@ export interface SandboxCandleStats {
   firstOpenTime: Date | null;
   lastOpenTime: Date | null;
   syntheticCandles: number;
+}
+
+/** One pending live-paper intent read back from `sandbox_intents`. */
+export interface SandboxPendingIntent {
+  readonly runId: string;
+  readonly intentId: string;
+  readonly tokenId: string;
+  readonly side: 'buy' | 'sell';
+  readonly strategyKey: StrategyKey;
+  readonly strategyVersion: number;
+  readonly requestedUsd: string | null;
+  readonly requestedAmount: string | null;
+  readonly priceUsd: string | null;
+  readonly strategyReasonCode: string;
+  readonly reasonText: string;
+  readonly decisionTime: Date;
+}
+
+export interface SandboxRunCreateInput {
+  userId: string;
+  name: string;
+  initialCapitalUsd: string;
+  settings: Record<string, unknown>;
+}
+
+export interface SandboxRunDraftPatch {
+  name?: string;
+  initialCapitalUsd?: string;
+  settings?: Record<string, unknown>;
+}
+
+export interface SandboxRunTransitionPatch {
+  status: 'running' | 'paused' | 'stopped' | 'failed';
+  pausedAt?: Date | null;
+  stoppedAt?: Date | null;
+  error?: string | null;
+}
+
+export interface SandboxRunStartInput {
+  config: Record<string, unknown>;
+  initialCapitalUsd: string;
+  engineState: Record<string, unknown>;
+  ledgerState: Record<string, unknown>;
+  tokens: readonly SandboxTokenSnapshotInput[];
+}
+
+export interface SandboxTokenSnapshotInput {
+  tokenKey: string;
+  symbol: string;
+  chain: string;
+  contractAddress: string | null;
+  enabled: boolean;
 }
 
 /** Drizzle access for the sandbox token universe and its 1h candle store. */
@@ -273,6 +331,9 @@ export class SandboxRepository {
       error: row.error ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      startedAt: row.startedAt ?? null,
+      pausedAt: row.pausedAt ?? null,
+      stoppedAt: row.stoppedAt ?? null,
       archivedAt: row.archivedAt ?? null,
       tokens,
     };
@@ -284,6 +345,377 @@ export class SandboxRepository {
     options: { afterSeq?: number; limit?: number } = {},
   ): Promise<SandboxEvent[]> {
     return listSandboxEvents(this.db, runId, options);
+  }
+
+  /** Inserts a draft run. The token snapshot is frozen only at start. */
+  async createRun(input: SandboxRunCreateInput): Promise<string> {
+    const [row] = await this.db
+      .insert(sandboxRuns)
+      .values({
+        userId: input.userId,
+        name: input.name,
+        status: 'draft',
+        initialCapitalUsd: input.initialCapitalUsd,
+        cashUsd: input.initialCapitalUsd,
+        equityUsd: input.initialCapitalUsd,
+        peakEquityUsd: input.initialCapitalUsd,
+        dayStartEquityUsd: input.initialCapitalUsd,
+        settings: input.settings,
+        engineState: {},
+        ledgerState: {},
+      })
+      .returning({ id: sandboxRuns.id });
+    if (!row) throw new Error('Sandbox run insert returned no row');
+
+    return row.id;
+  }
+
+  /**
+   * Updates a draft run. The conditional write refuses a non-draft or archived
+   * row so the service can return a precise conflict instead of overwriting a
+   * running configuration.
+   */
+  async updateDraftRun(
+    userId: string,
+    runId: string,
+    patch: SandboxRunDraftPatch,
+  ): Promise<boolean> {
+    const set: SandboxRunDraftPatch & { updatedAt: Date } = { updatedAt: new Date() };
+    if (patch.name !== undefined) set.name = patch.name;
+    if (patch.initialCapitalUsd !== undefined) {
+      set.initialCapitalUsd = patch.initialCapitalUsd;
+    }
+    if (patch.settings !== undefined) set.settings = patch.settings;
+
+    const rows = await this.db
+      .update(sandboxRuns)
+      .set({
+        ...set,
+        ...(patch.initialCapitalUsd === undefined
+          ? {}
+          : {
+              cashUsd: patch.initialCapitalUsd,
+              equityUsd: patch.initialCapitalUsd,
+              peakEquityUsd: patch.initialCapitalUsd,
+              dayStartEquityUsd: patch.initialCapitalUsd,
+            }),
+      })
+      .where(
+        and(
+          eq(sandboxRuns.id, runId),
+          eq(sandboxRuns.userId, userId),
+          eq(sandboxRuns.status, 'draft'),
+          isNull(sandboxRuns.archivedAt),
+        ),
+      )
+      .returning({ id: sandboxRuns.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Freezes the config/token snapshot, initializes the ledger and `{tokens:{}}`
+   * engine state, and flips a draft to running in one transaction.
+   */
+  async startRun(userId: string, runId: string, input: SandboxRunStartInput): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({ id: sandboxRuns.id })
+        .from(sandboxRuns)
+        .where(
+          and(
+            eq(sandboxRuns.id, runId),
+            eq(sandboxRuns.userId, userId),
+            eq(sandboxRuns.status, 'draft'),
+            isNull(sandboxRuns.archivedAt),
+          ),
+        )
+        .for('update');
+      if (!row) return false;
+
+      if (input.tokens.length > 0) {
+        await tx
+          .insert(sandboxRunTokens)
+          .values(input.tokens.map((token) => ({ runId, ...token })))
+          .onConflictDoNothing();
+      }
+
+      const now = new Date();
+      await tx
+        .update(sandboxRuns)
+        .set({
+          status: 'running',
+          settings: input.config,
+          engineState: input.engineState,
+          ledgerState: input.ledgerState,
+          initialCapitalUsd: input.initialCapitalUsd,
+          cashUsd: input.initialCapitalUsd,
+          equityUsd: input.initialCapitalUsd,
+          peakEquityUsd: input.initialCapitalUsd,
+          dayStartEquityUsd: input.initialCapitalUsd,
+          lastBarClose: null,
+          lastTickAt: null,
+          startedAt: now,
+          pausedAt: null,
+          stoppedAt: null,
+          archivedAt: null,
+          error: null,
+          updatedAt: now,
+        })
+        .where(eq(sandboxRuns.id, runId));
+
+      return true;
+    });
+  }
+
+  /** Applies one lifecycle transition; returns false when the row moved on. */
+  async transitionRun(
+    userId: string,
+    runId: string,
+    from: readonly string[],
+    patch: SandboxRunTransitionPatch,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .update(sandboxRuns)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(
+        and(
+          eq(sandboxRuns.id, runId),
+          eq(sandboxRuns.userId, userId),
+          inArray(sandboxRuns.status, [...from]),
+          isNull(sandboxRuns.archivedAt),
+        ),
+      )
+      .returning({ id: sandboxRuns.id });
+
+    return rows.length > 0;
+  }
+
+  /** Soft-hides a terminal run; no row is ever deleted. */
+  async archiveRun(userId: string, runId: string): Promise<boolean> {
+    const now = new Date();
+    const rows = await this.db
+      .update(sandboxRuns)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(sandboxRuns.id, runId),
+          eq(sandboxRuns.userId, userId),
+          inArray(sandboxRuns.status, ['stopped', 'failed']),
+          isNull(sandboxRuns.archivedAt),
+        ),
+      )
+      .returning({ id: sandboxRuns.id });
+
+    return rows.length > 0;
+  }
+
+  /** Runs the live scheduler may advance: running and not archived. */
+  async listRunningRuns(): Promise<Array<{ id: string; userId: string }>> {
+    return this.db
+      .select({ id: sandboxRuns.id, userId: sandboxRuns.userId })
+      .from(sandboxRuns)
+      .where(and(eq(sandboxRuns.status, 'running'), isNull(sandboxRuns.archivedAt)))
+      .orderBy(asc(sandboxRuns.createdAt));
+  }
+
+  /**
+   * Locks the run row for the tick transaction and returns its live lifecycle
+   * fields. A concurrent pause/stop acquired first is observed here, so a tick
+   * that started from a stale snapshot cannot overwrite it back to running.
+   */
+  async lockRunForTick(
+    executor: DbTransaction,
+    runId: string,
+  ): Promise<{ status: string; archivedAt: Date | null; lastBarClose: Date | null } | null> {
+    const [row] = await executor
+      .select({
+        status: sandboxRuns.status,
+        archivedAt: sandboxRuns.archivedAt,
+        lastBarClose: sandboxRuns.lastBarClose,
+      })
+      .from(sandboxRuns)
+      .where(eq(sandboxRuns.id, runId))
+      .for('update');
+
+    return row ?? null;
+  }
+
+  /** Updates `last_tick_at` for a tick that found no new closed bar. */
+  async touchRunTick(runId: string, at: Date): Promise<void> {
+    await this.db
+      .update(sandboxRuns)
+      .set({ lastTickAt: at, updatedAt: at })
+      .where(and(eq(sandboxRuns.id, runId), eq(sandboxRuns.status, 'running')));
+  }
+
+  /**
+   * Marks a run failed after a data/engine/reconciliation error. The runner is
+   * the only caller; the state is not advanced on the failing tick.
+   */
+  async markRunFailed(runId: string, error: string): Promise<void> {
+    const now = new Date();
+    await this.db
+      .update(sandboxRuns)
+      .set({ status: 'failed', error: error.slice(0, 1000), updatedAt: now })
+      .where(and(eq(sandboxRuns.id, runId), eq(sandboxRuns.status, 'running')));
+  }
+
+  /** Loads the closed 1h candle series for the run universe. */
+  async loadCandles(
+    tokenKeys: readonly string[],
+    timeframe: string = SANDBOX_TIMEFRAME,
+    limitPerToken = 5000,
+  ): Promise<Candle[]> {
+    const unique = [...new Set(tokenKeys)];
+    if (unique.length === 0) return [];
+
+    const rows = await this.db
+      .select({
+        tokenKey: sandboxCandles.tokenKey,
+        openTime: sandboxCandles.openTime,
+        open: sandboxCandles.open,
+        high: sandboxCandles.high,
+        low: sandboxCandles.low,
+        close: sandboxCandles.close,
+        volumeUsd: sandboxCandles.volumeUsd,
+      })
+      .from(sandboxCandles)
+      .where(and(eq(sandboxCandles.timeframe, timeframe), inArray(sandboxCandles.tokenKey, unique)))
+      .orderBy(asc(sandboxCandles.tokenKey), asc(sandboxCandles.openTime));
+
+    const byToken = new Map<string, Candle[]>();
+    for (const row of rows) {
+      const list = byToken.get(row.tokenKey) ?? [];
+      list.push({
+        tokenId: row.tokenKey,
+        timeframe,
+        openTime: row.openTime.getTime(),
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volumeUsd: row.volumeUsd,
+      });
+      byToken.set(row.tokenKey, list);
+    }
+
+    return unique.flatMap((tokenKey) => {
+      const list = byToken.get(tokenKey) ?? [];
+      return list.slice(Math.max(0, list.length - limitPerToken));
+    });
+  }
+
+  /** Pending live-paper intents for one run, oldest first. */
+  async listPendingIntents(
+    runId: string,
+    executor: DbExecutor = this.db,
+  ): Promise<SandboxPendingIntent[]> {
+    const rows = await executor
+      .select()
+      .from(sandboxIntents)
+      .where(and(eq(sandboxIntents.runId, runId), eq(sandboxIntents.status, 'pending')))
+      .orderBy(asc(sandboxIntents.decisionTime), asc(sandboxIntents.intentId));
+
+    return rows.map((row) => ({
+      runId: row.runId,
+      intentId: row.intentId,
+      tokenId: row.tokenId,
+      side: row.side === 'sell' ? 'sell' : 'buy',
+      strategyKey: row.strategyKey as StrategyKey,
+      strategyVersion: row.strategyVersion,
+      requestedUsd: row.requestedUsd,
+      requestedAmount: row.requestedAmount,
+      priceUsd: row.priceUsd,
+      strategyReasonCode: row.strategyReasonCode ?? Reason.INTENT_PENDING,
+      reasonText: row.reasonText,
+      decisionTime: row.decisionTime,
+    }));
+  }
+
+  /**
+   * Inserts the intents a decision queued for the next tick. Pending rows are
+   * updated in place by `persistTickInTransaction` when they resolve.
+   */
+  async insertPendingIntents(
+    executor: DbTransaction,
+    runId: string,
+    intents: readonly OrderIntent[],
+  ): Promise<number> {
+    if (intents.length === 0) return 0;
+
+    await executor
+      .insert(sandboxIntents)
+      .values(
+        intents.map((intent) => ({
+          runId,
+          intentId: intent.intentId,
+          tokenId: intent.tokenId,
+          side: intent.side,
+          strategyKey: intent.strategyKey,
+          strategyVersion: intent.strategyVersion,
+          status: 'pending',
+          requestedUsd: intent.side === 'buy' ? intent.sizeUsd : null,
+          requestedAmount: intent.side === 'sell' ? intent.amount : null,
+          filledUsd: '0.00',
+          filledAmount: '0.00000000',
+          priceUsd: intent.decisionPriceUsd,
+          feeUsd: '0.00',
+          reasonCode: Reason.INTENT_PENDING,
+          strategyReasonCode: intent.reasonCode,
+          reasonText: `Queued ${intent.side} intent for ${intent.tokenId} at the next live tick`,
+          decisionTime: new Date(intent.clockTime),
+          fillTime: null,
+        })),
+      )
+      .onConflictDoNothing({ target: [sandboxIntents.runId, sandboxIntents.intentId] });
+
+    return intents.length;
+  }
+
+  /** True when a manual or strategy sell is already queued for the token. */
+  async hasPendingSell(runId: string, tokenId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ intentId: sandboxIntents.intentId })
+      .from(sandboxIntents)
+      .where(
+        and(
+          eq(sandboxIntents.runId, runId),
+          eq(sandboxIntents.tokenId, tokenId),
+          eq(sandboxIntents.side, 'sell'),
+          eq(sandboxIntents.status, 'pending'),
+        ),
+      )
+      .limit(1);
+
+    return row !== undefined;
+  }
+
+  /** Inserts one owner-requested manual close as a pending sell intent. */
+  async insertManualCloseIntent(runId: string, intent: OrderIntent): Promise<void> {
+    await this.db
+      .insert(sandboxIntents)
+      .values({
+        runId,
+        intentId: intent.intentId,
+        tokenId: intent.tokenId,
+        side: 'sell',
+        strategyKey: intent.strategyKey,
+        strategyVersion: intent.strategyVersion,
+        status: 'pending',
+        requestedUsd: null,
+        requestedAmount: intent.amount,
+        filledUsd: '0.00',
+        filledAmount: '0.00000000',
+        priceUsd: null,
+        feeUsd: '0.00',
+        reasonCode: Reason.INTENT_PENDING,
+        strategyReasonCode: Reason.MANUAL_CLOSE,
+        reasonText: `Owner requested a manual close of ${intent.tokenId}; the next tick sells at the live quote`,
+        decisionTime: new Date(intent.clockTime),
+        fillTime: null,
+      })
+      .onConflictDoNothing({ target: [sandboxIntents.runId, sandboxIntents.intentId] });
   }
 
   /**

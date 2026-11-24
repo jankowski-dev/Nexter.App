@@ -230,4 +230,47 @@ describe('SandboxDataService', () => {
     expect(result).toEqual({ fetched: 0, upserted: 0, source: null, synthetic: false });
     expect(repo.upsertCandles).not.toHaveBeenCalled();
   });
+
+  it('quotes the newest raw close and the last closed bar volume, upserting only closed bars', async () => {
+    const closed = [
+      candle({ openTime: new Date('2026-11-24T10:00:00.000Z'), close: '1.70', volumeUsd: '70000' }),
+      candle({ openTime: new Date('2026-11-24T11:00:00.000Z'), close: '1.80', volumeUsd: '80000' }),
+    ];
+    const inProgress = candle({
+      openTime: new Date('2026-11-24T12:00:00.000Z'),
+      close: '1.95',
+      volumeUsd: '9000',
+    });
+    const h = harness([...closed, inProgress]);
+
+    const quote = await h.service.latestPrice(token(), { now });
+
+    expect(quote).toMatchObject({
+      tokenId: key,
+      priceUsd: '1.950000000000000000',
+      volumeUsd: '80000.000000000000000000',
+    });
+    expect(h.batches[0]?.map((row) => row.openTime.toISOString())).toEqual([
+      '2026-11-24T10:00:00.000Z',
+      '2026-11-24T11:00:00.000Z',
+    ]);
+  });
+
+  it('returns no quote when the provider has no positive close or volume', async () => {
+    const noVolume = harness([
+      candle({ openTime: new Date('2026-11-24T11:00:00.000Z'), volumeUsd: null }),
+    ]);
+    expect(await noVolume.service.latestPrice(token(), { now })).toBeNull();
+
+    const empty = harness([]);
+    expect(await empty.service.latestPrice(token(), { now })).toBeNull();
+  });
+
+  it('returns no quote for a stale provider series', async () => {
+    const stale = harness([
+      candle({ openTime: new Date('2026-11-24T10:00:00.000Z'), volumeUsd: '70000' }),
+    ]);
+
+    expect(await stale.service.latestPrice(token(), { now })).toBeNull();
+  });
 });

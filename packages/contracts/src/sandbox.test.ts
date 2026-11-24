@@ -4,6 +4,11 @@ import {
   sandboxCoverageQuerySchema,
   sandboxCoverageResponseSchema,
   sandboxCoverageSchema,
+  sandboxRunConfigSchema,
+  sandboxRunCreateRequestSchema,
+  sandboxRunSchema,
+  sandboxRunStartRequestSchema,
+  sandboxRunUpdateRequestSchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenKeySchema,
   sandboxTokenRefreshResponseSchema,
@@ -189,5 +194,135 @@ describe('sandbox coverage contracts', () => {
         fetched: 4320,
       }).fetched,
     ).toBe(4320);
+  });
+});
+
+const runSettings = {
+  timeframe: '1h' as const,
+  maxPositions: 5,
+  maxTokenExposurePct: 20,
+  maxStrategyExposurePct: 40,
+  cashBufferPct: 10,
+  dailyLossLimitPct: 2,
+  maxDrawdownPct: 15,
+  perTradeRiskPct: 1,
+  minOrderUsd: '10',
+  liquidityCapPct: 1,
+  defaultStopPct: 3,
+  regime: {
+    fastHours: 24,
+    slowHours: 168,
+    longHours: 720,
+    atrPeriod: 14,
+    rangeWindowHours: 72,
+    liquidityWindowHours: 24,
+    trendSpreadPct: 0.5,
+    trendMaxAtrPct: 8,
+    rangeSpreadPct: 0.75,
+    rangeMaxAtrPct: 3.5,
+    crashDrawdownPct: 12,
+    crashAtrPct: 10,
+    recoveryConfirmBars: 3,
+    regimeDwellBars: 3,
+    minLiquidityUsd: '50000',
+  },
+  strategies: {
+    trendPullback: {
+      fastPeriod: 24,
+      slowPeriod: 168,
+      pullbackPct: 2,
+      atrStopMult: 2.5,
+      trailActivationPct: 5,
+      trailPct: 5,
+    },
+    rangeReversion: { lookback: 72, bandAtrMult: 1.5, stopAtrMult: 2 },
+    recovery: { fastPeriod: 24, confirmBars: 3, stopPct: 3, riskWeight: 0.5 },
+  },
+};
+
+const runPaper = {
+  feeBps: 25,
+  slippageBps: 10,
+  liquidityCapPct: 1,
+  maxPendingBars: 1,
+  cooldownHoursAfterStop: 24,
+  counterfactualHorizonHours: 24,
+};
+
+const runConfig = {
+  tokenKeys: [bscKey],
+  seed: 1,
+  settings: runSettings,
+  paper: runPaper,
+};
+
+describe('sandbox run contracts', () => {
+  it('parses a frozen run config', () => {
+    expect(sandboxRunConfigSchema.parse(runConfig)).toEqual(runConfig);
+    expect(
+      sandboxRunConfigSchema.safeParse({ ...runConfig, settings: { timeframe: '4h' } }).success,
+    ).toBe(false);
+    expect(
+      sandboxRunConfigSchema.safeParse({ ...runConfig, tokenKeys: [bscKey, bscKey] }).success,
+    ).toBe(false);
+  });
+
+  it('validates draft create/update requests and unique tokens', () => {
+    const create = {
+      name: 'My sandbox',
+      initialCapitalUsd: '1000',
+      tokenKeys: [bscKey],
+      settings: runSettings,
+      paper: runPaper,
+    };
+    expect(sandboxRunCreateRequestSchema.parse(create)).toEqual(create);
+    expect(
+      sandboxRunCreateRequestSchema.safeParse({ ...create, tokenKeys: [bscKey, bscKey] }).success,
+    ).toBe(false);
+    expect(
+      sandboxRunCreateRequestSchema.safeParse({ ...create, initialCapitalUsd: '0' }).success,
+    ).toBe(false);
+    expect(sandboxRunUpdateRequestSchema.parse({ name: 'Renamed' })).toEqual({ name: 'Renamed' });
+    expect(sandboxRunUpdateRequestSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('defaults an empty start confirmation and parses a run', () => {
+    expect(sandboxRunStartRequestSchema.parse(undefined)).toEqual({});
+    expect(sandboxRunStartRequestSchema.parse({ allowPartial: true })).toEqual({
+      allowPartial: true,
+    });
+
+    const run = {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'My sandbox',
+      status: 'running',
+      initialCapitalUsd: '1000.00',
+      cashUsd: '1000.00',
+      equityUsd: '1000.00',
+      peakEquityUsd: '1000.00',
+      dayStartEquityUsd: '1000.00',
+      tokenKeys: [bscKey],
+      tokens: [
+        {
+          tokenKey: bscKey,
+          symbol: 'CAKE',
+          chain: 'bsc',
+          contractAddress: '0x1111111111111111111111111111111111111111',
+          enabled: true,
+        },
+      ],
+      settings: runSettings,
+      paper: runPaper,
+      lastBarClose: null,
+      lastTickAt: null,
+      error: null,
+      createdAt: '2026-11-24T00:00:00.000Z',
+      updatedAt: '2026-11-24T00:00:00.000Z',
+      startedAt: '2026-11-24T00:00:00.000Z',
+      pausedAt: null,
+      stoppedAt: null,
+      archivedAt: null,
+    };
+    expect(sandboxRunSchema.parse(run).status).toBe('running');
   });
 });

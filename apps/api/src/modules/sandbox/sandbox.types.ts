@@ -1,6 +1,9 @@
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
+import { sandboxRunConfigSchema } from '@nexter/contracts';
 import {
+  DEFAULT_PAPER_SETTINGS,
+  DEFAULT_SETTINGS,
   Reason,
   type EngineState,
   type EquityPoint,
@@ -8,11 +11,13 @@ import {
   type LedgerEntry,
   type PaperLedgerState,
   type PaperPosition,
+  type PaperRunSettings,
   type PaperTrade,
   type PortfolioPosition,
   type ReasonCode,
   type Regime,
   type RegimeFeatures,
+  type SandboxDecisionSettings,
   type StrategyKey,
   type TokenPhase,
   type TokenRuntimeState,
@@ -124,8 +129,61 @@ export interface SandboxRunSnapshot {
   readonly error: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  readonly startedAt: Date | null;
+  readonly pausedAt: Date | null;
+  readonly stoppedAt: Date | null;
   readonly archivedAt: Date | null;
   readonly tokens: readonly SandboxRunToken[];
+}
+
+/**
+ * Frozen runner configuration resolved from `sandbox_runs.settings`.
+ *
+ * The contract schema validates the persisted JSON; the returned shape uses the
+ * core `SandboxDecisionSettings`/`PaperRunSettings` types so the Stage 1B/1C
+ * code can consume it directly.
+ */
+export interface SandboxRunnerConfig {
+  readonly tokenKeys: readonly string[];
+  readonly seed: number;
+  readonly settings: SandboxDecisionSettings;
+  readonly paper: PaperRunSettings;
+}
+
+/**
+ * Resolves the frozen run config from persisted JSONB.
+ *
+ * A draft created before start may still carry the schema default `{}`; it is
+ * resolved to the approved Stage 1B/1C defaults over the supplied token keys so
+ * the owner can start it. Any other malformed shape fails closed.
+ */
+export function resolveSandboxRunConfig(
+  value: unknown,
+  fallbackTokenKeys: readonly string[],
+): SandboxRunnerConfig {
+  if (isEmptyObject(value)) {
+    return {
+      tokenKeys: [...fallbackTokenKeys],
+      seed: 1,
+      settings: DEFAULT_SETTINGS,
+      paper: DEFAULT_PAPER_SETTINGS,
+    };
+  }
+
+  const result = sandboxRunConfigSchema.safeParse(value);
+  if (!result.success) {
+    const detail = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'settings'}: ${issue.message}`)
+      .join('; ');
+    invalid('settings', detail);
+  }
+
+  return {
+    tokenKeys: result.data.tokenKeys,
+    seed: result.data.seed,
+    settings: result.data.settings as SandboxDecisionSettings,
+    paper: result.data.paper as PaperRunSettings,
+  };
 }
 
 /** Everything one persisted tick writes in a single transaction. */

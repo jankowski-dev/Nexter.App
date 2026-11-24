@@ -5,6 +5,8 @@ import { SandboxController } from './sandbox.controller';
 import { SandboxDataService } from './sandbox-data.service';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxRepository } from './sandbox.repository';
+import { SandboxRunnerService } from './sandbox-runner.service';
+import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED } from './sandbox.types';
 
@@ -15,9 +17,17 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxRepository,
     SandboxDataService,
     SandboxTokensService,
+    SandboxRunService,
+    SandboxRunnerService,
     SandboxEnabledGuard,
     { provide: SANDBOX_ENABLED, useValue: env.SANDBOX_ENABLED },
   ],
-  exports: [SandboxRepository, SandboxDataService, SandboxTokensService],
+  exports: [
+    SandboxRepository,
+    SandboxDataService,
+    SandboxTokensService,
+    SandboxRunService,
+    SandboxRunnerService,
+  ],
 })
 export class SandboxModule {}
