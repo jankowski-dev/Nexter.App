@@ -1,7 +1,7 @@
 # Sandbox Stage 2.1 — historical replay owner report
 
 Date: 2026-11-25
-Status: **Stage 2.1 independently signed off; owner acceptance and production rollout pending**
+Status: **Stage 2.1 independently signed off, accepted by the owner, and deployed to production on 2026-11-25**
 Branch: `feat/sandbox-replay` (draft PR #325, base `main`)
 Code/test head: `92338d1` (CI green)
 Final docs head: the commit that adds this report (docs-only; code/test tree identical to `92338d1`)
@@ -95,34 +95,50 @@ validation, per-token window-derived staleness, English report notes, full
 event-chain persistence (report + snapshot is the v1 record), and measurable
 3×180-day row size.
 
-## Production rollout (not applied)
+## Production rollout (applied 2026-11-25)
 
-Migration `0053` is **unapplied**; nothing is deployed. Rollout requires owner
-approval and:
+The owner accepted Stage 2.1 and approved the rollout. The pre-migration
+encrypted backup was taken and restore-checked:
 
-1. encrypted backup + restore check + SHA-256;
-2. apply `0053` with `MIGRATION_DATABASE_URL` as the owner role;
-3. verify `nexter_app` grants on `sandbox_replays` (`SELECT/INSERT/UPDATE`, no
-   DELETE) and the provisioning script;
-4. deploy with `SANDBOX_ENABLED=true`;
-5. verify `/health`, `/ready`, unauthenticated replay routes return 401, the
-   `Песочница → Прогон` tab renders, and one short real replay completes with
-   a report;
-6. do not leave a production replay/run queued or running unless asked.
+- dump 34,250,321 bytes, SHA-256
+  `c1679b9d9e3111ef27a4cd15b2e77defbcefccd8fdb42e8510d05543720d23b3`;
+- restore into a disposable database `restore_ok=1`; counts matched (users 1,
+  trade_groups 436, transactions 871, audit_log 6033, market_quotes 59,
+  bot_backtest_runs 70, sandbox_runs 1, sandbox_events 34);
+- encrypted backup `nexter-2026-11-25-pre-stage21.dump.enc` SHA-256
+  `74bb8e4c6c052187ea1807a16b5cf4e1c04855c92fd4d215ab60bd395695d0dc`;
+  the Railway `BACKUP_ENCRYPTION_KEY` key was used, and decryption was verified.
+
+Migration `0053` was applied as the owner role. Production now has 12
+`sandbox_*` tables; `sandbox_replays` is empty at apply time and the app role
+has SELECT/INSERT/UPDATE with no DELETE. `sandbox_events` remains SELECT/INSERT
+only. The migration count is 54.
+
+PR #325 was squash-merged as `c3e74da`. Railway deployment
+`642c0841-fbdf-4daf-b695-df779ba7aa3f` is live; bundle
+`assets/index-XeLpGvUf.js`; `/health` and `/ready` 200; unauthenticated
+`GET /api/v1/sandbox/replays` returns 401; main CI passed
+([run 45551913273](https://github.com/jankowski-dev/Nexter.App/actions/runs/45551913273)).
+
+The owner had already exercised the new tab after the rollout: two real
+180-day Q replays completed with reports and audit rows. The latest report:
+final equity 1085.46 USD, +8.55%, max drawdown 9.92%, reconciliation true,
+4320 evaluated bars; six `sandbox.replay_*` audit rows exist. The running Q
+live run is the owner's, not a rollout artifact. No extra production replay was
+created by the rollout agent.
 
 Rollback: set `SANDBOX_ENABLED=false`, stop the worker/replays, revert the
 image; `sandbox_replays` is additive and inert; no restore is required for the
 migration itself.
 
-## Decision requested
+## Owner decision (2026-11-25)
 
-1. **Accept the Stage 2.1 report and sign off Stage 2.1.**
-2. **Approve the production rollout** above (backup + migration `0053` +
-   app-role verification + deploy + verification). No production replay is
-   started without this approval.
+1. **Stage 2.1 report accepted and Stage 2.1 signed off.**
+2. **Production rollout approved and applied** (backup + restore check,
+   migration `0053`, app-role verification, deploy, health/ready and real
+   replay verification).
 3. Stage 3 (4–8 week forward paper) remains a separate plan and does not start
-   until Stage 2 and Stage 2.1 are accepted. Real money remains a separate
-   Stage 4 decision.
+   until its own acceptance. Real money remains a separate Stage 4 decision.
 
 ## Gate
 
