@@ -1,7 +1,7 @@
 # Sandbox historical replay in the UI — design
 
 Date: 2026-11-25
-Status: **implemented; independent review gate** (not deployed; migration `0053` not applied)
+Status: **independently signed off; owner acceptance and production rollout pending** (not deployed; migration `0053` not applied)
 Scope: Stage 2.1 (owner-facing historical replay). The Stage 1C replay engine is already built and accepted; this design wraps it in the `Песочница` UI. It does not change the decision, fill, ledger or report rules.
 Base: Stage 2 merged as `3a6f94a`, deployed `ad0b0b73-2df2-46bd-a403-f83074c598c5`, migration `0052` applied.
 

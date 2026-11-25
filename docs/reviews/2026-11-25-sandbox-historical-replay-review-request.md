@@ -4,10 +4,10 @@ Date: 2026-11-25
 Branch: `feat/sandbox-replay` (pushed; draft PR #325, base `main`)
 Base: `3a6f94a` (Stage 2 merged, signed off, accepted and deployed; migration `0052` applied)
 Docs base: `f1ac808` (design, ADR 0085, plan)
-Frozen code head: `fcd2f77` (Tasks 1–7 plus the Markdown-report 404 fix)
+Last behavioral change: `fcd2f77` (Tasks 1–7 plus the Markdown-report 404 fix); code/test head `92338d1` (dead-code removal + timeout test)
 Final code/test head: `92338d1` (CI green); this docs commit is docs-only
 CI: draft PR #325 — run `45543116107` at `92338d1` **passed**; earlier failures/fixes are in `CI evidence` below.
-Status: **Stage 2.1 implemented; independent whole-branch review gate. Not deployed; migration `0053` is not applied.**
+Status: **Stage 2.1 independently signed off by the whole-branch review on 2026-11-25; owner acceptance and production rollout pending. Not deployed; migration `0053` is not applied.** Owner report: `docs/reviews/2026-11-25-sandbox-historical-replay-report.md`.
 
 Review this as one whole-branch Stage 2.1 review. The scope is paper only: no
 real money, exchange orders, wallets, keys, signing or real-ledger writes.
@@ -59,7 +59,7 @@ assertions; `fcd2f77` added the Markdown-report error path fix (2 module tests p
 files** — it corrects
 documentation and adds one executor timeout test plus a stricter lock assertion
 — so the PR remains **68 files across 16 commits** (`3a6f94a..92338d1`), and the
-code under review is exactly `fcd2f77`. No production data or configuration was changed.
+last behavioral change is `fcd2f77`; the code/test head is `92338d1` (dead `loadReplay` removal + timeout test). No production data or configuration was changed.
 
 ## Commands and outputs
 
@@ -154,7 +154,7 @@ missing, each worker pass logs a claim failure and retries without crashing.
   bar `i` is bounded by `closeTime <= now`, so the next candle is never visible.
 - `evaluateFrom` starts the loop at the first bar whose **open** is at or after
   `from_time`; `runStarted`, the report period, equity and trades start there.
-  A missing bar at/after `evaluateFrom` raises `PAPER_EVALUATE_FROM_OUT_OF_RANGE`.
+  No bar at/after `evaluateFrom` raises `PAPER_EVALUATE_FROM_OUT_OF_RANGE`; the exact `from_time` bar is guaranteed by the create coverage gate.
 - A decision on closed bar `i` fills at the open of bar `i+1` with the frozen fee
   and slippage; a decision on the last bar is ignored (no next open); the
   end-of-window force-close remains.
@@ -220,10 +220,11 @@ request, matching the live-run `requireUniverse` convention);
 
 UI (`Прогон` tab, `#replay`):
 
-- Form: name, 1–3 tokens, 30/90/180 days, capital (default 1000), seed, the Stage
+- Form: name, 1–3 tokens, 30/90/180 days, capital (default 1000), the Stage
   1B/1C advanced settings, preflight coverage cards (available/required, prefix,
   gaps, stale, synthetic), `Обновить данные` link, blocked creation on
-  missing/blocked data, explicit partial-window confirmation.
+  missing/blocked data, explicit partial-window confirmation. The UI uses the API
+  default `seed = 7`; a UI seed field is deferred (the API accepts a seed).
 - History: rows with name/status/period/tokens/final equity/return/drawdown/times,
   status filter, cancel/archive with the shared `ConfirmDialog`, empty/loading/error.
 - Detail: queued/running progress; completed metrics, equity chart, trades, intent
