@@ -1,6 +1,6 @@
 # UI redesign — target information architecture
 
-Status: **UI-0 through UI-70 implemented.** Owner-approved direction on 2026-11-08; latest feedback batches are UI-67 (trading page) and UI-68 (logout/finance/tasks) on 2026-11-17. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
+Status: **UI-0 through UI-70 implemented; current navigation changed on 2026-11-25.** Owner-approved direction on 2026-11-08. Historical UI-67/UI-68 batches are preserved below, but the current Crypto workspace has six tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Статистика`); `ИИ-торговля` and the `Стратегии` tab were removed, and the strategy reference lives in `Настройки → Стратегии`. Russian light theme by default, USD base currency for crypto, no third-party analytics or trackers.
 
 ## Goals
 

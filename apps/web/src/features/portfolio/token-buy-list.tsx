@@ -101,7 +101,7 @@ export function TokenBuyList({
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        {showHeading ? <CardTitle>Основной список</CardTitle> : null}
+        {showHeading ? <CardTitle>Избранное</CardTitle> : null}
         <div className="ml-auto flex items-center gap-2">
           <Select
             className="h-9 w-44"
@@ -130,7 +130,7 @@ export function TokenBuyList({
 
       {entries.length === 0 ? (
         <p className="mt-4 text-sm text-zinc-600">
-          В группе «Основная» пока нет токенов. Добавьте их в базе токенов.
+          В группе «Избранное» пока нет токенов. Добавьте их в базе токенов.
         </p>
       ) : (
         <div className="mt-4 space-y-2">

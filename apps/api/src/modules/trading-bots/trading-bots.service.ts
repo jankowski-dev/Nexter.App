@@ -8,8 +8,6 @@ import {
 import { and, asc, desc, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { ZodError } from 'zod';
 import {
-  aiCandidates,
-  aiProfiles,
   assets,
   botEquitySnapshots,
   botEvents,
@@ -52,7 +50,6 @@ import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService } from '../market-data/market-quote.service';
 import { TradingNotificationsService } from '../notifications/trading-notifications.service';
 import { strategyByKey, strategyTemplates } from './strategies';
-import { isRecommendationExpired } from '../ai-trading/ai-recommendation';
 
 interface BotMeta {
   ip?: string;
@@ -231,24 +228,6 @@ export class TradingBotsService {
     this.assertBudget(input.budgetUsd);
     this.assertStaticLimit(definition.key, strategyParams, tokenAssetIds);
 
-    const candidate = input.aiCandidateId
-      ? await this.requireRecommendation(userId, input.aiCandidateId)
-      : null;
-    if (candidate) {
-      if (candidate.strategyKey !== definition.key) {
-        throw new BadRequestException({
-          code: 'VALIDATION_ERROR',
-          message: 'AI recommendation strategy does not match the bot strategy',
-        });
-      }
-      if (tokenAssetIds.length !== 1 || tokenAssetIds[0] !== candidate.assetId) {
-        throw new BadRequestException({
-          code: 'VALIDATION_ERROR',
-          message: 'AI recommendation must be linked to the bot with exactly its token',
-        });
-      }
-    }
-
     const cash = usdString(decimal(input.budgetUsd));
     let id: string;
 
@@ -263,11 +242,11 @@ export class TradingBotsService {
             name: input.name,
             description: input.description ?? '',
             icon: input.icon ?? null,
-            origin: candidate ? 'ai' : 'manual',
-            aiProfileId: candidate?.profileId ?? null,
-            aiCandidateId: candidate?.id ?? null,
-            evaluationTimeframe: candidate?.timeframe ?? null,
-            strategySource: candidate ? 'ai' : 'manual',
+            origin: 'manual',
+            aiProfileId: null,
+            aiCandidateId: null,
+            evaluationTimeframe: null,
+            strategySource: 'manual',
             status: 'draft',
             budgetUsd: cash,
             cashUsd: cash,
@@ -297,20 +276,8 @@ export class TradingBotsService {
           message: 'Бот создан',
           payload: {
             strategyKey: definition.key,
-            ...(candidate ? { aiCandidateId: candidate.id } : {}),
           },
         });
-
-        if (candidate) {
-          await tx
-            .update(aiCandidates)
-            .set({
-              status: 'accepted',
-              metrics: { ...candidate.metrics, botId: created.id },
-              updatedAt: new Date(),
-            })
-            .where(eq(aiCandidates.id, candidate.id));
-        }
 
         await this.audit.log(
           {
@@ -325,12 +292,6 @@ export class TradingBotsService {
               budgetUsd: cash,
               tokenAssetIds,
               icon: iconForAudit(input.icon),
-              ...(candidate
-                ? {
-                    aiCandidateId: candidate.id,
-                    evaluationTimeframe: candidate.timeframe,
-                  }
-                : {}),
             },
             ip: meta.ip,
             userAgent: meta.userAgent,
@@ -1047,34 +1008,6 @@ export class TradingBotsService {
         };
       }),
     };
-  }
-
-  private async requireRecommendation(userId: string, candidateId: string) {
-    const [row] = await this.db
-      .select({ candidate: aiCandidates })
-      .from(aiCandidates)
-      .innerJoin(aiProfiles, eq(aiCandidates.profileId, aiProfiles.id))
-      .where(and(eq(aiCandidates.id, candidateId), eq(aiProfiles.userId, userId)))
-      .limit(1);
-    if (!row) {
-      throw new NotFoundException({
-        code: 'NOT_FOUND',
-        message: 'AI recommendation not found',
-      });
-    }
-    if (row.candidate.status !== 'recommended') {
-      throw new ConflictException({
-        code: 'CONFLICT',
-        message: 'AI recommendation is no longer available',
-      });
-    }
-    if (isRecommendationExpired(row.candidate.createdAt, row.candidate.metrics)) {
-      throw new ConflictException({
-        code: 'AI_RECOMMENDATION_EXPIRED',
-        message: 'AI recommendation has expired',
-      });
-    }
-    return row.candidate;
   }
 
   private async toSummary(bot: TradingBotRecord): Promise<BotSummary> {

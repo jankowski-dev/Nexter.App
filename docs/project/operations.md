@@ -46,6 +46,7 @@
 | `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)      |
 | `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)             |
 | `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)         |
+| `SANDBOX_ENABLED`                                   | live paper sandbox + replay worker     |
 | `DEEPSEEK_BASE_URL`                                 | optional DeepSeek base URL             |
 | `BACKUP_ENCRYPTION_KEY`                             | только для backup/restore, не в API    |
 

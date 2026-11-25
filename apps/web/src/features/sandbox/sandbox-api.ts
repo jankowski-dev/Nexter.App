@@ -10,7 +10,9 @@ import {
   sandboxIntentsResponseSchema,
   sandboxOverviewSchema,
   sandboxPositionsResponseSchema,
+  sandboxReplayChartResponseSchema,
   sandboxReplayCreateRequestSchema,
+  sandboxReplayDecisionsResponseSchema,
   sandboxReplayDetailSchema,
   sandboxReplayListResponseSchema,
   sandboxReplayPreflightRequestSchema,
@@ -22,6 +24,7 @@ import {
   sandboxRunSchema,
   sandboxRunsResponseSchema,
   sandboxStatusSchema,
+  sandboxTokenCandidatesResponseSchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenRefreshResponseSchema,
   sandboxTokenSchema,
@@ -33,7 +36,10 @@ import {
   type SandboxIntentsResponse,
   type SandboxOverview,
   type SandboxPositionsResponse,
+  type SandboxReplayChartResponse,
   type SandboxReplayCreateRequest,
+  type SandboxReplayDecisionsQuery,
+  type SandboxReplayDecisionsResponse,
   type SandboxReplayDetail,
   type SandboxReplayListResponse,
   type SandboxReplayPreflightRequest,
@@ -49,6 +55,7 @@ import {
   type SandboxRunsResponse,
   type SandboxStatus,
   type SandboxToken,
+  type SandboxTokenCandidatesResponse,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
@@ -61,6 +68,7 @@ export const sandboxQueryKeys = {
   all: ['sandbox'] as const,
   status: ['sandbox', 'status'] as const,
   tokens: ['sandbox', 'tokens'] as const,
+  tokenCandidates: ['sandbox', 'token-candidates'] as const,
   coverage: ['sandbox', 'coverage'] as const,
   overview: ['sandbox', 'overview'] as const,
   runsRoot: ['sandbox', 'runs'] as const,
@@ -87,6 +95,9 @@ export const sandboxQueryKeys = {
   ) => ['sandbox', 'replay', 'list', status, includeArchived, limit, offset] as const,
   replay: (replayId: string) => ['sandbox', 'replay', replayId] as const,
   replayReport: (replayId: string) => ['sandbox', 'replay', replayId, 'report'] as const,
+  replayChart: (replayId: string) => ['sandbox', 'replay', replayId, 'chart'] as const,
+  replayDecisions: (replayId: string, tokenId: string | null) =>
+    ['sandbox', 'replay', replayId, 'decisions', tokenId ?? 'all'] as const,
   replayPreflight: (tokenKeys: readonly string[], periodDays: number, allowPartial: boolean) =>
     ['sandbox', 'replay', 'preflight', tokenKeys.join('|'), periodDays, allowPartial] as const,
 };
@@ -97,6 +108,10 @@ export function fetchSandboxStatus(): Promise<SandboxStatus> {
 
 export function fetchSandboxTokens(): Promise<SandboxTokensResponse> {
   return apiFetch('/api/v1/sandbox/tokens', {}, sandboxTokensResponseSchema);
+}
+
+export function fetchSandboxTokenCandidates(): Promise<SandboxTokenCandidatesResponse> {
+  return apiFetch('/api/v1/sandbox/tokens/candidates', {}, sandboxTokenCandidatesResponseSchema);
 }
 
 export function fetchSandboxCoverage(): Promise<SandboxCoverageResponse> {
@@ -334,24 +349,33 @@ export function fetchSandboxReplayReport(replayId: string): Promise<SandboxRepla
   );
 }
 
-/** Raw Markdown replay report body; used by the downloadable artifact. */
-export async function fetchSandboxReplayReportMarkdown(replayId: string): Promise<string> {
-  const response = await fetch(`/api/v1/sandbox/replays/${replayId}/report.md`, {
-    credentials: 'include',
-    headers: { Accept: 'text/markdown' },
-  });
-
-  if (!response.ok) {
-    throw await sandboxDownloadError(response);
-  }
-
-  return response.text();
+export function fetchSandboxReplayChart(replayId: string): Promise<SandboxReplayChartResponse> {
+  return apiFetch(
+    `/api/v1/sandbox/replays/${replayId}/chart`,
+    {},
+    sandboxReplayChartResponseSchema,
+  );
 }
 
-/** Downloads the deterministic replay report, via the same parsed contract. */
+export function fetchSandboxReplayDecisions(
+  replayId: string,
+  query: Partial<SandboxReplayDecisionsQuery> = {},
+): Promise<SandboxReplayDecisionsResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(query.limit ?? 100));
+  params.set('offset', String(query.offset ?? 0));
+  if (query.tokenId) params.set('tokenId', query.tokenId);
+  return apiFetch(
+    `/api/v1/sandbox/replays/${replayId}/decisions?${params.toString()}`,
+    {},
+    sandboxReplayDecisionsResponseSchema,
+  );
+}
+
+/** Downloads the deterministic replay report as JSON or the detailed PDF. */
 export async function downloadSandboxReplayReport(
   replayId: string,
-  format: 'json' | 'md',
+  format: 'json' | 'pdf',
 ): Promise<void> {
   if (format === 'json') {
     const response = await fetchSandboxReplayReport(replayId);
@@ -362,11 +386,12 @@ export async function downloadSandboxReplayReport(
     return;
   }
 
-  const markdown = await fetchSandboxReplayReportMarkdown(replayId);
-  triggerSandboxDownload(
-    new Blob([markdown], { type: 'text/markdown;charset=utf-8' }),
-    sandboxReplayReportFileName(replayId, 'md'),
-  );
+  const response = await fetch(`/api/v1/sandbox/replays/${replayId}/report.pdf`, {
+    credentials: 'include',
+    headers: { Accept: 'application/pdf' },
+  });
+  if (!response.ok) throw await sandboxDownloadError(response);
+  triggerSandboxDownload(await response.blob(), sandboxReplayReportFileName(replayId, 'pdf'));
 }
 
 /** Queues a sell intent for one position; fills on the next closed 1h bar. */

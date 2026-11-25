@@ -4,7 +4,6 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './modules/auth/auth.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { AiModule } from './modules/ai/ai.module';
-import { AiTradingModule } from './modules/ai-trading/ai-trading.module';
 import { AudioNotesModule } from './modules/audio-notes/audio-notes.module';
 import { AuditLogModule } from './modules/audit/audit-log.module';
 import { HealthModule } from './modules/health/health.module';
@@ -38,7 +37,6 @@ import { loggerModule } from './shared/logging/logger.module';
     HealthModule,
     AuthModule,
     AiModule,
-    AiTradingModule,
     AudioNotesModule,
     AccountingModule,
     ImportsModule,

@@ -4,7 +4,17 @@ import cookie from '@fastify/cookie';
 import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
-import { auditLog, createDb, sandboxTokens, users, type Database } from '@nexter/db';
+import {
+  assets,
+  auditLog,
+  chains,
+  createDb,
+  sandboxTokens,
+  users,
+  watchlist,
+  watchlistGroups,
+  type Database,
+} from '@nexter/db';
 import { sandboxCoverageResponseSchema, sandboxTokenSchema } from '@nexter/contracts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
@@ -73,6 +83,72 @@ describe('Sandbox tokens and coverage (e2e)', () => {
     return csrfFrom(enabled);
   }
 
+  /**
+   * New sandbox tokens may only come from the default favorites group. Seed
+   * the chain/asset/favorites entry for the singleton owner created by setup.
+   */
+  async function seedFavorite(input: {
+    chain: string;
+    chainName: string;
+    contractAddress: string;
+    symbol: string;
+    name: string;
+  }): Promise<void> {
+    if (!db) throw new Error('test database is not configured');
+    const [owner] = await db.select({ id: users.id }).from(users).limit(1);
+    if (!owner) throw new Error('owner is missing');
+
+    await db
+      .insert(chains)
+      .values({ code: input.chain, name: input.chainName })
+      .onConflictDoNothing({ target: chains.code });
+    const [chain] = await db
+      .select({ id: chains.id })
+      .from(chains)
+      .where(eq(chains.code, input.chain))
+      .limit(1);
+    if (!chain) throw new Error('chain is missing');
+
+    await db
+      .insert(assets)
+      .values({
+        chainId: chain.id,
+        symbol: input.symbol,
+        name: input.name,
+        contractAddress: input.contractAddress,
+      })
+      .onConflictDoNothing({ target: [assets.chainId, assets.symbol] });
+    const [asset] = await db
+      .select({ id: assets.id })
+      .from(assets)
+      .where(sql`${assets.chainId} = ${chain.id} and ${assets.symbol} = ${input.symbol}`)
+      .limit(1);
+    if (!asset) throw new Error('asset is missing');
+
+    const [group] = await db
+      .insert(watchlistGroups)
+      .values({ userId: owner.id, name: 'Избранное', isDefault: true, sortOrder: 0 })
+      .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+      .returning({ id: watchlistGroups.id });
+    const groupId =
+      group?.id ??
+      (
+        await db
+          .select({ id: watchlistGroups.id })
+          .from(watchlistGroups)
+          .where(
+            sql`${watchlistGroups.userId} = ${owner.id} and ${watchlistGroups.name} = 'Избранное'`,
+          )
+          .limit(1)
+      )[0]?.id;
+    if (!groupId) throw new Error('favorites group is missing');
+
+    await db
+      .insert(watchlist)
+      .values({ userId: owner.id, assetId: asset.id, groupId })
+      .onConflictDoNothing({ target: [watchlist.userId, watchlist.assetId] });
+  }
+
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
 
@@ -116,6 +192,30 @@ describe('Sandbox tokens and coverage (e2e)', () => {
   it.runIf(canRun)('creates, lists, toggles and audits a sandbox token', async () => {
     const agent = request.agent(app.getHttpServer());
     const csrf = await setupOwner(agent);
+    await seedFavorite({
+      chain: 'bsc',
+      chainName: 'BNB Smart Chain',
+      contractAddress: bscKey.slice(4),
+      symbol: 'CAKE',
+      name: 'PancakeSwap',
+    });
+
+    const candidates = await agent.get('/api/v1/sandbox/tokens/candidates').expect(200);
+    expect(candidates.body.candidates).toMatchObject([
+      { tokenKey: bscKey, symbol: 'CAKE', eligible: true, reason: null },
+    ]);
+
+    // Free-form keys not present in `Избранное` are rejected server-side.
+    const arbitrary = await agent
+      .post('/api/v1/sandbox/tokens')
+      .set('x-csrf-token', csrf)
+      .send({
+        tokenKey: 'bsc:0x2222222222222222222222222222222222222222',
+        symbol: 'FAKE',
+        name: 'Fake',
+      })
+      .expect(400);
+    expect(arbitrary.body).toMatchObject({ error: { code: 'SANDBOX_TOKEN_NOT_IN_FAVORITES' } });
 
     const created = await agent
       .post('/api/v1/sandbox/tokens')
@@ -178,6 +278,13 @@ describe('Sandbox tokens and coverage (e2e)', () => {
   it.runIf(canRun)('reports missing coverage and refreshes without network in tests', async () => {
     const agent = request.agent(app.getHttpServer());
     const csrf = await setupOwner(agent);
+    await seedFavorite({
+      chain: 'bsc',
+      chainName: 'BNB Smart Chain',
+      contractAddress: bscKey.slice(4),
+      symbol: 'CAKE',
+      name: 'PancakeSwap',
+    });
 
     const created = await agent
       .post('/api/v1/sandbox/tokens')
@@ -243,6 +350,13 @@ describe('Sandbox tokens and coverage (e2e)', () => {
     if (!db) return;
     const agent = request.agent(app.getHttpServer());
     const csrf = await setupOwner(agent);
+    await seedFavorite({
+      chain: 'bsc',
+      chainName: 'BNB Smart Chain',
+      contractAddress: bscKey.slice(4),
+      symbol: 'CAKE',
+      name: 'PancakeSwap',
+    });
     const secondKey = 'ethereum:0x2222222222222222222222222222222222222222';
 
     await agent

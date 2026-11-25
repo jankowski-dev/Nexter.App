@@ -22,6 +22,7 @@ import {
   sandboxEventsQuerySchema,
   sandboxPageQuerySchema,
   sandboxReplayCreateRequestSchema,
+  sandboxReplayDecisionsQuerySchema,
   sandboxReplayListQuerySchema,
   sandboxReplayPreflightRequestSchema,
   sandboxRunCreateRequestSchema,
@@ -40,7 +41,10 @@ import {
   type SandboxOverview,
   type SandboxPageQuery,
   type SandboxPositionsResponse,
+  type SandboxReplayChartResponse,
   type SandboxReplayCreateRequest,
+  type SandboxReplayDecisionsQuery,
+  type SandboxReplayDecisionsResponse,
   type SandboxReplayDetail,
   type SandboxReplayListQuery,
   type SandboxReplayListResponse,
@@ -56,6 +60,7 @@ import {
   type SandboxRunsResponse,
   type SandboxRunUpdateRequest,
   type SandboxToken,
+  type SandboxTokenCandidatesResponse,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
@@ -68,6 +73,8 @@ import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayChartService } from './sandbox-replay-chart.service';
+import { SandboxReplayPdfService } from './sandbox-replay-pdf.service';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -84,6 +91,8 @@ export class SandboxController {
     private readonly read: SandboxReadService,
     private readonly replay: SandboxReplayService,
     private readonly replayReports: SandboxReplayReportService,
+    private readonly replayPdf: SandboxReplayPdfService,
+    private readonly chartService: SandboxReplayChartService,
   ) {}
 
   @Get('status')
@@ -95,6 +104,13 @@ export class SandboxController {
   @UseGuards(SandboxEnabledGuard)
   listTokens(@CurrentAuth() auth: AuthContext): Promise<SandboxTokensResponse> {
     return this.tokens.list(auth.user.id);
+  }
+
+  @Get('tokens/candidates')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  tokenCandidates(@CurrentAuth() auth: AuthContext): Promise<SandboxTokenCandidatesResponse> {
+    return this.tokens.candidates(auth.user.id);
   }
 
   @Post('tokens')
@@ -211,19 +227,49 @@ export class SandboxController {
     return this.replayReports.getReport(auth.user.id, id);
   }
 
-  @Get('replays/:id/report.md')
+  @Get('replays/:id/chart')
   @UseGuards(SandboxEnabledGuard)
   @Header('Cache-Control', 'no-store')
-  async replayReportMarkdown(
+  replayChart(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<string> {
-    const markdown = await this.replayReports.getReportMarkdown(auth.user.id, id);
-    // Set the Markdown type only after a successful read: an exception must
-    // keep the normal JSON error content type instead of a markdown body type.
-    reply.header('Content-Type', 'text/markdown; charset=utf-8');
-    return markdown;
+  ): Promise<SandboxReplayChartResponse> {
+    return this.chartService.getChart(auth.user.id, id);
+  }
+
+  @Get('replays/:id/decisions')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayDecisions(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxReplayDecisionsQuerySchema))
+    query: SandboxReplayDecisionsQuery,
+  ): Promise<SandboxReplayDecisionsResponse> {
+    return this.chartService.getDecisions(auth.user.id, id, query);
+  }
+
+  @Get('replays/:id/report.pdf')
+  @UseGuards(SandboxEnabledGuard)
+  async replayReportPdf(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const response = await this.replayReports.getReport(auth.user.id, id);
+    const replay = await this.replay.detail(auth.user.id, id);
+    const { buffer, filename } = await this.replayPdf.build(response, {
+      id: replay.id,
+      name: replay.name,
+      periodDays: replay.periodDays,
+      fromTime: new Date(replay.fromTime),
+      toTime: new Date(replay.toTime),
+    });
+    reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .header('cache-control', 'no-store')
+      .send(buffer);
   }
 
   @Post('replays/:id/cancel')

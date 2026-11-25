@@ -1,6 +1,5 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -110,6 +109,7 @@ export function SandboxReplayTab() {
   const [includeArchived, setIncludeArchived] = useState(false);
   const [tokensOpen, setTokensOpen] = useState(false);
   const [selectedReplayId, setSelectedReplayId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useAutoDismissNotice(notice, () => setNotice(null), 8000);
@@ -189,6 +189,8 @@ export function SandboxReplayTab() {
       );
       setNotice('Прогон поставлен в очередь. Отчёт появится после завершения.');
       setSelectedReplayId(created.id);
+      setCreateOpen(false);
+      setValues(sandboxReplayFormDefaults());
     } catch (error) {
       setSubmitError(sandboxReplayCreateError(error));
     }
@@ -236,26 +238,30 @@ export function SandboxReplayTab() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-zinc-900">Исторический прогон</h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Ограниченный paper-прогон на сохранённых свечах 1h. Виртуальные деньги, без кошелька,
-          подписи и реальных ордеров.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-900">Исторический прогон</h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Ограниченный paper-прогон на сохранённых свечах 1h. Виртуальные деньги, без кошелька,
+            подписи и реальных ордеров.
+          </p>
+        </div>
+        <Button onClick={() => setCreateOpen(true)}>Новый прогон</Button>
       </div>
 
-      <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-base font-semibold text-zinc-900">Новый прогон</CardTitle>
-              <Badge tone="info">historical-paper</Badge>
-            </div>
-            <p className="mt-1 text-xs text-zinc-500">
-              Решение на закрытом баре i исполняется на открытии i+1. Отчёт и снимок свечей
-              сохраняются для повторной проверки.
-            </p>
-          </div>
+      <Drawer
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="Новый прогон"
+        description="Решение на закрытом баре i исполняется на открытии i+1. Отчёт и снимок свечей сохраняются для повторной проверки."
+        size="lg"
+        footer={
+          <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+            Закрыть
+          </Button>
+        }
+      >
+        <div className="mb-4 flex justify-end">
           <Button variant="secondary" onClick={() => setTokensOpen(true)}>
             Токены песочницы
           </Button>
@@ -514,7 +520,7 @@ export function SandboxReplayTab() {
             {createReplay.isPending ? 'Ставлю в очередь…' : 'Запустить прогон'}
           </Button>
         </div>
-      </Card>
+      </Drawer>
 
       {notice ? (
         <div

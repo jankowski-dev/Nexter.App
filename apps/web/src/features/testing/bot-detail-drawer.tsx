@@ -13,7 +13,6 @@ import {
   fetchBotTradeSummaries,
   fetchBotTrades,
   fetchTradingBot,
-  fetchWatchlist,
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import {
@@ -29,8 +28,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { BotUptimeText } from './bot-uptime';
 import { AiJournalPanel } from './ai-journal-panel';
-import { BacktestPanel } from './backtest-panel';
-import { formatStrategyParamValue, paramsToForm } from './strategy-params';
+import { formatStrategyParamValue } from './strategy-params';
 import type { BotStatus, BotSummary } from '@nexter/contracts';
 
 const statusLabels: Record<BotStatus, string> = {
@@ -129,18 +127,11 @@ export function BotDetailDrawer({
   });
   const [positionsLimit, setPositionsLimit] = useState(10);
   const [telemetryOpen, setTelemetryOpen] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
-  const testWatchlist = useQuery({
-    queryKey: ['bot-test-watchlist'],
-    queryFn: () => fetchWatchlist(false, undefined, undefined, 100),
-    enabled: Boolean(botId) && testOpen,
-  });
 
   useEffect(() => {
     setPositionsLimit(10);
     if (!open) {
       setTelemetryOpen(false);
-      setTestOpen(false);
     }
   }, [botId, open]);
 
@@ -204,9 +195,6 @@ export function BotDetailDrawer({
                   Запустить
                 </Button>
               )}
-              <Button variant="secondary" onClick={() => setTestOpen(true)}>
-                Тестировать
-              </Button>
               <Button variant="secondary" onClick={() => setTelemetryOpen(true)}>
                 Телеметрия
               </Button>
@@ -728,26 +716,6 @@ export function BotDetailDrawer({
         }
       >
         <AiJournalPanel botId={bot.id} botName={bot.name} />
-      </Drawer>
-      <Drawer
-        open={testOpen}
-        onClose={() => setTestOpen(false)}
-        title={`Тестирование · ${strategy.name}`}
-        description="Параметры и токен взяты из настроек робота. Прогон не меняет робота."
-        size="lg"
-        placement="beside"
-      >
-        <BacktestPanel
-          template={strategy}
-          tokenEntries={testWatchlist.data?.data ?? []}
-          tokensPending={testWatchlist.isPending}
-          tokensError={testWatchlist.error}
-          initialAssetId={tokens[0]?.assetId}
-          initialParams={paramsToForm(strategyParams)}
-          initialUseStopLoss
-          initialUseTakeProfit
-          stacked
-        />
       </Drawer>
     </>
   );

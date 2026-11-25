@@ -9,6 +9,7 @@
 - Confirm the daily encrypted backup exists in R2 and its size is plausible.
 - Confirm no new `unverified_assets`, `negative_balances`, or `missing_gas` spike on `/settings/data-quality`.
 - Check `/swap` history or the DB for `CONFIRMED` orders with null `accounting_transaction_id`, and for `SWAP_ACCOUNTING_*` errors older than 10 minutes. Investigate before the next swap.
+- If `SANDBOX_ENABLED=true`, confirm the five Stage 3 runs are still `running`, the replay worker has no stuck `running` row, and no sandbox report/replay hash changed unexpectedly.
 
 ## Weekly
 

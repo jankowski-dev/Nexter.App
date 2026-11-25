@@ -335,7 +335,9 @@ describe('sandbox replay report helpers', () => {
     expect(sandboxReplayReportFileName('replay-1', 'json')).toBe(
       'sandbox-replay-replay-1-report.json',
     );
-    expect(sandboxReplayReportFileName('replay-1', 'md')).toBe('sandbox-replay-replay-1-report.md');
+    expect(sandboxReplayReportFileName('replay-1', 'pdf')).toBe(
+      'sandbox-replay-replay-1-report.pdf',
+    );
   });
 
   it('maps replay contract errors to Russian messages', () => {

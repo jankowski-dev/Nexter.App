@@ -137,3 +137,24 @@
 | `bot_signals`          | Последний сигнал/причина и `strategy_state` по каждому токену бота; `(botId, assetId)` unique                                                                   |
 
 Таблицы изолированы от реального ledger: paper-сделки не пишут в `transactions`, `postings`, `lots` или `trade_groups`. `budgetUsd` неизменяем после создания; `reset` возвращает `cashUsd` к бюджету и удаляет paper-позиции/сделки/снимки. Стратегии встроены в код; отдельной таблицы экземпляров нет. Полное описание — в `trading-bots.md`.
+
+`bot_backtest_runs` — историческая таблица старых бэктестов; после ADR 0090 код её не читает и не пишет.
+
+## 12. Песочница
+
+| Таблица                  | Назначение                                                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `sandbox_tokens`         | Вселенная токенов песочницы; новые строки только из `Избранного` (chain+contract), существующие не удаляются |
+| `sandbox_candles`        | Сохранённые 1h-свечи для живых и исторических прогонов                                                       |
+| `sandbox_runs`           | Живой paper-запуск: frozen config/settings, seed, status, equity/return/drawdown, snapshots                  |
+| `sandbox_run_tokens`     | Токены запуска                                                                                               |
+| `sandbox_events`         | Append-only hash-chained журнал событий (SELECT/INSERT only)                                                 |
+| `sandbox_positions`      | Открытые paper-позиции запуска                                                                               |
+| `sandbox_trades`         | Закрытые paper-сделки                                                                                        |
+| `sandbox_ledger_entries` | Точные центовые записи paper-ledger                                                                          |
+| `sandbox_equity_points`  | Кривая капитала                                                                                              |
+| `sandbox_intents`        | Журнал интентов: requested/filled/rejected/expired, причина, защита                                          |
+| `sandbox_reports`        | Отчёты живых запусков (исторические отчёты живут в `sandbox_replays.report`)                                 |
+| `sandbox_replays`        | Исторический прогон: frozen settings/paper/seed, report JSONB, hashes, gzip candle snapshot, status/archive  |
+
+Песочница не связана с `ai_*`, `market_candles`, `trading_bots` или реальным ledger. `sandbox_events` append-only, DELETE не выдан. Новые токены валидируются по группе `Избранное`; миграция `0055` переименовывает default-группу, не меняя существующие строки. Подробности — `docs/runbooks/sandbox.md`.

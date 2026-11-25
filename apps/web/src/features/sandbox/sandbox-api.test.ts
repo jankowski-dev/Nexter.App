@@ -5,6 +5,7 @@ import {
   createSandboxToken,
   fetchSandboxRuns,
   fetchSandboxStatus,
+  fetchSandboxTokenCandidates,
   fetchSandboxTokens,
   pauseSandboxRun,
   refreshSandboxToken,
@@ -192,6 +193,26 @@ describe('sandbox api', () => {
     payload = { tokens: [] };
     await expect(fetchSandboxTokens()).resolves.toEqual({ tokens: [] });
     expect(calls[0]?.url).toBe('/api/v1/sandbox/tokens');
+  });
+
+  it('reads the favorites candidates for new tokens', async () => {
+    payload = {
+      candidates: [
+        {
+          assetId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          tokenKey,
+          symbol: 'AAA',
+          name: 'Alpha',
+          chain: 'bsc',
+          contractAddress: tokenKey.slice(4),
+          eligible: true,
+          reason: null,
+        },
+      ],
+    };
+    const response = await fetchSandboxTokenCandidates();
+    expect(response.candidates[0]?.tokenKey).toBe(tokenKey);
+    expect(calls[0]?.url).toBe('/api/v1/sandbox/tokens/candidates');
   });
 
   it('adds a token to the universe', async () => {

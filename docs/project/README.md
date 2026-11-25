@@ -2,7 +2,7 @@
 
 > Версия документа: 2026-11-17. Это живая документация: при изменении схемы, API или поведения обновляйте соответствующий раздел и `docs/decisions.md`.
 >
-> Быстрый старт для агента: [`agent-guide.md`](agent-guide.md). Архитектура ботов: [`trading-bots.md`](trading-bots.md). PDF-копия: [`../pdf/nexter-project-guide.pdf`](../pdf/nexter-project-guide.pdf).
+> Быстрый старт для агента: [`agent-guide.md`](agent-guide.md). Архитектура ботов: [`trading-bots.md`](trading-bots.md).
 
 ## 1. Что это за приложение
 
@@ -17,26 +17,28 @@ Nexter — личный финансовый учёт владельца. Оди
 - end-to-end зашифрованное хранилище паролей;
 - импорт исторических данных из Notion;
 - модуль бумажной торговли ботами с изолированным paper-ledger;
+- независимая бумажная `Песочница` (`@nexter/sandbox-core`): живые прогоны, исторические прогоны с графиком действий, PDF/JSON-отчётами и выбранными токенами из `Избранного`;
 - AI-настройки DeepSeek и аудиозаметки из Viber (отдельный `Nexter.Bot`);
-- AI-торговля: одна страница с one-click циклом (данные → поиск → рекомендации → draft-роботы), mass walk-forward поиск с warmup, экспорт и гистограммы, TTL рекомендаций, здоровье ИИ-роботов, мониторинг инвалидации и read-only Binance fallback; роботов запускает только владелец;
 - настраиваемый лимит аудио 1–20 МБ (по умолчанию 8 МБ).
+
+Старый модуль `ИИ-торговля` и бэктест роботов удалены из кода и интерфейса (ADR 0090). Таблицы `ai_*` и `bot_backtest_runs` остаются в базе как исторические и не используются; удаление — отдельная destructive-миграция с бэкапом.
 
 Приложение не является биржей, кастодиальным сервисом или налоговым калькулятором. Оно не хранит приватные ключи и seed-фразы. Все подписи выполняются в кошельке владельца.
 
-Текущее состояние (2026-11-19): один API-сервис + Postgres (worker удалён), миграции по `0049` применены, cleanup `0050` подготовлен, TOTP replay и append-only audit trigger включены, аудио-лимит настраивается в `Настройки → ИИ → Аудио`, а раздел `Крипта` — один пункт меню с восемью вкладками: `Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика`. Сейчас AI-модуль даёт данные/анализ/бэктесты, массовый поиск с историей, экспортом и гистограммами, экраны рекомендаций и ИИ-роботов, рекомендацию → draft-робот с TTL, мониторинг здоровья и Binance fallback для 180-дневной истории; ручной старт paper-ботов остаётся за владельцем.
+Текущее состояние (2026-11-25, ветка `sandbox-visual-cleanup`): один API-сервис + Postgres (worker удалён), в production применены миграции по `0054`; миграция `0055` (переименование группы `Основная` → `Избранное`) подготовлена и применяется при rollout. TOTP replay и append-only audit trigger включены, аудио-лимит настраивается в `Настройки → ИИ → Аудио`. Раздел `Крипта` — один пункт меню с шестью вкладками: `Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Статистика`. Справочник стратегий перенесён в `Настройки → Стратегии`. `Песочница` остаётся paper-only; ручной старт роботов и прогонов — только за владельцем.
 
 ## 2. Технологический стек
 
-| Слой            | Технологии                                                                                                |
-| --------------- | --------------------------------------------------------------------------------------------------------- |
-| Монорепозиторий | pnpm 10.20, TypeScript strict                                                                             |
-| API             | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry                                    |
-| Web             | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite                                           |
-| Тесты           | Vitest (unit/integration), Supertest, Playwright (E2E)                                                    |
-| Деньги          | PostgreSQL `numeric`, `decimal.js`, строки в API                                                          |
-| Фоновые задачи  | Интервальные сервисы API под advisory locks (котировки, снапшоты, индексер, swap tracker, боты, AI/audio) |
-| Деплой          | Railway (API + Postgres), Dockerfile; Viber-бот — отдельный проект                                        |
-| Бэкапы          | `pg_dump` custom format + AES-256-GCM, restore drill                                                      |
+| Слой            | Технологии                                                                                                        |
+| --------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Монорепозиторий | pnpm 10.20, TypeScript strict                                                                                     |
+| API             | NestJS 11, Fastify 5, Drizzle ORM, PostgreSQL 17/18, Zod, Pino, Sentry                                            |
+| Web             | React 19, TanStack Router, TanStack Query, Tailwind CSS 4, Vite                                                   |
+| Тесты           | Vitest (unit/integration), Supertest, Playwright (E2E)                                                            |
+| Деньги          | PostgreSQL `numeric`, `decimal.js`, строки в API                                                                  |
+| Фоновые задачи  | Интервальные сервисы API под advisory locks (котировки, снапшоты, индексер, swap tracker, боты, песочница, audio) |
+| Деплой          | Railway (API + Postgres), Dockerfile; Viber-бот — отдельный проект                                                |
+| Бэкапы          | `pg_dump` custom format + AES-256-GCM, restore drill                                                              |
 
 ## 3. Структура репозитория
 
@@ -87,6 +89,7 @@ SPA и API живут на одном origin в production. Cookie-сессия 
 | Reconciliation      | Read-only сверка с on-chain                            | `watched_addresses`, `indexed_transfers`, `reconciliation_runs/items`                                                                 |
 | Audit               | Журнал всех мутаций                                    | `audit_log`                                                                                                                           |
 | Trading bots        | Бумажная торговля встроенными стратегиями              | `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, `bot_signals` |
+| Sandbox             | Независимая paper-песочница и исторические прогоны     | `sandbox_tokens`, `sandbox_runs`, `sandbox_events`, `sandbox_replays`, `sandbox_candles`                                              |
 
 ## 5. Ключевые принципы
 

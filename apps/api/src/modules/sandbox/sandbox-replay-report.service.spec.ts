@@ -165,6 +165,16 @@ describe('SandboxReplayReportService getReport', () => {
     expect(result.executionMode).toBe('historical-paper');
     expect(result.report).toEqual(storedReport);
     expect(result.report.reportHash).toBe(storedReport.reportHash);
+    expect(result.identity).toMatchObject({
+      reportHash: storedReport.reportHash,
+      eventHash: storedReport.eventHash,
+      eventCount: storedReport.eventCount,
+      dataSnapshotId: storedReport.dataSnapshotId,
+      candleSnapshotHash: SNAPSHOT_HASH,
+      configVersion: storedReport.configVersion,
+      settingsVersion: storedReport.settingsVersion,
+      seed: storedReport.seed,
+    });
     expect(sandboxReplayReportResponseSchema.safeParse(result).success).toBe(true);
 
     const notes = result.notes.join('\n');
@@ -250,46 +260,8 @@ describe('SandboxReplayReportService getReport', () => {
     const h = harness(row);
 
     await h.service.getReport(USER, REPLAY);
-    await h.service.getReportMarkdown(USER, REPLAY);
 
     expect(JSON.stringify(row)).toBe(before);
     expect(h.unexpectedWrite).not.toHaveBeenCalled();
-  });
-});
-
-describe('SandboxReplayReportService getReportMarkdown', () => {
-  it('renders a deterministic Markdown report with the replay preamble and hashes', async () => {
-    const h = harness();
-    const first = await h.service.getReportMarkdown(USER, REPLAY);
-    const second = await h.service.getReportMarkdown(USER, REPLAY);
-
-    expect(second).toBe(first);
-    expect(first.startsWith('# Historical paper replay report')).toBe(true);
-    expect(first).toContain('> Execution mode: `historical-paper`');
-    expect(first).toContain(`> Replay \`${REPLAY}\` · requested period \`30\` days`);
-    expect(first).toContain(`- ${new Date(FROM).toISOString()}`);
-    expect(first).toContain('1h closed candles only');
-    expect(first).toContain('## Summary');
-    expect(first).toContain('## Reconciliation');
-    expect(first).toContain('## Hashes');
-    expect(first).toContain(storedReport.reportHash);
-    expect(first).toContain(SNAPSHOT_HASH);
-    expect(first.endsWith('\n')).toBe(true);
-
-    expect(h.findReplayReport).toHaveBeenCalledTimes(2);
-    expect(h.unexpectedWrite).not.toHaveBeenCalled();
-  });
-
-  it('applies the same owner/status gates as the JSON report', async () => {
-    await expectCode(
-      harness().service.getReportMarkdown(OTHER, REPLAY),
-      NotFoundException,
-      'SANDBOX_REPLAY_NOT_FOUND',
-    );
-    await expectCode(
-      harness(completedRecord({ status: 'running' })).service.getReportMarkdown(USER, REPLAY),
-      ConflictException,
-      'SANDBOX_REPLAY_NOT_COMPLETED',
-    );
   });
 });

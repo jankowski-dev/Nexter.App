@@ -45,10 +45,28 @@ const replayMigrationSql = readRepoFile('packages/db/drizzle/0053_sandbox_replay
   ' ',
 );
 const replaySnapshotSource = readRepoFile('packages/db/drizzle/meta/0053_snapshot.json');
+const favoritesMigrationSql = readRepoFile(
+  'packages/db/drizzle/0055_favorites_default_group.sql',
+).replace(/\s+/g, ' ');
 const journal = JSON.parse(readRepoFile('packages/db/drizzle/meta/_journal.json')) as {
   entries: Array<{ idx: number; tag: string }>;
 };
 const provisioningSource = readRepoFile('packages/db/scripts/provision-app-role.mjs');
+
+describe('favorites data migration 0055', () => {
+  it('renames only the default group and only when there is no conflict', () => {
+    expect(favoritesMigrationSql).toContain('UPDATE "watchlist_groups"');
+    expect(favoritesMigrationSql).toContain('"is_default" = true');
+    expect(favoritesMigrationSql).toContain('"name" = \'Основная\'');
+    expect(favoritesMigrationSql).toContain('NOT EXISTS');
+    expect(favoritesMigrationSql).toContain('"name" = \'Избранное\'');
+  });
+
+  it('never deletes or touches sandbox runs/tokens', () => {
+    expect(favoritesMigrationSql).not.toMatch(/DELETE/i);
+    expect(favoritesMigrationSql).not.toMatch(/sandbox_/i);
+  });
+});
 
 describe('sandbox stage 2 migration', () => {
   it('creates every sandbox table', () => {
@@ -128,9 +146,9 @@ describe('sandbox historical replay migration 0053', () => {
   });
 
   it('keeps the migration journal and snapshot chain consistent', () => {
-    expect(journal.entries).toHaveLength(55);
+    expect(journal.entries).toHaveLength(56);
     const last = journal.entries.at(-1);
-    expect(last).toMatchObject({ idx: 54, tag: '0054_elite_jimmy_woo' });
+    expect(last).toMatchObject({ idx: 55, tag: '0055_favorites_default_group' });
     expect(journal.entries.some((entry) => entry.tag === '0053_sandbox_replays')).toBe(true);
     expect(journal.entries.some((entry) => entry.tag === '0052_sandbox_stage2')).toBe(true);
     expect(replaySnapshotSource).toContain('"sandbox_replays"');

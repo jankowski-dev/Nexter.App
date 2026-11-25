@@ -5,7 +5,6 @@ import {
   type SandboxReplayReportResponse,
   type SandboxRunReport,
 } from '@nexter/contracts';
-import { renderMarkdown, type RunReport } from '@nexter/sandbox-core';
 import { SANDBOX_REPLAY_PREFIX_DAYS } from './sandbox-replay.coverage';
 import {
   SandboxReplayRepository,
@@ -40,17 +39,17 @@ export class SandboxReplayReportService {
       executionMode: SANDBOX_HISTORICAL_EXECUTION_MODE,
       report,
       notes: sandboxReplayReportNotes(replay, report),
+      identity: {
+        reportHash: report.reportHash,
+        eventHash: report.eventHash,
+        eventCount: report.eventCount,
+        dataSnapshotId: report.dataSnapshotId,
+        candleSnapshotHash: replay.candleSnapshotHash as string,
+        configVersion: report.configVersion,
+        settingsVersion: report.settingsVersion,
+        seed: report.seed,
+      },
     };
-  }
-
-  async getReportMarkdown(userId: string, id: string): Promise<string> {
-    const { replay, report } = await this.loadCompleted(userId, id);
-
-    return renderSandboxReplayReportMarkdown(
-      replay,
-      report,
-      sandboxReplayReportNotes(replay, report),
-    );
   }
 
   /**
@@ -137,39 +136,6 @@ export function sandboxReplayReportNotes(
       'Replaying the persisted snapshot reproduces the event rows; this report plus the ' +
       'snapshot is the evidence.',
   ];
-}
-
-/**
- * Markdown rendering for owners: the Stage 1C `renderMarkdown` body with a
- * historical-paper title and a replay identity/notes preamble. Presentation
- * only; the report and its hash are unchanged and no wall clock is used.
- */
-export function renderSandboxReplayReportMarkdown(
-  replay: SandboxReplayReportRecord,
-  report: SandboxRunReport,
-  notes: readonly string[],
-): string {
-  return renderMarkdown(toCoreReport(report), {
-    title: 'Historical paper replay report',
-    intro: [
-      '> Execution mode: `historical-paper`. Virtual money only: no wallet, key, signing ' +
-        'or exchange order is involved.',
-      `> Replay \`${replay.id}\` · requested period \`${replay.periodDays}\` days`,
-      ...notes.map((note) => `- ${note}`),
-    ],
-  });
-}
-
-/**
- * Structural boundary from the contract report to the core renderer type.
- *
- * The stored JSONB was produced by the Stage 1C `buildReport`, so every field
- * (including the strategy keys) is a valid core value; the contract schema only
- * widens those keys to `string`. Rendering is presentation-only and never feeds
- * back into the report hash.
- */
-function toCoreReport(report: SandboxRunReport): RunReport {
-  return report as unknown as RunReport;
 }
 
 function replayStateInvalid(reason: string): ConflictException {

@@ -4,9 +4,21 @@ import cookie from '@fastify/cookie';
 import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
-import { auditLog, createDb, sandboxReplays, users, type Database } from '@nexter/db';
+import {
+  assets,
+  auditLog,
+  chains,
+  createDb,
+  sandboxReplays,
+  users,
+  watchlist,
+  watchlistGroups,
+  type Database,
+} from '@nexter/db';
 import {
   SANDBOX_TIMEFRAME,
+  sandboxReplayChartResponseSchema,
+  sandboxReplayDecisionsResponseSchema,
   sandboxReplayDetailSchema,
   sandboxReplayListResponseSchema,
   sandboxReplayPreflightResponseSchema,
@@ -305,9 +317,60 @@ describe('Sandbox historical replay (e2e)', () => {
     return { candles, replays };
   }
 
+  /**
+   * New sandbox tokens are restricted to the default favorites group. Seed one
+   * asset + favorites entry per test key before calling the API.
+   */
+  async function seedFavorite(tokenKey: string, symbol: string, name: string): Promise<void> {
+    if (!db) throw new Error('test database is not configured');
+    const owner = await ownerId();
+    const contractAddress = tokenKey.slice('bsc:'.length);
+    await db
+      .insert(chains)
+      .values({ code: 'bsc', name: 'BNB Smart Chain' })
+      .onConflictDoNothing({ target: chains.code });
+    const [chain] = await db
+      .select({ id: chains.id })
+      .from(chains)
+      .where(eq(chains.code, 'bsc'))
+      .limit(1);
+    if (!chain) throw new Error('bsc chain was not created');
+    await db
+      .insert(assets)
+      .values({ chainId: chain.id, symbol, name, contractAddress })
+      .onConflictDoNothing({ target: [assets.chainId, assets.symbol] });
+    const [asset] = await db
+      .select({ id: assets.id })
+      .from(assets)
+      .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, symbol)))
+      .limit(1);
+    if (!asset) throw new Error('favorite asset was not created');
+    const [group] = await db
+      .insert(watchlistGroups)
+      .values({ userId: owner, name: 'Избранное', isDefault: true, sortOrder: 0 })
+      .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+      .returning({ id: watchlistGroups.id });
+    const groupId =
+      group?.id ??
+      (
+        await db
+          .select({ id: watchlistGroups.id })
+          .from(watchlistGroups)
+          .where(and(eq(watchlistGroups.userId, owner), eq(watchlistGroups.name, 'Избранное')))
+          .limit(1)
+      )[0]?.id;
+    if (!groupId) throw new Error('favorites group was not created');
+    await db
+      .insert(watchlist)
+      .values({ userId: owner, assetId: asset.id, groupId })
+      .onConflictDoNothing({ target: [watchlist.userId, watchlist.assetId] });
+  }
+
   async function createUniverse(
     cookies: TestCookies,
   ): Promise<{ tokenAId: string; tokenBId: string }> {
+    await seedFavorite(TOKEN_A, 'AAA', 'Alpha');
+    await seedFavorite(TOKEN_B, 'BBB', 'Beta');
     const tokenA = await api(app, cookies, 'post', '/api/v1/sandbox/tokens')
       .send({ tokenKey: TOKEN_A, symbol: 'AAA', name: 'Alpha' })
       .expect(201);
@@ -417,7 +480,9 @@ describe('Sandbox historical replay (e2e)', () => {
       ['get', '/api/v1/sandbox/replays'],
       ['get', `/api/v1/sandbox/replays/${replayId}`],
       ['get', `/api/v1/sandbox/replays/${replayId}/report.json`],
-      ['get', `/api/v1/sandbox/replays/${replayId}/report.md`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/report.pdf`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/chart`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/decisions`],
       ['post', `/api/v1/sandbox/replays/${replayId}/cancel`],
       ['post', `/api/v1/sandbox/replays/${replayId}/archive`],
     ];
@@ -512,15 +577,15 @@ describe('Sandbox historical replay (e2e)', () => {
       ).expect(409);
       expect(notReady.body).toMatchObject({ error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' } });
 
-      // A failed Markdown read must still use the JSON error type, not markdown.
-      const notReadyMarkdown = await api(
+      // A failed PDF read must still use the JSON error type, not PDF.
+      const notReadyPdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${created.id}/report.md`,
+        `/api/v1/sandbox/replays/${created.id}/report.pdf`,
       ).expect(409);
-      expect(notReadyMarkdown.headers['content-type']).toContain('application/json');
-      expect(notReadyMarkdown.body).toMatchObject({
+      expect(notReadyPdf.headers['content-type']).toContain('application/json');
+      expect(notReadyPdf.body).toMatchObject({
         error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' },
       });
 
@@ -566,6 +631,27 @@ describe('Sandbox historical replay (e2e)', () => {
       expect(report.metrics.totalReturnPct).toBe(completed.returnPct);
       expect(report.metrics.maxDrawdownPct).toBe(completed.maxDrawdownPct);
 
+      const chartResponse = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${created.id}/chart`,
+      ).expect(200);
+      const chart = sandboxReplayChartResponseSchema.parse(chartResponse.body);
+      expect(chart.replayId).toBe(created.id);
+      expect(chart.tokens[0]?.candles[0]?.time).toBe(Date.parse(created.fromTime));
+      expect(chart.actions.length).toBeGreaterThan(0);
+
+      const decisionsResponse = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${created.id}/decisions?limit=5&offset=0`,
+      ).expect(200);
+      const decisions = sandboxReplayDecisionsResponseSchema.parse(decisionsResponse.body);
+      expect(decisions.total).toBeGreaterThan(0);
+      expect(decisions.items).toHaveLength(5);
+
       // The report period is exactly the 30-day evaluation window; the 30-day
       // prefix is lookback only and is not evaluated.
       expect(report.period.bars).toBe(EVAL_BARS);
@@ -590,17 +676,15 @@ describe('Sandbox historical replay (e2e)', () => {
       expect(report.reconciliationOk).toBe(true);
       expect(report.reconciliationChecks.length).toBeGreaterThan(0);
 
-      const markdown = await api(
+      const pdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${created.id}/report.md`,
+        `/api/v1/sandbox/replays/${created.id}/report.pdf`,
       ).expect(200);
-      expect(markdown.headers['content-type']).toContain('text/markdown');
-      expect(markdown.text.startsWith('# Historical paper replay report')).toBe(true);
-      expect(markdown.text).toContain('historical-paper');
-      expect(markdown.text).toContain(report.reportHash);
-      expect(markdown.text).toContain(completed.candleSnapshotHash as string);
+      expect(pdf.headers['content-type']).toContain('application/pdf');
+      expect(pdf.headers['content-disposition']).toContain('attachment');
+      expect(pdf.body.subarray(0, 4).toString()).toBe('%PDF');
 
       // A stored report is never recomputed on a GET: two reads are identical.
       const secondRead = await getReport(cookies, created.id);
@@ -1064,14 +1148,14 @@ describe('Sandbox historical replay (e2e)', () => {
       await api(app, cookies, 'get', `/api/v1/sandbox/replays/${foreign.id}/report.json`).expect(
         404,
       );
-      const foreignMarkdown = await api(
+      const foreignPdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${foreign.id}/report.md`,
+        `/api/v1/sandbox/replays/${foreign.id}/report.pdf`,
       ).expect(404);
-      expect(foreignMarkdown.headers['content-type']).toContain('application/json');
-      expect(foreignMarkdown.body).toMatchObject({
+      expect(foreignPdf.headers['content-type']).toContain('application/json');
+      expect(foreignPdf.body).toMatchObject({
         error: { code: 'SANDBOX_REPLAY_NOT_FOUND' },
       });
       await api(app, cookies, 'post', `/api/v1/sandbox/replays/${foreign.id}/cancel`).expect(404);

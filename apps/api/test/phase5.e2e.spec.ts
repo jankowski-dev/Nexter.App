@@ -403,7 +403,7 @@ describe.runIf(canRun)('Phase 5 MVP-1 UI API', () => {
 
     const watchlistGroups = await agent.get('/api/v1/watchlist/groups').expect(200);
     expect(watchlistGroups.body.groups).toEqual([
-      expect.objectContaining({ name: 'Основная', isDefault: true, entryCount: 1 }),
+      expect.objectContaining({ name: 'Избранное', isDefault: true, entryCount: 1 }),
     ]);
     const defaultGroupId = watchlistGroups.body.groups[0].id as string;
     expect(watchlistCreated.body.groupId).toBe(defaultGroupId);

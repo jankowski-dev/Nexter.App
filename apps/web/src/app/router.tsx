@@ -17,6 +17,7 @@ import { VaultPage } from '@/features/vault/vault-page';
 import { AccountingSettingsPage } from '@/features/settings/accounting-settings-page';
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { BotsSettingsPage } from '@/features/settings/bots-settings-page';
+import { StrategiesSettingsPage } from '@/features/settings/strategies-settings-page';
 import { DataSettingsPage } from '@/features/settings/data-settings-page';
 import { ExportSettingsPage } from '@/features/settings/export-settings-page';
 import { GeneralSettingsPage } from '@/features/settings/general-settings-page';
@@ -350,6 +351,12 @@ const botsSettingsRoute = createRoute({
   component: BotsSettingsPage,
 });
 
+const strategiesSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/strategies',
+  component: StrategiesSettingsPage,
+});
+
 const tasksSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/tasks',
@@ -428,6 +435,7 @@ const routeTree = rootRoute.addChildren([
     marketSettingsRoute,
     tradingSettingsRoute,
     botsSettingsRoute,
+    strategiesSettingsRoute,
     tasksSettingsRoute,
     notificationsSettingsRoute,
     dataSettingsRoute,

@@ -62,7 +62,8 @@ describe('sandbox replay list', () => {
     expect(html).toContain('AAA');
     expect(html).toContain('4,20%');
     expect(html).toContain('3,52%');
-    expect(html).toContain('Открыть');
+    expect(html).toContain('role="button"');
+    expect(html).not.toContain('Открыть');
     expect(html).toContain('В архив');
     expect(html).not.toContain('Отменить');
     expect(html).not.toContain('Купить');

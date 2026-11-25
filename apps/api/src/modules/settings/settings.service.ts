@@ -17,17 +17,12 @@ interface SettingsMeta {
 }
 
 type UsdKey =
-  | 'marketMinLiquidityUsd'
-  | 'swapMaxGasUsd'
-  | 'botDefaultBudgetUsd'
-  | 'backtestDefaultCapitalUsd'
-  | 'tradeDefaultBuyAmountUsd';
+  'marketMinLiquidityUsd' | 'swapMaxGasUsd' | 'botDefaultBudgetUsd' | 'tradeDefaultBuyAmountUsd';
 
 export interface RuntimeSettings extends Omit<SettingsInput, UsdKey> {
   marketMinLiquidityUsd: number;
   swapMaxGasUsd: number;
   botDefaultBudgetUsd: number;
-  backtestDefaultCapitalUsd: number;
   tradeDefaultBuyAmountUsd: number;
 }
 
@@ -183,13 +178,6 @@ export class SettingsService {
       botDefaultSlippageBps: row.botDefaultSlippageBps,
       botDefaultDailyLossPct: row.botDefaultDailyLossPct,
       botDefaultCooldownMinutes: row.botDefaultCooldownMinutes,
-      backtestDefaultCapitalUsd: row.backtestDefaultCapitalUsd,
-      backtestDefaultFeeBps: row.backtestDefaultFeeBps,
-      backtestDefaultSlippageBps: row.backtestDefaultSlippageBps,
-      backtestDefaultDays: row.backtestDefaultDays,
-      backtestDefaultStopLoss: row.backtestDefaultStopLoss,
-      backtestDefaultTakeProfit: row.backtestDefaultTakeProfit,
-      backtestDefaultReinvest: row.backtestDefaultReinvest,
       taskReminderLeadMinutes: row.taskReminderLeadMinutes,
       taskDefaultDueTime: row.taskDefaultDueTime,
       autosaveIntervalSeconds: row.autosaveIntervalSeconds,
@@ -242,13 +230,6 @@ export class SettingsService {
       botDefaultSlippageBps: get('botDefaultSlippageBps'),
       botDefaultDailyLossPct: get('botDefaultDailyLossPct'),
       botDefaultCooldownMinutes: get('botDefaultCooldownMinutes'),
-      backtestDefaultCapitalUsd: Number(get('backtestDefaultCapitalUsd')),
-      backtestDefaultFeeBps: get('backtestDefaultFeeBps'),
-      backtestDefaultSlippageBps: get('backtestDefaultSlippageBps'),
-      backtestDefaultDays: get('backtestDefaultDays'),
-      backtestDefaultStopLoss: get('backtestDefaultStopLoss'),
-      backtestDefaultTakeProfit: get('backtestDefaultTakeProfit'),
-      backtestDefaultReinvest: get('backtestDefaultReinvest'),
       taskReminderLeadMinutes: get('taskReminderLeadMinutes'),
       taskDefaultDueTime: get('taskDefaultDueTime'),
       autosaveIntervalSeconds: get('autosaveIntervalSeconds'),

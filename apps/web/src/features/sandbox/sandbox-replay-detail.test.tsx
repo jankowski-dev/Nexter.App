@@ -6,10 +6,17 @@ import type { SandboxReplayDetail, SandboxReplayReportResponse } from '@nexter/c
 vi.mock('./sandbox-hooks', () => ({
   useSandboxReplay: vi.fn(),
   useSandboxReplayReport: vi.fn(),
+  useSandboxReplayChart: vi.fn(),
+  useSandboxReplayDecisions: vi.fn(),
 }));
 
 import { SandboxReplayDetail as SandboxReplayDetailView } from './sandbox-replay-detail';
-import { useSandboxReplay, useSandboxReplayReport } from './sandbox-hooks';
+import {
+  useSandboxReplay,
+  useSandboxReplayChart,
+  useSandboxReplayDecisions,
+  useSandboxReplayReport,
+} from './sandbox-hooks';
 import {
   sandboxReplayDetailFixture,
   sandboxReplayId,
@@ -19,6 +26,8 @@ import {
 
 const mockedReplay = vi.mocked(useSandboxReplay);
 const mockedReport = vi.mocked(useSandboxReplayReport);
+const mockedChart = vi.mocked(useSandboxReplayChart);
+const mockedDecisions = vi.mocked(useSandboxReplayDecisions);
 
 function replayResult(
   state: Partial<UseQueryResult<SandboxReplayDetail, Error>>,
@@ -61,6 +70,53 @@ function renderDetail(): string {
 
 beforeEach(() => {
   mockedReport.mockReturnValue(reportResult({ isPending: false, data: undefined }));
+  mockedChart.mockReturnValue({
+    isPending: false,
+    isError: false,
+    data: {
+      replayId: sandboxReplayId,
+      tokens: [
+        {
+          tokenId: sandboxTokenId,
+          candles: [
+            {
+              time: Date.parse('2026-11-24T00:00:00.000Z'),
+              openUsd: '4.00',
+              highUsd: '4.30',
+              lowUsd: '3.90',
+              closeUsd: '4.20',
+            },
+          ],
+        },
+      ],
+      actions: [
+        {
+          id: 'buy-1',
+          tokenId: sandboxTokenId,
+          time: Date.parse('2026-11-24T00:00:00.000Z'),
+          kind: 'buy',
+          priceUsd: '4.20',
+          amountUsd: '100.00',
+          pnlUsd: null,
+          reasonCode: 'TREND_PULLBACK_ENTRY',
+          reasonText: 'Вход на откате',
+          intentId: 'buy-1',
+          tradeId: 'trade-1',
+        },
+      ],
+      note: 'Показаны только свечи окна оценки.',
+    },
+    error: null,
+    refetch: vi.fn(),
+  } as never);
+  mockedDecisions.mockReturnValue({
+    isPending: false,
+    isError: false,
+    data: { pages: [{ items: [], total: 0, limit: 100, offset: 0 }], pageParams: [0] },
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    refetch: vi.fn(),
+  } as never);
 });
 
 describe('sandbox replay detail', () => {
@@ -125,6 +181,8 @@ describe('sandbox replay detail', () => {
     mockedReport.mockReturnValue(reportResult({ data: sandboxReplayReportResponseFixture() }));
 
     const html = renderDetail();
+    expect(html).toContain('Карта действий');
+    expect(html).toContain('TREND_PULLBACK_ENTRY');
     expect(html).toContain('Итоговый капитал');
     expect(html).toContain('+4,20%');
     expect(html).toContain('Кривая капитала');
@@ -134,15 +192,53 @@ describe('sandbox replay detail', () => {
     expect(html).toContain('Контрфактические');
     expect(html).toContain('Упущенная возможность');
     expect(html).toContain('Ретроспектива');
-    expect(html).toContain('Historical-paper replay');
-    expect(html).toContain('d'.repeat(64));
-    expect(html).toContain('e'.repeat(64));
-    expect(html).toContain('snapshot-replay-1');
     expect(html).toContain('Скачать JSON');
-    expect(html).toContain('Скачать Markdown');
+    expect(html).toContain('Скачать PDF');
     expect(html).toContain('В архив');
+    expect(html).not.toContain('Скачать Markdown');
+    expect(html).not.toContain('reportHash:');
+    expect(html).not.toContain('eventHash:');
+    expect(html).not.toContain('dataSnapshotId:');
+    expect(html).not.toContain('candleSnapshotHash:');
+    expect(html).not.toContain('configVersion:');
+    expect(html).not.toContain('settingsVersion:');
+    expect(html).not.toContain('seed:');
+    expect(html).not.toContain('full hash-chained event journal');
     expect(html).not.toContain('Купить');
     expect(html).not.toContain('Добавить');
+    expect(html.indexOf('Карта действий')).toBeLessThan(html.indexOf('Итоговый капитал'));
+    expect(html).not.toContain('xl:grid-cols-2');
+  });
+
+  it('limits long journals to 20 rows and offers Ещё', () => {
+    mockedReplay.mockReturnValue(
+      replayResult({ data: sandboxReplayDetailFixture({ status: 'completed' }) }),
+    );
+    const base = sandboxReplayReportResponseFixture();
+    const trade = base.report.trades[0];
+    const counterfactual = base.report.counterfactuals[0];
+    if (!trade || !counterfactual) throw new Error('fixture is missing report rows');
+    mockedReport.mockReturnValue(
+      reportResult({
+        data: {
+          ...base,
+          report: {
+            ...base.report,
+            trades: Array.from({ length: 25 }, (_, index) => ({
+              ...trade,
+              tradeId: `trade-${index}`,
+            })),
+            counterfactuals: Array.from({ length: 25 }, (_, index) => ({
+              ...counterfactual,
+              decisionTime: counterfactual.decisionTime + index,
+            })),
+          },
+        },
+      }),
+    );
+
+    const html = renderDetail();
+    expect((html.match(/Ещё/g) ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows a report loading state for a completed replay', () => {

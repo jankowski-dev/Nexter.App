@@ -3,34 +3,9 @@ import {
   approvalBuildResponseSchema,
   assetsResponseSchema,
   auditLogResponseSchema,
-  aiBotHealthResponseSchema,
-  aiCoverageSchema,
-  aiCycleStartResponseSchema,
-  aiCycleStatusSchema,
-  aiCyclesResponseSchema,
-  aiDataRefreshResponseSchema,
-  aiLabAnalysisSchema,
-  aiLabBacktestResponseSchema,
-  aiLabLatestSchema,
-  aiSearchResultsSchema,
-  aiSearchRunsResponseSchema,
-  aiSearchStartResponseSchema,
-  aiSearchStatusSchema,
-  aiProfileSchema,
-  aiRecommendationActionResponseSchema,
-  aiRecommendationsResponseSchema,
-  aiProfileTokenSchema,
-  aiProfileTokensResponseSchema,
-  aiServiceConfigSchema,
-  aiServiceConfigsResponseSchema,
-  aiTradingDashboardSchema,
   authMeResponseSchema,
   aiSettingsSchema,
   aiTestResponseSchema,
-  botBacktestClearResponseSchema,
-  botBacktestPreviewResponseSchema,
-  botBacktestRunSchema,
-  botBacktestsResponseSchema,
   botDetailResponseSchema,
   botEquityResponseSchema,
   botEventsResponseSchema,
@@ -112,42 +87,7 @@ import {
   type AccountsResponse,
   type ApprovalBuildResponse,
   type AssetsResponse,
-  type AiCoverage,
-  type AiCycleRequest,
-  type AiCycleStartResponse,
-  type AiCycleStatus,
-  type AiCyclesResponse,
-  type AiDataRefreshRequest,
-  type AiDataRefreshResponse,
-  type AiLabAnalysis,
-  type AiLabAnalyzeRequest,
-  type AiLabBacktestRequest,
-  type AiLabBacktestResponse,
-  type AiLabLatest,
-  type AiLabQuery,
-  type AiSearchRequest,
-  type AiSearchResults,
-  type AiSearchRunsResponse,
-  type AiSearchStatus,
-  type AiProfile,
-  type AiRecommendationActionResponse,
-  type AiRecommendationsResponse,
-  type AiProfileToken,
-  type AiProfileTokenCreateRequest,
-  type AiProfileTokenUpdateRequest,
-  type AiProfileUpdateRequest,
-  type AiServiceConfig,
-  type AiServiceConfigUpdateRequest,
-  type AiBotHealthResponse,
-  type AiTradingDashboard,
   type AuditLogResponse,
-  type BotBacktestClearResponse,
-  type BotBacktestListQuery,
-  type BotBacktestPreviewRequest,
-  type BotBacktestPreviewResponse,
-  type BotBacktestRequest,
-  type BotBacktestRun,
-  type BotBacktestsResponse,
   type BotCreateRequest,
   type BotDetailResponse,
   type AiSettings,
@@ -1239,49 +1179,6 @@ export async function fetchBotTelemetry(
   );
 }
 
-export async function previewBotBacktest(
-  body: BotBacktestPreviewRequest,
-): Promise<BotBacktestPreviewResponse> {
-  return apiPost('/api/v1/trading-bots/backtests/preview', body, botBacktestPreviewResponseSchema);
-}
-
-export async function runBotBacktest(body: BotBacktestRequest): Promise<BotBacktestRun> {
-  return apiPost('/api/v1/trading-bots/backtests', body, botBacktestRunSchema);
-}
-
-export async function fetchBotBacktests(
-  query: Partial<BotBacktestListQuery> = {},
-): Promise<BotBacktestsResponse> {
-  return apiFetch(
-    `/api/v1/trading-bots/backtests${queryString({
-      strategyKey: query.strategyKey,
-      assetId: query.assetId,
-      limit: query.limit,
-    })}`,
-    {},
-    botBacktestsResponseSchema,
-  );
-}
-
-export async function fetchBotBacktest(id: string): Promise<BotBacktestRun> {
-  return apiFetch(`/api/v1/trading-bots/backtests/${id}`, {}, botBacktestRunSchema);
-}
-
-export function botBacktestReportUrl(id: string): string {
-  return `/api/v1/trading-bots/backtests/${id}/report.pdf`;
-}
-
-export async function deleteBotBacktest(id: string): Promise<BotBacktestClearResponse> {
-  return apiDelete(`/api/v1/trading-bots/backtests/${id}`, botBacktestClearResponseSchema);
-}
-
-export async function clearBotBacktests(strategyKey?: string): Promise<BotBacktestClearResponse> {
-  return apiDelete(
-    `/api/v1/trading-bots/backtests${queryString({ strategyKey })}`,
-    botBacktestClearResponseSchema,
-  );
-}
-
 export async function fetchNotifications(limit = 100): Promise<NotificationsResponse> {
   return apiFetch(`/api/v1/notifications?limit=${limit}`, {}, notificationsResponseSchema);
 }
@@ -1320,158 +1217,6 @@ export async function updatePendingOrder(
   return apiPatch(`/api/v1/pending-orders/${id}`, body, pendingOrderSchema);
 }
 
-export async function fetchAiProfile(): Promise<AiProfile> {
-  return apiFetch('/api/v1/ai-trading/profile', {}, aiProfileSchema);
-}
-
-export async function updateAiProfile(body: AiProfileUpdateRequest): Promise<AiProfile> {
-  return apiPut('/api/v1/ai-trading/profile', body, aiProfileSchema);
-}
-
-export async function fetchAiTokens(): Promise<{ data: AiProfileToken[] }> {
-  return apiFetch(
-    '/api/v1/ai-trading/profile/tokens',
-    { signal: AbortSignal.timeout(20_000) },
-    aiProfileTokensResponseSchema,
-  );
-}
-
-export async function createAiToken(body: AiProfileTokenCreateRequest): Promise<AiProfileToken> {
-  return apiPost('/api/v1/ai-trading/profile/tokens', body, aiProfileTokenSchema);
-}
-
-export async function updateAiToken(
-  id: string,
-  body: AiProfileTokenUpdateRequest,
-): Promise<AiProfileToken> {
-  return apiPatch(`/api/v1/ai-trading/profile/tokens/${id}`, body, aiProfileTokenSchema);
-}
-
-export async function removeAiToken(id: string): Promise<void> {
-  await apiDelete(`/api/v1/ai-trading/profile/tokens/${id}`);
-}
-
-export async function fetchAiServices(): Promise<{ data: AiServiceConfig[] }> {
-  return apiFetch('/api/v1/ai-trading/services', {}, aiServiceConfigsResponseSchema);
-}
-
-export async function updateAiService(
-  service: string,
-  body: AiServiceConfigUpdateRequest,
-): Promise<AiServiceConfig> {
-  return apiPut(`/api/v1/ai-trading/services/${service}`, body, aiServiceConfigSchema);
-}
-
-export async function fetchAiDashboard(): Promise<AiTradingDashboard> {
-  return apiFetch(
-    '/api/v1/ai-trading/dashboard',
-    { signal: AbortSignal.timeout(20_000) },
-    aiTradingDashboardSchema,
-  );
-}
-
-export async function fetchAiCoverage(): Promise<AiCoverage> {
-  return apiFetch(
-    '/api/v1/ai-trading/coverage',
-    { signal: AbortSignal.timeout(20_000) },
-    aiCoverageSchema,
-  );
-}
-
-export async function refreshAiData(body: AiDataRefreshRequest): Promise<AiDataRefreshResponse> {
-  return apiPost('/api/v1/ai-trading/data/refresh', body, aiDataRefreshResponseSchema);
-}
-
-export async function fetchAiLab(query: AiLabQuery): Promise<AiLabLatest> {
-  return apiFetch(
-    `/api/v1/ai-trading/lab${queryString({ assetId: query.assetId, timeframe: query.timeframe })}`,
-    {},
-    aiLabLatestSchema,
-  );
-}
-
-export async function analyzeAiToken(body: AiLabAnalyzeRequest): Promise<AiLabAnalysis> {
-  return apiPost('/api/v1/ai-trading/lab/analyze', body, aiLabAnalysisSchema);
-}
-
-export async function backtestAiCandidate(
-  body: AiLabBacktestRequest,
-): Promise<AiLabBacktestResponse> {
-  return apiPost('/api/v1/ai-trading/lab/backtest', body, aiLabBacktestResponseSchema);
-}
-
-export async function startAiSearch(body: AiSearchRequest): Promise<{ runId: string }> {
-  return apiPost('/api/v1/ai-trading/search', body, aiSearchStartResponseSchema);
-}
-
-export async function fetchAiSearchStatus(runId: string): Promise<AiSearchStatus> {
-  return apiFetch(`/api/v1/ai-trading/search/${runId}`, {}, aiSearchStatusSchema);
-}
-
-export async function fetchAiSearchResults(runId: string): Promise<AiSearchResults> {
-  return apiFetch(`/api/v1/ai-trading/search/${runId}/results`, {}, aiSearchResultsSchema);
-}
-
-export async function cancelAiSearch(runId: string): Promise<AiSearchStatus> {
-  return apiPost(`/api/v1/ai-trading/search/${runId}/cancel`, {}, aiSearchStatusSchema);
-}
-
-export async function cancelAiCycle(cycleId: string): Promise<AiCycleStatus> {
-  return apiPost(`/api/v1/ai-trading/cycle/${cycleId}/cancel`, {}, aiCycleStatusSchema);
-}
-
-export async function fetchAiBotHealth(): Promise<AiBotHealthResponse> {
-  return apiFetch(
-    '/api/v1/ai-trading/bots/health',
-    { signal: AbortSignal.timeout(20_000) },
-    aiBotHealthResponseSchema,
-  );
-}
-
-export async function fetchAiSearchRuns(): Promise<AiSearchRunsResponse> {
-  return apiFetch('/api/v1/ai-trading/search/runs', {}, aiSearchRunsResponseSchema);
-}
-
-export async function deleteAiSearchRun(runId: string): Promise<void> {
-  await apiDelete(`/api/v1/ai-trading/search/${runId}`);
-}
-
-export async function fetchAiRecommendations(): Promise<AiRecommendationsResponse> {
-  return apiFetch(
-    '/api/v1/ai-trading/recommendations',
-    { signal: AbortSignal.timeout(20_000) },
-    aiRecommendationsResponseSchema,
-  );
-}
-
 export async function improveNoteText(text: string): Promise<NoteImproveResponse> {
   return apiPost('/api/v1/notes/improve', { text }, noteImproveResponseSchema);
-}
-
-export async function startAiCycle(body: AiCycleRequest): Promise<AiCycleStartResponse> {
-  return apiPost('/api/v1/ai-trading/cycle', body, aiCycleStartResponseSchema);
-}
-
-export async function fetchAiCycle(cycleId: string): Promise<AiCycleStatus> {
-  return apiFetch(
-    `/api/v1/ai-trading/cycle/${cycleId}`,
-    { signal: AbortSignal.timeout(20_000) },
-    aiCycleStatusSchema,
-  );
-}
-
-export async function fetchAiCycles(): Promise<AiCyclesResponse> {
-  return apiFetch(
-    '/api/v1/ai-trading/cycles',
-    { signal: AbortSignal.timeout(20_000) },
-    aiCyclesResponseSchema,
-  );
-}
-
-export async function rejectAiRecommendation(id: string): Promise<AiRecommendationActionResponse> {
-  return apiPost(
-    `/api/v1/ai-trading/recommendations/${id}/reject`,
-    {},
-    aiRecommendationActionResponseSchema,
-  );
 }
