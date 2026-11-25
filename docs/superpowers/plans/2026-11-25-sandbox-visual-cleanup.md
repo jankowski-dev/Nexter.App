@@ -1,6 +1,6 @@
 # Sandbox Visual Timeline, PDF Report and Legacy Cleanup — Implementation Plan
 
-> **Status (2026-11-25):** Tasks 1–8 implemented and committed on `sandbox-visual-cleanup` (`9e472fd`, `80b062e`, `305c596`, `8950df7`, `564839f`, `8f54f3d`, `c77a026`, `1904ca7`). Task 9 docs cleanup and full verification are in progress. Task 10 (production rollout) is gated on explicit owner approval.
+> **Status (2026-11-26):** Tasks 1–10 complete and deployed. PR #330 merged as `089f052`; deployment `b5a46242-0cdd-41de-9240-8deb7f5b0446`; migration `0055` applied (56 migrations); bundle `assets/index-C_LjVbrf.js`; `/health`/`/ready` 200. Pre-deploy encrypted backup dump SHA-256 `858c4d76…568a`, encrypted `ef9f288e…baad`; restore drill passed (82 tables, 194,651 rows). Five Stage 3 runs remain `running`; no `ai_*`/`bot_backtest_runs` tables were dropped.
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

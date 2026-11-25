@@ -9,7 +9,7 @@ Owner-only `Песочница`: a persistent live paper loop on real 1h market 
 - UI cleanup design: `docs/superpowers/specs/2026-11-25-sandbox-visual-cleanup-design.md`
 - UI cleanup ADRs: `0089-sandbox-favorites-token-source.md`, `0090-remove-ai-trading-and-backtest.md`
 - API flag: `SANDBOX_ENABLED` (default `true`; accepts `true|false|1|0`)
-- Migrations: `0052_sandbox_stage2.sql` and `0053_sandbox_replays.sql` are applied in production. `0055_favorites_default_group.sql` renames the default watchlist group; it is applied during this batch's rollout (see below). All sandbox migrations are additive/no-DELETE.
+- Migrations: `0052_sandbox_stage2.sql`, `0053_sandbox_replays.sql` and `0055_favorites_default_group.sql` are applied in production (56 migrations). `0055` renamed the default watchlist group to `Избранное`. All sandbox migrations are additive/no-DELETE.
 
 ## Enable / disable
 
