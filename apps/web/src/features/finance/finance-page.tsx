@@ -32,15 +32,11 @@ import type {
   FinanceImport,
   FinanceImportRequest,
   FinanceTransaction,
-  FinanceTransactionKind,
   FinanceTransfer,
 } from '@nexter/contracts';
-import {
-  FinanceAccountDialog,
-  FinanceCategoryDialog,
-  FinanceTransactionDialog,
-  FinanceTransferDialog,
-} from './finance-dialogs';
+import { FinanceAccountDialog, FinanceCategoryDialog } from './finance-dialogs';
+import { FinanceOperationDialog } from './finance-operation-dialog';
+import type { FinanceOperationKind } from './finance-operation';
 import { categoryColorClass } from './category-colors';
 import { FinanceCreditDialog } from './finance-credit-dialog';
 import {
@@ -137,11 +133,11 @@ export function FinancePage() {
   const [period, setPeriod] = useState<PeriodPreset>('current');
   const [customMonth, setCustomMonth] = useState(currentMonth);
   const [journalFilter, setJournalFilter] = useState<JournalFilter>('all');
-  const [transactionDialog, setTransactionDialog] = useState<{
+  const [operationDialog, setOperationDialog] = useState<{
+    kind?: FinanceOperationKind;
     transaction?: FinanceTransaction;
-    kind?: FinanceTransactionKind;
+    transfer?: FinanceTransfer;
   } | null>(null);
-  const [transferDialog, setTransferDialog] = useState<{ transfer?: FinanceTransfer } | null>(null);
   const [accountDialog, setAccountDialog] = useState<{ account?: FinanceAccount } | null>(null);
   const [creditDialogOpen, setCreditDialogOpen] = useState(false);
   const [categoryDialog, setCategoryDialog] = useState<{
@@ -426,15 +422,7 @@ export function FinancePage() {
         title="Финансы"
         subtitle="Доходы, расходы, переводы и счета в BYN, USD и EUR."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => setTransactionDialog({ kind: 'income' })}>
-              + Доход
-            </Button>
-            <Button variant="secondary" onClick={() => setTransactionDialog({ kind: 'expense' })}>
-              + Расход
-            </Button>
-            <Button onClick={() => setTransferDialog({})}>+ Перевод</Button>
-          </>
+          <Button onClick={() => setOperationDialog({ kind: 'expense' })}>Новая операция</Button>
         }
       />
 
@@ -557,7 +545,7 @@ export function FinancePage() {
               categories={summary.data?.categories ?? []}
               colorById={categoryColorById}
               periodLabel={periodRange.label}
-              onAddExpense={() => setTransactionDialog({ kind: 'expense' })}
+              onAddExpense={() => setOperationDialog({ kind: 'expense' })}
             />
           </div>
 
@@ -666,9 +654,11 @@ export function FinancePage() {
                             variant="ghost"
                             className="h-8 px-2 text-xs"
                             onClick={() => {
-                              if (row.transaction)
-                                setTransactionDialog({ transaction: row.transaction });
-                              else if (row.transfer) setTransferDialog({ transfer: row.transfer });
+                              if (row.transaction) {
+                                setOperationDialog({ transaction: row.transaction });
+                              } else if (row.transfer) {
+                                setOperationDialog({ transfer: row.transfer });
+                              }
                             }}
                           >
                             Изменить
@@ -973,21 +963,14 @@ export function FinancePage() {
         </div>
       ) : null}
 
-      {transactionDialog ? (
-        <FinanceTransactionDialog
-          transaction={transactionDialog.transaction}
-          kind={transactionDialog.kind}
+      {operationDialog ? (
+        <FinanceOperationDialog
+          kind={operationDialog.kind}
+          transaction={operationDialog.transaction}
+          transfer={operationDialog.transfer}
           accounts={accountRows}
           categories={categoryRows}
-          onClose={() => setTransactionDialog(null)}
-          onSaved={invalidate}
-        />
-      ) : null}
-      {transferDialog ? (
-        <FinanceTransferDialog
-          transfer={transferDialog.transfer}
-          accounts={accountRows}
-          onClose={() => setTransferDialog(null)}
+          onClose={() => setOperationDialog(null)}
           onSaved={invalidate}
         />
       ) : null}

@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, desc, eq, gte, ilike, isNull, lte, or } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   financeAccounts,
   financeCategories,
@@ -346,6 +346,54 @@ export class FinanceService {
       .orderBy(financeCategories.kind, financeCategories.sortOrder, financeCategories.name);
 
     return { categories: rows.map(toCategory) };
+  }
+
+  async categorySuggestions(
+    userId: string,
+    kind: 'income' | 'expense',
+    limit: number,
+  ): Promise<FinanceCategoriesResponse> {
+    const categories = await this.db
+      .select()
+      .from(financeCategories)
+      .where(and(eq(financeCategories.userId, userId), eq(financeCategories.kind, kind)))
+      .orderBy(financeCategories.sortOrder, financeCategories.name);
+    const active = categories.filter((category) => !category.archivedAt);
+    const byId = new Map(active.map((category) => [category.id, category] as const));
+
+    const usage = await this.db
+      .select({
+        categoryId: financeTransactions.categoryId,
+        count: sql<number>`count(*)::int`,
+        latest: sql<string>`max(${financeTransactions.occurredOn})::text`,
+      })
+      .from(financeTransactions)
+      .where(
+        and(
+          eq(financeTransactions.userId, userId),
+          eq(financeTransactions.kind, kind),
+          isNull(financeTransactions.archivedAt),
+          isNotNull(financeTransactions.categoryId),
+        ),
+      )
+      .groupBy(financeTransactions.categoryId)
+      .orderBy(desc(sql`count(*)`), desc(sql`max(${financeTransactions.occurredOn})`))
+      .limit(limit);
+
+    const selected: FinanceCategory[] = [];
+    for (const row of usage) {
+      const category = row.categoryId ? byId.get(row.categoryId) : null;
+      if (category && !selected.some((item) => item.id === category.id)) {
+        selected.push(category);
+      }
+      if (selected.length >= limit) break;
+    }
+    for (const category of active) {
+      if (selected.length >= limit) break;
+      if (!selected.some((item) => item.id === category.id)) selected.push(category);
+    }
+
+    return { categories: selected.map(toCategory) };
   }
 
   async createCategory(userId: string, input: FinanceCategoryCreateRequest, meta: FinanceMeta) {
