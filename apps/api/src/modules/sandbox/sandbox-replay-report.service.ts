@@ -40,6 +40,16 @@ export class SandboxReplayReportService {
       executionMode: SANDBOX_HISTORICAL_EXECUTION_MODE,
       report,
       notes: sandboxReplayReportNotes(replay, report),
+      identity: {
+        reportHash: report.reportHash,
+        eventHash: report.eventHash,
+        eventCount: report.eventCount,
+        dataSnapshotId: report.dataSnapshotId,
+        candleSnapshotHash: replay.candleSnapshotHash as string,
+        configVersion: report.configVersion,
+        settingsVersion: report.settingsVersion,
+        seed: report.seed,
+      },
     };
   }
 

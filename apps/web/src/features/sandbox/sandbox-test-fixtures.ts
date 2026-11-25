@@ -547,6 +547,16 @@ export function sandboxReplayReportResponseFixture(
       'Historical-paper replay over 1h closed candles only.',
       'The full hash-chained event journal is not persisted for replays.',
     ],
+    identity: {
+      reportHash: base.report.reportHash,
+      eventHash: 'e'.repeat(64),
+      eventCount: 120,
+      dataSnapshotId: 'snapshot-replay-1',
+      candleSnapshotHash: 'c'.repeat(64),
+      configVersion: base.report.configVersion,
+      settingsVersion: base.report.settingsVersion,
+      seed: base.report.seed,
+    },
     ...overrides,
   };
 }

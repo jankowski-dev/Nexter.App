@@ -1053,9 +1053,115 @@ export type SandboxReplayListResponse = z.infer<typeof sandboxReplayListResponse
 export const SANDBOX_HISTORICAL_EXECUTION_MODE = 'historical-paper' as const;
 export type SandboxHistoricalExecutionMode = typeof SANDBOX_HISTORICAL_EXECUTION_MODE;
 
+export const sandboxReplayReportIdentitySchema = z.object({
+  reportHash: z.string().regex(/^[0-9a-f]{64}$/),
+  eventHash: z.string().regex(/^[0-9a-f]{64}$/),
+  eventCount: z.number().int().nonnegative(),
+  dataSnapshotId: z.string().min(1),
+  candleSnapshotHash: z.string().regex(/^[0-9a-f]{64}$/),
+  configVersion: z.string().min(1),
+  settingsVersion: z.string().min(1),
+  seed: z.number().int(),
+});
+export type SandboxReplayReportIdentity = z.infer<typeof sandboxReplayReportIdentitySchema>;
+
 export const sandboxReplayReportResponseSchema = z.object({
   executionMode: z.literal(SANDBOX_HISTORICAL_EXECUTION_MODE),
   report: sandboxRunReportSchema,
   notes: z.array(z.string()),
+  identity: sandboxReplayReportIdentitySchema,
 });
 export type SandboxReplayReportResponse = z.infer<typeof sandboxReplayReportResponseSchema>;
+
+export const sandboxReplayChartActionKindSchema = z.enum([
+  'buy',
+  'sell',
+  'reject',
+  'expire',
+  'counterfactual',
+]);
+export type SandboxReplayChartActionKind = z.infer<typeof sandboxReplayChartActionKindSchema>;
+
+export const sandboxReplayChartCandleSchema = z.object({
+  time: z.number().int().nonnegative(),
+  openUsd: sandboxReportDecimalSchema,
+  highUsd: sandboxReportDecimalSchema,
+  lowUsd: sandboxReportDecimalSchema,
+  closeUsd: sandboxReportDecimalSchema,
+});
+export type SandboxReplayChartCandle = z.infer<typeof sandboxReplayChartCandleSchema>;
+
+export const sandboxReplayChartTokenSchema = z.object({
+  tokenId: z.string().min(1),
+  candles: z.array(sandboxReplayChartCandleSchema),
+});
+export type SandboxReplayChartToken = z.infer<typeof sandboxReplayChartTokenSchema>;
+
+export const sandboxReplayChartActionSchema = z.object({
+  id: z.string().min(1),
+  tokenId: z.string().min(1),
+  time: z.number().int().nonnegative(),
+  kind: sandboxReplayChartActionKindSchema,
+  priceUsd: sandboxReportDecimalNullableSchema,
+  amountUsd: sandboxReportDecimalSchema,
+  pnlUsd: sandboxReportDecimalNullableSchema,
+  reasonCode: z.string().min(1),
+  reasonText: z.string(),
+  intentId: z.string().nullable(),
+  tradeId: z.string().nullable(),
+});
+export type SandboxReplayChartAction = z.infer<typeof sandboxReplayChartActionSchema>;
+
+export const sandboxReplayChartResponseSchema = z.object({
+  replayId: z.uuid(),
+  tokens: z.array(sandboxReplayChartTokenSchema),
+  actions: z.array(sandboxReplayChartActionSchema),
+  note: z.string(),
+});
+export type SandboxReplayChartResponse = z.infer<typeof sandboxReplayChartResponseSchema>;
+
+export const sandboxReplayDecisionActionSchema = z.enum(['buy', 'sell', 'hold', 'block', 'noop']);
+export type SandboxReplayDecisionAction = z.infer<typeof sandboxReplayDecisionActionSchema>;
+
+export const sandboxReplayDecisionSchema = z.object({
+  time: z.number().int().nonnegative(),
+  tokenId: z.string().min(1),
+  strategyKey: z.string(),
+  action: sandboxReplayDecisionActionSchema,
+  sizeUsd: sandboxReportDecimalNullableSchema,
+  reasonCode: z.string().min(1),
+  reasonText: z.string(),
+});
+export type SandboxReplayDecision = z.infer<typeof sandboxReplayDecisionSchema>;
+
+export const sandboxReplayDecisionsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().nonnegative().default(0),
+  tokenId: z.string().min(1).optional(),
+});
+export type SandboxReplayDecisionsQuery = z.infer<typeof sandboxReplayDecisionsQuerySchema>;
+
+export const sandboxReplayDecisionsResponseSchema = z.object({
+  items: z.array(sandboxReplayDecisionSchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxReplayDecisionsResponse = z.infer<typeof sandboxReplayDecisionsResponseSchema>;
+
+export const sandboxTokenCandidateSchema = z.object({
+  assetId: z.uuid(),
+  tokenKey: z.string().min(1).max(80),
+  symbol: z.string().min(1).max(40),
+  name: z.string().min(1).max(80),
+  chain: sandboxChainSchema,
+  contractAddress: z.string().nullable(),
+  eligible: z.boolean(),
+  reason: z.string().nullable(),
+});
+export type SandboxTokenCandidate = z.infer<typeof sandboxTokenCandidateSchema>;
+
+export const sandboxTokenCandidatesResponseSchema = z.object({
+  candidates: z.array(sandboxTokenCandidateSchema),
+});
+export type SandboxTokenCandidatesResponse = z.infer<typeof sandboxTokenCandidatesResponseSchema>;
