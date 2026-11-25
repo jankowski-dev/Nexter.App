@@ -1,8 +1,19 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
-import { sandboxReplays, type Database, type SandboxReplayRecord } from '@nexter/db';
-import type { SandboxReplayPeriod, SandboxReplayStatus } from '@nexter/contracts';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
+import {
+  sandboxCandles,
+  sandboxReplays,
+  type Database,
+  type SandboxReplayRecord,
+} from '@nexter/db';
+import {
+  SANDBOX_TIMEFRAME,
+  type SandboxReplayPeriod,
+  type SandboxReplayStatus,
+} from '@nexter/contracts';
+import type { Candle } from '@nexter/sandbox-core';
 import { DB } from '../../shared/db/db.module';
+import { SANDBOX_REPLAY_PREFIX_DAYS } from './sandbox-replay.coverage';
 
 const REPLAY_STATUSES = [
   'queued',
@@ -67,6 +78,36 @@ export interface SandboxReplayDetailRecord extends SandboxReplaySummaryRecord {
   readonly candleSnapshotHash: string | null;
 }
 
+/**
+ * Worker-facing claim row: the frozen config/identity, the owner and any
+ * already persisted gzip candle snapshot (so a requeued run reuses its input).
+ */
+export interface SandboxReplayWorkerRecord extends SandboxReplayDetailRecord {
+  readonly userId: string;
+  readonly candleSnapshot: Buffer | null;
+}
+
+export interface SandboxReplaySnapshotWrite {
+  readonly dataSnapshotId: string;
+  readonly candleSnapshot: Buffer;
+  readonly candleSnapshotHash: string;
+  readonly at: Date;
+}
+
+export interface SandboxReplayReportWrite {
+  readonly report: Record<string, unknown>;
+  readonly reportHash: string;
+  readonly eventCount: number;
+  readonly eventHash: string;
+  readonly dataSnapshotId: string;
+  readonly candleSnapshot: Buffer;
+  readonly candleSnapshotHash: string;
+  readonly at: Date;
+}
+
+/** Per-token 1h candle read cap: 180 days plus one bar. */
+export const SANDBOX_REPLAY_CANDLE_LIMIT = SANDBOX_REPLAY_PREFIX_DAYS * 24 + 1;
+
 /** Report-derived summary fields; absent until the worker completes. */
 const reportMetrics = {
   finalEquityUsd: sql<string | null>`${sandboxReplays.report}->'metrics'->>'finalEquityUsd'`,
@@ -103,6 +144,13 @@ const detailSelection = {
   eventHash: sandboxReplays.eventHash,
   dataSnapshotId: sandboxReplays.dataSnapshotId,
   candleSnapshotHash: sandboxReplays.candleSnapshotHash,
+};
+
+/** Claim selection: detail plus owner scope and the stored snapshot bytes. */
+const workerSelection = {
+  ...detailSelection,
+  userId: sandboxReplays.userId,
+  candleSnapshot: sandboxReplays.candleSnapshot,
 };
 
 /** Drizzle access for persisted historical replays. No DELETE is ever issued. */
@@ -215,6 +263,196 @@ export class SandboxReplayRepository {
 
     return rows.length > 0;
   }
+
+  /**
+   * Reads the oldest queued replay with `FOR UPDATE SKIP LOCKED`.
+   *
+   * The worker holds the replay advisory lock, so this is the single claimer;
+   * the row lock + `markReplayRunning` let a concurrent owner cancel win before
+   * execution starts instead of being overwritten.
+   */
+  async claimQueuedReplay(): Promise<SandboxReplayWorkerRecord | null> {
+    const [row] = await this.db
+      .select(workerSelection)
+      .from(sandboxReplays)
+      .where(and(eq(sandboxReplays.status, 'queued'), isNull(sandboxReplays.archivedAt)))
+      .orderBy(asc(sandboxReplays.queuedAt), asc(sandboxReplays.createdAt), asc(sandboxReplays.id))
+      .limit(1)
+      .for('update', { skipLocked: true });
+    if (!row) return null;
+
+    return workerFromRow(row);
+  }
+
+  /**
+   * Queued -> running with the start time. Returns false when the row moved on
+   * (for example the owner cancelled it between claim and start).
+   */
+  async markReplayRunning(id: string, at: Date): Promise<boolean> {
+    const rows = await this.db
+      .update(sandboxReplays)
+      .set({
+        status: 'running',
+        startedAt: at,
+        finishedAt: null,
+        error: null,
+        updatedAt: at,
+      })
+      .where(
+        and(
+          eq(sandboxReplays.id, id),
+          eq(sandboxReplays.status, 'queued'),
+          isNull(sandboxReplays.archivedAt),
+        ),
+      )
+      .returning({ id: sandboxReplays.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Persists the exact gzip input snapshot before the run starts. A restart
+   * therefore re-runs the same candles even after `sandbox_candles` changes.
+   */
+  async storeReplaySnapshot(id: string, input: SandboxReplaySnapshotWrite): Promise<boolean> {
+    const rows = await this.db
+      .update(sandboxReplays)
+      .set({
+        dataSnapshotId: input.dataSnapshotId,
+        candleSnapshot: input.candleSnapshot,
+        candleSnapshotHash: input.candleSnapshotHash,
+        updatedAt: input.at,
+      })
+      .where(and(eq(sandboxReplays.id, id), eq(sandboxReplays.status, 'running')))
+      .returning({ id: sandboxReplays.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Stores the report, its identities and the input snapshot and marks the
+   * replay completed in one statement/transaction.
+   */
+  async storeReplayReport(id: string, input: SandboxReplayReportWrite): Promise<boolean> {
+    const rows = await this.db
+      .update(sandboxReplays)
+      .set({
+        status: 'completed',
+        report: input.report,
+        reportHash: input.reportHash,
+        eventCount: input.eventCount,
+        eventHash: input.eventHash,
+        dataSnapshotId: input.dataSnapshotId,
+        candleSnapshot: input.candleSnapshot,
+        candleSnapshotHash: input.candleSnapshotHash,
+        error: null,
+        finishedAt: input.at,
+        updatedAt: input.at,
+      })
+      .where(and(eq(sandboxReplays.id, id), eq(sandboxReplays.status, 'running')))
+      .returning({ id: sandboxReplays.id });
+
+    return rows.length > 0;
+  }
+
+  /** Running -> failed with a sanitized error; the row is never deleted. */
+  async markReplayFailed(id: string, error: string, at: Date): Promise<boolean> {
+    const rows = await this.db
+      .update(sandboxReplays)
+      .set({
+        status: 'failed',
+        error: error.slice(0, 1000),
+        finishedAt: at,
+        updatedAt: at,
+      })
+      .where(and(eq(sandboxReplays.id, id), eq(sandboxReplays.status, 'running')))
+      .returning({ id: sandboxReplays.id });
+
+    return rows.length > 0;
+  }
+
+  /**
+   * Restart recovery: every `running` row is returned to `queued` so the next
+   * pass re-claims it. **Only** called while the replay advisory lock is held;
+   * a row held by another live instance is therefore never requeued. The
+   * snapshot is kept so the retry uses the same input.
+   */
+  async requeueRunningReplays(at: Date): Promise<Array<{ id: string; userId: string }>> {
+    return this.db
+      .update(sandboxReplays)
+      .set({
+        status: 'queued',
+        startedAt: null,
+        finishedAt: null,
+        error: null,
+        updatedAt: at,
+      })
+      .where(eq(sandboxReplays.status, 'running'))
+      .returning({ id: sandboxReplays.id, userId: sandboxReplays.userId });
+  }
+
+  /** Worker/internal detail read by id without an owner filter (never HTTP). */
+  async loadReplay(id: string): Promise<SandboxReplayDetailRecord | null> {
+    const [row] = await this.db
+      .select(detailSelection)
+      .from(sandboxReplays)
+      .where(eq(sandboxReplays.id, id))
+      .limit(1);
+    if (!row) return null;
+
+    return detailFromRow(row);
+  }
+
+  /**
+   * Loads the exact replay data window from `sandbox_candles` only.
+   *
+   * `to` is exclusive (`openTime < to_time`), matching the half-open evaluation
+   * window; `from` is the store's 180-day maximum. Each token is read
+   * newest-first with a bounded limit and reversed to ascending order.
+   */
+  async loadReplayCandles(tokenKeys: readonly string[], from: Date, to: Date): Promise<Candle[]> {
+    const unique = [...new Set(tokenKeys)];
+    if (unique.length === 0 || from.getTime() >= to.getTime()) return [];
+
+    const candles: Candle[] = [];
+    for (const tokenKey of unique) {
+      const rows = await this.db
+        .select({
+          openTime: sandboxCandles.openTime,
+          open: sandboxCandles.open,
+          high: sandboxCandles.high,
+          low: sandboxCandles.low,
+          close: sandboxCandles.close,
+          volumeUsd: sandboxCandles.volumeUsd,
+        })
+        .from(sandboxCandles)
+        .where(
+          and(
+            eq(sandboxCandles.timeframe, SANDBOX_TIMEFRAME),
+            eq(sandboxCandles.tokenKey, tokenKey),
+            gte(sandboxCandles.openTime, from),
+            lt(sandboxCandles.openTime, to),
+          ),
+        )
+        .orderBy(desc(sandboxCandles.openTime))
+        .limit(SANDBOX_REPLAY_CANDLE_LIMIT);
+
+      for (const row of rows.reverse()) {
+        candles.push({
+          tokenId: tokenKey,
+          timeframe: SANDBOX_TIMEFRAME,
+          openTime: row.openTime.getTime(),
+          open: row.open,
+          high: row.high,
+          low: row.low,
+          close: row.close,
+          volumeUsd: row.volumeUsd,
+        });
+      }
+    }
+
+    return candles;
+  }
 }
 
 function summaryFromRow(row: {
@@ -298,6 +536,20 @@ function detailFromRow(row: {
     eventHash: row.eventHash,
     dataSnapshotId: row.dataSnapshotId,
     candleSnapshotHash: row.candleSnapshotHash,
+  };
+}
+
+/** Claim row (detail + owner + snapshot bytes) -> worker record. */
+function workerFromRow(
+  row: Parameters<typeof detailFromRow>[0] & {
+    userId: string;
+    candleSnapshot: Buffer | null;
+  },
+): SandboxReplayWorkerRecord {
+  return {
+    ...detailFromRow(row),
+    userId: row.userId,
+    candleSnapshot: row.candleSnapshot,
   };
 }
 
