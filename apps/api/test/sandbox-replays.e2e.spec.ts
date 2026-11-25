@@ -512,6 +512,18 @@ describe('Sandbox historical replay (e2e)', () => {
       ).expect(409);
       expect(notReady.body).toMatchObject({ error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' } });
 
+      // A failed Markdown read must still use the JSON error type, not markdown.
+      const notReadyMarkdown = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${created.id}/report.md`,
+      ).expect(409);
+      expect(notReadyMarkdown.headers['content-type']).toContain('application/json');
+      expect(notReadyMarkdown.body).toMatchObject({
+        error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' },
+      });
+
       // --- One worker pass completes it ------------------------------------
       await runReplayWorker();
 
@@ -1052,7 +1064,16 @@ describe('Sandbox historical replay (e2e)', () => {
       await api(app, cookies, 'get', `/api/v1/sandbox/replays/${foreign.id}/report.json`).expect(
         404,
       );
-      await api(app, cookies, 'get', `/api/v1/sandbox/replays/${foreign.id}/report.md`).expect(404);
+      const foreignMarkdown = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${foreign.id}/report.md`,
+      ).expect(404);
+      expect(foreignMarkdown.headers['content-type']).toContain('application/json');
+      expect(foreignMarkdown.body).toMatchObject({
+        error: { code: 'SANDBOX_REPLAY_NOT_FOUND' },
+      });
       await api(app, cookies, 'post', `/api/v1/sandbox/replays/${foreign.id}/cancel`).expect(404);
       await api(app, cookies, 'post', `/api/v1/sandbox/replays/${foreign.id}/archive`).expect(404);
 

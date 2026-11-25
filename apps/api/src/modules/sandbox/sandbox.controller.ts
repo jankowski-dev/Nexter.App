@@ -12,6 +12,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -61,7 +62,7 @@ import {
   type SandboxTokenUpdateRequest,
   type SandboxTradesResponse,
 } from '@nexter/contracts';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
@@ -213,12 +214,16 @@ export class SandboxController {
   @Get('replays/:id/report.md')
   @UseGuards(SandboxEnabledGuard)
   @Header('Cache-Control', 'no-store')
-  @Header('Content-Type', 'text/markdown; charset=utf-8')
-  replayReportMarkdown(
+  async replayReportMarkdown(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<string> {
-    return this.replayReports.getReportMarkdown(auth.user.id, id);
+    const markdown = await this.replayReports.getReportMarkdown(auth.user.id, id);
+    // Set the Markdown type only after a successful read: an exception must
+    // keep the normal JSON error content type instead of a markdown body type.
+    reply.header('Content-Type', 'text/markdown; charset=utf-8');
+    return markdown;
   }
 
   @Post('replays/:id/cancel')
@@ -332,12 +337,15 @@ export class SandboxController {
   @Get('runs/:id/report.md')
   @UseGuards(SandboxEnabledGuard)
   @Header('Cache-Control', 'no-store')
-  @Header('Content-Type', 'text/markdown; charset=utf-8')
-  reportMarkdown(
+  async reportMarkdown(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<string> {
-    return this.read.reportMarkdown(auth.user.id, id);
+    const markdown = await this.read.reportMarkdown(auth.user.id, id);
+    // See the replay route: keep the JSON error type when the read throws.
+    reply.header('Content-Type', 'text/markdown; charset=utf-8');
+    return markdown;
   }
 
   @Post('runs')

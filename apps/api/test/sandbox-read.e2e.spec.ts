@@ -347,6 +347,15 @@ describe('Sandbox read API (e2e)', () => {
     const notReady = await agent.get(`/api/v1/sandbox/runs/${draftId}/report.json`).expect(409);
     expect(notReady.body).toMatchObject({ error: { code: 'SANDBOX_REPORT_NOT_READY' } });
 
+    // A failed Markdown read must still use the JSON error type, not markdown.
+    const notReadyMarkdown = await agent
+      .get(`/api/v1/sandbox/runs/${draftId}/report.md`)
+      .expect(409);
+    expect(notReadyMarkdown.headers['content-type']).toContain('application/json');
+    expect(notReadyMarkdown.body).toMatchObject({
+      error: { code: 'SANDBOX_REPORT_NOT_READY' },
+    });
+
     const missing = await agent
       .get('/api/v1/sandbox/runs/33333333-3333-4333-8333-333333333333')
       .expect(404);
@@ -399,5 +408,13 @@ describe('Sandbox read API (e2e)', () => {
 
     const report = await agent.get(`/api/v1/sandbox/runs/${foreignRunId}/report.json`).expect(404);
     expect(report.body).toMatchObject({ error: { code: 'SANDBOX_RUN_NOT_FOUND' } });
+
+    // Regression: a static Markdown content type on this route made Fastify
+    // reject the JSON error object and return 500 instead of 404.
+    const reportMarkdown = await agent
+      .get(`/api/v1/sandbox/runs/${foreignRunId}/report.md`)
+      .expect(404);
+    expect(reportMarkdown.headers['content-type']).toContain('application/json');
+    expect(reportMarkdown.body).toMatchObject({ error: { code: 'SANDBOX_RUN_NOT_FOUND' } });
   });
 });
