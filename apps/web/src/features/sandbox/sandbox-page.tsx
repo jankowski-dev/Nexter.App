@@ -6,6 +6,7 @@ import { TabGroup } from '@/components/ui/list-toolbar';
 import { toRussianError } from '@/lib/error-messages';
 import { SandboxDashboard } from './sandbox-dashboard';
 import { SandboxJournal } from './sandbox-journal';
+import { SandboxReplayTab } from './sandbox-replay-tab';
 import { SandboxReports } from './sandbox-reports';
 import { SandboxRunsTab } from './sandbox-runs-tab';
 import { useSandboxOverview, useSandboxRuns, useSandboxStatus } from './sandbox-hooks';
@@ -65,7 +66,11 @@ export function SandboxPage() {
     <PageHeader
       title="Песочница"
       subtitle="Автономный paper-режим на реальных рыночных данных 1h: виртуальные деньги, без кошелька, подписи и реальных ордеров."
-      actions={<Badge tone="info">live-paper · виртуальные деньги</Badge>}
+      actions={
+        <Badge tone="info">
+          {tab === 'replay' ? 'historical-paper' : 'live-paper'} · виртуальные деньги
+        </Badge>
+      }
     />
   );
 
@@ -96,7 +101,7 @@ export function SandboxPage() {
         {header}
         <EmptyState
           title="Песочница выключена"
-          description="Функция отключена на сервере (SANDBOX_ENABLED=false). Запуски, журнал и отчёты не удаляются: включите флаг, чтобы вернуться."
+          description="Функция отключена на сервере (SANDBOX_ENABLED=false). Запуски, прогоны, журнал и отчёты не удаляются: включите флаг, чтобы вернуться."
         />
         <div>
           <Button variant="secondary" onClick={() => void status.refetch()}>
@@ -128,6 +133,7 @@ export function SandboxPage() {
         <SandboxDashboard {...sharedProps} selectedRunId={effectiveRunId} />
       ) : null}
       {tab === 'runs' ? <SandboxRunsTab onOpenRun={openRun} /> : null}
+      {tab === 'replay' ? <SandboxReplayTab /> : null}
       {tab === 'journal' ? <SandboxJournal {...sharedProps} /> : null}
       {tab === 'reports' ? <SandboxReports {...sharedProps} /> : null}
     </div>

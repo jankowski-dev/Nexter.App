@@ -72,6 +72,17 @@ const messages: Record<string, string> = {
   SANDBOX_TOKEN_EXISTS: 'Этот токен уже добавлен в песочницу.',
   SANDBOX_TOKEN_KEY_INVALID: 'Некорректный ключ токена песочницы.',
   SANDBOX_TOKEN_CONTRACT_MISMATCH: 'Адрес контракта не совпадает с ключом токена.',
+  SANDBOX_REPLAY_NOT_FOUND: 'Исторический прогон не найден.',
+  SANDBOX_REPLAY_INVALID_STATUS:
+    'Действие недоступно для текущего состояния прогона. Обновите список и повторите.',
+  SANDBOX_REPLAY_COVERAGE_MISSING:
+    'Недостаточно истории 1h для окна прогона. Обновите данные и попробуйте снова.',
+  SANDBOX_REPLAY_WINDOW_TOO_SHORT:
+    'Полное окно не покрыто. Подтвердите сокращённое окно или обновите данные.',
+  SANDBOX_REPLAY_TOKEN_NOT_FOUND: 'Некоторые токены отсутствуют в песочнице.',
+  SANDBOX_REPLAY_CAPITAL_INVALID: 'Начальный капитал должен быть больше нуля.',
+  SANDBOX_REPLAY_STATE_INVALID: 'Сохранённое состояние прогона повреждено.',
+  SANDBOX_REPLAY_NOT_COMPLETED: 'Отчёт доступен только для завершённого прогона.',
   BACKTEST_DATA_UNAVAILABLE:
     'Не удалось получить исторические данные. Попробуйте ещё раз через минуту.',
   FORBIDDEN: 'Действие запрещено. Обновите страницу и попробуйте снова.',

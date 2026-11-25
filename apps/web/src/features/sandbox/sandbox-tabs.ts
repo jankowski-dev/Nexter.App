@@ -2,7 +2,7 @@ import type { NavIconName } from '@/components/nav-icon';
 import { messages } from '@/lib/i18n';
 import type { SandboxCoverage, SandboxRunStatus, SandboxStatus } from '@nexter/contracts';
 
-export type SandboxTab = 'overview' | 'runs' | 'journal' | 'reports';
+export type SandboxTab = 'overview' | 'runs' | 'replay' | 'journal' | 'reports';
 
 export const sandboxTabs: ReadonlyArray<{
   value: SandboxTab;
@@ -11,6 +11,7 @@ export const sandboxTabs: ReadonlyArray<{
 }> = [
   { value: 'overview', label: 'Обзор', icon: 'dashboard' },
   { value: 'runs', label: 'Запуски', icon: 'sandbox' },
+  { value: 'replay', label: 'Прогон', icon: 'statistics' },
   { value: 'journal', label: 'Журнал', icon: 'notes' },
   { value: 'reports', label: 'Отчёты', icon: 'statistics' },
 ];
@@ -33,14 +34,16 @@ export function isSandboxVisible(status: SandboxStatus | undefined): boolean {
 }
 
 /**
- * `Обзор` is the default owner landing tab (design §10); `#runs`, `#journal`
- * and `#reports` remain deep-linkable, and any unknown hash falls back to the
- * dashboard.
+ * `Обзор` is the default owner landing tab (design §10); `#runs`, `#replay`,
+ * `#journal` and `#reports` remain deep-linkable, and any unknown hash falls
+ * back to the dashboard.
  */
 export function sandboxTabFromHash(hash: string | undefined): SandboxTab {
   switch (hash) {
     case '#runs':
       return 'runs';
+    case '#replay':
+      return 'replay';
     case '#journal':
       return 'journal';
     case '#reports':

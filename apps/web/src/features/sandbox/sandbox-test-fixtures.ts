@@ -3,6 +3,10 @@ import type {
   SandboxIntent,
   SandboxOverview,
   SandboxPosition,
+  SandboxReplayDetail,
+  SandboxReplayPreflightResponse,
+  SandboxReplayReportResponse,
+  SandboxReplaySummary,
   SandboxReportResponse,
   SandboxRunDetail,
   SandboxRunSummary,
@@ -10,8 +14,11 @@ import type {
 } from '@nexter/contracts';
 
 export const sandboxRunId = '11111111-1111-4111-8111-111111111111';
+export const sandboxReplayId = '22222222-2222-4222-8222-222222222222';
 export const sandboxTokenId = 'bsc:0x1111111111111111111111111111111111111111';
 export const sandboxCreatedAt = '2026-11-24T00:00:00.000Z';
+export const sandboxReplayFromTime = '2026-05-28T00:00:00.000Z';
+export const sandboxReplayToTime = '2026-11-24T00:00:00.000Z';
 
 export function sandboxRunSummaryFixture(
   overrides: Partial<SandboxRunSummary> = {},
@@ -421,4 +428,125 @@ export function sandboxReportResponseFixture(
   };
 
   return { ...base, ...overrides };
+}
+
+export function sandboxReplaySummaryFixture(
+  overrides: Partial<SandboxReplaySummary> = {},
+): SandboxReplaySummary {
+  return {
+    id: sandboxReplayId,
+    name: 'Прогон 180 дней',
+    status: 'completed',
+    tokenKeys: [sandboxTokenId],
+    periodDays: 180,
+    fromTime: sandboxReplayFromTime,
+    toTime: sandboxReplayToTime,
+    initialCapitalUsd: '1000.00',
+    finalEquityUsd: '1042.00',
+    returnPct: '4.20',
+    maxDrawdownPct: '3.5200',
+    reportHash: 'd'.repeat(64),
+    error: null,
+    queuedAt: sandboxCreatedAt,
+    startedAt: sandboxCreatedAt,
+    finishedAt: '2026-11-24T00:02:00.000Z',
+    archivedAt: null,
+    createdAt: sandboxCreatedAt,
+    updatedAt: sandboxCreatedAt,
+    ...overrides,
+  };
+}
+
+export function sandboxReplayDetailFixture(
+  overrides: Partial<SandboxReplayDetail> = {},
+): SandboxReplayDetail {
+  const run = sandboxRunDetailFixture();
+  return {
+    ...sandboxReplaySummaryFixture(),
+    settings: run.settings,
+    paper: run.paper,
+    seed: 7,
+    eventCount: 120,
+    eventHash: 'e'.repeat(64),
+    dataSnapshotId: 'snapshot-replay-1',
+    candleSnapshotHash: 'f'.repeat(64),
+    ...overrides,
+  };
+}
+
+export function sandboxReplayPreflightFixture(
+  overrides: Partial<SandboxReplayPreflightResponse> = {},
+): SandboxReplayPreflightResponse {
+  return {
+    fromTime: sandboxReplayFromTime,
+    toTime: sandboxReplayToTime,
+    status: 'ok',
+    warnings: [],
+    coverage: [
+      {
+        tokenKey: sandboxTokenId,
+        fromTime: sandboxReplayFromTime,
+        toTime: sandboxReplayToTime,
+        available: 4320,
+        required: 4320,
+        prefixBars: 0,
+        gaps: 0,
+        synthetic: false,
+        stale: false,
+        status: 'ok',
+        warning: null,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+export function sandboxReplayReportResponseFixture(
+  overrides: Partial<SandboxReplayReportResponse> = {},
+): SandboxReplayReportResponse {
+  const base = sandboxReportResponseFixture();
+  return {
+    executionMode: 'historical-paper',
+    report: {
+      ...base.report,
+      runId: sandboxReplayId,
+      dataSnapshotId: 'snapshot-replay-1',
+      eventCount: 120,
+      eventHash: 'e'.repeat(64),
+      config: { ...base.report.config, runId: sandboxReplayId },
+      counterfactuals: [
+        {
+          tokenId: sandboxTokenId,
+          decisionTime: Date.parse(sandboxCreatedAt),
+          reasonCode: 'STRATEGY_NO_SIGNAL',
+          entryAt: null,
+          entryPriceUsd: null,
+          exitAt: null,
+          exitPriceUsd: null,
+          returnPct: null,
+          outcome: 'neutral',
+          hindsight: true,
+          usedForDecisions: false,
+        },
+        {
+          tokenId: sandboxTokenId,
+          decisionTime: Date.parse('2026-11-24T01:00:00.000Z'),
+          reasonCode: 'RISK_BLOCKED',
+          entryAt: Date.parse('2026-11-24T01:00:00.000Z'),
+          entryPriceUsd: '4.1000',
+          exitAt: Date.parse('2026-11-24T03:00:00.000Z'),
+          exitPriceUsd: '4.3050',
+          returnPct: '5.00',
+          outcome: 'missed_opportunity',
+          hindsight: true,
+          usedForDecisions: false,
+        },
+      ],
+    },
+    notes: [
+      'Historical-paper replay over 1h closed candles only.',
+      'The full hash-chained event journal is not persisted for replays.',
+    ],
+    ...overrides,
+  };
 }
