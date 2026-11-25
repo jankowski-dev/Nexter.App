@@ -11,6 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-11-25-sandbox-historical-replay-design.md`
 **ADR:** `docs/adr/0085-sandbox-historical-replay.md`
 **Base:** `3a6f94a` (Stage 2 merged/deployed; migration `0052` applied in production)
+**Status:** Stage 2.1 implemented; independent review gate. Not deployed; migration `0053` is not applied.
 
 ## Global Constraints
 

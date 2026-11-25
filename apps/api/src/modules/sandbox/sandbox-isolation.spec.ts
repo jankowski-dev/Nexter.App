@@ -23,7 +23,7 @@ const sandboxSources = readdirSync(sandboxDir)
 
 const contractsSource = readFileSync(resolve(root, 'packages/contracts/src/sandbox.ts'), 'utf8');
 
-describe('sandbox stage 2 isolation', () => {
+describe('sandbox isolation (stage 2 and 2.1)', () => {
   it('keeps the sandbox module free of old AI and trading-bot imports', () => {
     for (const { file, source } of sandboxSources) {
       expect(source, file).not.toMatch(/from '[^']*ai-trading/);
@@ -68,6 +68,30 @@ describe('sandbox stage 2 isolation', () => {
     expect(runner?.source).toContain('pg_try_advisory_lock');
     expect(runner?.source).toContain("'nexter:sandbox-runner'");
     expect(runner?.source).toContain('pg_advisory_unlock');
+  });
+
+  it('uses a separate, released advisory lock for the historical replay worker', () => {
+    const worker = sandboxSources.find(
+      (entry) => entry.file === 'sandbox-replay-worker.service.ts',
+    );
+    expect(worker).toBeDefined();
+    expect(worker?.source).toContain('pg_try_advisory_lock');
+    expect(worker?.source).toContain("'nexter:sandbox-replay-worker'");
+    expect(worker?.source).toContain('pg_advisory_unlock');
+    // Stale-running recovery must be lock-gated, i.e. after the lock check.
+    expect(worker?.source).toContain('requeueStaleReplays');
+    expect(worker?.source.indexOf('requeueStaleReplays')).toBeGreaterThan(
+      worker?.source.indexOf('if (!locked) return;') ?? -1,
+    );
+  });
+
+  it('reads replay candles only from sandbox_candles and never calls a provider', () => {
+    const repository = sandboxSources.find(
+      (entry) => entry.file === 'sandbox-replay.repository.ts',
+    );
+    expect(repository).toBeDefined();
+    expect(repository?.source).toContain('sandboxCandles');
+    expect(repository?.source).not.toMatch(/geckoterminal|binance|coingecko|market-data/i);
   });
 
   it('reuses only the HTTP market-data clients', () => {

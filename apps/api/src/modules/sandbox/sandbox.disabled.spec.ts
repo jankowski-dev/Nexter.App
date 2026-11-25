@@ -60,5 +60,8 @@ describe('Sandbox module with SANDBOX_ENABLED=0', () => {
 
     const runner = sandboxSource('sandbox-runner.service.ts');
     expect(runner).toContain("if (env.NODE_ENV === 'test' || !this.enabled) return;");
+
+    const replayWorker = sandboxSource('sandbox-replay-worker.service.ts');
+    expect(replayWorker).toContain("if (env.NODE_ENV === 'test' || !this.enabled) return;");
   });
 });

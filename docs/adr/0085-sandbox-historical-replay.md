@@ -1,6 +1,7 @@
 # ADR 0085 — Sandbox historical replay in the UI
 
-Status: accepted, 2026-11-25.
+Status: accepted, 2026-11-25; implemented, awaiting the independent whole-branch
+review. Not deployed; migration `0053` is not applied.
 
 ## Context
 
