@@ -1,4 +1,4 @@
-import { Controller, Get, Post } from '@nestjs/common';
+import { Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type {
   DashboardActivePositions,
@@ -8,8 +8,12 @@ import type {
   DashboardRecentTrades,
   DashboardSummary,
   EquityCurve,
+  EquitySeries,
+  EquitySeriesQuery,
   PortfolioSnapshot,
 } from '@nexter/contracts';
+import { equitySeriesQuerySchema } from '@nexter/contracts';
+import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { PortfolioSnapshotService } from './portfolio-snapshot.service';
@@ -31,6 +35,14 @@ export class DashboardController {
   @Get('equity-curve')
   equityCurve(@CurrentAuth() auth: AuthContext): Promise<EquityCurve> {
     return this.reporting.equityCurve(auth.user.id);
+  }
+
+  @Get('equity-series')
+  equitySeries(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(equitySeriesQuerySchema)) query: EquitySeriesQuery,
+  ): Promise<EquitySeries> {
+    return this.reporting.equitySeries(auth.user.id, query.range);
   }
 
   @Get('allocation')
