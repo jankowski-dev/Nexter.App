@@ -52,6 +52,7 @@ export function StatCard({
   icon,
   tone = 'emerald',
   live = false,
+  size = 'default',
   className,
 }: {
   title: string;
@@ -60,27 +61,39 @@ export function StatCard({
   icon: NavIconName;
   tone?: StatTone;
   live?: boolean;
+  size?: 'default' | 'compact';
   className?: string;
 }) {
   const styles = statTones[tone];
+  const compact = size === 'compact';
 
   return (
-    <Card className={`relative overflow-hidden ${styles.card} ${className ?? ''}`}>
+    <Card
+      className={`relative overflow-hidden ${compact ? 'p-4' : ''} ${styles.card} ${className ?? ''}`}
+    >
       <div className="flex items-start justify-between gap-3">
-        <CardTitle className={styles.title}>{title}</CardTitle>
+        <CardTitle className={`${styles.title} ${compact ? 'text-xs' : ''}`}>{title}</CardTitle>
         <span
-          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${styles.icon}`}
+          className={`inline-flex shrink-0 items-center justify-center rounded-xl ${
+            compact ? 'h-7 w-7' : 'h-8 w-8'
+          } ${styles.icon}`}
         >
-          <NavIcon name={icon} className="h-4 w-4" />
+          <NavIcon name={icon} className={compact ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
         </span>
       </div>
       <div
-        className={`mt-1 font-mono text-3xl font-semibold tracking-tight tabular-nums ${styles.value}`}
+        className={`mt-1 font-mono font-semibold tracking-tight tabular-nums ${
+          compact ? 'text-2xl' : 'text-3xl'
+        } ${styles.value}`}
       >
         {live ? <LiveValue value={value}>{value}</LiveValue> : value}
       </div>
       {description ? (
-        <CardDescription className={styles.description}>{description}</CardDescription>
+        <CardDescription
+          className={`${styles.description} ${compact ? 'mt-1 text-[11px] leading-4' : ''}`}
+        >
+          {description}
+        </CardDescription>
       ) : null}
     </Card>
   );

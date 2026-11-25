@@ -22,6 +22,7 @@ import { TradesPanel } from '../trades/trades-panel';
 import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
+import { PortfolioEquityCard } from './portfolio-equity-chart';
 import { TokenBuyList } from './token-buy-list';
 import { useRuntimeSettings } from '../settings/use-settings';
 import { TestingPage } from '../testing/testing-page';
@@ -191,35 +192,44 @@ export function PortfolioPage() {
 
       {tab === 'overview' && data ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              title="Стоимость позиций"
-              value={formatUsd(data.positionsValueUsd)}
-              description="По последним ценам"
-              icon="portfolio"
-              tone="emerald"
-            />
-            <StatCard
-              title="Капитал"
-              value={formatUsd(data.equityUsd)}
-              description="Стоимость позиций + свободный капитал"
-              icon="statistics"
-              tone="sky"
-            />
-            <StatCard
-              title="Свободный капитал"
-              value={formatUsd(data.cashUsd)}
-              description="USDT / USDC вне позиций"
-              icon="finance"
-              tone="amber"
-            />
-            <StatCard
-              title="Мои инвестиции"
-              value={dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'}
-              description="Пополнения минус выводы"
-              icon="operations"
-              tone="violet"
-            />
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <PortfolioEquityCard />
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
+              <StatCard
+                title="Стоимость позиций"
+                value={formatUsd(data.positionsValueUsd)}
+                description="По последним ценам"
+                icon="portfolio"
+                tone="emerald"
+                size="compact"
+              />
+              <StatCard
+                title="Капитал"
+                value={formatUsd(data.equityUsd)}
+                description="Позиции + свободный капитал"
+                icon="statistics"
+                tone="sky"
+                size="compact"
+              />
+              <StatCard
+                title="Свободный капитал"
+                value={formatUsd(data.cashUsd)}
+                description="USDT / USDC вне позиций"
+                icon="finance"
+                tone="amber"
+                size="compact"
+              />
+              <StatCard
+                title="Мои инвестиции"
+                value={
+                  dashboardSummary.data ? formatUsd(dashboardSummary.data.netDepositsUsd) : '—'
+                }
+                description="Пополнения минус выводы"
+                icon="operations"
+                tone="violet"
+                size="compact"
+              />
+            </div>
           </div>
 
           {tokenSummaries.isPending ? <LoadingRows rows={4} /> : null}
