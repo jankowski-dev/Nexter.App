@@ -80,6 +80,10 @@ export interface LedgerSourceOverride {
   sourceId: string;
 }
 
+export function shouldNotifyClosedGroups(replayed: boolean, groupIds: string[]): boolean {
+  return !replayed && groupIds.length > 0;
+}
+
 @Injectable()
 export class LedgerService {
   private readonly logger = new Logger(LedgerService.name);
@@ -138,7 +142,7 @@ export class LedgerService {
             .from(postings)
             .where(eq(postings.transactionId, existing.id));
 
-          return { transaction: existing, postings: existingPostings };
+          return { transaction: existing, postings: existingPostings, replayed: true };
         }
       }
 
@@ -876,7 +880,7 @@ export class LedgerService {
         { executor: tx, strict: true },
       );
 
-      return { transaction, postings: insertedPostings };
+      return { transaction, postings: insertedPostings, replayed: false };
     });
 
     const closedGroupIds =
@@ -887,7 +891,7 @@ export class LedgerService {
         : input.type === 'swap'
           ? (input.closeGroupIds ?? [])
           : [];
-    if (closedGroupIds.length > 0) {
+    if (shouldNotifyClosedGroups(result.replayed, closedGroupIds)) {
       try {
         await this.notifyClosedGroups(userId, result.transaction.id, closedGroupIds);
       } catch (error) {

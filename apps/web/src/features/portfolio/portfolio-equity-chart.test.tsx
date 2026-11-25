@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { StatCard } from '@/components/ui/stat-card';
-import { equitySeriesChange, equitySeriesLabel } from './portfolio-equity-chart';
+import {
+  PortfolioEquityChart,
+  equitySeriesChange,
+  equitySeriesLabel,
+} from './portfolio-equity-chart';
 
 describe('portfolio equity chart helpers', () => {
   it('formats hour, day and month labels deterministically', () => {
@@ -9,6 +13,29 @@ describe('portfolio equity chart helpers', () => {
     expect(equitySeriesLabel(date, 'hour')).toBe('10:05');
     expect(equitySeriesLabel(date, 'day')).toBe('25.11');
     expect(equitySeriesLabel(date, 'month')).toBe('ноя 26');
+  });
+
+  it('shows a collection note and no change indicator for one point', () => {
+    const html = renderToStaticMarkup(
+      <PortfolioEquityChart
+        series={{
+          range: 'hour',
+          granularity: 'hour',
+          valuation: 'hourly-points',
+          note: 'Почасовые точки собираются с 2026-11-25T08:00:00.000Z; показаны последние 24 часа.',
+          points: [
+            {
+              date: '2026-11-25T08:00:00.000Z',
+              cashUsd: '1000',
+              positionsValueUsd: '0',
+              equityUsd: '1000',
+            },
+          ],
+        }}
+      />,
+    );
+    expect(html).toContain('Почасовые точки собираются с');
+    expect(html).not.toContain('к первой точке');
   });
 
   it('computes absolute and percent change against the first point', () => {

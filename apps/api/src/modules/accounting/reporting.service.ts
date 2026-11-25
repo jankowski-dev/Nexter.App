@@ -35,6 +35,13 @@ import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { PricingService } from './pricing.service';
 import { TradeGroupsService } from './trade-groups.service';
 
+export function hourlyEquityNote(firstBucketAt: Date | null): string {
+  if (!firstBucketAt) {
+    return 'Почасовые точки ещё не собраны: первая появится при ближайшем снимке капитала.';
+  }
+  return `Почасовые точки собираются с ${firstBucketAt.toISOString()}; показаны последние 24 часа.`;
+}
+
 export function groupMonthlyEquityPoints(points: EquityCurvePoint[]): EquityCurvePoint[] {
   const byMonth = new Map<string, EquityCurvePoint>();
   for (const point of points) {
@@ -733,6 +740,12 @@ export class ReportingService {
   async equitySeries(userId: string, range: EquitySeriesRange): Promise<EquitySeries> {
     if (range === 'hour') {
       const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [firstPoint] = await this.db
+        .select({ bucketAt: portfolioEquityPoints.bucketAt })
+        .from(portfolioEquityPoints)
+        .where(eq(portfolioEquityPoints.userId, userId))
+        .orderBy(asc(portfolioEquityPoints.bucketAt))
+        .limit(1);
       const rows = await this.db
         .select()
         .from(portfolioEquityPoints)
@@ -753,8 +766,10 @@ export class ReportingService {
         valuation: 'hourly-points',
         note:
           points.length > 0
-            ? `Почасовые точки собираются с ${points[0]?.date}; более ранняя история недоступна.`
-            : 'Почасовые точки ещё не собраны: первая появится при ближайшем снимке капитала.',
+            ? hourlyEquityNote(firstPoint?.bucketAt ?? null)
+            : firstPoint
+              ? `Почасовые точки собираются с ${firstPoint.bucketAt.toISOString()}; за последние 24 часа точек нет.`
+              : hourlyEquityNote(null),
         points,
       };
     }

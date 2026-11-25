@@ -114,7 +114,8 @@ describe.runIf(canRun)('Equity series API', () => {
     expect(hour.body).toMatchObject({ range: 'hour', granularity: 'hour' });
     expect(hour.body.valuation).toBe('hourly-points');
     expect(hour.body.points).toHaveLength(1);
-    expect(hour.body.note).toContain('с момента');
+    expect(hour.body.note).toContain('Почасовые точки собираются с');
+    expect(hour.body.note).toContain('последние 24 часа');
     const bucket = new Date(hour.body.points[0].date);
     expect(bucket.getUTCMinutes()).toBe(0);
 

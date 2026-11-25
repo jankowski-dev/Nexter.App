@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { EquityCurvePoint } from '@nexter/contracts';
-import { groupMonthlyEquityPoints } from './reporting.service';
+import { shouldNotifyClosedGroups } from './ledger.service';
+import { groupMonthlyEquityPoints, hourlyEquityNote } from './reporting.service';
 
 function point(date: string, equityUsd: string): EquityCurvePoint {
   return {
@@ -27,5 +28,20 @@ describe('groupMonthlyEquityPoints', () => {
 
   it('returns an empty array for no points', () => {
     expect(groupMonthlyEquityPoints([])).toEqual([]);
+  });
+
+  it('describes the first collected hour without claiming a rolling window start', () => {
+    const note = hourlyEquityNote(new Date('2026-11-25T08:00:00.000Z'));
+    expect(note).toContain('Почасовые точки собираются с 2026-11-25T08:00:00.000Z');
+    expect(note).toContain('показаны последние 24 часа');
+    expect(hourlyEquityNote(null)).toContain('ещё не собраны');
+  });
+});
+
+describe('shouldNotifyClosedGroups', () => {
+  it('skips notifications for an idempotent replay and for empty groups', () => {
+    expect(shouldNotifyClosedGroups(false, ['group-1'])).toBe(true);
+    expect(shouldNotifyClosedGroups(true, ['group-1'])).toBe(false);
+    expect(shouldNotifyClosedGroups(false, [])).toBe(false);
   });
 });

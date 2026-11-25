@@ -93,6 +93,12 @@ describe.runIf(canRun)('Viber notifications API', () => {
       .expect(401);
     expect(unauthorized.body.error.code).toBe('BOT_UNAUTHORIZED');
 
+    const wrongToken = await request(app.getHttpServer())
+      .get('/api/v1/bot/notifications/pending')
+      .set('Authorization', 'Bearer wrong-token-0123456789')
+      .expect(401);
+    expect(wrongToken.body.error.code).toBe('BOT_UNAUTHORIZED');
+
     const pending = await request(app.getHttpServer())
       .get('/api/v1/bot/notifications/pending')
       .set('Authorization', `Bearer ${botToken}`)
@@ -182,7 +188,7 @@ describe.runIf(canRun)('Viber notifications API', () => {
       ),
     ).toHaveLength(0);
 
-    await post({
+    const closeBody = {
       type: 'sell',
       accountId: wallet.id,
       assetId: link.id,
@@ -190,21 +196,39 @@ describe.runIf(canRun)('Viber notifications API', () => {
       proceedsAssetId: usdc.id,
       proceedsAmount: '70',
       tradeGroupId: groupId,
-    });
+    };
+    const firstClose = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .set('Idempotency-Key', 'viber-close-1')
+      .send(closeBody)
+      .expect(201);
+    const replayClose = await agent
+      .post('/api/v1/transactions')
+      .set('x-csrf-token', owner.csrf)
+      .set('Idempotency-Key', 'viber-close-1')
+      .send(closeBody)
+      .expect(201);
+    expect(replayClose.body.transaction.id).toBe(firstClose.body.transaction.id);
 
     const notifications = await agent.get('/api/v1/notifications').expect(200);
-    const closed = notifications.body.data.find(
+    const closedRows = notifications.body.data.filter(
       (item: { type: string }) => item.type === 'trade_closed',
     );
-    expect(closed).toMatchObject({ title: 'Сделка закрыта: LINK' });
-    expect(closed.body).toContain('P&L:');
+    expect(closedRows).toHaveLength(1);
+    expect(closedRows[0]).toMatchObject({
+      title: 'Сделка закрыта: LINK',
+      body: 'P&L: +$20.00 (+40.00%) · ручное закрытие',
+    });
 
     const viberRows = await db
       .select()
       .from(viberNotifications)
       .where(eq(viberNotifications.userId, owner.userId));
     expect(viberRows.filter((row) => row.type === 'trade_closed')).toHaveLength(1);
-    expect(viberRows.find((row) => row.type === 'trade_closed')?.body).toContain('P&L:');
+    expect(viberRows.find((row) => row.type === 'trade_closed')?.body).toBe(
+      'P&L: +$20.00 (+40.00%) · ручное закрытие',
+    );
   });
 
   it('marks failed deliveries and keeps attempts bounded', async () => {
