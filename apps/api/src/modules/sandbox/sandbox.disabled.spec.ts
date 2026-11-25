@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayChartService } from './sandbox-replay-chart.service';
+import { SandboxReplayPdfService } from './sandbox-replay-pdf.service';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -34,6 +36,8 @@ describe('Sandbox module with SANDBOX_ENABLED=0', () => {
         { provide: SandboxReadService, useValue: {} },
         { provide: SandboxReplayService, useValue: {} },
         { provide: SandboxReplayReportService, useValue: {} },
+        { provide: SandboxReplayPdfService, useValue: {} },
+        { provide: SandboxReplayChartService, useValue: {} },
         SandboxEnabledGuard,
       ],
     }).compile();
@@ -54,8 +58,8 @@ describe('Sandbox module with SANDBOX_ENABLED=0', () => {
   it('guards every route except status and gates the runner behind the flag', () => {
     const controller = sandboxSource('sandbox.controller.ts');
     const guarded = controller.match(/@UseGuards\(SandboxEnabledGuard\)/g) ?? [];
-    // 31 data/read/replay control routes; only `GET /status` stays reachable when off.
-    expect(guarded).toHaveLength(31);
+    // 34 data/read/replay/report routes; only `GET /status` stays reachable when off.
+    expect(guarded).toHaveLength(34);
     expect(controller).toContain("@Get('status')");
 
     const runner = sandboxSource('sandbox-runner.service.ts');

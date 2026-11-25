@@ -43,13 +43,8 @@ describe('AllExceptionsFilter cache headers', () => {
     expect(reply.send).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves AI and static-limit contract codes on 400 responses', () => {
-    for (const code of [
-      'AI_DATA_INSUFFICIENT',
-      'AI_BACKTEST_LIMIT',
-      'BOT_STATIC_LIMIT_SINGLE_TOKEN',
-      'BOT_STATIC_LIMIT_PRICES',
-    ]) {
+  it('preserves static-limit contract codes on 400 responses', () => {
+    for (const code of ['BOT_STATIC_LIMIT_SINGLE_TOKEN', 'BOT_STATIC_LIMIT_PRICES']) {
       const { reply, host } = harness('/api/v1/trading-bots/bots');
       new AllExceptionsFilter().catch(new BadRequestException({ code, message: code }), host);
       const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
@@ -100,25 +95,6 @@ describe('AllExceptionsFilter cache headers', () => {
       const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
       expect(payload.error?.code).toBe(code);
     }
-  });
-
-  it('preserves the AI cycle limit code on 429 responses', () => {
-    const { reply, host } = harness('/api/v1/ai-trading/cycle');
-
-    new AllExceptionsFilter().catch(
-      new HttpException(
-        {
-          code: 'AI_CYCLE_LIMIT',
-          message: 'Дневной лимит циклов ИИ исчерпан: 1 за 24 часа.',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      ),
-      host,
-    );
-
-    expect(reply.status).toHaveBeenCalledWith(429);
-    const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
-    expect(payload.error?.code).toBe('AI_CYCLE_LIMIT');
   });
 
   it('leaves the SPA fallback alone', () => {

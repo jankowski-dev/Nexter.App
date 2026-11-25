@@ -1,6 +1,5 @@
 import type { NavIconName } from '@/components/nav-icon';
-export type CryptoTab =
-  'overview' | 'tokens' | 'orders' | 'operations' | 'robots' | 'ai' | 'statistics';
+export type CryptoTab = 'overview' | 'tokens' | 'orders' | 'operations' | 'robots' | 'statistics';
 
 export const cryptoTabs: ReadonlyArray<{
   value: CryptoTab;
@@ -12,7 +11,6 @@ export const cryptoTabs: ReadonlyArray<{
   { value: 'orders', label: 'Ордера', icon: 'portfolio' },
   { value: 'operations', label: 'Операции', icon: 'operations' },
   { value: 'robots', label: 'Роботы', icon: 'testing' },
-  { value: 'ai', label: 'ИИ-торговля', icon: 'ai' },
   { value: 'statistics', label: 'Статистика', icon: 'statistics' },
 ];
 
@@ -34,8 +32,6 @@ export function tabFromLocation(pathname: string, hash: string | undefined): Cry
       return 'operations';
     case '#robots':
       return 'robots';
-    case '#ai':
-      return 'ai';
     case '#strategies':
       return 'overview';
     case '#statistics':
@@ -56,8 +52,6 @@ export function hashForTab(tab: CryptoTab): string {
       return '#operations';
     case 'robots':
       return '#robots';
-    case 'ai':
-      return '#ai';
     case 'statistics':
       return '#statistics';
     default:

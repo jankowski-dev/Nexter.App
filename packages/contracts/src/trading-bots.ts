@@ -191,7 +191,6 @@ export const botCreateRequestSchema = z
     slippageBps: z.number().int().min(0).max(500).default(10),
     maxDailyLossPct: z.number().min(0).max(100).default(10),
     cooldownMinutes: z.number().int().min(0).max(1440).default(15),
-    aiCandidateId: z.uuid().optional(),
   })
   .refine((value) => Number(value.budgetUsd) >= 100, {
     message: 'Budget must be at least 100 USD',

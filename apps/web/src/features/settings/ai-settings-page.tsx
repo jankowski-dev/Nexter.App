@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
-import { Switch } from '@/components/ui/switch';
 import {
   fetchAiSettings,
   fetchSettings,
@@ -17,15 +16,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { formatDateTime } from '@/lib/format';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import {
-  AI_CYCLE_LIMIT_MAX,
-  AI_CYCLE_LIMIT_MIN,
-  AUDIO_MAX_MB_MAX,
-  AUDIO_MAX_MB_MIN,
-  aiCycleLimitDefaults,
-  type AiCycleLimit,
-  type AiTestResponse,
-} from '@nexter/contracts';
+import { AUDIO_MAX_MB_MAX, AUDIO_MAX_MB_MIN, type AiTestResponse } from '@nexter/contracts';
 
 const models = [
   { value: 'deepseek-flash', label: 'DeepSeek Flash — быстрая' },
@@ -44,9 +35,6 @@ export function AiSettingsPage() {
   const [temperature, setTemperature] = useState('0.30');
   const [maxTokens, setMaxTokens] = useState('2000');
   const [fallbackToRaw, setFallbackToRaw] = useState(true);
-  const [cyclePerDay, setCyclePerDay] = useState(String(aiCycleLimitDefaults.perDay));
-  const [cycleUnlimited, setCycleUnlimited] = useState<boolean>(aiCycleLimitDefaults.unlimited);
-  const [cycleDirty, setCycleDirty] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [audioMaxMb, setAudioMaxMb] = useState('');
   const [audioDirty, setAudioDirty] = useState(false);
@@ -63,9 +51,6 @@ export function AiSettingsPage() {
     setTemperature(String(settings.data.temperature));
     setMaxTokens(String(settings.data.maxTokens));
     setFallbackToRaw(settings.data.fallbackToRaw);
-    setCyclePerDay(String(settings.data.cycleLimit.perDay));
-    setCycleUnlimited(settings.data.cycleLimit.unlimited);
-    setCycleDirty(false);
     setDirty(false);
   }, [settings.data]);
 
@@ -118,21 +103,6 @@ export function AiSettingsPage() {
     onError: (err) => setError(toRussianError(err, 'Не удалось удалить ключ')),
   });
 
-  const saveCycleLimit = useMutation({
-    mutationFn: (cycleLimit: AiCycleLimit) => updateAiSettings({ cycleLimit }),
-    onSuccess: (data) => {
-      queryClient.setQueryData(['ai-settings'], data);
-      setCycleDirty(false);
-      setError(null);
-      setNotice(
-        data.cycleLimit.unlimited
-          ? 'Лимит циклов сохранён: ограничение отключено.'
-          : `Лимит циклов сохранён: ${data.cycleLimit.perDay} за 24 часа.`,
-      );
-    },
-    onError: (err) => setError(toRussianError(err, 'Не удалось сохранить лимит циклов')),
-  });
-
   const saveAudioLimit = useMutation({
     mutationFn: (value: number) => updateSettings({ audioMaxMb: value }),
     onSuccess: (data) => {
@@ -143,23 +113,6 @@ export function AiSettingsPage() {
     },
     onError: (err) => setError(toRussianError(err, 'Не удалось сохранить лимит аудио')),
   });
-
-  function saveCycle() {
-    const parsed = Number(cyclePerDay);
-    const valid =
-      Number.isInteger(parsed) && parsed >= AI_CYCLE_LIMIT_MIN && parsed <= AI_CYCLE_LIMIT_MAX;
-    if (!cycleUnlimited && !valid) {
-      setError(
-        `Лимит циклов должен быть целым числом от ${AI_CYCLE_LIMIT_MIN} до ${AI_CYCLE_LIMIT_MAX}.`,
-      );
-      return;
-    }
-    setError(null);
-    saveCycleLimit.mutate({
-      perDay: valid ? parsed : aiCycleLimitDefaults.perDay,
-      unlimited: cycleUnlimited,
-    });
-  }
 
   function saveAudio() {
     const value = Number(audioMaxMb);
@@ -400,71 +353,6 @@ export function AiSettingsPage() {
               : `Ошибка: ${test.error ?? 'неизвестная'}`}
           </div>
         ) : null}
-      </Card>
-
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>Циклы ИИ</CardTitle>
-          <Badge tone={settings.data.cycleLimit.unlimited ? 'warning' : 'neutral'}>
-            {settings.data.cycleLimit.unlimited
-              ? 'Без ограничения'
-              : `${settings.data.cycleLimit.perDay} за 24 часа`}
-          </Badge>
-        </div>
-        <CardDescription>
-          Сколько циклов ИИ можно запустить за последние 24 часа. «Не ограничивать» полностью
-          отключает проверку лимита.
-        </CardDescription>
-        <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,320px)_1fr] md:items-end">
-          <label className="block text-sm text-zinc-600">
-            Циклов за 24 часа
-            <Input
-              className="mt-1"
-              type="number"
-              min={AI_CYCLE_LIMIT_MIN}
-              max={AI_CYCLE_LIMIT_MAX}
-              step={1}
-              value={cyclePerDay}
-              disabled={cycleUnlimited}
-              onChange={(event) => {
-                setCyclePerDay(event.target.value);
-                setCycleDirty(true);
-                setError(null);
-                setNotice(null);
-              }}
-            />
-          </label>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2">
-              <span className="text-sm text-zinc-700">
-                Не ограничивать
-                <span className="mt-0.5 block text-xs text-zinc-500">
-                  Запуски циклов не будут блокироваться дневным лимитом.
-                </span>
-              </span>
-              <Switch
-                checked={cycleUnlimited}
-                onChange={(checked) => {
-                  setCycleUnlimited(checked);
-                  setCycleDirty(true);
-                  setError(null);
-                  setNotice(null);
-                }}
-                label="Не ограничивать количество циклов ИИ"
-              />
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button onClick={saveCycle} disabled={saveCycleLimit.isPending || !cycleDirty}>
-                {saveCycleLimit.isPending ? 'Применяю…' : 'Применить лимит'}
-              </Button>
-              <span className="text-xs text-zinc-500">
-                {cycleDirty
-                  ? 'Есть несохранённые изменения'
-                  : `Обновлено ${formatDateTime(settings.data.updatedAt)}`}
-              </span>
-            </div>
-          </div>
-        </div>
       </Card>
 
       <Card>

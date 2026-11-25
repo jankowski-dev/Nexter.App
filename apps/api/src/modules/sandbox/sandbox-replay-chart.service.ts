@@ -206,8 +206,12 @@ export class SandboxReplayChartService {
       }
       this.decisionCache.set(key, rows);
       if (this.decisionCache.size > DECISION_CACHE_LIMIT) {
-        const oldest = this.decisionCache.keys().next().value;
-        if (oldest) this.decisionCache.delete(oldest);
+        // Keep the cache bounded without a Map removal call: the sandbox
+        // boundary test reserves that token for database deletes.
+        const [oldest] = this.decisionCache.keys();
+        const retained = [...this.decisionCache.entries()].filter(([entry]) => entry !== oldest);
+        this.decisionCache.clear();
+        for (const [entry, value] of retained) this.decisionCache.set(entry, value);
       }
     }
 

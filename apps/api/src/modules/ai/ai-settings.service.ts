@@ -5,17 +5,10 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { aiProfiles, aiSettings, type AiSettingsRecord, type Database } from '@nexter/db';
-import {
-  readAiCycleLimit,
-  withAiCycleLimit,
-  type AiCycleLimit,
-  type AiSettings,
-  type UpdateAiSettingsRequest,
-} from '@nexter/contracts';
+import { aiSettings, type AiSettingsRecord, type Database } from '@nexter/db';
+import type { AiSettings, UpdateAiSettingsRequest } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
-import { DEFAULT_AI_MODEL_SETTINGS } from '../../shared/ai/ai-profile-defaults';
 import { CryptoService } from '../auth/crypto.service';
 
 const DEFAULTS = {
@@ -28,7 +21,7 @@ const DEFAULTS = {
   fallbackToRaw: true,
 };
 
-function toContract(row: AiSettingsRecord | null, modelSettings: unknown): AiSettings {
+function toContract(row: AiSettingsRecord | null): AiSettings {
   return {
     enabled: row?.enabled ?? DEFAULTS.enabled,
     provider: (row?.provider as AiSettings['provider'] | undefined) ?? DEFAULTS.provider,
@@ -37,7 +30,6 @@ function toContract(row: AiSettingsRecord | null, modelSettings: unknown): AiSet
     temperature: row ? Number(row.temperature) : DEFAULTS.temperature,
     maxTokens: row?.maxTokens ?? DEFAULTS.maxTokens,
     fallbackToRaw: row?.fallbackToRaw ?? DEFAULTS.fallbackToRaw,
-    cycleLimit: readAiCycleLimit(modelSettings),
     hasApiKey: Boolean(row?.apiKeyEncrypted),
     updatedAt: (row?.updatedAt ?? new Date()).toISOString(),
   };
@@ -52,8 +44,7 @@ export class AiSettingsService {
   ) {}
 
   async get(userId: string): Promise<AiSettings> {
-    const [row, profile] = await Promise.all([this.row(userId), this.profileRow(userId)]);
-    return toContract(row, profile?.modelSettings);
+    return toContract(await this.row(userId));
   }
 
   async update(userId: string, input: UpdateAiSettingsRequest): Promise<AiSettings> {
@@ -64,7 +55,7 @@ export class AiSettingsService {
       });
     }
 
-    const [existing, profile] = await Promise.all([this.row(userId), this.profileRow(userId)]);
+    const existing = await this.row(userId);
     const apiKeyEncrypted =
       input.apiKey !== undefined
         ? this.crypto.encryptSecret(input.apiKey)
@@ -96,11 +87,6 @@ export class AiSettingsService {
 
     if (!row) throw new Error('Failed to save AI settings');
 
-    const updatedProfile =
-      input.cycleLimit !== undefined
-        ? await this.saveCycleLimit(userId, input.cycleLimit)
-        : profile;
-
     await this.audit.log(
       {
         userId,
@@ -113,7 +99,6 @@ export class AiSettingsService {
               provider: existing.provider,
               model: existing.model,
               reasoning: existing.reasoning,
-              cycleLimit: readAiCycleLimit(profile?.modelSettings),
               hasApiKey: Boolean(existing.apiKeyEncrypted),
             }
           : null,
@@ -122,7 +107,6 @@ export class AiSettingsService {
           provider: row.provider,
           model: row.model,
           reasoning: row.reasoning,
-          cycleLimit: readAiCycleLimit(updatedProfile?.modelSettings),
           hasApiKey: Boolean(row.apiKeyEncrypted),
           keyChanged: input.apiKey !== undefined || input.clearApiKey === true,
         },
@@ -130,12 +114,12 @@ export class AiSettingsService {
       { strict: true },
     );
 
-    return toContract(row, updatedProfile?.modelSettings);
+    return toContract(row);
   }
 
   async requireKey(userId: string): Promise<{ settings: AiSettings; apiKey: string }> {
     const row = await this.row(userId);
-    const settings = toContract(row, null);
+    const settings = toContract(row);
     if (!settings.enabled) {
       throw new ServiceUnavailableException({
         code: 'AI_NOT_CONFIGURED',
@@ -161,39 +145,7 @@ export class AiSettingsService {
 
   async fallbackToRaw(userId: string): Promise<boolean> {
     const row = await this.row(userId);
-    return toContract(row, null).fallbackToRaw;
-  }
-
-  private async saveCycleLimit(
-    userId: string,
-    cycleLimit: AiCycleLimit,
-  ): Promise<typeof aiProfiles.$inferSelect> {
-    const existing = await this.profileRow(userId);
-    if (!existing) {
-      const [created] = await this.db
-        .insert(aiProfiles)
-        .values({
-          userId,
-          modelSettings: withAiCycleLimit(DEFAULT_AI_MODEL_SETTINGS, cycleLimit),
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (created) return created;
-    }
-
-    const current = existing ?? (await this.profileRow(userId));
-    if (!current) throw new Error('Failed to save AI cycle limit');
-
-    const [updated] = await this.db
-      .update(aiProfiles)
-      .set({
-        modelSettings: withAiCycleLimit(current.modelSettings, cycleLimit),
-        updatedAt: new Date(),
-      })
-      .where(eq(aiProfiles.userId, userId))
-      .returning();
-    if (!updated) throw new Error('Failed to save AI cycle limit');
-    return updated;
+    return toContract(row).fallbackToRaw;
   }
 
   private async row(userId: string): Promise<AiSettingsRecord | null> {
@@ -201,15 +153,6 @@ export class AiSettingsService {
       .select()
       .from(aiSettings)
       .where(eq(aiSettings.userId, userId))
-      .limit(1);
-    return row ?? null;
-  }
-
-  private async profileRow(userId: string): Promise<typeof aiProfiles.$inferSelect | null> {
-    const [row] = await this.db
-      .select()
-      .from(aiProfiles)
-      .where(eq(aiProfiles.userId, userId))
       .limit(1);
     return row ?? null;
   }

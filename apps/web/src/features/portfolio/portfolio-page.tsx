@@ -29,7 +29,6 @@ import { TestingPage } from '../testing/testing-page';
 import { OperationsPage } from '../operations/operations-page';
 import { WatchlistPage } from '../watchlist/watchlist-page';
 import { ReportsPage } from '../reports/reports-page';
-import { AiTradingPage } from '../ai-trading/ai-trading-page';
 import { cryptoTabs, hashForTab, tabFromLocation, type CryptoTab } from './portfolio-tabs';
 
 function PortfolioMetric({
@@ -403,7 +402,6 @@ export function PortfolioPage() {
       ) : null}
       {tab === 'operations' ? <OperationsPage embedded /> : null}
       {tab === 'robots' ? <TestingPage /> : null}
-      {tab === 'ai' ? <AiTradingPage /> : null}
       {tab === 'statistics' ? <ReportsPage embedded /> : null}
 
       <AssetDrawer

@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { cryptoTabs, hashForTab, tabFromLocation } from './portfolio-tabs';
 
 describe('crypto tabs', () => {
-  it('exposes seven crypto sections without the strategy guide', () => {
+  it('exposes six crypto sections without the AI and strategy modules', () => {
     expect(cryptoTabs.map((tab) => tab.label)).toEqual([
       'Обзор',
       'Токены',
       'Ордера',
       'Операции',
       'Роботы',
-      'ИИ-торговля',
       'Статистика',
     ]);
     expect(cryptoTabs.some((tab) => tab.value === ('strategies' as never))).toBe(false);
+    expect(cryptoTabs.some((tab) => tab.value === ('ai' as never))).toBe(false);
   });
 
   it('maps the legacy crypto routes to their tabs', () => {
@@ -29,6 +29,7 @@ describe('crypto tabs', () => {
     expect(tabFromLocation('/portfolio', '#watchlist')).toBe('tokens');
     expect(tabFromLocation('/portfolio', '#reports')).toBe('statistics');
     expect(tabFromLocation('/portfolio', '#strategies')).toBe('overview');
+    expect(tabFromLocation('/portfolio', '#ai')).toBe('overview');
   });
 
   it('round-trips the current hashes', () => {
