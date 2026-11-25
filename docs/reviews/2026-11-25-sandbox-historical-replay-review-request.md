@@ -5,8 +5,8 @@ Branch: `feat/sandbox-replay` (pushed; draft PR #325, base `main`)
 Base: `3a6f94a` (Stage 2 merged, signed off, accepted and deployed; migration `0052` applied)
 Docs base: `f1ac808` (design, ADR 0085, plan)
 Frozen code head: `fcd2f77` (Tasks 1–7 plus the Markdown-report 404 fix)
-Docs/fix head: this Task 8 docs/fix commit
-CI: draft PR #325; see `CI evidence` below for the run at `ad46db4` (failed) and `fcd2f77` (pending at packet update).
+Docs/fix head: `3711752` (the evidence corrections); the final commit only records CI status.
+CI: draft PR #325. Run `45537895046` at `ad46db4` failed on the Markdown 404; `45540307264` at `fcd2f77` **passed**; run `45542727298` at `3711752` (the docs/fix evidence commit) was in progress at packet update. This final commit only records that status and changes no code (see `CI evidence`).
 Status: **Stage 2.1 implemented; independent whole-branch review gate. Not deployed; migration `0053` is not applied.**
 
 Review this as one whole-branch Stage 2.1 review. The scope is paper only: no
@@ -49,16 +49,16 @@ real money, exchange orders, wallets, keys, signing or real-ledger writes.
 | 7    | `Прогон` UI tab, form, history, detail, downloads       | `a040e4b`                        | complete                         |
 | 8    | Full gate, security/ops evidence, runbook, this packet  | `ad46db4` + this docs/fix commit | **awaiting whole-branch review** |
 
-Branch diff from `3a6f94a` through `fcd2f77`: 68 files, +24,549/−208 across 14
-commits. Of that, `packages/db/drizzle/meta/0053_snapshot.json` is the 12,208-line
-generated Drizzle snapshot; excluding it the hand-written diff is 67 files,
+Branch diff from `3a6f94a` through the frozen code head `fcd2f77`: 68 files,
++24,549/−208 across 14 commits. Of that,
+`packages/db/drizzle/meta/0053_snapshot.json` is the 12,208-line generated
+Drizzle snapshot; excluding it the hand-written code diff is 67 files,
 +12,341/−208. `ad46db4` added the docs/packet and two static security
 assertions; `fcd2f77` added the Markdown-report error path fix (2 module tests, 1
-live-read e2e test); this docs/fix commit touches 8 already-changed files for
-+126 net lines (packet counts, runbook, one timeout test, one stricter lock
-assertion, dead-helper removal). The branch head is therefore **68 files,
-+24,675/−208 across 15 commits**. No production data or configuration was
-changed.
+live-read e2e test). This docs/fix commit adds **no new files** — it corrects
+documentation and adds one executor timeout test plus a stricter lock assertion
+— so the PR remains **68 files across 15 commits**, and the code under review is
+exactly `fcd2f77`. No production data or configuration was changed.
 
 ## Commands and outputs
 
@@ -76,10 +76,11 @@ changed.
 
 ### CI evidence (PR #325, base `main`, head `feat/sandbox-replay`)
 
-| Run           | Head      | Result                                                                                                                                                                                                                                                                                                                                    |
-| ------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `45537895046` | `ad46db4` | **Failed** — 1 failure in `sandbox-replays.e2e` owner isolation: a foreign `report.md` returned `500` instead of `404` (route-level Markdown `Content-Type` serialized the JSON error).                                                                                                                                                   |
-| `45540307264` | `fcd2f77` | **Pending at packet update** (in progress when the packet was written). `fcd2f77` fixes both Markdown routes (live and replay) by setting the content type only after a successful read and adds the live 404 test. The full gate above is the local green run on the code before this small fix; CI is authoritative for the final head. |
+| Run           | Head      | Result                                                                                                                                                                                                                                                                     |
+| ------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `45537895046` | `ad46db4` | **Failed** — 1 failure in `sandbox-replays.e2e` owner isolation: a foreign `report.md` returned `500` instead of `404` (route-level Markdown `Content-Type` serialized the JSON error).                                                                                    |
+| `45540307264` | `fcd2f77` | **Passed** (completed 2026-11-25T03:39Z). `fcd2f77` fixes both Markdown routes (live and replay) by setting the content type only after a successful read and adds the live 404 test. The DB-gated suites ran here for the first time.                                     |
+| `45542727298` | `3711752` | **In progress** at packet update (docs/fix evidence commit). It changes docs, one executor test (`REPLAY_WORKER_TIMEOUT`), the lock-gating assertion and removes a dead repository helper; the local focused/gate runs are green. The final commit only records CI status. |
 
 ## Schema, migration and grants
 
@@ -254,8 +255,9 @@ UI (`Прогон` tab, `#replay`):
   seed phrases or signing in the module. No real money or ledger writes; the
   replay uses an in-memory event log and the report only.
 - Every replay route sets `Cache-Control: no-store` statically (controller
-  header). The DB e2e asserts it on `report.json`; list/detail and the Markdown
-  route rely on that header assertion, and there is no snapshot HTTP route.
+  header). The DB e2e asserts it on `report.json`; the module suite asserts both
+  Markdown report routes; list/detail rely on the same controller decorator and
+  have no dedicated header assertion. There is no snapshot HTTP route.
 - `ad46db4` added only two static assertions: the replay lock/lock-gated requeue
   and the replay-only candle repository, plus the replay worker flag gate.
   `fcd2f77` added two module tests for the Markdown error path (JSON errors keep
@@ -320,9 +322,10 @@ Unverified in this environment (explicit):
    no production access was used.
 4. Report/snapshot row size at the 3-token × 180-day maximum: expected to be a
    few MB, **unmeasured**; fixtures are small.
-5. CI at the final docs/fix head; the `fcd2f77` run was still pending when this
-   packet was updated, so the `ad46db4` failed run/successful local gate plus the
-   focused fix tests are the recorded evidence.
+5. CI at the final status-only head. The `fcd2f77` run passed; run `45542727298`
+   at the docs/fix evidence commit `3711752` was still in progress when the
+   packet was updated. The `ad46db4` failed run, the `fcd2f77` pass, the local
+   full gate and the focused fix tests are the recorded evidence.
 
 ## Fixed in this fix round
 
