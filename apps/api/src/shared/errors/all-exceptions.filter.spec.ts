@@ -2,7 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   HttpException,
-  HttpStatus,
   NotFoundException,
   type ArgumentsHost,
 } from '@nestjs/common';

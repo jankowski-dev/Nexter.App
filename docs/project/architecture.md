@@ -19,7 +19,7 @@ flowchart LR
 
 - **SPA** не хранит приватные ключи и не работает с БД напрямую.
 - **API** — единственная точка записи в БД. Он же раздаёт статику SPA из `apps/web/dist`.
-- Фоновые задачи (котировки, индексер, swap tracker, снапшоты, paper-боты, AI/audio) выполняются внутри API по интервалам под advisory locks. Отдельного worker-процесса и pg-boss больше нет.
+- Фоновые задачи (котировки, индексер, swap tracker, снапшоты, paper-боты, песочница, аудио/DeepSeek) выполняются внутри API по интервалам под advisory locks. Отдельного worker-процесса и pg-boss больше нет.
 - **WalletConnect/Tangem** — единственный путь подписи. Сервер не может подписать транзакцию за владельца.
 - **RPC/индексер** используется для проверки балансов, квитанций и reconciliation; он не является источником цен.
 - **Viber-бот** — отдельный Python-сервис в репозитории `jankowski-dev/Nexter.Bot` (Railway-проект `Viber-Bot's`). Он принимает webhook, скачивает/распознаёт аудио локально и вызывает `GET /api/v1/bot/tasks/upcoming` и `POST /api/v1/bot/audio-notes`; API создаёт заметку/вложение и вызывает DeepSeek. API-ключи и БД в боте не хранятся.
@@ -236,5 +236,29 @@ flowchart LR
 - `BotRunnerService` просыпается каждые 60 секунд, берёт advisory lock `nexter:bot-runner` на отдельном соединении и обрабатывает всех `running` ботов.
 - Стратегии — код-реестр; параметры валидируются Zod. Paper execution считает комиссию/проскальзывание и пишет только в `bot_*` таблицы.
 - `bot_quote_samples` даёт минутную историю для индикаторов; retention 30 дней.
-- UI `/testing` показывает full-width карточки, статистику, позиции, сделки и события.
+- UI `Крипта → Роботы` показывает карточки, статистику, позиции, сделки, события и телеметрию.
+- Бэктест роботов удалён; для исторической проверки стратегий используется `Песочница → Прогон`.
 - Ключевое ограничение: реальная автоторговля не может использовать WalletConnect/Tangem без ручного подтверждения. Для live нужен отдельный подписант/session key/AA и отдельный security review; сервер не должен хранить приватные ключи.
+
+## 14. Независимая песочница (см. `runbooks/sandbox.md`)
+
+```mermaid
+flowchart LR
+  Owner[Owner] --> SandboxUI[Песочница]
+  SandboxUI --> SandboxAPI[/api/v1/sandbox/]
+  SandboxAPI --> Core[@nexter/sandbox-core]
+  Core --> Run[sandbox_runs]
+  Core --> Replay[sandbox_replays]
+  Replay --> Snapshot[gzip candle snapshot]
+  Replay --> Report[RunReport + hash]
+  Report --> PDF[PDF/JSON]
+  Report --> Chart[chart/decisions on demand]
+  Candles[sandbox_candles] --> Core
+```
+
+- `@nexter/sandbox-core` — отдельный пакет без импортов из `apps/*`, старого AI и trading-bots.
+- Живые прогоны идут под advisory lock `nexter:sandbox-runner`; исторические — под `nexter:sandbox-replay-worker`, в worker thread, с сохранённым gzip-снимком свечей.
+- Исторический прогон детерминирован: отчёт, хеши и seed сохраняются; `chart`/`decisions` только читают снимок и не меняют отчёт.
+- Страница прогона: график действий → PDF/JSON → метрики → стратегии/токены → журналы (20 строк + `Ещё`). Хеши и технические заметки доступны в PDF/JSON.
+- Новые токены добавляются только из `Избранного` по chain+contract (ADR 0089); существующие токены Stage 3 не меняются.
+- Real money, wallets, keys и signing в песочнице отсутствуют.

@@ -23,7 +23,7 @@ test.beforeAll(async () => {
   }
 });
 
-test('bot create modal keeps the form open while the backtest modal opens beside it', async ({
+test('bot create modal has no backtest action and the detail drawer keeps telemetry', async ({
   page,
 }) => {
   const email = `playwright-bot-${Date.now()}@example.com`;
@@ -68,16 +68,8 @@ test('bot create modal keeps the form open while the backtest modal opens beside
     .getByRole('checkbox')
     .check();
 
-  await botDialog.getByRole('button', { name: 'Тестировать' }).click();
-
-  const testDialog = page.getByRole('dialog').filter({ hasText: 'Тестирование ·' });
-  await expect(testDialog).toBeVisible();
-  await expect(page.getByRole('dialog')).toHaveCount(2);
-  await expect(testDialog.getByText('BASED').first()).toBeVisible();
-
-  await testDialog.getByRole('button', { name: 'Закрыть' }).click();
+  await expect(botDialog.getByRole('button', { name: 'Тестировать' })).toHaveCount(0);
   await expect(page.getByRole('dialog')).toHaveCount(1);
-  await expect(botDialog).toBeVisible();
 
   await botDialog.getByRole('button', { name: 'Отмена' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -104,11 +96,7 @@ test('bot create modal keeps the form open while the backtest modal opens beside
   await page.getByRole('button', { name: 'Открыть робота Telemetry bot' }).click();
   const detailDialog = page.getByRole('dialog').filter({ hasText: 'Telemetry bot' });
   await expect(detailDialog).toBeVisible();
-  await detailDialog.getByRole('button', { name: 'Тестировать' }).click();
-  const botTestDialog = page.getByRole('dialog').filter({ hasText: 'Тестирование ·' });
-  await expect(botTestDialog).toBeVisible();
-  await botTestDialog.getByRole('button', { name: 'Закрыть' }).click();
-  await expect(detailDialog).toBeVisible();
+  await expect(detailDialog.getByRole('button', { name: 'Тестировать' })).toHaveCount(0);
   await detailDialog.getByRole('button', { name: 'Телеметрия' }).click();
   const telemetryDialog = page.getByRole('dialog').filter({ hasText: 'Телеметрия ·' });
   await expect(telemetryDialog).toBeVisible();

@@ -2,11 +2,11 @@
 
 Private, single-user, modular personal finance application.
 
-Current scope: **production v2 (2026-11-19)**. Phases 0–11 are accepted, and the shipped product now also includes live non-custodial swaps on BSC and Ethereum, paper-trading bots with backtesting and telemetry, an AI settings module, an AI trading research module (data, lab analysis, backtests and mass walk-forward search; recommendation-to-draft-bot is the next phase), Viber audio notes, an encrypted vault, tasks, notes, finance tracking, and the redesigned Russian UI. This is the actual product scope; where older sections of the implementation contract still say "MVP-1", the v2 scope amendment in [`docs/mega-prompt.md`](docs/mega-prompt.md) and ADR 0063 take precedence. The unused `@nexter/worker` service was removed; background work runs in the API process. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
+Current scope: **production v2.1 (2026-11-25)**. Phases 0–11 are accepted, and the shipped product includes live non-custodial swaps on BSC and Ethereum, paper-trading robots with telemetry, an independent paper `Песочница` with live and historical runs, DeepSeek settings, Viber audio notes, an encrypted vault, tasks, notes, finance tracking, and the redesigned Russian UI. The old `ИИ-торговля` and bot backtest modules were removed (ADR 0090); their DB tables remain dormant. Where older sections of the implementation contract still say "MVP-1", the v2.1 scope amendment in [`docs/mega-prompt.md`](docs/mega-prompt.md), ADR 0063 and ADR 0090 take precedence. The unused `@nexter/worker` service was removed; background work runs in the API process. Ethereum signing is controlled by `SWAP_ETHEREUM_EXECUTION_ENABLED` and the kill switch.
 
 The implementation contract is in [`docs/mega-prompt.md`](docs/mega-prompt.md).
 
-Current UI state: `Крипта` is one sidebar entry with eight tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика`). The AI tab is one workspace with a logged one-click data → search → recommendations → draft-bot cycle, mass walk-forward search with OOS warmup, near-miss diagnostics and JSON export, recommendation TTL, an invalidation health monitor, OOS histograms and a read-only Binance history fallback. The cycle never starts bots; the owner starts them manually. `Обзор` combines summary cards, consolidated token blocks and the main token list; the other tabs reuse the operations, token-base, journal, bot, strategy and statistics pages. The Viber audio limit is configurable in `Настройки → ИИ → Аудио` (default 8 MB, max 20 MB). Wave 0/1 hardening added disposable-DB test guards, CSRF origin enforcement, TOTP replay protection, an append-only `audit_log` trigger, and removed the unused worker service.
+Current UI state: `Крипта` is one sidebar entry with six tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Статистика`). `Обзор` combines summary cards, consolidated token blocks and the main token list; the other tabs reuse the operations, token-base, journal, bot and statistics pages. The read-only strategy reference moved to `Настройки → Стратегии`. `Песочница` has live runs, historical replay with an action chart/full decision journal, PDF/JSON reports and tokens sourced from `Избранное`. The Viber audio limit is configurable in `Настройки → ИИ → Аудио` (default 8 MB, max 20 MB). Wave 0/1 hardening added disposable-DB test guards, CSRF origin enforcement, TOTP replay protection, an append-only `audit_log` trigger, and removed the unused worker service.
 
 ## Notion import
 
@@ -155,7 +155,7 @@ npx pnpm@10.20.0 test:e2e
 - [x] Phase 9 — Ethereum (accepted)
 - [x] Phase 10 — On-chain reconciliation (implementation accepted; data reconciliation deferred to the clean cutover)
 - [x] Phase 11 — Other modules (vault, tasks, notes)
-- [x] Post-MVP — production UI redesign, live swaps, paper-trading bots, AI and audio notes
+- [x] Post-MVP — production UI redesign, live swaps, paper-trading robots, sandbox, AI settings and audio notes
 
 ## Production environment
 

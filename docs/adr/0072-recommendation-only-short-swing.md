@@ -3,7 +3,7 @@
 - **Status:** accepted
 - **Date:** 2026-11-19
 - **Supersedes in part:** ADR 0071 (autonomous orchestrator/approval parts)
-- **Related:** `docs/plans/ai-trading-2026-11.md`, `docs/plans/ai-trading-schema-contracts-2026-11.md`
+- **Related:** the original AI-trading plans were removed with the module in ADR 0090; this ADR is retained as historical rationale.
 
 ## Context
 

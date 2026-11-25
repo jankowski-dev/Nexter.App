@@ -228,37 +228,49 @@ Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankow
 | GET    | `/trading-bots/bots/:id/equity?limit=`   | equity curve                                  |
 | GET    | `/trading-bots/bots/:id/signals`         | последние решения по токенам                  |
 | GET    | `/trading-bots/bots/:id/trade-summaries` | P&L по токенам                                |
-| GET    | `/trading-bots/bots/:id/telemetry`       | schema-v1 JSON для AI-анализа                 |
-| POST   | `/trading-bots/backtests`                | запустить/сохранить backtest                  |
-| POST   | `/trading-bots/backtests/preview`        | preview без сохранения                        |
-| GET    | `/trading-bots/backtests`                | список прогонов                               |
-| GET    | `/trading-bots/backtests/:id/report.pdf` | PDF-отчёт                                     |
-| DELETE | `/trading-bots/backtests/:id`            | удалить прогон                                |
+| GET    | `/trading-bots/bots/:id/telemetry`       | schema-v1 JSON телеметрии робота              |
 
-Стратегии — read-only code registry; отдельных CRUD-эндпоинтов стратегий больше нет. Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются. Подробности — в `trading-bots.md`.
+Стратегии — read-only code registry; отдельных CRUD-эндпоинтов стратегий больше нет. Бюджет — от $100 и кратен $100; токены должны быть активными записями Базы токенов. Running-боты не редактируются. Справочник стратегий доступен в `Настройки → Стратегии`; бэктест роботов удалён (ADR 0090). Подробности — в `trading-bots.md`.
 
-## 14. AI trading (research/recommendation)
+## 14. Sandbox (`/sandbox`)
 
-Owner-only; CSRF and audit. The module is recommendation-only: it does not create or start bots.
+Owner-only paper sandbox; feature flag `SANDBOX_ENABLED`. It never touches the real ledger, wallets or swaps.
 
-| Метод        | Путь                             | Назначение                                           |
-| ------------ | -------------------------------- | ---------------------------------------------------- |
-| GET          | `/ai-trading/profile`            | профиль: бюджет, лимиты, модель                      |
-| PUT          | `/ai-trading/profile`            | обновить профиль                                     |
-| GET/POST     | `/ai-trading/profile/tokens`     | AI-вселенная                                         |
-| PATCH/DELETE | `/ai-trading/profile/tokens/:id` | изменить/мягко отключить токен                       |
-| GET          | `/ai-trading/services`           | конфиги Data/Analyst/Backtest/Risk/Reporter          |
-| PUT          | `/ai-trading/services/:service`  | изменить конфиг сервиса                              |
-| GET          | `/ai-trading/recommendations`    | рекомендации по всем запускам                        |
-| GET          | `/ai-trading/dashboard`          | бюджет, токены, роботы, очередь                      |
-| GET          | `/ai-trading/coverage`           | покрытие свечей по токенам/ТФ                        |
-| POST         | `/ai-trading/cycle`              | один цикл: данные → поиск → рекомендации → черновики |
-| GET          | `/ai-trading/cycle/:cycleId`     | статус/шаги/ошибки цикла                             |
-| POST         | `/ai-trading/data/refresh`       | загрузить OHLCV (GeckoTerminal/CoinGecko/Binance)    |
-| GET          | `/ai-trading/lab`                | последний анализ по токену/ТФ                        |
-| POST         | `/ai-trading/lab/analyze`        | анализ + кандидаты                                   |
-| POST         | `/ai-trading/lab/backtest`       | train/OOS бэктест кандидата                          |
+| Метод | Путь                               | Назначение                                          |
+| ----- | ---------------------------------- | --------------------------------------------------- |
+| GET   | `/sandbox/status`                  | feature flag и версия                               |
+| GET   | `/sandbox/tokens`                  | вселенная токенов песочницы                         |
+| GET   | `/sandbox/tokens/candidates`       | токены `Избранного` с признаком `eligible`/`reason` |
+| POST  | `/sandbox/tokens`                  | добавить только кандидата из `Избранного`           |
+| PATCH | `/sandbox/tokens/:id`              | включить/отключить или обновить метаданные          |
+| POST  | `/sandbox/tokens/:id/refresh`      | загрузить историю 1h                                |
+| GET   | `/sandbox/coverage`                | покрытие и свежесть свечей                          |
+| GET   | `/sandbox/overview`                | сводка живых запусков                               |
+| GET   | `/sandbox/runs`                    | список живых запусков                               |
+| POST  | `/sandbox/runs`                    | создать черновик запуска                            |
+| PATCH | `/sandbox/runs/:id`                | изменить черновик                                   |
+| POST  | `/sandbox/runs/:id/start`          | запустить paper-цикл                                |
+| POST  | `/sandbox/runs/:id/pause`          | пауза                                               |
+| POST  | `/sandbox/runs/:id/resume`         | продолжить                                          |
+| POST  | `/sandbox/runs/:id/stop`           | остановить                                          |
+| POST  | `/sandbox/runs/:id/archive`        | архив                                               |
+| POST  | `/sandbox/runs/:id/close/:tokenId` | закрыть позицию токена                              |
+| GET   | `/sandbox/runs/:id/positions`      | позиции                                             |
+| GET   | `/sandbox/runs/:id/trades`         | сделки                                              |
+| GET   | `/sandbox/runs/:id/intents`        | журнал интентов                                     |
+| GET   | `/sandbox/runs/:id/events`         | журнал событий                                      |
+| GET   | `/sandbox/runs/:id/equity`         | кривая капитала                                     |
+| GET   | `/sandbox/runs/:id/report.json`    | JSON-отчёт живого запуска                           |
+| GET   | `/sandbox/runs/:id/report.md`      | Markdown-отчёт живого запуска                       |
+| POST  | `/sandbox/replays/preflight`       | проверка покрытия исторического окна                |
+| POST  | `/sandbox/replays`                 | создать исторический прогон (202, воркер)           |
+| GET   | `/sandbox/replays`                 | история прогонов                                    |
+| GET   | `/sandbox/replays/:id`             | детали прогона                                      |
+| GET   | `/sandbox/replays/:id/report.json` | JSON-отчёт с `identity` (хеши, seed)                |
+| GET   | `/sandbox/replays/:id/report.pdf`  | PDF-отчёт со всеми журналами и identity             |
+| GET   | `/sandbox/replays/:id/chart`       | свечи окна оценки и маркеры действий                |
+| GET   | `/sandbox/replays/:id/decisions`   | полный журнал решений (on-demand, постранично)      |
+| POST  | `/sandbox/replays/:id/cancel`      | отменить прогон в очереди                           |
+| POST  | `/sandbox/replays/:id/archive`     | архив                                               |
 
-The one-click research cycle is implemented as `POST /ai-trading/cycle` (202) with `GET /ai-trading/cycle/:cycleId`; `GET /ai-trading/cycles?limit=20` returns the owner-scoped cycle history (status, symbol/timeframe, steps, counts and a sanitized error) for the Reporter drawer. The cycle stops at the first failed step, writes step logs to `ai_pipeline_runs`/`ai_jobs`, creates only draft bots and never starts them. `POST /ai-trading/cycle/:cycleId/cancel` cancels a queued/running cycle, cancels its linked search, marks unfinished steps skipped and is idempotent for an already cancelled cycle; finished cycles return `AI_CYCLE_NOT_CANCELLABLE` (409). The cycle has a 90-minute hard search cap and aborts only after 10 minutes without progress; search progress is written every 50 evaluated variants. Stale recovery is 45 minutes; transient database errors during status polling are retried and raw SQL is never exposed to the client.
-
-Mass search is implemented: asynchronous `POST /ai-trading/search`, `GET /search/runs` (recent runs), `GET /search/:runId` (progress/stats), `GET /search/:runId/results` and `POST /search/:runId/cancel`. Search variants run in a bounded Node worker-thread pool (`AI_SEARCH_WORKERS`, production 6) with a sequential fallback; cancellation terminates all workers. Search results expose candidate `expiresAt`/`expired` (horizon TTL, default 7 days) and `nearMisses` (positive OOS but failed a filter/holdout; not recommendations). Accept a candidate by creating a draft bot through `POST /trading-bots/bots` with `aiCandidateId`; the bot is created as `draft` and never started automatically, and stale candidates return `AI_RECOMMENDATION_EXPIRED`. `GET /ai-trading/recommendations` lists recommended/accepted candidates with TTL, suggested allocation and invalidation rules; `GET /recommendations/:id` and `POST /recommendations/:id/reject` are available. The risk layer caps drafts by worker slots, per-bot allocation, `maxInvestedPct` and `maxTokenExposurePct` before creating them. `GET /ai-trading/bots/health` returns invalidation health for AI-origin bots, including drawdown, daily loss, stale ticks, missing/malformed/non-positive or older-than-5-minutes position quotes, stop/take hits using the bot strategy params (`stopLossPct`, `hardStopPct`, `closeLossThresholdPct`, `takeProfitPct`), horizon, negative P&L, errors and missing recommendations. The monitor is advisory and never stops a bot. No approvals endpoints.
+Новые токены песочницы добавляются только из группы `Избранное` по паре chain+contract; отсутствующий/неподдерживаемый контракт блокируется на сервере (`SANDBOX_TOKEN_NOT_IN_FAVORITES`, `SANDBOX_TOKEN_NOT_ELIGIBLE`). Исторический прогон исполняется на сохранённом gzip-снимке свечей; `chart` и `decisions` не меняют отчёт и его хеши. Markdown для исторических прогонов удалён — остаются PDF и JSON. См. ADR 0085, 0089 и `runbooks/sandbox.md`.

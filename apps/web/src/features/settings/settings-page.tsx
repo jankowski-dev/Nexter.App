@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { NavIcon, type NavIconName } from '@/components/nav-icon';
 import { PageHeader } from '@/components/ui/page-header';
@@ -60,35 +59,6 @@ export function SettingsPage() {
         title="Настройки"
         subtitle="Общие параметры, уведомления, безопасность, данные и экспорт."
       />
-
-      <Card className="border-emerald-200 bg-white">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700">
-              <NavIcon name="download" className="h-6 w-6" />
-            </span>
-            <div>
-              <div className="text-base font-semibold text-zinc-900">Инженерный гайд AI</div>
-              <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-500">
-                23 страницы: данные, walk-forward, воронка поиска, fast engine, H5, рекомендации и
-                paper-боты. PDF со схемами.
-              </p>
-            </div>
-          </div>
-          <Button
-            asChild
-            className="h-11 w-full border-emerald-500 bg-emerald-500 px-5 text-white shadow-sm hover:border-emerald-600 hover:bg-emerald-600 sm:w-auto"
-          >
-            <a
-              href="/docs/nexter-ai-system-engineering.pdf?v=5"
-              download="nexter-ai-system-engineering.pdf"
-            >
-              <NavIcon name="download" className="h-4 w-4" />
-              Скачать PDF
-            </a>
-          </Button>
-        </div>
-      </Card>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <SettingsNavCard

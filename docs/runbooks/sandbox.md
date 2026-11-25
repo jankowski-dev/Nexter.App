@@ -6,8 +6,10 @@ Owner-only `Песочница`: a persistent live paper loop on real 1h market 
 - Stage 2 ADR: `docs/adr/0084-sandbox-stage-2-ui-live.md`
 - Stage 2.1 design: `docs/superpowers/specs/2026-11-25-sandbox-historical-replay-design.md`
 - Stage 2.1 ADR: `docs/adr/0085-sandbox-historical-replay.md`
+- UI cleanup design: `docs/superpowers/specs/2026-11-25-sandbox-visual-cleanup-design.md`
+- UI cleanup ADRs: `0089-sandbox-favorites-token-source.md`, `0090-remove-ai-trading-and-backtest.md`
 - API flag: `SANDBOX_ENABLED` (default `true`; accepts `true|false|1|0`)
-- Migrations: `packages/db/drizzle/0052_sandbox_stage2.sql` (applied in production) and `packages/db/drizzle/0053_sandbox_replays.sql` (additive, **not applied**) — both with no DELETE grants
+- Migrations: `0052_sandbox_stage2.sql` and `0053_sandbox_replays.sql` are applied in production. `0055_favorites_default_group.sql` renames the default watchlist group; it is applied during this batch's rollout (see below). All sandbox migrations are additive/no-DELETE.
 
 ## Enable / disable
 
@@ -102,6 +104,25 @@ sandbox_replays` and the CI `sandbox-schema` suite (`sandbox.migration.spec.ts`
    a separate approved destructive migration. Do not restore the database for
    this migration.
 
+## Migration `0055` — favorites rename (this batch)
+
+`0055_favorites_default_group.sql` is a data-only migration: it renames the
+owner's default group `Основная` → `Избранное` only when no custom group named
+`Избранное` already exists. It does not touch existing `sandbox_tokens` rows or
+Stage 3 runs.
+
+1. Encrypted backup + restore check (migration is data-only; DB schema unchanged).
+2. Apply `0055` with the owner role, then verify:
+   `select name, is_default from watchlist_groups;` shows one default
+   `Избранное`; if the owner already had a custom `Избранное`, the default keeps
+   its old name (UI still treats it as the default group).
+3. Deploy API/web. Verify `/health`/`/ready`, `GET /sandbox/tokens/candidates`,
+   both replay report downloads, chart/decisions, `Настройки → Стратегии`, no
+   `ИИ-торговля` tab and no `Тестировать` buttons.
+4. Confirm the five Stage 3 runs are still `running` and were not edited.
+5. Rollback: redeploy the previous image. The rename is harmless; no data is
+   dropped. Do not drop dormant `ai_*`/`bot_backtest_runs` tables here.
+
 ## Pre-migration backup and rollback
 
 Backup (encrypted, custom format):
@@ -159,12 +180,21 @@ runs and never mutates them.
 
 - **API:** `POST /sandbox/replays/preflight`, `POST /sandbox/replays` (202),
   `GET /sandbox/replays`, `GET /sandbox/replays/:id`,
-  `GET /sandbox/replays/:id/report.json|report.md`,
+  `GET /sandbox/replays/:id/report.json`, `GET /sandbox/replays/:id/report.pdf`,
+  `GET /sandbox/replays/:id/chart`, `GET /sandbox/replays/:id/decisions`,
   `POST /sandbox/replays/:id/cancel` (queued only), `POST /sandbox/replays/:id/archive`
   (terminal only). Owner-only, `SandboxEnabledGuard`, `Cache-Control: no-store`;
   unknown/foreign ids return `404 SANDBOX_REPLAY_NOT_FOUND`, a non-completed
-  report returns `409 SANDBOX_REPLAY_NOT_COMPLETED`. There is no manual buy/add
-  route.
+  report returns `409 SANDBOX_REPLAY_NOT_COMPLETED`. Historical `report.md` was
+  removed; only live run Markdown remains. There is no manual buy/add route.
+- **Chart/decisions:** `chart` returns only evaluation-window candles plus
+  buy/sell/reject/expire/counterfactual markers with reasons. `decisions`
+  re-runs the persisted snapshot with frozen settings/seed on demand, caches in
+  API memory by `(replayId, reportHash)` and never writes to the DB. A corrupt
+  snapshot returns `409 SANDBOX_REPLAY_DECISIONS_UNAVAILABLE`/`SNAPSHOT_INVALID`.
+- **Artifacts:** the page prioritizes PDF, keeps JSON, and hides hashes/seed/
+  technical notes behind the artifact identity. PDF includes the identity,
+  metrics, equity chart, per-strategy/per-token tables and all journals.
 - **Statuses:** `queued`, `running`, `completed`, `failed`, `cancelled`; archive
   is a soft `archived_at`. A running replay is bounded and is not cancelled in
   v1; only queued replays can be cancelled.
@@ -203,6 +233,12 @@ runs and never mutates them.
   only; fills execute at the next bar open with the frozen fees/slippage. The
   report is labelled `historical-paper` and says it is not a live fill or a
   performance claim.
+- **Favorites source:** `GET /sandbox/tokens/candidates` lists non-archived
+  assets in the owner's default `Избранное` group. Only BSC/Ethereum assets with
+  a contract are eligible; missing contracts, unsupported chains and cash
+  equivalents are returned with `eligible=false` and a reason. `POST
+/sandbox/tokens` re-resolves the key server-side and rejects arbitrary keys.
+  Existing Stage 3 tokens are never removed or edited.
 
 ### Manual verification after deploy
 
@@ -212,12 +248,16 @@ runs and never mutates them.
    available/required and prefix bars.
 3. Create a 30-day replay; the row is `queued`, then the worker moves it to
    `running` → `completed` within a pass or two. `GET …/report.json` returns
-   `executionMode: 'historical-paper'` with `no-store`; JSON and Markdown
-   downloads match the stored hash.
-4. Confirm the audit rows `sandbox.replay_created`, `replay_started`,
+   `executionMode: 'historical-paper'` with `no-store` and the `identity` block;
+   the PDF starts with `%PDF` and JSON/PDF downloads match the stored hash.
+4. The completed page shows the action chart before the metric cards; markers
+   open the reason, and `Все решения` loads the full decision journal. Long
+   journals show 20 rows with `Ещё`. No `reportHash`/`seed`/notes are visible on
+   the page.
+5. Confirm the audit rows `sandbox.replay_created`, `replay_started`,
    `replay_completed` (and `replay_archived` after archiving), and that no
    `sandbox_replays` row was deleted.
-5. Optionally cancel a queued replay (`cancelled` + `sandbox.replay_cancelled`).
+6. Optionally cancel a queued replay (`cancelled` + `sandbox.replay_cancelled`).
 
 ## Operations
 

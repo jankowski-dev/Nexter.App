@@ -1,8 +1,8 @@
-# NEXTER — MEGA PROMPT v2
+# NEXTER — MEGA PROMPT v2.1
 
 > Implementation contract for AI agents.
-> Version: 2.0 (scope amendment; historical MVP sections are preserved)
-> Date: 2026-11-17
+> Version: 2.1 (scope amendment; historical MVP sections are preserved)
+> Date: 2026-11-25
 > Owner: single user
 > UI language: Russian
 > Code language: TypeScript, English identifiers/comments
@@ -32,8 +32,10 @@ The product shipped beyond the original MVP-1/MVP-2 contract. The current scope,
 
 - Accounting, FIFO lots, P&L, imports, reports, finance, vault, tasks, notes, notifications, dashboard, and the Russian UI are live.
 - Non-custodial WalletConnect/Tangem swaps are live on BSC and Ethereum. Execution is allowlisted, built and simulated by the server, signed only by the wallet, step-up protected above $500, and gated by `SWAP_ENABLED`, the per-chain flags, and the kill switch. No private keys ever reach the server.
-- Paper-trading bots, backtesting, bot telemetry, the AI settings module, and Viber audio notes are part of the product.
-- Crypto is one sidebar entry with eight tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика`); `Обзор` contains summary cards, consolidated tokens and the main token list; `/operations`, `/watchlist` and `/statistics` render the same shell with their tab (ADR 0067).
+- Paper-trading robots, bot telemetry, the independent paper `Песочница` (live runs + historical replays), DeepSeek settings, and Viber audio notes are part of the product.
+- `ИИ-торговля`, AI search/cycles/holdout, AI auto-drafts and bot backtesting were removed by ADR 0090. `ai_*`/`bot_backtest_runs` tables and AI-origin bot columns stay dormant; do not reintroduce the modules without a new owner-approved ADR.
+- Crypto is one sidebar entry with six tabs (`Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `Статистика`); `Обзор` contains summary cards, consolidated tokens and the main token list; `/operations`, `/watchlist` and `/statistics` render the same shell with their tab (ADR 0067). The read-only strategy reference is `Настройки → Стратегии`.
+- Sandbox is owner-only, paper-only, feature-flagged (`SANDBOX_ENABLED`) and isolated in `@nexter/sandbox-core`. Live and historical runs never touch the real ledger, wallets, keys or swaps. Historical replay artifacts are PDF + JSON; replay chart/decisions are read-only projections of the persisted snapshot (ADR 0085/0089). New sandbox tokens come only from the default `Избранное` group with a supported chain/contract.
 - Viber audio uploads use the per-owner `settings.audio_max_mb` limit: default 8 MB, configurable 1–20 MB in `Настройки → ИИ`, with a 20 MB hard ceiling. `Nexter.Bot` accepts up to the same 20 MB ceiling, so the API setting is the effective limit.
 - The `apps/worker` service was removed because it registered no jobs. Background polling and scheduled work run in the API process under advisory locks. `pnpm dev` starts the API and web app only.
 - Where older sections below still describe "MVP-1" or "MVP-2" as future work, treat them as historical rationale. Current behavior is defined by this amendment, the ADRs, and `docs/decisions.md`.
@@ -50,9 +52,9 @@ Primary goals:
 - provide accurate accounting, P&L, FIFO lots, fees, transfers, income, and audit;
 - provide a fast dashboard and detailed statistics;
 - add safe non-custodial DEX swaps via KyberSwap on BSC and Ethereum;
-- include passwords, tasks, notes, finance, paper-trading bots, backtesting, and AI/audio modules;
+- include passwords, tasks, notes, finance, paper-trading robots, the independent paper sandbox, and AI/audio modules;
 
-Delivered: accounting and import, live swaps on BSC/Ethereum, on-chain reconciliation, passwords, tasks, notes, finance, paper-trading bots, backtesting, AI settings, and Viber audio notes.
+Delivered: accounting and import, live swaps on BSC/Ethereum, on-chain reconciliation, passwords, tasks, notes, finance, paper-trading robots, the sandbox with historical replay, AI settings, and Viber audio notes. Removed: AI trading/search and bot backtesting (ADR 0090).
 
 ---
 
@@ -639,6 +641,8 @@ Tolerance: ±0.01 USD for totals, ±0.01 percentage point for rates. For the ori
 ```
 
 Error codes: `AUTH_REQUIRED`, `INVALID_CREDENTIALS`, `TOTP_REQUIRED`, `TOTP_INVALID`, `FORBIDDEN`, `RATE_LIMITED`, `VALIDATION_ERROR`, `CONFLICT`, `NOT_FOUND`, `INSUFFICIENT_LOTS`, `NEGATIVE_BALANCE`, `IMPORT_PARSE_ERROR`, `IMPORT_MAPPING_ERROR`, `IMPORT_RECONCILIATION_FAILED`, `IMPORT_CONFLICT`, `INTERNAL_ERROR`.
+
+> The endpoint lists below are historical MVP contracts. The current authoritative endpoint reference is `docs/project/api.md`, including `/sandbox`, `/sandbox/replays`, `/settings/strategies` (UI) and the removal of `/ai-trading` and `/trading-bots/backtests`.
 
 ### MVP-1 endpoints
 

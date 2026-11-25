@@ -4,7 +4,7 @@ Read this before changing code. It is intentionally opinionated: most production
 
 ## 1. What this repo is
 
-Private single-owner personal finance app. No public signup, no multi-tenant features. Crypto ledger + DEX swaps + paper bots/backtests + personal finance (BYN) + tasks/notes/habits/vault + AI settings and Viber audio notes. UI is Russian; code identifiers/comments are English.
+Private single-owner personal finance app. No public signup, no multi-tenant features. Crypto ledger + DEX swaps + paper bots + independent sandbox (including historical replay) + personal finance (BYN) + tasks/notes/habits/vault + DeepSeek settings and Viber audio notes. The old `ИИ-торговля` and bot backtest modules are removed (ADR 0090); their DB tables remain dormant. UI is Russian; code identifiers/comments are English.
 
 Monorepo:
 
@@ -134,7 +134,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - Token icons: `TokenIcon` + `tokenIconSrc`; icon URL is `/api/v1/watchlist/icon?url=...`.
 - Russian copy; use existing `format*` helpers; never `Number()` for money except display-only.
 - New UI should be full-width rows/cards where the owner asked (watchlist, vault, notes, tasks).
-- Crypto is one sidebar entry with eight tabs: `Обзор` (stat cards + consolidated token blocks + main token list), `Токены` (token base), `Ордера` (full journal blocks), `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика`. `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab; tab switches canonicalize to `/portfolio#<tab>`. Hash compatibility: `#trades`/`#deals`/`#journal` -> `Ордера`, `#watchlist` -> `Токены`, `#reports` -> `Статистика`. See ADR 0067.
+- Crypto is one sidebar entry with six tabs: `Обзор` (stat cards + consolidated token blocks + main token list), `Токены` (token base), `Ордера` (full journal blocks), `Операции`, `Роботы`, `Статистика`. `/operations`, `/watchlist` and `/statistics` render the same shell with the matching tab; tab switches canonicalize to `/portfolio#<tab>`. Hash compatibility: `#trades`/`#deals`/`#journal` -> `Ордера`, `#watchlist` -> `Токены`, `#reports` -> `Статистика`; legacy `#ai`/`#strategies` map to `Обзор`. The read-only strategy guide is `Настройки → Стратегии`. See ADR 0067, 0090.
 
 ## 12. Testing
 
@@ -170,20 +170,29 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - **Swap preview**: Do not poll Kyber too aggressively; 500ms debounce/15s poll/5s server cache.
 - **Order footer**: technical IDs belong in audit/logs, not the primary UI.
 
-## 15. Trading bots (implemented, see `trading-bots.md`)
+## 15. Trading robots (see `trading-bots.md`)
 
-- Paper-only v1; no real swaps/signing. Tables are `trading_bots` (with `strategy_key`/`strategy_params`), `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, diagnostics `bot_signals`, and immutable `bot_backtest_runs` (migrations `0032`, `0034`–`0036`).
-- Strategy algorithms live in `apps/api/src/modules/trading-bots/strategies/` as a read-only code registry with Zod params, `guide`, `kind`, and `paramFields`. New strategy = code + unit tests + deploy; never execute user scripts. Bots own their `strategyKey`/`strategyParams`; there is no strategy-instance table.
-- `GET /bots/:id/signals` returns per-token price/24h/action/reason so blocked tokens are explainable in the UI.
-- Stateful strategies use `StrategyContext.state`/`StrategyDecision.nextState`; the runner persists state in `bot_signals.strategy_state`. `crash_protected_grid` is the custom high-water-mark crash-grid strategy with pause/close at 10% and resume at 30%; state clears on strategy/params/token changes or bot reset.
-- `BotRunnerService` ticks every `BOT_RUNNER_INTERVAL_SECONDS` (60) under Postgres advisory lock `nexter:bot-runner`; `runOnce()` is used by tests. Quotes come only from `market_quotes`; stale (>5 min) or missing quotes are skipped.
-- Sizing: `min(budget * positionSizePct / 100, cash)` per buy; no per-asset cap, so DCA/grid can add until strategy `maxAdds` or cash runs out. Max positions applies only to new positions.
-- P&L is average-cost: buy cost basis includes fee; sell realized = net proceeds − cost basis. Never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
-- All user mutations are audited (`bot.*`); paper trades/events are their own journals. Running bots cannot be edited; unknown or invalid strategy keys/params cannot be saved or started. `POST /bots/:id/close-positions` force-closes all paper positions at the latest quotes, preserves trade history and stops the bot; archiving is blocked while positions remain. Bot stops/closes create `notifications` rows; the global nav shows an unread badge, and opening `/notifications` marks all read.
-- API under `/api/v1/trading-bots`; paper robots and read-only strategy documentation live under `/portfolio#robots` and `/portfolio#strategies`; the backtest opens from the bot edit/create drawer and from strategy cards, and the standalone `/testing` page no longer exists. Strategy drawers contain descriptions, best-use cases, risks, guides and defaults. The crypto workspace has eight tabs: `Обзор`, `Токены`, `Ордера`, `Операции`, `Роботы`, `ИИ-торговля`, `Стратегии`, `Статистика` (ADR 0067). Bot trade/event journals paginate with `limit/offset` and `Ещё` (20 per page). Backtests use daily candles from CoinGecko or GeckoTerminal, store an immutable snapshot in `bot_backtest_runs`, and generate a Russian PDF on demand. PDF uses pdfmake + Roboto; local/URL font access is restricted to the pdfmake fonts directory.
+- Paper-only; no real swaps/signing. Tables: `trading_bots`, `bot_tokens`, `bot_positions`, `bot_trades`, `bot_equity_snapshots`, `bot_events`, `bot_quote_samples`, `bot_signals`. `bot_backtest_runs` is dormant after ADR 0090.
+- Strategies live in `apps/api/src/modules/trading-bots/strategies/` as a read-only code registry with Zod params, `guide`, `kind`, `paramFields`. New strategy = code + unit tests + deploy; never execute user scripts. Bots own `strategyKey`/`strategyParams`; no strategy-instance table.
+- `GET /bots/:id/signals` returns per-token price/24h/action/reason. Stateful strategies persist `strategy_state` in `bot_signals`.
+- `BotRunnerService` ticks every 60 seconds under `pg_try_advisory_lock('nexter:bot-runner')`; quotes come only from `market_quotes`, stale/missing quotes are skipped.
+- P&L is average-cost; never write paper trades into `transactions`/`postings`/`lots`/`trade_groups`.
+- All user mutations are audited (`bot.*`); paper trades/events are their own journals. Running bots cannot be edited. Archiving is blocked while positions remain.
+- API under `/api/v1/trading-bots`; UI under `/portfolio#robots`. Strategy reference is `/settings/strategies` (read-only, no test buttons). Bot journals paginate with `limit/offset` and `Ещё`.
+- Bot creation no longer accepts `aiCandidateId` and never writes `ai_*` tables. Historical `origin='ai'` robots may still exist and remain readable; they are not recreated by the removed module.
 - Real automated trading is blocked by WalletConnect/Tangem manual signing. A future live venue needs an owner-approved signer/session-key/AA design and a separate security review; no server private keys.
 
-## 16. Definition of Done
+## 16. Sandbox (see `runbooks/sandbox.md`)
+
+- `@nexter/sandbox-core` is independent of `apps/*`, AI and trading-bots. Paper-only: no wallets/keys/signing/real ledger.
+- Live runs: `sandbox_runs`/`sandbox_events` under advisory lock `nexter:sandbox-runner`.
+- Historical replay: `POST /sandbox/replays` queues a worker (`nexter:sandbox-replay-worker`) that freezes config/settings/seed and a gzip candle snapshot; the report hash must reproduce.
+- Replay artifacts are PDF + JSON. `report.md` for historical replays is removed; live run Markdown remains.
+- `chart`/`decisions` are read-only projections: chart uses the evaluation-window candles and report intent/trade/counterfactual rows; decisions re-run the persisted snapshot on demand and cache in memory. Never mutate the replay row/report from these reads.
+- New sandbox tokens come only from the default `Избранное` group via chain+contract; server rejects arbitrary keys and ineligible candidates. Existing Stage 3 tokens are untouched.
+- Never stop/start/re-run the five Stage 3 production runs without explicit owner approval.
+
+## 17. Definition of Done
 
 - Spec/acceptance clear; tests added/updated.
 - `format:check`, `lint`, `typecheck`, `test`, `build` pass.
