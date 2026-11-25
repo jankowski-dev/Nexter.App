@@ -247,6 +247,20 @@ export const equityCurveSchema = z.object({
   points: z.array(equityCurvePointSchema),
 });
 
+export const equitySeriesRangeSchema = z.enum(['hour', 'day', 'month']);
+
+export const equitySeriesQuerySchema = z.object({
+  range: equitySeriesRangeSchema.default('day'),
+});
+
+export const equitySeriesSchema = z.object({
+  range: equitySeriesRangeSchema,
+  granularity: equitySeriesRangeSchema,
+  valuation: z.enum(['hourly-points', 'daily-snapshots']),
+  note: z.string(),
+  points: z.array(equityCurvePointSchema),
+});
+
 export const portfolioSnapshotSchema = z.object({
   snapshotDate: z.string(),
   cashUsd: z.string(),
@@ -280,6 +294,9 @@ export type DataQualityIssue = z.infer<typeof dataQualityIssueSchema>;
 export type DashboardDataQuality = z.infer<typeof dashboardDataQualitySchema>;
 export type EquityCurvePoint = z.infer<typeof equityCurvePointSchema>;
 export type EquityCurve = z.infer<typeof equityCurveSchema>;
+export type EquitySeriesRange = z.infer<typeof equitySeriesRangeSchema>;
+export type EquitySeriesQuery = z.infer<typeof equitySeriesQuerySchema>;
+export type EquitySeries = z.infer<typeof equitySeriesSchema>;
 export type PortfolioSnapshot = z.infer<typeof portfolioSnapshotSchema>;
 
 export const portfolioTokenSummarySchema = z.object({
