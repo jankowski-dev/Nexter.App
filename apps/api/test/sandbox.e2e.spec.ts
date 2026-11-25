@@ -5,13 +5,17 @@ import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
 import {
+  assets,
   auditLog,
+  chains,
   createDb,
   sandboxEquityPoints,
   sandboxEvents,
   sandboxIntents,
   sandboxRuns,
   users,
+  watchlist,
+  watchlistGroups,
   type Database,
 } from '@nexter/db';
 import {
@@ -229,6 +233,57 @@ async function setupOwner(app: NestFastifyApplication): Promise<TestCookies> {
   return cookies;
 }
 
+/** Seed the default favorites entry required for a new sandbox token. */
+async function seedFavoriteToken(
+  db: Database,
+  tokenKey: string,
+  symbol: string,
+  name: string,
+): Promise<void> {
+  const [owner] = await db.select({ id: users.id }).from(users).limit(1);
+  if (!owner) throw new Error('owner was not created');
+  const contractAddress = tokenKey.slice('bsc:'.length);
+  await db
+    .insert(chains)
+    .values({ code: 'bsc', name: 'BNB Smart Chain' })
+    .onConflictDoNothing({ target: chains.code });
+  const [chain] = await db
+    .select({ id: chains.id })
+    .from(chains)
+    .where(eq(chains.code, 'bsc'))
+    .limit(1);
+  if (!chain) throw new Error('bsc chain was not created');
+  await db
+    .insert(assets)
+    .values({ chainId: chain.id, symbol, name, contractAddress })
+    .onConflictDoNothing({ target: [assets.chainId, assets.symbol] });
+  const [asset] = await db
+    .select({ id: assets.id })
+    .from(assets)
+    .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, symbol)))
+    .limit(1);
+  if (!asset) throw new Error('favorite asset was not created');
+  const [group] = await db
+    .insert(watchlistGroups)
+    .values({ userId: owner.id, name: 'Избранное', isDefault: true, sortOrder: 0 })
+    .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+    .returning({ id: watchlistGroups.id });
+  const groupId =
+    group?.id ??
+    (
+      await db
+        .select({ id: watchlistGroups.id })
+        .from(watchlistGroups)
+        .where(and(eq(watchlistGroups.userId, owner.id), eq(watchlistGroups.name, 'Избранное')))
+        .limit(1)
+    )[0]?.id;
+  if (!groupId) throw new Error('favorites group was not created');
+  await db
+    .insert(watchlist)
+    .values({ userId: owner.id, assetId: asset.id, groupId })
+    .onConflictDoNothing({ target: [watchlist.userId, watchlist.assetId] });
+}
+
 async function bootApp(fakeData?: FakeSandboxData): Promise<NestFastifyApplication> {
   let builder = Test.createTestingModule({ imports: [AppModule] });
   if (fakeData !== undefined) {
@@ -357,6 +412,7 @@ describe('Sandbox live-paper fake-clock e2e', () => {
           .expect(403);
 
         // --- Token universe (create / update / refresh audit) -----------------
+        await seedFavoriteToken(db, TOKEN, 'CAKE', 'PancakeSwap');
         const token = await api(liveApp, cookies, 'post', '/api/v1/sandbox/tokens')
           .send({ tokenKey: TOKEN, symbol: 'CAKE', name: 'PancakeSwap' })
           .expect(201);

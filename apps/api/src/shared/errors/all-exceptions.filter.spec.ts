@@ -66,6 +66,22 @@ describe('AllExceptionsFilter cache headers', () => {
         code: 'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
       },
       {
+        exception: new BadRequestException({
+          code: 'SANDBOX_TOKEN_NOT_IN_FAVORITES',
+          message: 'Token is not in favorites',
+        }),
+        status: 400,
+        code: 'SANDBOX_TOKEN_NOT_IN_FAVORITES',
+      },
+      {
+        exception: new BadRequestException({
+          code: 'SANDBOX_TOKEN_NOT_ELIGIBLE',
+          message: 'Token is not eligible',
+        }),
+        status: 400,
+        code: 'SANDBOX_TOKEN_NOT_ELIGIBLE',
+      },
+      {
         exception: new NotFoundException({
           code: 'SANDBOX_REPLAY_NOT_FOUND',
           message: 'Replay not found',

@@ -4,7 +4,17 @@ import cookie from '@fastify/cookie';
 import { and, eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
-import { auditLog, createDb, sandboxReplays, users, type Database } from '@nexter/db';
+import {
+  assets,
+  auditLog,
+  chains,
+  createDb,
+  sandboxReplays,
+  users,
+  watchlist,
+  watchlistGroups,
+  type Database,
+} from '@nexter/db';
 import {
   SANDBOX_TIMEFRAME,
   sandboxReplayChartResponseSchema,
@@ -307,9 +317,60 @@ describe('Sandbox historical replay (e2e)', () => {
     return { candles, replays };
   }
 
+  /**
+   * New sandbox tokens are restricted to the default favorites group. Seed one
+   * asset + favorites entry per test key before calling the API.
+   */
+  async function seedFavorite(tokenKey: string, symbol: string, name: string): Promise<void> {
+    if (!db) throw new Error('test database is not configured');
+    const owner = await ownerId();
+    const contractAddress = tokenKey.slice('bsc:'.length);
+    await db
+      .insert(chains)
+      .values({ code: 'bsc', name: 'BNB Smart Chain' })
+      .onConflictDoNothing({ target: chains.code });
+    const [chain] = await db
+      .select({ id: chains.id })
+      .from(chains)
+      .where(eq(chains.code, 'bsc'))
+      .limit(1);
+    if (!chain) throw new Error('bsc chain was not created');
+    await db
+      .insert(assets)
+      .values({ chainId: chain.id, symbol, name, contractAddress })
+      .onConflictDoNothing({ target: [assets.chainId, assets.symbol] });
+    const [asset] = await db
+      .select({ id: assets.id })
+      .from(assets)
+      .where(and(eq(assets.chainId, chain.id), eq(assets.symbol, symbol)))
+      .limit(1);
+    if (!asset) throw new Error('favorite asset was not created');
+    const [group] = await db
+      .insert(watchlistGroups)
+      .values({ userId: owner, name: 'Избранное', isDefault: true, sortOrder: 0 })
+      .onConflictDoNothing({ target: [watchlistGroups.userId, watchlistGroups.name] })
+      .returning({ id: watchlistGroups.id });
+    const groupId =
+      group?.id ??
+      (
+        await db
+          .select({ id: watchlistGroups.id })
+          .from(watchlistGroups)
+          .where(and(eq(watchlistGroups.userId, owner), eq(watchlistGroups.name, 'Избранное')))
+          .limit(1)
+      )[0]?.id;
+    if (!groupId) throw new Error('favorites group was not created');
+    await db
+      .insert(watchlist)
+      .values({ userId: owner, assetId: asset.id, groupId })
+      .onConflictDoNothing({ target: [watchlist.userId, watchlist.assetId] });
+  }
+
   async function createUniverse(
     cookies: TestCookies,
   ): Promise<{ tokenAId: string; tokenBId: string }> {
+    await seedFavorite(TOKEN_A, 'AAA', 'Alpha');
+    await seedFavorite(TOKEN_B, 'BBB', 'Beta');
     const tokenA = await api(app, cookies, 'post', '/api/v1/sandbox/tokens')
       .send({ tokenKey: TOKEN_A, symbol: 'AAA', name: 'Alpha' })
       .expect(201);
