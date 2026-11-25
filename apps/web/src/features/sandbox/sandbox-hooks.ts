@@ -12,6 +12,8 @@ import {
   fetchSandboxOverview,
   fetchSandboxPositions,
   fetchSandboxReplay,
+  fetchSandboxReplayChart,
+  fetchSandboxReplayDecisions,
   fetchSandboxReplayReport,
   fetchSandboxReplays,
   fetchSandboxReport,
@@ -336,6 +338,38 @@ export function useSandboxReplayReport(replayId: string | null, enabled = true) 
   return useQuery({
     queryKey: sandboxQueryKeys.replayReport(replayId ?? 'none'),
     queryFn: () => fetchSandboxReplayReport(replayId as string),
+    enabled: replayId !== null && enabled,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSandboxReplayChart(replayId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.replayChart(replayId ?? 'none'),
+    queryFn: () => fetchSandboxReplayChart(replayId as string),
+    enabled: replayId !== null && enabled,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSandboxReplayDecisions(
+  replayId: string | null,
+  tokenId: string | null,
+  enabled = true,
+) {
+  return useInfiniteQuery({
+    queryKey: sandboxQueryKeys.replayDecisions(replayId ?? 'none', tokenId),
+    queryFn: ({ pageParam }) =>
+      fetchSandboxReplayDecisions(replayId as string, {
+        tokenId: tokenId ?? undefined,
+        limit: 100,
+        offset: pageParam,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (last) =>
+      last.offset + last.items.length < last.total ? last.offset + last.items.length : undefined,
     enabled: replayId !== null && enabled,
     retry: false,
     refetchOnWindowFocus: false,

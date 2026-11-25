@@ -6,8 +6,9 @@ import {
   createSandboxReplay,
   downloadSandboxReplayReport,
   fetchSandboxReplay,
+  fetchSandboxReplayChart,
+  fetchSandboxReplayDecisions,
   fetchSandboxReplayReport,
-  fetchSandboxReplayReportMarkdown,
   fetchSandboxReplays,
   preflightSandboxReplay,
   sandboxQueryKeys,
@@ -139,24 +140,87 @@ describe('sandbox replay api', () => {
     expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/report.json`);
   });
 
-  it('fetches the Markdown report as text with credentials', async () => {
-    nextResponse = () => new Response('# Historical paper replay report\n', { status: 200 });
-    const markdown = await fetchSandboxReplayReportMarkdown(sandboxReplayId);
-    expect(markdown).toContain('Historical paper');
-    expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/report.md`);
-    expect(calls[0]?.init.credentials).toBe('include');
-    expect(calls[0]?.init.headers).toEqual({ Accept: 'text/markdown' });
+  it('reads the chart and decision timeline', async () => {
+    nextResponse = () =>
+      jsonResponse({
+        replayId: sandboxReplayId,
+        tokens: [
+          {
+            tokenId: sandboxTokenId,
+            candles: [
+              {
+                time: 1_760_000_000_000,
+                openUsd: '4.00',
+                highUsd: '4.30',
+                lowUsd: '3.90',
+                closeUsd: '4.20',
+              },
+            ],
+          },
+        ],
+        actions: [
+          {
+            id: 'buy-1',
+            tokenId: sandboxTokenId,
+            time: 1_760_000_000_000,
+            kind: 'buy',
+            priceUsd: '4.20',
+            amountUsd: '100.00',
+            pnlUsd: null,
+            reasonCode: 'TREND_PULLBACK_ENTRY',
+            reasonText: 'Вход',
+            intentId: 'buy-1',
+            tradeId: 'trade-1',
+          },
+        ],
+        note: 'window only',
+      });
+    const chart = await fetchSandboxReplayChart(sandboxReplayId);
+    expect(chart.actions[0]?.reasonCode).toBe('TREND_PULLBACK_ENTRY');
+    expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/chart`);
+
+    calls.length = 0;
+    nextResponse = () =>
+      jsonResponse({
+        items: [
+          {
+            time: 1_760_000_000_000,
+            tokenId: sandboxTokenId,
+            strategyKey: 'trend_pullback',
+            action: 'hold',
+            sizeUsd: null,
+            reasonCode: 'TREND_PULLBACK_HOLD',
+            reasonText: 'Hold',
+          },
+        ],
+        total: 1,
+        limit: 20,
+        offset: 0,
+      });
+    const decisions = await fetchSandboxReplayDecisions(sandboxReplayId, {
+      limit: 20,
+      offset: 0,
+      tokenId: sandboxTokenId,
+    });
+    expect(decisions.items[0]?.reasonCode).toBe('TREND_PULLBACK_HOLD');
+    expect(calls[0]?.url).toContain(`/api/v1/sandbox/replays/${sandboxReplayId}/decisions?`);
+    expect(calls[0]?.url).toContain('tokenId=');
   });
 
-  it('downloads both artifacts through the replay report endpoints', async () => {
+  it('downloads JSON and PDF artifacts', async () => {
     nextResponse = () => jsonResponse(sandboxReplayReportResponseFixture());
     await downloadSandboxReplayReport(sandboxReplayId, 'json');
     expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/report.json`);
 
     calls.length = 0;
-    nextResponse = () => new Response('# Historical paper replay report\n', { status: 200 });
-    await downloadSandboxReplayReport(sandboxReplayId, 'md');
-    expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/report.md`);
+    nextResponse = () =>
+      new Response(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), {
+        status: 200,
+        headers: { 'content-type': 'application/pdf' },
+      });
+    await downloadSandboxReplayReport(sandboxReplayId, 'pdf');
+    expect(calls[0]?.url).toBe(`/api/v1/sandbox/replays/${sandboxReplayId}/report.pdf`);
+    expect(calls[0]?.init.headers).toEqual({ Accept: 'application/pdf' });
   });
 
   it('maps a not-completed report to the typed Russian error', async () => {

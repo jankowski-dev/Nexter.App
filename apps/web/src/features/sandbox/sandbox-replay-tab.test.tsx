@@ -129,33 +129,13 @@ beforeEach(() => {
 });
 
 describe('sandbox replay tab', () => {
-  it('renders the replay form, coverage preflight and history', () => {
+  it('renders the history page with a compact new-run action', () => {
     const html = renderTab();
     expect(html).toContain('Исторический прогон');
     expect(html).toContain('Новый прогон');
-    expect(html).toContain('Название');
-    expect(html).toContain('Период');
-    expect(html).toContain('180 дней');
-    expect(html).toContain('Начальный капитал');
-    expect(html).toContain('Токены прогона');
-    expect(html).toContain('AAA');
-    expect(html).toContain('Выберите токены для прогона');
-    expect(html).toContain('Не выбрано ни одного токена');
-    expect(html).toContain('4320 / 4320');
-    expect(html).toContain('Запустить прогон');
-    expect(html).toContain('Дополнительные настройки');
-    expect(html).toContain('Обновить данные');
     expect(html).toContain('Прогонов пока нет');
-  });
-
-  it('blocks creation while coverage cannot be verified', () => {
-    mockedPreflight.mockReturnValue(
-      preflightResult({ isError: true, error: new Error('boom'), data: undefined }),
-    );
-    const html = renderTab();
-    expect(html).toContain('Выберите токены для прогона');
-    expect(html).toContain('Повторить проверку');
-    expect(html).toContain('disabled');
+    expect(html).not.toContain('Запустить прогон');
+    expect(html).not.toContain('Начальный капитал');
   });
 
   it('renders the history rows inside the tab', () => {
@@ -167,7 +147,7 @@ describe('sandbox replay tab', () => {
     const html = renderTab();
     expect(html).toContain('Прогон 180 дней');
     expect(html).toContain('Завершён');
-    expect(html).toContain('Открыть');
+    expect(html).not.toContain('Открыть');
   });
 
   it('never renders a manual buy or add action', () => {

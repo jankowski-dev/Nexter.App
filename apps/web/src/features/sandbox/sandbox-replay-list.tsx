@@ -137,16 +137,23 @@ function SandboxReplayRow({
   onArchive: (replay: SandboxReplaySummary) => void;
 }) {
   return (
-    <Card className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <Card
+      className="flex cursor-pointer flex-col gap-4 transition-colors hover:border-emerald-300 lg:flex-row lg:items-center lg:justify-between"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(replay)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen(replay);
+        }
+      }}
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="truncate text-left text-base font-semibold text-zinc-900 hover:text-emerald-800"
-            onClick={() => onOpen(replay)}
-          >
+          <span className="truncate text-left text-base font-semibold text-zinc-900">
             {replay.name}
-          </button>
+          </span>
           <Badge tone={sandboxReplayStatusTones[replay.status]}>
             {sandboxReplayStatusLabels[replay.status]}
           </Badge>
@@ -197,16 +204,27 @@ function SandboxReplayRow({
           </div>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" onClick={() => onOpen(replay)}>
-            Открыть
-          </Button>
           {sandboxReplayCanCancel(replay) ? (
-            <Button variant="danger" disabled={busy} onClick={() => onCancel(replay)}>
+            <Button
+              variant="danger"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                onCancel(replay);
+              }}
+            >
               Отменить
             </Button>
           ) : null}
           {sandboxReplayCanArchive(replay) ? (
-            <Button variant="secondary" disabled={busy} onClick={() => onArchive(replay)}>
+            <Button
+              variant="secondary"
+              disabled={busy}
+              onClick={(event) => {
+                event.stopPropagation();
+                onArchive(replay);
+              }}
+            >
               В архив
             </Button>
           ) : null}

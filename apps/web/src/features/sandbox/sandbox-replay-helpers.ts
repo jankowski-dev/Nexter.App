@@ -410,8 +410,8 @@ export const sandboxReplayCounterfactualOutcomeTones: Record<
   insufficient_data: 'neutral',
 };
 
-/** Stable artifact names for the replay JSON/Markdown downloads. */
-export function sandboxReplayReportFileName(replayId: string, format: 'json' | 'md'): string {
+/** Stable artifact names for the replay JSON/PDF downloads. */
+export function sandboxReplayReportFileName(replayId: string, format: 'json' | 'pdf'): string {
   return `sandbox-replay-${replayId}-report.${format}`;
 }
 

@@ -6,6 +6,7 @@ import { LineChart } from '@/components/charts/line-chart';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { downloadSandboxReplayReport } from './sandbox-api';
 import { useSandboxReplay, useSandboxReplayReport } from './sandbox-hooks';
+import { SandboxReplayChart } from './sandbox-replay-chart';
 import {
   sandboxIntentSideLabels,
   sandboxIntentStatusLabels,
@@ -147,6 +148,8 @@ export function SandboxReplayDetail({
         </Card>
       ) : null}
 
+      {completed ? <SandboxReplayChart replay={data} symbolByKey={symbolByKey} /> : null}
+
       {completed ? (
         <>
           {report.isPending ? <LoadingRows rows={6} /> : null}
@@ -210,7 +213,7 @@ function ReplayReportBody({
 }) {
   const { report } = response;
   const cards = sandboxReplaySummaryCards(report.metrics);
-  const [pending, setPending] = useState<'json' | 'md' | null>(null);
+  const [pending, setPending] = useState<'json' | 'pdf' | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const chartPoints = useMemo(
     () =>
@@ -221,7 +224,7 @@ function ReplayReportBody({
     [report.equityCurve],
   );
 
-  async function download(format: 'json' | 'md'): Promise<void> {
+  async function download(format: 'json' | 'pdf'): Promise<void> {
     setPending(format);
     setDownloadError(null);
     try {
@@ -262,9 +265,9 @@ function ReplayReportBody({
             <Button
               variant="secondary"
               disabled={pending !== null}
-              onClick={() => void download('md')}
+              onClick={() => void download('pdf')}
             >
-              {pending === 'md' ? 'Готовлю Markdown…' : 'Скачать Markdown'}
+              {pending === 'pdf' ? 'Готовлю PDF…' : 'Скачать PDF'}
             </Button>
           </div>
         </div>
@@ -278,26 +281,9 @@ function ReplayReportBody({
           </div>
         ) : null}
 
-        <div className="mt-3 grid gap-1 break-all font-mono text-[11px] text-zinc-500">
-          <div>reportHash: {report.reportHash}</div>
-          <div>
-            eventHash: {report.eventHash} · событий: {report.eventCount}
-          </div>
-          <div>dataSnapshotId: {report.dataSnapshotId}</div>
-          <div>candleSnapshotHash: {replay.candleSnapshotHash ?? '—'}</div>
-          <div>
-            configVersion: {report.configVersion} · settingsVersion: {report.settingsVersion} ·
-            seed: {report.seed}
-          </div>
-        </div>
-
-        {response.notes.length > 0 ? (
-          <ul className="mt-3 list-disc space-y-1 rounded-xl border border-zinc-200 bg-zinc-50 py-2 pl-8 pr-4 text-xs text-zinc-600">
-            {response.notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        ) : null}
+        <p className="mt-3 text-[11px] text-zinc-500">
+          Технические данные, хеши и полный журнал решений доступны в PDF и JSON.
+        </p>
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -324,7 +310,7 @@ function ReplayReportBody({
         )}
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="space-y-4">
         <Card>
           <CardTitle>По стратегиям</CardTitle>
           <ReplayMetricTable
@@ -422,6 +408,8 @@ function ReplayTradesTable({
   trades: readonly SandboxReportTrade[];
   symbolByKey: ReadonlyMap<string, string>;
 }) {
+  const [visible, setVisible] = useState(20);
+
   return (
     <Card>
       <CardTitle>Сделки прогона</CardTitle>
@@ -444,7 +432,7 @@ function ReplayTradesTable({
               </tr>
             </thead>
             <tbody>
-              {trades.map((trade) => (
+              {trades.slice(0, visible).map((trade) => (
                 <tr key={trade.tradeId} className="border-t border-zinc-100">
                   <td className="py-1 pr-2 text-zinc-800">
                     {symbolByKey.get(trade.tokenId) ?? trade.tokenId}
@@ -463,6 +451,17 @@ function ReplayTradesTable({
               ))}
             </tbody>
           </table>
+          {trades.length > visible ? (
+            <div className="mt-3 flex justify-center">
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                onClick={() => setVisible((current) => current + 20)}
+              >
+                Ещё
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>
@@ -476,6 +475,8 @@ function ReplayIntentJournal({
   intents: readonly SandboxReportIntent[];
   symbolByKey: ReadonlyMap<string, string>;
 }) {
+  const [visible, setVisible] = useState(20);
+
   return (
     <Card>
       <CardTitle>Журнал интентов</CardTitle>
@@ -486,7 +487,7 @@ function ReplayIntentJournal({
         <p className="mt-3 text-sm text-zinc-600">Интентов нет.</p>
       ) : (
         <div className="mt-3 space-y-2">
-          {intents.map((intent) => (
+          {intents.slice(0, visible).map((intent) => (
             <div
               key={intent.intentId}
               className="rounded-xl border border-zinc-200 px-3 py-2 text-xs text-zinc-600"
@@ -516,6 +517,17 @@ function ReplayIntentJournal({
               ) : null}
             </div>
           ))}
+          {intents.length > visible ? (
+            <div className="flex justify-center">
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                onClick={() => setVisible((current) => current + 20)}
+              >
+                Ещё
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>
@@ -529,6 +541,8 @@ function ReplayCounterfactuals({
   counterfactuals: readonly SandboxReportCounterfactual[];
   symbolByKey: ReadonlyMap<string, string>;
 }) {
+  const [visible, setVisible] = useState(20);
+
   return (
     <Card>
       <CardTitle>Контрфактические наблюдения</CardTitle>
@@ -539,7 +553,7 @@ function ReplayCounterfactuals({
         <p className="mt-3 text-sm text-zinc-600">Контрфактических наблюдений нет.</p>
       ) : (
         <div className="mt-3 space-y-2">
-          {counterfactuals.map((counterfactual, index) => (
+          {counterfactuals.slice(0, visible).map((counterfactual, index) => (
             <div
               key={`${counterfactual.tokenId}-${counterfactual.decisionTime}-${index}`}
               className="rounded-xl border border-zinc-200 px-3 py-2 text-xs text-zinc-600"
@@ -571,6 +585,17 @@ function ReplayCounterfactuals({
               </div>
             </div>
           ))}
+          {counterfactuals.length > visible ? (
+            <div className="flex justify-center">
+              <Button
+                variant="secondary"
+                className="h-8 px-3 text-xs"
+                onClick={() => setVisible((current) => current + 20)}
+              >
+                Ещё
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </Card>
