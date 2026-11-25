@@ -186,13 +186,16 @@
 
 ## 11.1. Notifications
 
-| Метод | Путь                          | Описание                            |
-| ----- | ----------------------------- | ----------------------------------- |
-| GET   | `/notifications?limit=`       | последние уведомления + unreadCount |
-| GET   | `/notifications/unread-count` | число непрочитанных                 |
-| POST  | `/notifications/read-all`     | пометить все прочитанными           |
+| Метод | Путь                          | Описание                                |
+| ----- | ----------------------------- | --------------------------------------- |
+| GET   | `/notifications?limit=`       | последние уведомления + unreadCount     |
+| GET   | `/notifications/unread-count` | число непрочитанных                     |
+| POST  | `/notifications/read-all`     | пометить все прочитанными               |
+| GET   | `/notifications/viber/status` | статус очереди Viber и последняя ошибка |
+| GET   | `/notifications/viber?limit=` | последние доставки Viber                |
+| POST  | `/notifications/viber/test`   | поставить тестовое сообщение в очередь  |
 
-Все ответы owner-scoped. Уведомления создаются сервером; отдельного пользовательского создания нет.
+Все ответы owner-scoped. Уведомления создаются сервером; отдельного пользовательского создания нет. Viber-очередь (`viber_notifications`) заполняется при закрытии сделки/остановке робота, если включены соответствующие тумблеры.
 
 ## 12. Bot API (server-to-server)
 
@@ -201,8 +204,10 @@
 | GET   | `/bot/tasks/upcoming?minutes=5` | открытые задачи в окне напоминания             |
 | POST  | `/bot/audio-notes`              | транскрипт + аудио; создаёт заметку и вложение |
 | GET   | `/bot/audio-notes/:id`          | статус обработки аудиозаметки                  |
+| GET   | `/bot/notifications/pending`    | очередь Viber + частота/время дайджеста        |
+| POST  | `/bot/notifications/:id/ack`    | подтвердить `sent`/`failed`                    |
 
-Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankowski-dev/Nexter.Bot` service transcribes locally and calls these endpoints. The audio limit is `settings.audio_max_mb` (default 8, max 20).
+Bearer `BOT_API_TOKEN`; origin/CSRF exempt (`@SkipOrigin`). The external `jankowski-dev/Nexter.Bot` service transcribes locally and calls these endpoints. The audio limit is `settings.audio_max_mb` (default 8, max 20). Viber secrets (`VIBER_TOKEN`, `VIBER_USER_ID`) stay in `Nexter.Bot`; the API only exposes the outbox. Failed acks remain pending until three attempts, then `failed`.
 
 ## 13. Trading bots (paper)
 

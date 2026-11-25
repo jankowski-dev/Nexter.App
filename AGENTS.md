@@ -18,6 +18,17 @@ The independent autonomous `Песочница` is the long-term replacement can
 - Stage 3 (8-week forward paper validation) is **active** from 2026-11-25 through 2027-01-20: design `docs/superpowers/specs/2026-11-25-sandbox-stage-3-forward-paper-design.md`, ADR 0086, baseline `docs/sandbox/stage-3-baseline.md`, incidents `docs/sandbox/stage-3-incidents.md`, weekly `docs/sandbox/stage-3-weekly.md`, runbook `docs/runbooks/sandbox-stage-3.md`. Five separate clean runs, $1,000 each and current Stage 1B/1C defaults: CAKE, BTCB, ETH, LINK, WBNB (BSC/GeckoTerminal 1h; Binance is HTTP 451 in production). Manual close is allowed with an intervention log; code changes are allowed through PR/review/CI, while strategy/risk-parameter changes require a new baseline and owner approval. Weekly checkpoints on Wednesdays; final stop/report 2027-01-20; Stage 4 (real money) remains a separate decision.
 - Stage 1C proof is execution/accounting/determinism, not a performance claim: 49,379 events, 454 intents, 227 trades, +37.85% synthetic, 2.68% max drawdown, reconciliation true.
 
+### UX batch (2026-11-25)
+
+Owner-requested UX batch, no real-money or trading-rule changes, implemented on `ux-batch`:
+
+- Settings now has full `Общие настройки`, `Экспорт` and `ViberBot` sections; the duplicate inline cards were removed. `/settings/accounting` keeps the default report period; `/settings/data` keeps accounts/import.
+- Viber notifications use an additive `viber_notifications` outbox (migration `0054`): manual/on-chain full closes, bot sells, close-all and bot stops create in-app notifications with P&L and an outbox row when the Viber toggles are on. `Nexter.Bot` polls `/api/v1/bot/notifications/pending`, sends `instant` or hourly/daily digests, and acks `/api/v1/bot/notifications/:id/ack`; secure delivery is at-least-once and bounded to 3 attempts. The owner `ViberBot` page shows connection/queue status, event toggles, cadence/digest time, test send and last deliveries.
+- `portfolio_equity_points` adds hourly UTC equity buckets; `GET /dashboard/equity-series?range=hour|day|month` powers the `Крипта → Обзор` capital chart. Hourly history starts at deploy time; no synthetic hours are produced. The overview layout is chart left, 2×2 compact cards right.
+- `StatCard` has a compact size used by the dashboard and portfolio cards. `Финансы → Обзор` shows the 12-month chart next to a monthly income/expense table. The add-operation drawer has a three-way `Расход/Доход/Перевод` switch, type-specific fields and quick categories from `GET /finance/categories/suggestions`; editing keeps the type fixed.
+- Notes now sort pinned first in both modes, expose pin/unpin in the drawer, and use a clear «Прикрепить файл» button plus a readable attachment pill.
+- ADR 0087/0088, design `docs/superpowers/specs/2026-11-25-ux-batch-design.md`, plan `docs/superpowers/plans/2026-11-25-ux-batch.md`. Migration `0054` and the bot deployment are gated by backup/restore + owner approval; API must deploy before the bot.
+
 ### AI direction (2026-11-19)
 
 The AI trading module is **recommendation-only**. The system may collect data, run analysis and mass searches, but it never creates, starts, stops or reallocates paper bots; the owner reviews a recommendation and creates/starts the bot manually. See ADR 0072 and the v0.2 plans.

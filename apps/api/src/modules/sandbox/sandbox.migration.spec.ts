@@ -128,9 +128,10 @@ describe('sandbox historical replay migration 0053', () => {
   });
 
   it('keeps the migration journal and snapshot chain consistent', () => {
-    expect(journal.entries).toHaveLength(54);
+    expect(journal.entries).toHaveLength(55);
     const last = journal.entries.at(-1);
-    expect(last).toMatchObject({ idx: 53, tag: '0053_sandbox_replays' });
+    expect(last).toMatchObject({ idx: 54, tag: '0054_elite_jimmy_woo' });
+    expect(journal.entries.some((entry) => entry.tag === '0053_sandbox_replays')).toBe(true);
     expect(journal.entries.some((entry) => entry.tag === '0052_sandbox_stage2')).toBe(true);
     expect(replaySnapshotSource).toContain('"sandbox_replays"');
   });
