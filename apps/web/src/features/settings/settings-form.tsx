@@ -86,6 +86,7 @@ export function TextField({
   onChange,
   type = 'text',
   placeholder,
+  disabled,
 }: {
   label: string;
   hint?: string;
@@ -93,6 +94,7 @@ export function TextField({
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block text-sm text-zinc-600">
@@ -102,6 +104,7 @@ export function TextField({
         type={type}
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       />
       {hint ? <span className="mt-1 block text-[11px] text-zinc-500">{hint}</span> : null}

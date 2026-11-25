@@ -18,6 +18,9 @@ import { AccountingSettingsPage } from '@/features/settings/accounting-settings-
 import { AccountsSettingsPage } from '@/features/settings/accounts-settings-page';
 import { BotsSettingsPage } from '@/features/settings/bots-settings-page';
 import { DataSettingsPage } from '@/features/settings/data-settings-page';
+import { ExportSettingsPage } from '@/features/settings/export-settings-page';
+import { GeneralSettingsPage } from '@/features/settings/general-settings-page';
+import { ViberSettingsPage } from '@/features/settings/viber-settings-page';
 import { DiagnosticsSettingsPage } from '@/features/settings/diagnostics-settings-page';
 import { MarketSettingsPage } from '@/features/settings/market-settings-page';
 import { NotificationsSettingsPage } from '@/features/settings/notifications-settings-page';
@@ -317,6 +320,12 @@ const dataQualityRoute = createRoute({
   component: DataQualityPage,
 });
 
+const generalSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/general',
+  component: GeneralSettingsPage,
+});
+
 const accountingSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/accounting',
@@ -351,6 +360,18 @@ const notificationsSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/notifications',
   component: NotificationsSettingsPage,
+});
+
+const exportSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/export',
+  component: ExportSettingsPage,
+});
+
+const viberSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/viber',
+  component: ViberSettingsPage,
 });
 
 const dataSettingsRoute = createRoute({
@@ -400,7 +421,10 @@ const routeTree = rootRoute.addChildren([
     auditSettingsRoute,
     systemSettingsRoute,
     dataQualityRoute,
+    generalSettingsRoute,
     accountingSettingsRoute,
+    exportSettingsRoute,
+    viberSettingsRoute,
     marketSettingsRoute,
     tradingSettingsRoute,
     botsSettingsRoute,

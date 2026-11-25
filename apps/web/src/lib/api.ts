@@ -48,9 +48,11 @@ import {
   dashboardSummarySchema,
   dataQualityReportSchema,
   equityCurveSchema,
+  equitySeriesSchema,
   errorEnvelopeSchema,
   financeAccountsResponseSchema,
   financeCategoriesResponseSchema,
+  financeCategorySuggestionsResponseSchema,
   financeCreditDrawdownResponseSchema,
   financeImportSchema,
   financeImportsResponseSchema,
@@ -74,6 +76,9 @@ import {
   notificationsReadAllResponseSchema,
   notificationUnreadCountSchema,
   notificationsClearResponseSchema,
+  viberListResponseSchema,
+  viberStatusResponseSchema,
+  viberTestResponseSchema,
   notesResponseSchema,
   portfolioAssetDetailSchema,
   portfolioTokenSummariesResponseSchema,
@@ -165,12 +170,15 @@ import {
   type DashboardRecentTrades,
   type DashboardSummary,
   type EquityCurve,
+  type EquitySeries,
+  type EquitySeriesRange,
   type FinanceAccountCreateRequest,
   type FinanceAccountUpdateRequest,
   type FinanceAccountsResponse,
   type FinanceCategoryCreateRequest,
   type FinanceCategoryUpdateRequest,
   type FinanceCategoriesResponse,
+  type FinanceCategorySuggestionsResponse,
   type FinanceCreditDrawdownRequest,
   type FinanceCreditDrawdownResponse,
   type FinanceImport,
@@ -236,6 +244,9 @@ import {
   type TradeGroupDetail,
   type VaultConfig,
   type VaultInitializeRequest,
+  type ViberListResponse,
+  type ViberStatusResponse,
+  type ViberTestResponse,
   type VaultItem,
   type VaultItemCreateRequest,
   type VaultItemUpdateRequest,
@@ -547,6 +558,10 @@ export async function fetchEquityCurve(): Promise<EquityCurve> {
   return apiFetch('/api/v1/dashboard/equity-curve', {}, equityCurveSchema);
 }
 
+export async function fetchEquitySeries(range: EquitySeriesRange): Promise<EquitySeries> {
+  return apiFetch('/api/v1/dashboard/equity-series?range=' + range, {}, equitySeriesSchema);
+}
+
 export async function capturePortfolioSnapshot(): Promise<PortfolioSnapshot> {
   return apiPost('/api/v1/dashboard/snapshot', {}, portfolioSnapshotSchema);
 }
@@ -739,6 +754,18 @@ export async function fetchDataQuality(): Promise<DataQualityReport> {
 
 export async function updateSettings(body: UpdateSettingsRequest): Promise<Settings> {
   return apiPatch('/api/v1/settings', body, settingsSchema);
+}
+
+export async function fetchViberStatus(): Promise<ViberStatusResponse> {
+  return apiFetch('/api/v1/notifications/viber/status', {}, viberStatusResponseSchema);
+}
+
+export async function fetchViberNotifications(limit = 10): Promise<ViberListResponse> {
+  return apiFetch(`/api/v1/notifications/viber?limit=${limit}`, {}, viberListResponseSchema);
+}
+
+export async function sendViberTest(): Promise<ViberTestResponse> {
+  return apiPost('/api/v1/notifications/viber/test', {}, viberTestResponseSchema);
 }
 
 export async function fetchAuditLog(
@@ -973,6 +1000,17 @@ export async function updateFinanceAccount(
 
 export async function fetchFinanceCategories(): Promise<FinanceCategoriesResponse> {
   return apiFetch('/api/v1/finance/categories', {}, financeCategoriesResponseSchema);
+}
+
+export async function fetchFinanceCategorySuggestions(
+  kind: 'expense' | 'income',
+  limit = 5,
+): Promise<FinanceCategorySuggestionsResponse> {
+  return apiFetch(
+    `/api/v1/finance/categories/suggestions?kind=${kind}&limit=${limit}`,
+    {},
+    financeCategorySuggestionsResponseSchema,
+  );
 }
 
 export async function createFinanceCategory(

@@ -3,14 +3,7 @@ import { Link } from '@tanstack/react-router';
 import { toRussianError } from '@/lib/error-messages';
 import type { ReportPeriodDefault, Settings } from '@nexter/contracts';
 import { useState } from 'react';
-import {
-  SelectField,
-  SettingsCard,
-  SettingsPageShell,
-  SettingsSaveBar,
-  TextField,
-  ToggleField,
-} from './settings-form';
+import { SelectField, SettingsCard, SettingsPageShell, SettingsSaveBar } from './settings-form';
 import { useSettings, useUpdateSettings } from './use-settings';
 
 const periodOptions: ReadonlyArray<{ value: ReportPeriodDefault; label: string }> = [
@@ -39,47 +32,43 @@ export function AccountingSettingsPage() {
 
 function AccountingForm({ settings }: { settings: Settings }) {
   const update = useUpdateSettings();
-  const [values, setValues] = useState({
-    timezone: settings.timezone,
-    includeGasInCostBasis: settings.includeGasInCostBasis,
-    defaultReportPeriod: settings.defaultReportPeriod,
-  });
+  const [defaultReportPeriod, setDefaultReportPeriod] = useState<ReportPeriodDefault>(
+    settings.defaultReportPeriod,
+  );
 
   return (
     <SettingsPageShell
       title="Учёт и отчёты"
-      description="Часовой пояс, стоимость газа и период статистики."
+      description="Период статистики по умолчанию и ссылки на общие правила учёта."
     >
-      <SettingsCard title="Общие">
-        <TextField
-          label="Часовой пояс (IANA)"
-          hint="Например, Europe/Minsk. Влияет на границы месяцев и снапшоты."
-          value={values.timezone}
-          onChange={(value) => setValues((current) => ({ ...current, timezone: value }))}
-        />
-        <ToggleField
-          label="Включать gas в стоимость покупки"
-          hint="Применяется к новым сделкам; история не пересчитывается."
-          checked={values.includeGasInCostBasis}
-          onChange={(checked) =>
-            setValues((current) => ({ ...current, includeGasInCostBasis: checked }))
-          }
-        />
+      <SettingsCard title="Отчёты">
         <SelectField
           label="Период статистики по умолчанию"
-          value={values.defaultReportPeriod}
-          onChange={(value) => setValues((current) => ({ ...current, defaultReportPeriod: value }))}
+          hint="Применяется к странице статистики и отчётам."
+          value={defaultReportPeriod}
+          onChange={setDefaultReportPeriod}
           options={periodOptions}
         />
       </SettingsCard>
-      <SettingsCard title="Справочники">
+      <SettingsCard title="Правила учёта">
         <p className="text-sm text-zinc-600">
-          Базовая валюта — USD, налоговый метод — FIFO. Это фиксированные продуктовые правила,
-          поэтому они не редактируются.
+          Базовая валюта — USD, налоговый метод — FIFO. Это фиксированные продуктовые правила.
+          Часовой пояс и включение газа в стоимость настраиваются в «Общих настройках».
         </p>
-        <Link className="text-sm text-emerald-800 hover:underline" to="/settings/data">
-          Счета, экспорт и импорт →
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-200 px-3 text-sm text-emerald-800 hover:border-emerald-300"
+            to="/settings/general"
+          >
+            Общие настройки
+          </Link>
+          <Link
+            className="inline-flex h-9 items-center rounded-lg border border-zinc-200 px-3 text-sm text-emerald-800 hover:border-emerald-300"
+            to="/settings/export"
+          >
+            Экспорт
+          </Link>
+        </div>
       </SettingsCard>
       <SettingsSaveBar
         pending={update.isPending}
@@ -87,13 +76,7 @@ function AccountingForm({ settings }: { settings: Settings }) {
         error={
           update.isError ? toRussianError(update.error, 'Не удалось сохранить настройки') : null
         }
-        onSave={() =>
-          update.mutate({
-            timezone: values.timezone,
-            includeGasInCostBasis: values.includeGasInCostBasis,
-            defaultReportPeriod: values.defaultReportPeriod,
-          })
-        }
+        onSave={() => update.mutate({ defaultReportPeriod })}
       />
     </SettingsPageShell>
   );
