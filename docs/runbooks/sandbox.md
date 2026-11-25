@@ -1,3 +1,4 @@
+successfully downloaded text file (SHA: 921e3ca95c8ad64e602bbd9116e5eacbfa1a39b6)
 # Sandbox Runbook
 
 Owner-only `Песочница`: a persistent live paper loop on real 1h market data (Stage 2) and an owner-facing historical replay over stored candles (Stage 2.1), both with virtual money. No wallets, keys, signing, exchange orders or real ledger writes.
@@ -61,7 +62,7 @@ environment:
    `GET /api/v1/sandbox/overview` returns `executionMode: 'live-paper'`.
 6. Run the live smoke below, then optionally start one short paper run.
 
-## Migration `0053` — production apply order (Stage 2.1, not applied)
+## Migration `0053` — production apply order (Stage 2.1, applied 2026-11-25)
 
 Migration `0053_sandbox_replays.sql` is additive, creates the `sandbox_replays`
 table plus three indexes and grants `nexter_app` `SELECT/INSERT/UPDATE` with
@@ -293,14 +294,14 @@ runs and never mutates them.
 
 ## Stage 2.1 gate
 
-Stage 2.1 (historical replay UI) is **implemented; independent review gate**.
-Migration `0053` is not applied and nothing is deployed. Production migration and
-deploy only after the independent whole-branch review and explicit owner
-approval, with the backup/restore/SHA-256 record above.
+Stage 2.1 (historical replay UI) is **accepted and deployed**. Migration `0053`
+is applied, the independent whole-branch review signed off, and the owner
+accepted the report. The backup/restore/SHA-256 record is in
+`docs/decisions.md` and `docs/reviews/2026-11-25-sandbox-historical-replay-report.md`.
+Stage 3 is active.
 
 ## Stage 3 gate
 
-Stage 3 (4–8 week forward paper run) must not start until the Stage 2
-independent review is signed off, the owner accepts the Stage 2 report, and the
-Stage 2.1 replay report is also accepted. Real money remains a separate Stage 4
+Stage 3 (8-week forward paper run) is **active** from 2026-11-25 through
+2027-01-20. Real money remains a separate Stage 4
 product/security/legal decision.
