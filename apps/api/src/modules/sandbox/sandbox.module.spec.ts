@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayChartService } from './sandbox-replay-chart.service';
+import { SandboxReplayPdfService } from './sandbox-replay-pdf.service';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -35,6 +37,8 @@ async function compile(enabled: boolean) {
       { provide: SandboxReadService, useValue: {} },
       { provide: SandboxReplayService, useValue: {} },
       { provide: SandboxReplayReportService, useValue: {} },
+      { provide: SandboxReplayPdfService, useValue: {} },
+      { provide: SandboxReplayChartService, useValue: {} },
       SandboxEnabledGuard,
     ],
   }).compile();
@@ -75,56 +79,44 @@ describe('SandboxController', () => {
     }
   });
 
-  it('serves both Markdown report routes no-store without a static content type', () => {
+  it('serves the live Markdown report route no-store without a static content type', () => {
     const headersOf = (method: keyof SandboxController) =>
       (Reflect.getMetadata(HEADERS_METADATA, SandboxController.prototype[method]) ?? []) as Array<{
         name: string;
         value: string;
       }>;
 
-    for (const method of ['reportMarkdown', 'replayReportMarkdown'] as const) {
-      expect(headersOf(method)).toContainEqual({ name: 'Cache-Control', value: 'no-store' });
-      // A static Content-Type would also label 404/409 JSON errors as Markdown
-      // and make Fastify reject the object payload (500). It is set per request
-      // only after a successful read instead.
-      expect(headersOf(method).some((header) => header.name === 'Content-Type')).toBe(false);
-    }
+    expect(headersOf('reportMarkdown')).toContainEqual({
+      name: 'Cache-Control',
+      value: 'no-store',
+    });
+    expect(headersOf('reportMarkdown').some((header) => header.name === 'Content-Type')).toBe(
+      false,
+    );
   });
 
-  it('sets the Markdown content type only after a successful report read', async () => {
+  it('sets the live Markdown content type only after a successful report read', async () => {
     const read = { reportMarkdown: vi.fn(async () => '# Live paper run report\n') };
-    const replayReports = {
-      getReportMarkdown: vi.fn(async () => '# Historical paper replay report\n'),
-    };
     const controller = new SandboxController(
       true,
       {} as never,
       {} as never,
       read as never,
       {} as never,
-      replayReports as never,
+      {} as never,
+      {} as never,
       {} as never,
     );
     const auth = { user: { id: '22222222-2222-4222-8222-222222222222' } } as never;
     const liveReply = { header: vi.fn() };
-    const replayReply = { header: vi.fn() };
 
     await expect(controller.reportMarkdown(auth, uuid(), liveReply as never)).resolves.toContain(
       '# Live paper run report',
     );
-    await expect(
-      controller.replayReportMarkdown(auth, uuid(), replayReply as never),
-    ).resolves.toContain('# Historical paper replay report');
-
     expect(liveReply.header).toHaveBeenCalledWith('Content-Type', 'text/markdown; charset=utf-8');
-    expect(replayReply.header).toHaveBeenCalledWith('Content-Type', 'text/markdown; charset=utf-8');
   });
 
-  it('keeps the JSON error path on both Markdown routes when the read fails', async () => {
-    const notFound = new NotFoundException({
-      code: 'SANDBOX_REPLAY_NOT_FOUND',
-      message: 'Sandbox replay not found',
-    });
+  it('keeps the JSON error path on the live Markdown route when the read fails', async () => {
     const runMissing = new NotFoundException({
       code: 'SANDBOX_RUN_NOT_FOUND',
       message: 'Sandbox run not found',
@@ -134,32 +126,23 @@ describe('SandboxController', () => {
         throw runMissing;
       }),
     };
-    const replayReports = {
-      getReportMarkdown: vi.fn(async () => {
-        throw notFound;
-      }),
-    };
     const controller = new SandboxController(
       true,
       {} as never,
       {} as never,
       read as never,
       {} as never,
-      replayReports as never,
+      {} as never,
+      {} as never,
       {} as never,
     );
     const auth = { user: { id: '22222222-2222-4222-8222-222222222222' } } as never;
     const liveReply = { header: vi.fn() };
-    const replayReply = { header: vi.fn() };
 
     await expect(controller.reportMarkdown(auth, uuid(), liveReply as never)).rejects.toBe(
       runMissing,
     );
-    await expect(controller.replayReportMarkdown(auth, uuid(), replayReply as never)).rejects.toBe(
-      notFound,
-    );
     expect(liveReply.header).not.toHaveBeenCalled();
-    expect(replayReply.header).not.toHaveBeenCalled();
   });
 });
 

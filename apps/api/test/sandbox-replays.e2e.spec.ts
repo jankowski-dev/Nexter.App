@@ -419,7 +419,7 @@ describe('Sandbox historical replay (e2e)', () => {
       ['get', '/api/v1/sandbox/replays'],
       ['get', `/api/v1/sandbox/replays/${replayId}`],
       ['get', `/api/v1/sandbox/replays/${replayId}/report.json`],
-      ['get', `/api/v1/sandbox/replays/${replayId}/report.md`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/report.pdf`],
       ['get', `/api/v1/sandbox/replays/${replayId}/chart`],
       ['get', `/api/v1/sandbox/replays/${replayId}/decisions`],
       ['post', `/api/v1/sandbox/replays/${replayId}/cancel`],
@@ -516,15 +516,15 @@ describe('Sandbox historical replay (e2e)', () => {
       ).expect(409);
       expect(notReady.body).toMatchObject({ error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' } });
 
-      // A failed Markdown read must still use the JSON error type, not markdown.
-      const notReadyMarkdown = await api(
+      // A failed PDF read must still use the JSON error type, not PDF.
+      const notReadyPdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${created.id}/report.md`,
+        `/api/v1/sandbox/replays/${created.id}/report.pdf`,
       ).expect(409);
-      expect(notReadyMarkdown.headers['content-type']).toContain('application/json');
-      expect(notReadyMarkdown.body).toMatchObject({
+      expect(notReadyPdf.headers['content-type']).toContain('application/json');
+      expect(notReadyPdf.body).toMatchObject({
         error: { code: 'SANDBOX_REPLAY_NOT_COMPLETED' },
       });
 
@@ -615,17 +615,15 @@ describe('Sandbox historical replay (e2e)', () => {
       expect(report.reconciliationOk).toBe(true);
       expect(report.reconciliationChecks.length).toBeGreaterThan(0);
 
-      const markdown = await api(
+      const pdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${created.id}/report.md`,
+        `/api/v1/sandbox/replays/${created.id}/report.pdf`,
       ).expect(200);
-      expect(markdown.headers['content-type']).toContain('text/markdown');
-      expect(markdown.text.startsWith('# Historical paper replay report')).toBe(true);
-      expect(markdown.text).toContain('historical-paper');
-      expect(markdown.text).toContain(report.reportHash);
-      expect(markdown.text).toContain(completed.candleSnapshotHash as string);
+      expect(pdf.headers['content-type']).toContain('application/pdf');
+      expect(pdf.headers['content-disposition']).toContain('attachment');
+      expect(pdf.body.subarray(0, 4).toString()).toBe('%PDF');
 
       // A stored report is never recomputed on a GET: two reads are identical.
       const secondRead = await getReport(cookies, created.id);
@@ -1089,14 +1087,14 @@ describe('Sandbox historical replay (e2e)', () => {
       await api(app, cookies, 'get', `/api/v1/sandbox/replays/${foreign.id}/report.json`).expect(
         404,
       );
-      const foreignMarkdown = await api(
+      const foreignPdf = await api(
         app,
         cookies,
         'get',
-        `/api/v1/sandbox/replays/${foreign.id}/report.md`,
+        `/api/v1/sandbox/replays/${foreign.id}/report.pdf`,
       ).expect(404);
-      expect(foreignMarkdown.headers['content-type']).toContain('application/json');
-      expect(foreignMarkdown.body).toMatchObject({
+      expect(foreignPdf.headers['content-type']).toContain('application/json');
+      expect(foreignPdf.body).toMatchObject({
         error: { code: 'SANDBOX_REPLAY_NOT_FOUND' },
       });
       await api(app, cookies, 'post', `/api/v1/sandbox/replays/${foreign.id}/cancel`).expect(404);

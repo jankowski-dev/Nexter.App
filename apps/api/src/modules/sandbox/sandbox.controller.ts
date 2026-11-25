@@ -73,6 +73,7 @@ import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
 import { SandboxReplayChartService } from './sandbox-replay-chart.service';
+import { SandboxReplayPdfService } from './sandbox-replay-pdf.service';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -89,6 +90,7 @@ export class SandboxController {
     private readonly read: SandboxReadService,
     private readonly replay: SandboxReplayService,
     private readonly replayReports: SandboxReplayReportService,
+    private readonly replayPdf: SandboxReplayPdfService,
     private readonly chartService: SandboxReplayChartService,
   ) {}
 
@@ -239,19 +241,27 @@ export class SandboxController {
     return this.chartService.getDecisions(auth.user.id, id, query);
   }
 
-  @Get('replays/:id/report.md')
+  @Get('replays/:id/report.pdf')
   @UseGuards(SandboxEnabledGuard)
-  @Header('Cache-Control', 'no-store')
-  async replayReportMarkdown(
+  async replayReportPdf(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
-    @Res({ passthrough: true }) reply: FastifyReply,
-  ): Promise<string> {
-    const markdown = await this.replayReports.getReportMarkdown(auth.user.id, id);
-    // Set the Markdown type only after a successful read: an exception must
-    // keep the normal JSON error content type instead of a markdown body type.
-    reply.header('Content-Type', 'text/markdown; charset=utf-8');
-    return markdown;
+    @Res() reply: FastifyReply,
+  ): Promise<void> {
+    const response = await this.replayReports.getReport(auth.user.id, id);
+    const replay = await this.replay.detail(auth.user.id, id);
+    const { buffer, filename } = await this.replayPdf.build(response, {
+      id: replay.id,
+      name: replay.name,
+      periodDays: replay.periodDays,
+      fromTime: new Date(replay.fromTime),
+      toTime: new Date(replay.toTime),
+    });
+    reply
+      .header('content-type', 'application/pdf')
+      .header('content-disposition', `attachment; filename="${filename}"`)
+      .header('cache-control', 'no-store')
+      .send(buffer);
   }
 
   @Post('replays/:id/cancel')

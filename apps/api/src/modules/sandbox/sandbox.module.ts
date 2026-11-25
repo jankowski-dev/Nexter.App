@@ -8,6 +8,7 @@ import { SandboxReadService } from './sandbox-read.service';
 import { SandboxReportService } from './sandbox-report.service';
 import { SANDBOX_REPLAY_EXECUTOR, WorkerThreadReplayExecutor } from './sandbox-replay.executor';
 import { SandboxReplayChartService } from './sandbox-replay-chart.service';
+import { SandboxReplayPdfService } from './sandbox-replay-pdf.service';
 import { SandboxReplayRepository } from './sandbox-replay.repository';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
@@ -33,6 +34,7 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxReplayService,
     SandboxReplayReportService,
     SandboxReplayChartService,
+    SandboxReplayPdfService,
     SandboxReplayWorkerService,
     {
       provide: SANDBOX_REPLAY_EXECUTOR,
