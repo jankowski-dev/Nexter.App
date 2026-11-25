@@ -250,14 +250,15 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await updatedDrawer.getByLabel('Закрыть').click();
   await expect(page.locator('img[src^="data:image/"]').first()).toBeVisible();
 
-  await page.goto('/settings');
-  await expect(page.getByRole('heading', { name: 'Настройки' })).toBeVisible();
-  await expect(page.getByText('Общие').first()).toBeVisible();
+  await page.goto('/settings/general');
+  await expect(page.getByRole('heading', { name: 'Общие настройки' })).toBeVisible();
+  await expect(page.getByText('Учёт').first()).toBeVisible();
   await page.getByLabel('Часовой пояс (IANA)').fill('Europe/Moscow');
   await page.getByRole('button', { name: 'Сохранить настройки' }).click();
   await page.reload();
   await expect(page.getByLabel('Часовой пояс (IANA)')).toHaveValue('Europe/Moscow');
 
+  await page.goto('/settings/export');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'CSV' }).first().click();
   const download = await downloadPromise;
