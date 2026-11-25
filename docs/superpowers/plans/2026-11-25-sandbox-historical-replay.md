@@ -11,7 +11,7 @@
 **Spec:** `docs/superpowers/specs/2026-11-25-sandbox-historical-replay-design.md`
 **ADR:** `docs/adr/0085-sandbox-historical-replay.md`
 **Base:** `3a6f94a` (Stage 2 merged/deployed; migration `0052` applied in production)
-**Status:** Stage 2.1 implemented; independent review gate. Not deployed; migration `0053` is not applied.
+**Status:** Stage 2.1 implemented; independent review gate. Final code/test head `92338d1` is CI green; not deployed, migration `0053` is not applied.
 
 ## Global Constraints
 
@@ -416,7 +416,7 @@ git commit -m "feat(sandbox): add historical replay contracts and service"
   - `onApplicationBootstrap` starts a 60s interval + 15s initial when enabled and `NODE_ENV !== 'test'`.
   - `runOnce(now: Date = new Date(), executor: ReplayExecutor = this.executor): Promise<void>` test seam; takes `pg_try_advisory_lock(hashtext('nexter:sandbox-replay-worker'))`; after lock, `requeueRunningReplays()`; claim the oldest queued (`FOR UPDATE SKIP LOCKED`), mark running/started, audit `sandbox.replay_started`; load/reuse the stored snapshot (gzip/hash/dataSnapshotId) **before** running; call executor; store report/hashes/status `completed` in one transaction; audit `sandbox.replay_completed`; failure marks `failed` with a sanitized message and audits `sandbox.replay_failed`; release lock.
   - Uses `sandbox_candles` only; no provider calls.
-- Repository methods: `claimQueuedReplay`, `markReplayRunning`, `storeReplayReport`, `markReplayFailed`, `requeueRunningReplays`, `cancelQueuedReplay`, `archiveReplay`, `loadReplay`.
+- Repository methods: `claimQueuedReplay`, `markReplayRunning`, `storeReplayReport`, `markReplayFailed`, `requeueRunningReplays`, `cancelQueuedReplay`, `archiveReplay`.
 - Snapshot: `zlib.gzipSync(Buffer.from(stableStringify(candles)))`; hash SHA-256 of the uncompressed string; store bytea; reuse if present (so a restart uses the same input).
 - Stale recovery only after the advisory lock; no timer-based requeue.
 - No old AI imports; worker thread path uses `__dirname`/compiled `.js`.

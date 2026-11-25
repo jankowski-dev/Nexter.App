@@ -65,8 +65,9 @@ Migration `0053_sandbox_replays.sql` is additive, creates the `sandbox_replays`
 table plus three indexes and grants `nexter_app` `SELECT/INSERT/UPDATE` with
 `DELETE` revoked. Nothing else changes; the table stays empty until the owner
 creates a replay. With the flag on and the table missing, every replay worker
-pass fails its first query — the stale `running` requeue (`requeueRunningReplays`)
-that runs before the claim — logged and retried, no crash, but no replays run.
+pass fails its first table query — the stale `running` requeue
+(`requeueRunningReplays`) that runs after the advisory lock and before the claim
+— logged and retried, no crash, but no replays run.
 Apply the migration **before** deploying code that references the table.
 
 1. Encrypted backup + restore check + SHA-256 (see below). A migration without
