@@ -8,6 +8,7 @@ import { SandboxReadService } from './sandbox-read.service';
 import { SandboxReportService } from './sandbox-report.service';
 import { SANDBOX_REPLAY_EXECUTOR, WorkerThreadReplayExecutor } from './sandbox-replay.executor';
 import { SandboxReplayRepository } from './sandbox-replay.repository';
+import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxReplayWorkerService } from './sandbox-replay-worker.service';
 import { SandboxRepository } from './sandbox.repository';
@@ -29,6 +30,7 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxReportService,
     SandboxReplayRepository,
     SandboxReplayService,
+    SandboxReplayReportService,
     SandboxReplayWorkerService,
     {
       provide: SANDBOX_REPLAY_EXECUTOR,
@@ -47,6 +49,7 @@ import { SANDBOX_ENABLED } from './sandbox.types';
     SandboxReportService,
     SandboxReplayRepository,
     SandboxReplayService,
+    SandboxReplayReportService,
   ],
 })
 export class SandboxModule {}

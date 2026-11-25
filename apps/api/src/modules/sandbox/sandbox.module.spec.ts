@@ -1,9 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
+import { HEADERS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { describe, expect, it } from 'vitest';
 import { SandboxController } from './sandbox.controller';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
@@ -26,6 +28,7 @@ async function compile(enabled: boolean) {
       { provide: SandboxRunService, useValue: {} },
       { provide: SandboxReadService, useValue: {} },
       { provide: SandboxReplayService, useValue: {} },
+      { provide: SandboxReplayReportService, useValue: {} },
       SandboxEnabledGuard,
     ],
   }).compile();
@@ -64,6 +67,27 @@ describe('SandboxController', () => {
     } finally {
       await moduleRef.close();
     }
+  });
+
+  it('serves replay reports no-store, with Markdown content type for the .md route', () => {
+    const headersOf = (method: keyof SandboxController) =>
+      (Reflect.getMetadata(HEADERS_METADATA, SandboxController.prototype[method]) ?? []) as Array<{
+        name: string;
+        value: string;
+      }>;
+
+    expect(headersOf('replayReportJson')).toContainEqual({
+      name: 'Cache-Control',
+      value: 'no-store',
+    });
+    expect(headersOf('replayReportMarkdown')).toContainEqual({
+      name: 'Cache-Control',
+      value: 'no-store',
+    });
+    expect(headersOf('replayReportMarkdown')).toContainEqual({
+      name: 'Content-Type',
+      value: 'text/markdown; charset=utf-8',
+    });
   });
 });
 

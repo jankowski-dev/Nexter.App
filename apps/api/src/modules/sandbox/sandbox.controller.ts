@@ -45,6 +45,7 @@ import {
   type SandboxReplayListResponse,
   type SandboxReplayPreflightRequest,
   type SandboxReplayPreflightResponse,
+  type SandboxReplayReportResponse,
   type SandboxReportResponse,
   type SandboxRun,
   type SandboxRunCreateRequest,
@@ -66,6 +67,7 @@ import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
@@ -80,6 +82,7 @@ export class SandboxController {
     private readonly runs: SandboxRunService,
     private readonly read: SandboxReadService,
     private readonly replay: SandboxReplayService,
+    private readonly replayReports: SandboxReplayReportService,
   ) {}
 
   @Get('status')
@@ -195,6 +198,27 @@ export class SandboxController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<SandboxReplayDetail> {
     return this.replay.detail(auth.user.id, id);
+  }
+
+  @Get('replays/:id/report.json')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayReportJson(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReplayReportResponse> {
+    return this.replayReports.getReport(auth.user.id, id);
+  }
+
+  @Get('replays/:id/report.md')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  @Header('Content-Type', 'text/markdown; charset=utf-8')
+  replayReportMarkdown(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<string> {
+    return this.replayReports.getReportMarkdown(auth.user.id, id);
   }
 
   @Post('replays/:id/cancel')

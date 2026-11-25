@@ -87,6 +87,15 @@ export interface SandboxReplayWorkerRecord extends SandboxReplayDetailRecord {
   readonly candleSnapshot: Buffer | null;
 }
 
+/**
+ * Owner-facing report read: the detail identity plus the stored `RunReport`
+ * JSONB. The report is the only large field here; the candle snapshot stays out
+ * of this selection and is never read on a GET.
+ */
+export interface SandboxReplayReportRecord extends SandboxReplayDetailRecord {
+  readonly report: Record<string, unknown> | null;
+}
+
 export interface SandboxReplaySnapshotWrite {
   readonly dataSnapshotId: string;
   readonly candleSnapshot: Buffer;
@@ -151,6 +160,12 @@ const workerSelection = {
   ...detailSelection,
   userId: sandboxReplays.userId,
   candleSnapshot: sandboxReplays.candleSnapshot,
+};
+
+/** Report read selection: detail identity plus the stored report JSONB. */
+const reportSelection = {
+  ...detailSelection,
+  report: sandboxReplays.report,
 };
 
 /** Drizzle access for persisted historical replays. No DELETE is ever issued. */
@@ -226,6 +241,23 @@ export class SandboxReplayRepository {
     if (!row) return null;
 
     return detailFromRow(row);
+  }
+
+  /**
+   * Owner-scoped read of the stored deterministic report.
+   *
+   * The report is never recomputed here: the worker already persisted it with
+   * the snapshot and hashes, so a GET is a pure read of that JSONB.
+   */
+  async findReplayReport(userId: string, id: string): Promise<SandboxReplayReportRecord | null> {
+    const [row] = await this.db
+      .select(reportSelection)
+      .from(sandboxReplays)
+      .where(and(eq(sandboxReplays.id, id), eq(sandboxReplays.userId, userId)))
+      .limit(1);
+    if (!row) return null;
+
+    return { ...detailFromRow(row), report: row.report ?? null };
   }
 
   /** Queued -> cancelled only; returns false when the row moved on. */
