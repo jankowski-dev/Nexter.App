@@ -1,10 +1,10 @@
 import { Test } from '@nestjs/testing';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import cookie from '@fastify/cookie';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
-import { createDb, type Database } from '@nexter/db';
+import { createDb, viberNotifications, type Database } from '@nexter/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { env } from '../src/shared/config/env';
@@ -48,7 +48,7 @@ describe.runIf(canRun)('Viber notifications API', () => {
       .set('x-csrf-token', csrfFrom(setup))
       .send({ code: generateSync({ secret: totpSetup.body.secret as string }) })
       .expect(200);
-    return { csrf: csrfFrom(enabled) };
+    return { csrf: csrfFrom(enabled), userId: setup.body.user.id as string };
   }
 
   beforeAll(async () => {
@@ -120,6 +120,91 @@ describe.runIf(canRun)('Viber notifications API', () => {
     expect(status.body.sent24h).toBe(1);
     expect(status.body.failed24h).toBe(0);
     expect(status.body.configured).toBe(true);
+  });
+
+  it('notifies once when a manual sell fully closes a trade group', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+
+    const assetsResponse = await agent.get('/api/v1/assets').expect(200);
+    const assets = assetsResponse.body.assets as Array<{
+      id: string;
+      chainCode: string;
+      symbol: string;
+    }>;
+    const usdc = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'USDC');
+    const link = assets.find((asset) => asset.chainCode === 'bsc' && asset.symbol === 'LINK');
+    const accountsResponse = await agent.get('/api/v1/accounts').expect(200);
+    const wallet = (accountsResponse.body.accounts as Array<{ id: string; name: string }>).find(
+      (account) => account.name === 'Tangem BSC',
+    );
+    if (!usdc || !link || !wallet) throw new Error('Seeded accounting data is missing');
+
+    const post = (body: Record<string, unknown>) =>
+      agent.post('/api/v1/transactions').set('x-csrf-token', owner.csrf).send(body).expect(201);
+
+    await post({
+      type: 'deposit',
+      accountId: wallet.id,
+      assetId: usdc.id,
+      amount: '1000',
+      usdValue: '1000',
+    });
+    await agent
+      .post('/api/v1/watchlist')
+      .set('x-csrf-token', owner.csrf)
+      .send({ assetId: link.id })
+      .expect(201);
+    const buy = await post({
+      type: 'buy',
+      accountId: wallet.id,
+      assetId: link.id,
+      amount: '10',
+      quoteAssetId: usdc.id,
+      quoteAmount: '100',
+    });
+    const groupId = buy.body.transaction.tradeGroupId as string;
+
+    await post({
+      type: 'sell',
+      accountId: wallet.id,
+      assetId: link.id,
+      amount: '5',
+      proceedsAssetId: usdc.id,
+      proceedsAmount: '60',
+      tradeGroupId: groupId,
+    });
+
+    const partialNotifications = await agent.get('/api/v1/notifications').expect(200);
+    expect(
+      partialNotifications.body.data.filter(
+        (item: { type: string }) => item.type === 'trade_closed',
+      ),
+    ).toHaveLength(0);
+
+    await post({
+      type: 'sell',
+      accountId: wallet.id,
+      assetId: link.id,
+      amount: '5',
+      proceedsAssetId: usdc.id,
+      proceedsAmount: '70',
+      tradeGroupId: groupId,
+    });
+
+    const notifications = await agent.get('/api/v1/notifications').expect(200);
+    const closed = notifications.body.data.find(
+      (item: { type: string }) => item.type === 'trade_closed',
+    );
+    expect(closed).toMatchObject({ title: 'Сделка закрыта: LINK' });
+    expect(closed.body).toContain('P&L:');
+
+    const viberRows = await db
+      .select()
+      .from(viberNotifications)
+      .where(eq(viberNotifications.userId, owner.userId));
+    expect(viberRows.filter((row) => row.type === 'trade_closed')).toHaveLength(1);
+    expect(viberRows.find((row) => row.type === 'trade_closed')?.body).toContain('P&L:');
   });
 
   it('marks failed deliveries and keeps attempts bounded', async () => {

@@ -26,7 +26,7 @@ import { env } from '../../shared/config/env';
 import { DB, DB_POOL } from '../../shared/db/db.module';
 import { Decimal, amountString, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService, type MarketQuoteValue } from '../market-data/market-quote.service';
-import { NotificationsService } from '../notifications/notifications.service';
+import { TradingNotificationsService } from '../notifications/trading-notifications.service';
 import { SettingsService } from '../settings/settings.service';
 import { strategyByKey } from './strategies';
 import type { StrategyDefinition } from './strategies/types';
@@ -47,7 +47,7 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
     @Inject(DB) private readonly db: Database,
     @Inject(DB_POOL) private readonly pool: Pool,
     private readonly quotes: MarketQuoteService,
-    private readonly notifications: NotificationsService,
+    private readonly tradingNotifications: TradingNotificationsService,
     private readonly settings: SettingsService,
   ) {}
 
@@ -146,18 +146,13 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .update(tradingBots)
         .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
-      if (runtime?.notifyBotStopped !== false) {
-        await this.notifications
-          .create({
-            userId: bot.userId,
-            type: 'bot_stopped',
-            title: 'Бот остановлен',
-            body: `Бот «${bot.name}» остановлен: стратегия недоступна в этой версии.`,
-            href: '/portfolio#robots',
-            payload: { botId: bot.id, reason: 'strategy_unavailable' },
-          })
-          .catch(() => undefined);
-      }
+      await this.tradingNotifications
+        .botStopped(bot.userId, {
+          botId: bot.id,
+          botName: bot.name,
+          reason: 'стратегия недоступна в этой версии',
+        })
+        .catch(() => undefined);
       return;
     }
 
@@ -178,18 +173,13 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         .update(tradingBots)
         .set({ status: 'stopped', stoppedAt: now, updatedAt: now })
         .where(eq(tradingBots.id, bot.id));
-      if (runtime?.notifyBotStopped !== false) {
-        await this.notifications
-          .create({
-            userId: bot.userId,
-            type: 'bot_stopped',
-            title: 'Бот остановлен',
-            body: `Бот «${bot.name}» остановлен: некорректные параметры стратегии.`,
-            href: '/portfolio#robots',
-            payload: { botId: bot.id, reason: 'invalid_params' },
-          })
-          .catch(() => undefined);
-      }
+      await this.tradingNotifications
+        .botStopped(bot.userId, {
+          botId: bot.id,
+          botName: bot.name,
+          reason: 'некорректные параметры стратегии',
+        })
+        .catch(() => undefined);
       return;
     }
 
@@ -522,6 +512,15 @@ export class BotRunnerService implements OnApplicationBootstrap, OnApplicationSh
         changed = true;
         await record(quote, 'sell', decision.reason, false);
         await this.snapshot(bot.id, now, true);
+        await this.tradingNotifications
+          .botTradeClosed(bot.userId, {
+            botId: bot.id,
+            botName: bot.name,
+            symbol: asset.symbol,
+            realizedPnlUsd: usdString(realized),
+            costBasisUsd: usdString(cost),
+          })
+          .catch(() => undefined);
       } else if (decision.action === 'sell') {
         await record(quote, 'hold', 'Сигнал на продажу, но открытой позиции нет', false);
       } else {

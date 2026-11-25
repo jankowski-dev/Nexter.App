@@ -50,8 +50,7 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { MarketQuoteService } from '../market-data/market-quote.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { SettingsService } from '../settings/settings.service';
+import { TradingNotificationsService } from '../notifications/trading-notifications.service';
 import { strategyByKey, strategyTemplates } from './strategies';
 import { isRecommendationExpired } from '../ai-trading/ai-recommendation';
 
@@ -172,8 +171,7 @@ export class TradingBotsService {
     @Inject(DB) private readonly db: Database,
     private readonly audit: AuditService,
     private readonly quotes: MarketQuoteService,
-    private readonly notifications: NotificationsService,
-    private readonly settings: SettingsService,
+    private readonly tradingNotifications: TradingNotificationsService,
   ) {}
 
   templates(): BotStrategyTemplate[] {
@@ -607,19 +605,13 @@ export class TradingBotsService {
         { executor: tx, strict: true },
       );
     });
-    const stopRuntime = await this.settings.getRuntime();
-    if (stopRuntime.notifyBotStopped) {
-      await this.notifications
-        .create({
-          userId,
-          type: 'bot_stopped',
-          title: 'Бот остановлен',
-          body: `Бот «${bot.name}» остановлен.`,
-          href: '/portfolio#robots',
-          payload: { botId: id },
-        })
-        .catch(() => undefined);
-    }
+    await this.tradingNotifications
+      .botStopped(userId, {
+        botId: id,
+        botName: bot.name,
+        reason: 'остановлен владельцем',
+      })
+      .catch(() => undefined);
     return this.getBot(userId, id);
   }
 
@@ -714,6 +706,7 @@ export class TradingBotsService {
     const now = new Date();
     let cash = decimal(bot.cashUsd);
     let realizedTotal = new Decimal(0);
+    let closedCost = new Decimal(0);
 
     await this.db.transaction(async (tx) => {
       for (const position of positions) {
@@ -731,6 +724,7 @@ export class TradingBotsService {
         const realized = net.minus(decimal(position.costBasisUsd));
         cash = cash.plus(net);
         realizedTotal = realizedTotal.plus(realized);
+        closedCost = closedCost.plus(decimal(position.costBasisUsd));
 
         await tx.delete(botPositions).where(eq(botPositions.id, position.id));
         await tx.insert(botTrades).values({
@@ -814,19 +808,15 @@ export class TradingBotsService {
       unrealizedPnlUsd: '0.00000000',
     });
 
-    const closeRuntime = await this.settings.getRuntime();
-    if (closeRuntime.notifyPositionsClosed) {
-      await this.notifications
-        .create({
-          userId,
-          type: 'bot_positions_closed',
-          title: 'Позиции закрыты',
-          body: `Бот «${bot.name}»: закрыто позиций — ${positions.length}.`,
-          href: '/portfolio#robots',
-          payload: { botId: id, positions: positions.length },
-        })
-        .catch(() => undefined);
-    }
+    await this.tradingNotifications
+      .botPositionsClosed(userId, {
+        botId: id,
+        botName: bot.name,
+        positions: positions.length,
+        realizedPnlUsd: usdString(realizedTotal),
+        costBasisUsd: usdString(closedCost),
+      })
+      .catch(() => undefined);
     return this.getBot(userId, id);
   }
 

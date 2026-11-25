@@ -247,6 +247,13 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     const sells = await agent.get(`/api/v1/trading-bots/bots/${botId}/trades`).expect(200);
     expect(sells.body.data.map((trade: { side: string }) => trade.side)).toEqual(['sell', 'buy']);
 
+    const tradeNotifications = await agent.get('/api/v1/notifications').expect(200);
+    const botClose = tradeNotifications.body.data.find(
+      (item: { type: string }) => item.type === 'bot_trade_closed',
+    );
+    expect(botClose).toBeDefined();
+    expect(botClose.body).toContain('P&L:');
+
     const olderTrade = await agent
       .get(`/api/v1/trading-bots/bots/${botId}/trades?limit=1&offset=1`)
       .expect(200);
@@ -396,6 +403,13 @@ describe.runIf(canRun)('Trading bots e2e', () => {
     expect(closeEvents.body.data.map((event: { type: string }) => event.type)).toEqual(
       expect.arrayContaining(['buy', 'sell', 'closed_all']),
     );
+
+    const closeNotifications = await agent.get('/api/v1/notifications').expect(200);
+    const positionsClosed = closeNotifications.body.data.find(
+      (item: { type: string }) => item.type === 'bot_positions_closed',
+    );
+    expect(positionsClosed).toBeDefined();
+    expect(positionsClosed.body).toContain('Итог:');
 
     await agent
       .delete(`/api/v1/trading-bots/bots/${closeBotId}`)
