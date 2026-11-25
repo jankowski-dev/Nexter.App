@@ -32,6 +32,7 @@ function NotificationsForm({ settings }: { settings: Settings }) {
   const [values, setValues] = useState({
     notifyBotStopped: settings.notifyBotStopped,
     notifyPositionsClosed: settings.notifyPositionsClosed,
+    notifyTradesClosed: settings.notifyTradesClosed,
     notificationsPollSeconds: String(settings.notificationsPollSeconds),
   });
 
@@ -50,7 +51,15 @@ function NotificationsForm({ settings }: { settings: Settings }) {
           }
         />
         <ToggleField
-          label="Закрытие позиций"
+          label="Закрытие сделок"
+          hint="Ручное/ончейн-закрытие и автоматическая продажа робота. В уведомлении будет P&L."
+          checked={values.notifyTradesClosed}
+          onChange={(checked) =>
+            setValues((current) => ({ ...current, notifyTradesClosed: checked }))
+          }
+        />
+        <ToggleField
+          label="Закрытие всех позиций робота"
           hint="Ручное или автоматическое закрытие всех позиций робота."
           checked={values.notifyPositionsClosed}
           onChange={(checked) =>
@@ -81,6 +90,7 @@ function NotificationsForm({ settings }: { settings: Settings }) {
           update.mutate({
             notifyBotStopped: values.notifyBotStopped,
             notifyPositionsClosed: values.notifyPositionsClosed,
+            notifyTradesClosed: values.notifyTradesClosed,
             notificationsPollSeconds: Number(values.notificationsPollSeconds),
           })
         }

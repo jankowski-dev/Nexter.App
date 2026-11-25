@@ -164,6 +164,12 @@ export const settings = pgTable(
     notificationsPollSeconds: integer('notifications_poll_seconds').notNull().default(30),
     notifyBotStopped: boolean('notify_bot_stopped').notNull().default(true),
     notifyPositionsClosed: boolean('notify_positions_closed').notNull().default(true),
+    notifyTradesClosed: boolean('notify_trades_closed').notNull().default(true),
+    viberNotificationsEnabled: boolean('viber_notifications_enabled').notNull().default(true),
+    viberTradeClosedEnabled: boolean('viber_trade_closed_enabled').notNull().default(true),
+    viberBotStoppedEnabled: boolean('viber_bot_stopped_enabled').notNull().default(true),
+    viberFrequency: text('viber_frequency').notNull().default('instant'),
+    viberDigestTime: text('viber_digest_time').notNull().default('20:00'),
     // Per-order protection and delayed-buy defaults; not a global automation feature.
     tradeDefaultStopLossPct: integer('automation_default_stop_loss_pct').notNull().default(10),
     tradeDefaultTakeProfitPct: integer('automation_default_take_profit_pct').notNull().default(20),
@@ -189,6 +195,14 @@ export const settings = pgTable(
     check(
       'settings_task_default_due_time',
       sql`${table.taskDefaultDueTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
+    ),
+    check(
+      'settings_viber_frequency',
+      sql`${table.viberFrequency} in ('instant', 'hourly', 'daily')`,
+    ),
+    check(
+      'settings_viber_digest_time',
+      sql`${table.viberDigestTime} ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$'`,
     ),
   ],
 );
@@ -1332,6 +1346,54 @@ export const notifications = pgTable(
   ],
 );
 
+export const viberNotifications = pgTable(
+  'viber_notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull().default({}),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    error: text('error'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('viber_notifications_user_status_idx').on(table.userId, table.status, table.createdAt),
+    check(
+      'viber_notifications_status_check',
+      sql`${table.status} in ('pending', 'sent', 'failed')`,
+    ),
+    check('viber_notifications_attempts_check', sql`${table.attempts} >= 0`),
+  ],
+);
+
+export const portfolioEquityPoints = pgTable(
+  'portfolio_equity_points',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    bucketAt: timestamp('bucket_at', { withTimezone: true }).notNull(),
+    capturedAt: timestamp('captured_at', { withTimezone: true }).notNull().defaultNow(),
+    cashUsd: numeric('cash_usd', { precision: 24, scale: 8 }).notNull(),
+    positionsValueUsd: numeric('positions_value_usd', { precision: 24, scale: 8 }).notNull(),
+    equityUsd: numeric('equity_usd', { precision: 24, scale: 8 }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('portfolio_equity_points_user_bucket_unique').on(table.userId, table.bucketAt),
+    index('portfolio_equity_points_user_bucket_idx').on(table.userId, table.bucketAt),
+  ],
+);
+
 export const aiProfiles = pgTable(
   'ai_profiles',
   {
@@ -2184,6 +2246,9 @@ export type SwapOrder = typeof swapOrders.$inferSelect;
 export type SwapEvent = typeof swapEvents.$inferSelect;
 export type ExternalApiCall = typeof externalApiCalls.$inferSelect;
 export type NotificationRecord = typeof notifications.$inferSelect;
+export type ViberNotificationRecord = typeof viberNotifications.$inferSelect;
+export type NewViberNotificationRecord = typeof viberNotifications.$inferInsert;
+export type PortfolioEquityPointRecord = typeof portfolioEquityPoints.$inferSelect;
 export type TradingBotRecord = typeof tradingBots.$inferSelect;
 export type BotTokenRecord = typeof botTokens.$inferSelect;
 export type BotPositionRecord = typeof botPositions.$inferSelect;

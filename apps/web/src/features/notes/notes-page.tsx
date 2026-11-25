@@ -12,6 +12,7 @@ import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
 import { NotebookIcon, PaperclipIcon, PencilIcon, PinIcon, TrashIcon } from '@/components/ui/icons';
 import { NoteDrawer } from './note-drawer';
+import { sortNotes } from './notes-sort';
 
 interface DrawerState {
   note: Note | null;
@@ -53,10 +54,7 @@ export function NotesPage() {
   });
 
   const rows = notes.data?.pages.flatMap((page) => page.data) ?? [];
-  const sortedRows = [...rows].sort((left, right) => {
-    const field = sort === 'updated' ? 'updatedAt' : 'createdAt';
-    return right[field].localeCompare(left[field]);
-  });
+  const sortedRows = sortNotes(rows, sort);
 
   return (
     <div className="space-y-6">
@@ -132,10 +130,10 @@ export function NotesPage() {
                       {note.pinned ? <Badge tone="info">Закреплена</Badge> : null}
                       {note.attachmentCount > 0 ? (
                         <span
-                          className="inline-flex items-center gap-1 text-xs text-zinc-500"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-600"
                           title={`Вложений: ${note.attachmentCount}`}
                         >
-                          <PaperclipIcon className="h-3.5 w-3.5" />
+                          <PaperclipIcon className="h-4 w-4" />
                           {note.attachmentCount}
                         </span>
                       ) : null}
@@ -149,7 +147,7 @@ export function NotesPage() {
                 <div className="flex items-center gap-1">
                   <Button
                     variant="ghost"
-                    className={`h-8 w-8 p-0 ${
+                    className={`h-9 w-9 p-0 ${
                       note.pinned ? 'text-emerald-700' : 'text-zinc-400 hover:text-zinc-700'
                     }`}
                     aria-label={note.pinned ? 'Открепить заметку' : 'Закрепить заметку'}
@@ -159,7 +157,7 @@ export function NotesPage() {
                       pinMutation.mutate(note);
                     }}
                   >
-                    <PinIcon filled={note.pinned} />
+                    <PinIcon filled={note.pinned} className="h-[18px] w-[18px]" />
                   </Button>
                   <Button
                     variant="ghost"

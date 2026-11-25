@@ -6,7 +6,13 @@ import {
   type OnApplicationShutdown,
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
-import { portfolioSnapshots, settings as settingsTable, users, type Database } from '@nexter/db';
+import {
+  portfolioEquityPoints,
+  portfolioSnapshots,
+  settings as settingsTable,
+  users,
+  type Database,
+} from '@nexter/db';
 import type { PortfolioSnapshot } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { env } from '../../shared/config/env';
@@ -76,6 +82,47 @@ export class PortfolioSnapshotService implements OnApplicationBootstrap, OnAppli
       .returning();
 
     if (!row) throw new Error('Failed to persist portfolio snapshot');
+
+    const bucketAt = new Date(capturedAt);
+    bucketAt.setUTCMinutes(0, 0, 0);
+    const [equityPoint] = await this.db
+      .insert(portfolioEquityPoints)
+      .values({
+        userId,
+        bucketAt,
+        capturedAt,
+        cashUsd: usdString(decimal(positions.cashUsd)),
+        positionsValueUsd: usdString(decimal(positions.positionsValueUsd)),
+        equityUsd: usdString(decimal(positions.equityUsd)),
+      })
+      .onConflictDoUpdate({
+        target: [portfolioEquityPoints.userId, portfolioEquityPoints.bucketAt],
+        set: {
+          capturedAt,
+          cashUsd: usdString(decimal(positions.cashUsd)),
+          positionsValueUsd: usdString(decimal(positions.positionsValueUsd)),
+          equityUsd: usdString(decimal(positions.equityUsd)),
+        },
+      })
+      .returning();
+
+    if (!equityPoint) throw new Error('Failed to persist portfolio equity point');
+
+    await this.audit.log(
+      {
+        userId,
+        action: 'accounting.portfolio_equity_point',
+        entityType: 'portfolio_equity_point',
+        entityId: equityPoint.id,
+        after: {
+          bucketAt: equityPoint.bucketAt.toISOString(),
+          cashUsd: equityPoint.cashUsd,
+          positionsValueUsd: equityPoint.positionsValueUsd,
+          equityUsd: equityPoint.equityUsd,
+        },
+      },
+      { strict: true },
+    );
 
     await this.audit.log(
       {

@@ -15,6 +15,7 @@ import type {
   FinanceAccountUpdateRequest,
   FinanceAccountsResponse,
   FinanceCategoryCreateRequest,
+  FinanceCategorySuggestionsQuery,
   FinanceCategoryUpdateRequest,
   FinanceCategoriesResponse,
   FinanceCreditDrawdownRequest,
@@ -37,6 +38,7 @@ import {
   financeAccountCreateRequestSchema,
   financeAccountUpdateRequestSchema,
   financeCategoryCreateRequestSchema,
+  financeCategorySuggestionsQuerySchema,
   financeCategoryUpdateRequestSchema,
   financeCreditDrawdownRequestSchema,
   financeImportRequestSchema,
@@ -98,6 +100,15 @@ export class FinanceController {
   @Get('categories')
   categories(@CurrentAuth() auth: AuthContext): Promise<FinanceCategoriesResponse> {
     return this.finance.listCategories(auth.user.id);
+  }
+
+  @Get('categories/suggestions')
+  categorySuggestions(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(financeCategorySuggestionsQuerySchema))
+    query: FinanceCategorySuggestionsQuery,
+  ): Promise<FinanceCategoriesResponse> {
+    return this.finance.categorySuggestions(auth.user.id, query.kind, query.limit);
   }
 
   @Post('categories')

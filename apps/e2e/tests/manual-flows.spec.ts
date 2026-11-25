@@ -256,7 +256,7 @@ test('manual buy, partial sell, income, adjustment, trade detail and export thro
   await expect(page.getByText('accounting.transaction_created').first()).toBeVisible();
 
   // JSON export downloads a real file.
-  await page.goto('/settings');
+  await page.goto('/settings/export');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'JSON' }).first().click();
   const download = await downloadPromise;

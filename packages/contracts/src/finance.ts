@@ -386,6 +386,21 @@ export type FinanceImportSummary = z.infer<typeof financeImportSummarySchema>;
 export type FinanceImport = z.infer<typeof financeImportSchema>;
 export type FinanceImportsResponse = z.infer<typeof financeImportsResponseSchema>;
 
+export const financeCategorySuggestionsQuerySchema = z.object({
+  kind: z.enum(['income', 'expense']),
+  limit: z.coerce.number().int().min(1).max(10).default(5),
+});
+
+export const financeCategorySuggestionsResponseSchema = z.object({
+  categories: z.array(financeCategorySchema),
+});
+
+export type FinanceCategorySuggestionsQuery = z.infer<typeof financeCategorySuggestionsQuerySchema>;
+
+export type FinanceCategorySuggestionsResponse = z.infer<
+  typeof financeCategorySuggestionsResponseSchema
+>;
+
 export const financeCreditDrawdownRequestSchema = z
   .object({
     creditAccountId: z.uuid().optional(),

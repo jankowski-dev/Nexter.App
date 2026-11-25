@@ -96,12 +96,14 @@ describe('finance overview visuals', () => {
     expect(emptyHtml).toContain('За период пока нет категорий');
   });
 
-  it('renders the monthly chart and its totals', () => {
+  it('renders the monthly chart, totals and the month table', () => {
     const html = renderToStaticMarkup(<FinanceMonthsBlock months={[month]} />);
 
     expect(html).toContain('Последние 12 месяцев');
     expect(html).toContain('Доходы');
     expect(html).toContain('Сальдо');
     expect(html).toContain('ноя');
+    expect(html).toContain('<table');
+    expect(html).toContain('Месяц');
   });
 });

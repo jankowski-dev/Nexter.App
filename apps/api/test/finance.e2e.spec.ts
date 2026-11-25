@@ -782,4 +782,80 @@ describe.runIf(canRun)('Finance API', () => {
       destinationAccountId: drawdown.body.account.id,
     }).expect(400);
   }, 60_000);
+
+  it('suggests the most-used categories and falls back to active categories', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const post = (url: string, body: Record<string, unknown>) =>
+      agent.post(url).set('x-csrf-token', owner.csrf).send(body);
+
+    const account = await post('/api/v1/finance/accounts', {
+      name: 'Карта',
+      kind: 'card',
+      currency: 'BYN',
+      openingBalance: '1000',
+      openingDate: '2026-11-01',
+      fxRate: '1',
+    }).expect(201);
+    const products = await post('/api/v1/finance/categories', {
+      name: 'Продукты',
+      kind: 'expense',
+      sortOrder: 10,
+    }).expect(201);
+    const transport = await post('/api/v1/finance/categories', {
+      name: 'Транспорт',
+      kind: 'expense',
+      sortOrder: 1,
+    }).expect(201);
+    await post('/api/v1/finance/categories', {
+      name: 'Зарплата',
+      kind: 'income',
+      sortOrder: 1,
+    }).expect(201);
+
+    await post('/api/v1/finance/transactions', {
+      kind: 'expense',
+      occurredOn: '2026-11-20',
+      accountId: account.body.id,
+      categoryId: products.body.id,
+      amount: '20',
+      title: 'Продукты',
+    }).expect(201);
+    await post('/api/v1/finance/transactions', {
+      kind: 'expense',
+      occurredOn: '2026-11-21',
+      accountId: account.body.id,
+      categoryId: products.body.id,
+      amount: '30',
+      title: 'Продукты',
+    }).expect(201);
+    await post('/api/v1/finance/transactions', {
+      kind: 'expense',
+      occurredOn: '2026-11-22',
+      accountId: account.body.id,
+      categoryId: transport.body.id,
+      amount: '10',
+      title: 'Метро',
+    }).expect(201);
+
+    const suggestions = await agent
+      .get('/api/v1/finance/categories/suggestions?kind=expense&limit=2')
+      .expect(200);
+    expect(suggestions.body.categories.map((item: { name: string }) => item.name)).toEqual([
+      'Продукты',
+      'Транспорт',
+    ]);
+
+    const fallback = await agent
+      .get('/api/v1/finance/categories/suggestions?kind=income&limit=5')
+      .expect(200);
+    expect(fallback.body.categories.map((item: { name: string }) => item.name)).toContain(
+      'Зарплата',
+    );
+
+    const invalid = await agent
+      .get('/api/v1/finance/categories/suggestions?kind=transfer')
+      .expect(400);
+    expect(invalid.body.error.code).toBe('VALIDATION_ERROR');
+  }, 60_000);
 });

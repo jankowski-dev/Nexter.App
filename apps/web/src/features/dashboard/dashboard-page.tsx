@@ -214,8 +214,9 @@ export function DashboardPage() {
             <Link to="/portfolio">Торговля</Link>
           </Button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
+            size="compact"
             title="Чистая прибыль за месяц"
             value={pnl.isPending ? '—' : formatSignedUsd(monthPnl)}
             description="Net P&L из Статистики"
@@ -224,6 +225,7 @@ export function DashboardPage() {
             live={!pnl.isPending}
           />
           <StatCard
+            size="compact"
             title="Плюс в нереализованном"
             value={formatUsd(summary.data?.positiveUnrealizedUsd)}
             description="Положительные открытые позиции"
@@ -232,6 +234,7 @@ export function DashboardPage() {
             live
           />
           <StatCard
+            size="compact"
             title="Минус в нереализованном"
             value={formatUsd(summary.data?.negativeUnrealizedUsd)}
             description="Отрицательные открытые позиции"
@@ -240,6 +243,7 @@ export function DashboardPage() {
             live
           />
           <StatCard
+            size="compact"
             title="Капитал"
             value={formatUsd(summary.data?.equityUsd)}
             description={`Кэш ${formatUsd(summary.data?.cashUsd)}`}
@@ -257,8 +261,9 @@ export function DashboardPage() {
             <Link to="/finance">Финансы</Link>
           </Button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
+            size="compact"
             title="Средний расход в день"
             value={finance.data ? formatByn(avgExpense) : '—'}
             description={`${elapsedDays} дн. месяца`}
@@ -267,6 +272,7 @@ export function DashboardPage() {
             live={Boolean(finance.data)}
           />
           <StatCard
+            size="compact"
             title="Средний доход в день"
             value={finance.data ? formatByn(avgIncome) : '—'}
             description={`${elapsedDays} дн. месяца`}
@@ -275,6 +281,7 @@ export function DashboardPage() {
             live={Boolean(finance.data)}
           />
           <StatCard
+            size="compact"
             title="Доходы за месяц"
             value={formatByn(finance.data?.incomeBase)}
             description={monthKey}
@@ -283,6 +290,7 @@ export function DashboardPage() {
             live
           />
           <StatCard
+            size="compact"
             title="Расходы за месяц"
             value={formatByn(finance.data?.expenseBase)}
             description={monthKey}

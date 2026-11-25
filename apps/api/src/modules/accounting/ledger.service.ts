@@ -1,8 +1,9 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, gte, ilike, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import {
   accounts,
   assets,
+  lotConsumptions,
   lots,
   postings,
   settings as settingsTable,
@@ -25,6 +26,7 @@ import type {
 } from '@nexter/contracts';
 import { AuditService } from '../../shared/audit/audit.service';
 import { DB } from '../../shared/db/db.module';
+import { TradingNotificationsService } from '../notifications/trading-notifications.service';
 import {
   AMOUNT_SCALE,
   USD_SCALE,
@@ -78,8 +80,14 @@ export interface LedgerSourceOverride {
   sourceId: string;
 }
 
+export function shouldNotifyClosedGroups(replayed: boolean, groupIds: string[]): boolean {
+  return !replayed && groupIds.length > 0;
+}
+
 @Injectable()
 export class LedgerService {
+  private readonly logger = new Logger(LedgerService.name);
+
   constructor(
     @Inject(DB) private readonly db: Database,
     private readonly bootstrap: AccountingBootstrapService,
@@ -89,6 +97,7 @@ export class LedgerService {
     private readonly audit: AuditService,
     private readonly policy: TradePolicyService,
     private readonly intents: TradeIntentService,
+    private readonly tradingNotifications: TradingNotificationsService,
   ) {}
 
   async createManual(
@@ -133,7 +142,7 @@ export class LedgerService {
             .from(postings)
             .where(eq(postings.transactionId, existing.id));
 
-          return { transaction: existing, postings: existingPostings };
+          return { transaction: existing, postings: existingPostings, replayed: true };
         }
       }
 
@@ -871,12 +880,72 @@ export class LedgerService {
         { executor: tx, strict: true },
       );
 
-      return { transaction, postings: insertedPostings };
+      return { transaction, postings: insertedPostings, replayed: false };
     });
+
+    const closedGroupIds =
+      input.type === 'sell'
+        ? input.tradeGroupId
+          ? [input.tradeGroupId]
+          : []
+        : input.type === 'swap'
+          ? (input.closeGroupIds ?? [])
+          : [];
+    if (shouldNotifyClosedGroups(result.replayed, closedGroupIds)) {
+      try {
+        await this.notifyClosedGroups(userId, result.transaction.id, closedGroupIds);
+      } catch (error) {
+        this.logger.warn(
+          `Closed-trade notification failed for ${userId}: ${
+            error instanceof Error ? error.message : 'unknown error'
+          }`,
+        );
+      }
+    }
 
     return {
       transaction: this.toContract(result.transaction, result.postings),
     };
+  }
+
+  private async notifyClosedGroups(
+    userId: string,
+    transactionId: string,
+    groupIds: string[],
+  ): Promise<void> {
+    const rows = await this.db
+      .select({
+        id: tradeGroups.id,
+        status: tradeGroups.status,
+        symbol: assets.symbol,
+      })
+      .from(tradeGroups)
+      .innerJoin(assets, eq(tradeGroups.assetId, assets.id))
+      .where(and(eq(tradeGroups.userId, userId), inArray(tradeGroups.id, groupIds)));
+
+    for (const group of rows) {
+      if (group.status !== 'closed') continue;
+      const [totals] = await this.db
+        .select({
+          realizedPnlUsd: sql<string>`coalesce(sum(${lotConsumptions.realizedPnlUsd}), 0)::text`,
+          costBasisUsd: sql<string>`coalesce(sum(${lotConsumptions.costBasisUsd}), 0)::text`,
+        })
+        .from(lotConsumptions)
+        .innerJoin(lots, eq(lotConsumptions.lotId, lots.id))
+        .where(
+          and(
+            eq(lots.tradeGroupId, group.id),
+            eq(lotConsumptions.disposalTransactionId, transactionId),
+          ),
+        );
+
+      await this.tradingNotifications.manualTradeClosed(userId, {
+        groupId: group.id,
+        symbol: group.symbol,
+        realizedPnlUsd: totals?.realizedPnlUsd ?? '0',
+        costBasisUsd: totals?.costBasisUsd ?? '0',
+      });
+    }
   }
 
   async list(userId: string, query: TransactionsListQuery): Promise<TransactionsPageResponse> {

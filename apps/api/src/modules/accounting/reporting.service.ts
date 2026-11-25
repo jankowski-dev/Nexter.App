@@ -1,11 +1,12 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import {
   accounts,
   assets,
   chains,
   lotConsumptions,
   lots,
+  portfolioEquityPoints,
   portfolioSnapshots,
   postings,
   settings as settingsTable,
@@ -22,6 +23,9 @@ import type {
   DashboardRecentTrades,
   DashboardSummary,
   EquityCurve,
+  EquityCurvePoint,
+  EquitySeries,
+  EquitySeriesRange,
   Position,
   PositionsResponse,
 } from '@nexter/contracts';
@@ -30,6 +34,21 @@ import { Decimal, decimal, usdString } from '../../shared/money/decimal';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { PricingService } from './pricing.service';
 import { TradeGroupsService } from './trade-groups.service';
+
+export function hourlyEquityNote(firstBucketAt: Date | null): string {
+  if (!firstBucketAt) {
+    return 'Почасовые точки ещё не собраны: первая появится при ближайшем снимке капитала.';
+  }
+  return `Почасовые точки собираются с ${firstBucketAt.toISOString()}; показаны последние 24 часа.`;
+}
+
+export function groupMonthlyEquityPoints(points: EquityCurvePoint[]): EquityCurvePoint[] {
+  const byMonth = new Map<string, EquityCurvePoint>();
+  for (const point of points) {
+    byMonth.set(point.date.slice(0, 7), point);
+  }
+  return [...byMonth.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
 
 @Injectable()
 export class ReportingService {
@@ -715,6 +734,100 @@ export class ReportingService {
       valuation: 'current-prices',
       note: 'Исторические остатки оценены по текущим ценам; точная историческая переоценка появится после ежедневных снимков.',
       points,
+    };
+  }
+
+  async equitySeries(userId: string, range: EquitySeriesRange): Promise<EquitySeries> {
+    if (range === 'hour') {
+      const from = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const [firstPoint] = await this.db
+        .select({ bucketAt: portfolioEquityPoints.bucketAt })
+        .from(portfolioEquityPoints)
+        .where(eq(portfolioEquityPoints.userId, userId))
+        .orderBy(asc(portfolioEquityPoints.bucketAt))
+        .limit(1);
+      const rows = await this.db
+        .select()
+        .from(portfolioEquityPoints)
+        .where(
+          and(eq(portfolioEquityPoints.userId, userId), gte(portfolioEquityPoints.bucketAt, from)),
+        )
+        .orderBy(asc(portfolioEquityPoints.bucketAt));
+
+      const points = rows.map((row) => ({
+        date: row.bucketAt.toISOString(),
+        cashUsd: row.cashUsd,
+        positionsValueUsd: row.positionsValueUsd,
+        equityUsd: row.equityUsd,
+      }));
+      return {
+        range,
+        granularity: 'hour',
+        valuation: 'hourly-points',
+        note:
+          points.length > 0
+            ? hourlyEquityNote(firstPoint?.bucketAt ?? null)
+            : firstPoint
+              ? `Почасовые точки собираются с ${firstPoint.bucketAt.toISOString()}; за последние 24 часа точек нет.`
+              : hourlyEquityNote(null),
+        points,
+      };
+    }
+
+    const from = new Date();
+    if (range === 'day') {
+      from.setUTCDate(from.getUTCDate() - 30);
+    } else {
+      from.setUTCMonth(from.getUTCMonth() - 12);
+    }
+    const rows = await this.db
+      .select()
+      .from(portfolioSnapshots)
+      .where(
+        and(
+          eq(portfolioSnapshots.userId, userId),
+          gte(portfolioSnapshots.snapshotDate, from.toISOString().slice(0, 10)),
+        ),
+      )
+      .orderBy(asc(portfolioSnapshots.snapshotDate));
+
+    if (rows.length === 0) {
+      const point = await this.currentEquityPoint(userId);
+      return {
+        range,
+        granularity: range,
+        valuation: 'daily-snapshots',
+        note: 'Снимков пока нет: показана текущая оценка капитала.',
+        points: [point],
+      };
+    }
+
+    const points = rows.map((row) => ({
+      date: row.capturedAt.toISOString(),
+      cashUsd: row.cashUsd,
+      positionsValueUsd: row.positionsValueUsd,
+      equityUsd: row.equityUsd,
+    }));
+
+    return {
+      range,
+      granularity: range,
+      valuation: 'daily-snapshots',
+      note:
+        range === 'month'
+          ? 'Последний дневной снимок каждого месяца.'
+          : 'Ежедневные снимки капитала за последние 30 дней.',
+      points: range === 'month' ? groupMonthlyEquityPoints(points) : points,
+    };
+  }
+
+  private async currentEquityPoint(userId: string): Promise<EquityCurvePoint> {
+    const positions = await this.positions(userId);
+    return {
+      date: new Date().toISOString(),
+      cashUsd: positions.cashUsd,
+      positionsValueUsd: positions.positionsValueUsd,
+      equityUsd: positions.equityUsd,
     };
   }
 

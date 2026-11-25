@@ -38,8 +38,11 @@
 | `BSC_RPC_URL` / `ETHEREUM_RPC_URL`                  | RPC                                    |
 | `WALLETCONNECT_PROJECT_ID`                          | WalletConnect                          |
 | `RECONCILIATION_ENABLED`                            | on-chain indexer                       |
-| `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots                        |
+| `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots + hourly equity points |
+| `PORTFOLIO_SNAPSHOT_INTERVAL_SECONDS`               | hourly bucket capture interval         |
 | `BOT_API_TOKEN`                                     | bearer-токен для `/api/v1/bot/*`       |
+| `NOTIFICATION_POLL_SECONDS` (Nexter.Bot)            | Viber outbox poll, default 15          |
+| `VIBER_TOKEN` / `VIBER_USER_ID` (Nexter.Bot)        | Viber credentials, never in the API    |
 | `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)      |
 | `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)             |
 | `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)         |
@@ -63,6 +66,7 @@ npx pnpm@10.20.0 db:migrate    # локально
   4. проверить `/ready`, схему, гранты `nexter_app`;
   5. записать миграцию/бандл в `docs/decisions.md`.
 - Production restore-проверка: `pg_restore` в `nexter_restore_check_*`, сравнить counts/sums, затем `dropdb`.
+- `0054` (UX batch) добавляет `viber_notifications`, `portfolio_equity_points` и шесть Viber-полей в `settings`. Гранты: SELECT/INSERT/UPDATE, без DELETE. Применять после encrypted backup/restore; сначала API, затем `Nexter.Bot` (он использует новые `/bot/notifications/*`). Hourly equity начинает собираться с момента миграции/деплоя, старые часы не синтезируются. Откат — предыдущий образ/бот; таблицы остаются инертными.
 
 ## 4. Бэкапы
 

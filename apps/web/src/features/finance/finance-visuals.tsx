@@ -478,6 +478,43 @@ const compactNumber = new Intl.NumberFormat('ru-RU', {
   maximumFractionDigits: 1,
 });
 
+function MonthlyFlowTable({ months }: { months: readonly FinanceMonthTotal[] }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-200">
+      <table className="w-full min-w-[360px] text-sm">
+        <thead>
+          <tr className="border-b border-zinc-200 bg-zinc-50/70 text-left text-[11px] text-zinc-500">
+            <th className="px-3 py-2 font-medium">Месяц</th>
+            <th className="px-3 py-2 text-right font-medium">Доходы</th>
+            <th className="px-3 py-2 text-right font-medium">Расходы</th>
+            <th className="px-3 py-2 text-right font-medium">Сальдо</th>
+          </tr>
+        </thead>
+        <tbody>
+          {months.map((row) => (
+            <tr key={row.month} className="border-b border-zinc-100 last:border-0">
+              <td className="px-3 py-2 capitalize text-zinc-700">{monthShortLabel(row.month)}</td>
+              <td className="px-3 py-2 text-right font-mono text-emerald-700">
+                {financeMoney(row.incomeBase, 'BYN')}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-rose-700">
+                {financeMoney(row.expenseBase, 'BYN')}
+              </td>
+              <td
+                className={`px-3 py-2 text-right font-mono ${
+                  Number(row.netBase) >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                }`}
+              >
+                {financeMoney(row.netBase, 'BYN')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function compactByn(value: number): string {
   if (!Number.isFinite(value) || value === 0) return '0 Br';
   return `${compactNumber.format(value)} Br`;
@@ -735,8 +772,9 @@ export function FinanceMonthsBlock({ months }: { months: readonly FinanceMonthTo
       </div>
 
       {hasMovement ? (
-        <div className="mt-4">
+        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
           <MonthlyFlowChart months={months} />
+          <MonthlyFlowTable months={months} />
         </div>
       ) : (
         <div className="mt-4 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center">

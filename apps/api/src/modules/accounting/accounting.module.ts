@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MarketDataCoreModule } from '../market-data/market-data-core.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AccountingBootstrapService } from './accounting-bootstrap.service';
 import { AccountsController } from './accounts.controller';
 import { AccountsService } from './accounts.service';
@@ -26,7 +27,7 @@ import { TradePolicyService } from './trade-policy.service';
 import { TransactionsController } from './transactions.controller';
 
 @Module({
-  imports: [MarketDataCoreModule],
+  imports: [MarketDataCoreModule, NotificationsModule],
   controllers: [
     AccountsController,
     AssetsController,
