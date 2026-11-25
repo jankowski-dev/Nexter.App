@@ -19,8 +19,9 @@ Removed (ADR 0090): `ИИ-торговля` module/UI/contracts/API/tab and the 
 
 ## Current state (2026-11-25)
 
-- Production: `6b362f7`, deployment `9003288c-e070-415d-a300-aa57441cb865`, migration `0054` applied, bundle `assets/index-B4REXXip.js`; `/health`/`/ready` 200.
-- Branch `sandbox-visual-cleanup` contains the approved visual-cleanup batch: replay timeline/PDF/favorites/strategies Settings/legacy removal, migration `0055` prepared but **not applied to production**.
+- Production: `089f052`, deployment `b5a46242-0cdd-41de-9240-8deb7f5b0446`, migration `0055` applied (56 migrations), bundle `assets/index-C_LjVbrf.js`; `/health`/`/ready` 200.
+- The sandbox visual-cleanup batch is deployed: replay timeline/PDF/favorites/strategies Settings/legacy AI+backtest removal. Pre-deploy encrypted backup dump SHA-256 `858c4d761c4f8a5a68e189b7811b7b4f46e1e03f40bc4d1889eb2c1c764e568a`, encrypted `ef9f288e80e015420c48c4a93aabe897821a28ec3ae02d4331c59287bbdfbaad`; restore drill passed (82 tables, 194,651 rows, zero orphan invariants).
+- Six sandbox runs are `running`: five Stage 3 (CAKE/BTCB/ETH/LINK/WBNB) plus the owner's Quack AI run. Stage 3 ends 2027-01-20.
 - Stage 3 forward paper validation is active (2026-11-25 → 2027-01-20): five separate clean runs CAKE/BTCB/ETH/LINK/WBNB (BSC/GeckoTerminal 1h, $1,000 each, current Stage 1B/1C defaults). They must remain `running`; never stop/start/edit/re-run them without explicit owner approval.
 - Stage 4 (real money) remains a separate decision. No real-money code path exists in the sandbox.
 
