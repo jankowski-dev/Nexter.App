@@ -66,7 +66,7 @@ npx pnpm@10.20.0 db:migrate    # локально
   4. проверить `/ready`, схему, гранты `nexter_app`;
   5. записать миграцию/бандл в `docs/decisions.md`.
 - Production restore-проверка: `pg_restore` в `nexter_restore_check_*`, сравнить counts/sums, затем `dropdb`.
-- `0054` (UX batch) добавляет `viber_notifications`, `portfolio_equity_points` и шесть Viber-полей в `settings`. Гранты: SELECT/INSERT/UPDATE, без DELETE. Применять после encrypted backup/restore; сначала API, затем `Nexter.Bot` (он использует новые `/bot/notifications/*`). Hourly equity начинает собираться с момента миграции/деплоя, старые часы не синтезируются. Откат — предыдущий образ/бот; таблицы остаются инертными.
+- `0054` (UX batch) добавляет `viber_notifications`, `portfolio_equity_points` и шесть Viber-полей в `settings`; применена в production 2026-11-25 (55 миграций). Гранты: SELECT/INSERT/UPDATE, без DELETE. Порядок: encrypted backup/restore → API → `Nexter.Bot` (он использует новые `/bot/notifications/*`). Hourly equity начинает собираться с момента миграции/деплоя, старые часы не синтезируются. Откат — предыдущий образ/бот; таблицы остаются инертными.
 
 ## 4. Бэкапы
 
