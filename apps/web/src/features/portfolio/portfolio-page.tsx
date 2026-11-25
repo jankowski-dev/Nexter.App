@@ -402,9 +402,8 @@ export function PortfolioPage() {
         <TradesPanel mode="journal" onOpenGroup={openTradeGroup} logos={watchlistLogos} />
       ) : null}
       {tab === 'operations' ? <OperationsPage embedded /> : null}
-      {tab === 'robots' ? <TestingPage mode="bots" /> : null}
+      {tab === 'robots' ? <TestingPage /> : null}
       {tab === 'ai' ? <AiTradingPage /> : null}
-      {tab === 'strategies' ? <TestingPage mode="strategies" /> : null}
       {tab === 'statistics' ? <ReportsPage embedded /> : null}
 
       <AssetDrawer

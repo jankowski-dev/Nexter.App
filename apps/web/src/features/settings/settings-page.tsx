@@ -141,6 +141,13 @@ export function SettingsPage() {
           tone="violet"
         />
         <SettingsNavCard
+          to="/settings/strategies"
+          title="Стратегии"
+          description="Справочник встроенных алгоритмов: описание, гайд и риски."
+          icon="sliders"
+          tone="violet"
+        />
+        <SettingsNavCard
           to="/settings/tasks"
           title="Задачи и заметки"
           description="Напоминания, время задачи и автосохранение."

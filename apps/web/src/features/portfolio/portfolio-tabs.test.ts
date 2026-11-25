@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cryptoTabs, hashForTab, tabFromLocation } from './portfolio-tabs';
 
 describe('crypto tabs', () => {
-  it('exposes eight crypto sections', () => {
+  it('exposes seven crypto sections without the strategy guide', () => {
     expect(cryptoTabs.map((tab) => tab.label)).toEqual([
       'Обзор',
       'Токены',
@@ -10,9 +10,9 @@ describe('crypto tabs', () => {
       'Операции',
       'Роботы',
       'ИИ-торговля',
-      'Стратегии',
       'Статистика',
     ]);
+    expect(cryptoTabs.some((tab) => tab.value === ('strategies' as never))).toBe(false);
   });
 
   it('maps the legacy crypto routes to their tabs', () => {
@@ -28,6 +28,7 @@ describe('crypto tabs', () => {
     expect(tabFromLocation('/portfolio', '#journal')).toBe('orders');
     expect(tabFromLocation('/portfolio', '#watchlist')).toBe('tokens');
     expect(tabFromLocation('/portfolio', '#reports')).toBe('statistics');
+    expect(tabFromLocation('/portfolio', '#strategies')).toBe('overview');
   });
 
   it('round-trips the current hashes', () => {
