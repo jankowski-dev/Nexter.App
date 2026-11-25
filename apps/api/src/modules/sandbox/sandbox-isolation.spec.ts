@@ -36,6 +36,22 @@ describe('legacy AI removal', () => {
     const index = readFileSync(resolve(root, 'packages/contracts/src/index.ts'), 'utf8');
     expect(index).not.toContain("'./ai-trading'");
   });
+
+  it('removes the legacy bot backtest module and contracts', () => {
+    expect(existsSync(resolve(root, 'apps/api/src/modules/trading-bots/backtest'))).toBe(false);
+    expect(
+      existsSync(resolve(root, 'apps/api/src/modules/trading-bots/backtest.controller.ts')),
+    ).toBe(false);
+    const module = readFileSync(
+      resolve(root, 'apps/api/src/modules/trading-bots/trading-bots.module.ts'),
+      'utf8',
+    );
+    expect(module).not.toContain('Backtest');
+    const contracts = readFileSync(resolve(root, 'packages/contracts/src/trading-bots.ts'), 'utf8');
+    expect(contracts).not.toContain('BotBacktest');
+    const settings = readFileSync(resolve(root, 'packages/contracts/src/settings.ts'), 'utf8');
+    expect(settings).not.toContain('backtestDefault');
+  });
 });
 
 describe('sandbox isolation (stage 2 and 2.1)', () => {

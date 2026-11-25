@@ -135,7 +135,7 @@ export function SettingsPage() {
         />
         <SettingsNavCard
           to="/settings/bots"
-          title="Роботы и бэктест"
+          title="Роботы"
           description="Тик, лимиты и значения по умолчанию."
           icon="testing"
           tone="violet"

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { decimal, priceString, usdString } from '../../shared/money/decimal';
-import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
+import type { HistoricalCandle } from './historical-candle';
 import type { RawCandle } from './candle.types';
 
 export interface CoinGeckoToken {

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { env } from '../../shared/config/env';
 import { decimal, priceString } from '../../shared/money/decimal';
-import type { HistoricalCandle } from '../trading-bots/backtest/historical.types';
+import type { HistoricalCandle } from './historical-candle';
 import type { MarketTimeframe, RawCandle } from './candle.types';
 
 const NETWORK: Record<string, string> = {

@@ -21,6 +21,14 @@ describe('legacy AI removal', () => {
     expect(tabs).not.toContain("'ai'");
     expect(tabs).not.toContain('ИИ-торговля');
   });
+
+  it('removes the legacy backtest panel and API helpers', () => {
+    expect(existsSync(resolve(webSrc, 'features/testing/backtest-panel.tsx'))).toBe(false);
+    expect(existsSync(resolve(webSrc, 'features/testing/backtest-chart.tsx'))).toBe(false);
+    const api = readFileSync(resolve(webSrc, 'lib/api.ts'), 'utf8');
+    expect(api).not.toContain('/trading-bots/backtests');
+    expect(api).not.toContain('BotBacktest');
+  });
 });
 
 describe('sandbox web boundary', () => {

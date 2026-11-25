@@ -6,10 +6,6 @@ import {
   authMeResponseSchema,
   aiSettingsSchema,
   aiTestResponseSchema,
-  botBacktestClearResponseSchema,
-  botBacktestPreviewResponseSchema,
-  botBacktestRunSchema,
-  botBacktestsResponseSchema,
   botDetailResponseSchema,
   botEquityResponseSchema,
   botEventsResponseSchema,
@@ -92,13 +88,6 @@ import {
   type ApprovalBuildResponse,
   type AssetsResponse,
   type AuditLogResponse,
-  type BotBacktestClearResponse,
-  type BotBacktestListQuery,
-  type BotBacktestPreviewRequest,
-  type BotBacktestPreviewResponse,
-  type BotBacktestRequest,
-  type BotBacktestRun,
-  type BotBacktestsResponse,
   type BotCreateRequest,
   type BotDetailResponse,
   type AiSettings,
@@ -1187,49 +1176,6 @@ export async function fetchBotTelemetry(
     `/api/v1/trading-bots/bots/${id}/telemetry${queryString({ from, to })}`,
     {},
     botTelemetryResponseSchema,
-  );
-}
-
-export async function previewBotBacktest(
-  body: BotBacktestPreviewRequest,
-): Promise<BotBacktestPreviewResponse> {
-  return apiPost('/api/v1/trading-bots/backtests/preview', body, botBacktestPreviewResponseSchema);
-}
-
-export async function runBotBacktest(body: BotBacktestRequest): Promise<BotBacktestRun> {
-  return apiPost('/api/v1/trading-bots/backtests', body, botBacktestRunSchema);
-}
-
-export async function fetchBotBacktests(
-  query: Partial<BotBacktestListQuery> = {},
-): Promise<BotBacktestsResponse> {
-  return apiFetch(
-    `/api/v1/trading-bots/backtests${queryString({
-      strategyKey: query.strategyKey,
-      assetId: query.assetId,
-      limit: query.limit,
-    })}`,
-    {},
-    botBacktestsResponseSchema,
-  );
-}
-
-export async function fetchBotBacktest(id: string): Promise<BotBacktestRun> {
-  return apiFetch(`/api/v1/trading-bots/backtests/${id}`, {}, botBacktestRunSchema);
-}
-
-export function botBacktestReportUrl(id: string): string {
-  return `/api/v1/trading-bots/backtests/${id}/report.pdf`;
-}
-
-export async function deleteBotBacktest(id: string): Promise<BotBacktestClearResponse> {
-  return apiDelete(`/api/v1/trading-bots/backtests/${id}`, botBacktestClearResponseSchema);
-}
-
-export async function clearBotBacktests(strategyKey?: string): Promise<BotBacktestClearResponse> {
-  return apiDelete(
-    `/api/v1/trading-bots/backtests${queryString({ strategyKey })}`,
-    botBacktestClearResponseSchema,
   );
 }
 

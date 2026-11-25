@@ -38,7 +38,6 @@ import type {
   BotToken,
   BotUpdateRequest,
 } from '@nexter/contracts';
-import { BacktestPanel } from './backtest-panel';
 import { BotDetailDrawer } from './bot-detail-drawer';
 import { BotIcon } from './bot-icon';
 import { BotUptimeText } from './bot-uptime';
@@ -47,14 +46,6 @@ import { StrategyParamInputs } from './strategy-param-inputs';
 import { formatStrategyParamValue, formToParams, paramsToForm } from './strategy-params';
 
 type Sort = 'pnl' | 'equity' | 'profitFactor';
-
-type TestConfig = {
-  strategyKey: string;
-  assetId?: string;
-  params?: Record<string, string>;
-  useStopLoss?: boolean;
-  useTakeProfit?: boolean;
-};
 
 type BotFormState = {
   name: string;
@@ -178,7 +169,6 @@ export function TestingPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const [sort, setSort] = useState<Sort>('pnl');
-  const [testConfig, setTestConfig] = useState<TestConfig | null>(null);
   const [botDialogOpen, setBotDialogOpen] = useState(false);
   const [editingBot, setEditingBot] = useState<BotSummary | null>(null);
   const [botForm, setBotForm] = useState<BotFormState>(emptyBotForm());
@@ -209,7 +199,7 @@ export function TestingPage() {
     queryKey: ['watchlist-groups'],
     queryFn: fetchWatchlistGroups,
     staleTime: 60_000,
-    enabled: botDialogOpen || Boolean(testConfig),
+    enabled: botDialogOpen,
   });
   const defaultGroup =
     watchlistGroups.data?.groups.find((group) => group.isDefault) ??
@@ -218,7 +208,7 @@ export function TestingPage() {
   const watchlist = useQuery({
     queryKey: ['trading-bot-tokens', defaultGroup?.id ?? null],
     queryFn: () => fetchWatchlist(false, undefined, defaultGroup?.id, 100),
-    enabled: Boolean(defaultGroup?.id) && (botDialogOpen || Boolean(testConfig)),
+    enabled: Boolean(defaultGroup?.id) && botDialogOpen,
   });
 
   const templates = strategies.data?.data ?? [];
@@ -294,10 +284,6 @@ export function TestingPage() {
       strategyParams: paramsToForm(first.defaultParams),
     }));
   }, [botDialogOpen, templates, botForm.strategyKey]);
-
-  const testTemplate = testConfig
-    ? (templates.find((template) => template.key === testConfig.strategyKey) ?? null)
-    : null;
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['trading-bots'] });
@@ -386,21 +372,6 @@ export function TestingPage() {
     setTokenSearch('');
     setBotError(null);
     setBotDialogOpen(true);
-  }
-
-  function openBotTest() {
-    setTestConfig({
-      strategyKey: botForm.strategyKey,
-      assetId: botForm.tokenAssetIds[0],
-      params: { ...botForm.strategyParams },
-      useStopLoss: true,
-      useTakeProfit: true,
-    });
-  }
-
-  function openStrategyTest(strategyKey: string) {
-    setStrategyDetail(null);
-    setTestConfig({ strategyKey });
   }
 
   async function openEditBot(bot: BotSummary): Promise<boolean> {
@@ -737,9 +708,6 @@ export function TestingPage() {
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={openBotTest} disabled={!selectedTemplate}>
-              Тестировать
-            </Button>
             <Button variant="ghost" onClick={closeBotDialog}>
               Отмена
             </Button>
@@ -1078,14 +1046,9 @@ export function TestingPage() {
         }
         size="lg"
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setStrategyDetail(null)}>
-              Готово
-            </Button>
-            {strategyDetail ? (
-              <Button onClick={() => openStrategyTest(strategyDetail.key)}>Тестировать</Button>
-            ) : null}
-          </>
+          <Button variant="secondary" onClick={() => setStrategyDetail(null)}>
+            Готово
+          </Button>
         }
       >
         {strategyDetail ? (
@@ -1138,33 +1101,9 @@ export function TestingPage() {
             </Card>
             <p className="text-xs leading-5 text-zinc-500">
               Стратегия встроена в приложение и не редактируется. Все числовые параметры задаются
-              отдельно для каждого робота и для прогона на тестовом стенде.
+              отдельно для каждого робота и для исторического прогона песочницы.
             </p>
           </div>
-        ) : null}
-      </Drawer>
-
-      <Drawer
-        open={Boolean(testConfig && testTemplate)}
-        onClose={() => setTestConfig(null)}
-        title={testTemplate ? `Тестирование · ${testTemplate.name}` : 'Тестирование'}
-        description="Параметры и токен взяты из формы робота. Изменения в этом окне не меняют робота."
-        size="lg"
-        placement="beside"
-      >
-        {testTemplate && testConfig ? (
-          <BacktestPanel
-            key={`${testConfig.strategyKey}:${testConfig.assetId ?? 'none'}`}
-            template={testTemplate}
-            tokenEntries={tokenEntries}
-            tokensPending={watchlist.isPending}
-            tokensError={watchlist.error}
-            initialAssetId={testConfig.assetId}
-            initialParams={testConfig.params}
-            initialUseStopLoss={testConfig.useStopLoss}
-            initialUseTakeProfit={testConfig.useTakeProfit}
-            stacked
-          />
         ) : null}
       </Drawer>
 

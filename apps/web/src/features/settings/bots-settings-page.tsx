@@ -2,13 +2,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { toRussianError } from '@/lib/error-messages';
 import type { Settings } from '@nexter/contracts';
 import { useState } from 'react';
-import {
-  NumberField,
-  SettingsCard,
-  SettingsPageShell,
-  SettingsSaveBar,
-  ToggleField,
-} from './settings-form';
+import { NumberField, SettingsCard, SettingsPageShell, SettingsSaveBar } from './settings-form';
 import { useSettings, useUpdateSettings } from './use-settings';
 
 export function BotsSettingsPage() {
@@ -39,13 +33,6 @@ function BotsForm({ settings }: { settings: Settings }) {
     botDefaultSlippageBps: String(settings.botDefaultSlippageBps),
     botDefaultDailyLossPct: String(settings.botDefaultDailyLossPct),
     botDefaultCooldownMinutes: String(settings.botDefaultCooldownMinutes),
-    backtestDefaultCapitalUsd: settings.backtestDefaultCapitalUsd,
-    backtestDefaultFeeBps: String(settings.backtestDefaultFeeBps),
-    backtestDefaultSlippageBps: String(settings.backtestDefaultSlippageBps),
-    backtestDefaultDays: String(settings.backtestDefaultDays),
-    backtestDefaultStopLoss: settings.backtestDefaultStopLoss,
-    backtestDefaultTakeProfit: settings.backtestDefaultTakeProfit,
-    backtestDefaultReinvest: settings.backtestDefaultReinvest,
   });
 
   const set = (key: keyof typeof values, value: string | boolean) =>
@@ -53,7 +40,7 @@ function BotsForm({ settings }: { settings: Settings }) {
 
   return (
     <SettingsPageShell
-      title="Роботы и бэктест"
+      title="Роботы"
       description="Параметры бумажной торговли и значения по умолчанию для новых ботов."
     >
       <SettingsCard title="Исполнение" description="Частота тиков и допустимый возраст котировки.">
@@ -138,57 +125,6 @@ function BotsForm({ settings }: { settings: Settings }) {
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Бэктест по умолчанию">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <NumberField
-            label="Стартовый капитал"
-            value={values.backtestDefaultCapitalUsd}
-            onChange={(value) => set('backtestDefaultCapitalUsd', value)}
-            min={100}
-            suffix="USD"
-          />
-          <NumberField
-            label="Период"
-            value={values.backtestDefaultDays}
-            onChange={(value) => set('backtestDefaultDays', value)}
-            min={30}
-            max={730}
-            suffix="дней"
-          />
-          <NumberField
-            label="Комиссия"
-            value={values.backtestDefaultFeeBps}
-            onChange={(value) => set('backtestDefaultFeeBps', value)}
-            min={0}
-            max={500}
-            suffix="bps"
-          />
-          <NumberField
-            label="Slippage"
-            value={values.backtestDefaultSlippageBps}
-            onChange={(value) => set('backtestDefaultSlippageBps', value)}
-            min={0}
-            max={500}
-            suffix="bps"
-          />
-        </div>
-        <ToggleField
-          label="Учитывать стоп-лосс"
-          checked={values.backtestDefaultStopLoss}
-          onChange={(checked) => set('backtestDefaultStopLoss', checked)}
-        />
-        <ToggleField
-          label="Учитывать тейк-профит"
-          checked={values.backtestDefaultTakeProfit}
-          onChange={(checked) => set('backtestDefaultTakeProfit', checked)}
-        />
-        <ToggleField
-          label="Реинвестировать прибыль"
-          checked={values.backtestDefaultReinvest}
-          onChange={(checked) => set('backtestDefaultReinvest', checked)}
-        />
-      </SettingsCard>
-
       <SettingsSaveBar
         pending={update.isPending}
         saved={update.isSuccess}
@@ -206,13 +142,6 @@ function BotsForm({ settings }: { settings: Settings }) {
             botDefaultSlippageBps: Number(values.botDefaultSlippageBps),
             botDefaultDailyLossPct: Number(values.botDefaultDailyLossPct),
             botDefaultCooldownMinutes: Number(values.botDefaultCooldownMinutes),
-            backtestDefaultCapitalUsd: values.backtestDefaultCapitalUsd,
-            backtestDefaultFeeBps: Number(values.backtestDefaultFeeBps),
-            backtestDefaultSlippageBps: Number(values.backtestDefaultSlippageBps),
-            backtestDefaultDays: Number(values.backtestDefaultDays),
-            backtestDefaultStopLoss: values.backtestDefaultStopLoss,
-            backtestDefaultTakeProfit: values.backtestDefaultTakeProfit,
-            backtestDefaultReinvest: values.backtestDefaultReinvest,
           })
         }
       />

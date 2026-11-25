@@ -1,3 +1,4 @@
+/** Daily historical candle shared by the market-data HTTP clients. */
 export interface HistoricalCandle {
   date: string;
   openUsd: string;
@@ -7,9 +8,4 @@ export interface HistoricalCandle {
   volumeUsd: string | null;
   /** True when the source only provides sampled daily points, not true OHLC. */
   synthetic?: boolean;
-}
-
-export interface HistoricalSeries {
-  source: string;
-  candles: HistoricalCandle[];
 }
