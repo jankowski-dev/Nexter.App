@@ -1,6 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, sql } from 'drizzle-orm';
 import {
+  assets,
+  chains,
   sandboxCandles,
   sandboxEquityPoints,
   sandboxIntents,
@@ -10,6 +12,8 @@ import {
   sandboxRunTokens,
   sandboxTokens,
   sandboxTrades,
+  watchlist,
+  watchlistGroups,
   type Database,
   type DbExecutor,
   type DbTransaction,
@@ -72,6 +76,16 @@ export interface SandboxTokenRecord {
   enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface DefaultWatchlistAsset {
+  assetId: string;
+  symbol: string;
+  name: string;
+  chain: string;
+  contractAddress: string | null;
+  coingeckoId: string | null;
+  isCashEquivalent: boolean;
 }
 
 export interface SandboxTokenInsert {
@@ -209,6 +223,37 @@ export interface SandboxTokenSnapshotInput {
 @Injectable()
 export class SandboxRepository {
   constructor(@Inject(DB) private readonly db: Database) {}
+
+  /**
+   * Active assets in the owner's default `Избранное` group. This is the only
+   * source for new sandbox tokens; the chain/contract come from the asset, not
+   * from free-form client input.
+   */
+  async listDefaultWatchlistAssets(userId: string): Promise<DefaultWatchlistAsset[]> {
+    return this.db
+      .select({
+        assetId: assets.id,
+        symbol: assets.symbol,
+        name: assets.name,
+        chain: chains.code,
+        contractAddress: assets.contractAddress,
+        coingeckoId: assets.coingeckoId,
+        isCashEquivalent: assets.isCashEquivalent,
+      })
+      .from(watchlist)
+      .innerJoin(
+        watchlistGroups,
+        and(
+          eq(watchlist.groupId, watchlistGroups.id),
+          eq(watchlistGroups.userId, userId),
+          eq(watchlistGroups.isDefault, true),
+        ),
+      )
+      .innerJoin(assets, eq(watchlist.assetId, assets.id))
+      .innerJoin(chains, eq(assets.chainId, chains.id))
+      .where(and(eq(watchlist.userId, userId), isNull(watchlist.archivedAt)))
+      .orderBy(asc(assets.symbol), asc(assets.id));
+  }
 
   async listTokens(userId: string): Promise<SandboxTokenRecord[]> {
     return this.db

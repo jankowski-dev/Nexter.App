@@ -721,7 +721,7 @@ export function WatchlistPage({ embedded = false }: { embedded?: boolean }) {
         open={groupDialogOpen}
         onClose={() => setGroupDialogOpen(false)}
         title="Новая группа"
-        description="Например: Основная, Наблюдение, Перспективные."
+        description="Например: Избранное, Наблюдение, Перспективные."
         footer={
           <>
             <Button variant="ghost" onClick={() => setGroupDialogOpen(false)}>

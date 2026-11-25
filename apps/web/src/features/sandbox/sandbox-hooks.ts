@@ -20,6 +20,7 @@ import {
   fetchSandboxRun,
   fetchSandboxRuns,
   fetchSandboxStatus,
+  fetchSandboxTokenCandidates,
   fetchSandboxTokens,
   fetchSandboxTrades,
   preflightSandboxReplay,
@@ -122,6 +123,15 @@ export function useSandboxTokens(enabled = true) {
   return useQuery({
     queryKey: sandboxQueryKeys.tokens,
     queryFn: fetchSandboxTokens,
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useSandboxTokenCandidates(enabled = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.tokenCandidates,
+    queryFn: fetchSandboxTokenCandidates,
     enabled,
     staleTime: 60_000,
   });

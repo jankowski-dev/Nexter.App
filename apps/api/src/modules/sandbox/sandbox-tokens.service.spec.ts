@@ -6,6 +6,7 @@ import {
   type SandboxAuditMeta,
 } from './sandbox-tokens.service';
 import type {
+  DefaultWatchlistAsset,
   SandboxCandleStats,
   SandboxTokenInsert,
   SandboxTokenRecord,
@@ -44,11 +45,38 @@ function fullStats(overrides: Partial<SandboxCandleStats> = {}): SandboxCandleSt
   };
 }
 
-function harness(tokens: SandboxTokenRecord[] = [row()]) {
+function candidate(overrides: Partial<DefaultWatchlistAsset> = {}): DefaultWatchlistAsset {
+  return {
+    assetId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    symbol: 'CAKE',
+    name: 'PancakeSwap',
+    chain: 'bsc',
+    contractAddress: '0xabcdef1111111111111111111111111111111111',
+    coingeckoId: null,
+    isCashEquivalent: false,
+    ...overrides,
+  };
+}
+
+function defaultCandidates(): DefaultWatchlistAsset[] {
+  return [
+    candidate(),
+    candidate({
+      assetId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      contractAddress: '0x1111111111111111111111111111111111111111',
+    }),
+  ];
+}
+
+function harness(
+  tokens: SandboxTokenRecord[] = [row()],
+  candidates: DefaultWatchlistAsset[] = defaultCandidates(),
+) {
   const repo = {
     listTokens: vi.fn(async (ownerId: string) =>
       tokens.filter((token) => token.userId === ownerId),
     ),
+    listDefaultWatchlistAssets: vi.fn(async () => candidates),
     findTokenById: vi.fn(
       async (ownerId: string, id: string) =>
         tokens.find((token) => token.userId === ownerId && token.id === id) ?? null,
@@ -124,23 +152,73 @@ describe('SandboxTokensService create', () => {
     expect(created.tokenKey).toBe('bsc:0xabcdef1111111111111111111111111111111111');
   });
 
-  it('normalizes a Binance pair and omits the contract address', async () => {
+  it('rejects a token that is not in the default favorites group', async () => {
     const { service, repo } = harness([]);
 
-    const created = await service.create(
+    await expect(
+      service.create(userId, { tokenKey: 'binance:btcusdt', symbol: 'BTC', name: 'Bitcoin' }, meta),
+    ).rejects.toMatchObject({ response: { code: 'SANDBOX_TOKEN_NOT_IN_FAVORITES' } });
+    expect(repo.insertToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects an ineligible favorites candidate with its reason', async () => {
+    const { service, repo } = harness(
+      [],
+      [candidate({ symbol: 'USDC', name: 'USD Coin', isCashEquivalent: true })],
+    );
+
+    await expect(
+      service.create(
+        userId,
+        {
+          tokenKey: 'bsc:0xabcdef1111111111111111111111111111111111',
+          symbol: 'USDC',
+          name: 'USD Coin',
+        },
+        meta,
+      ),
+    ).rejects.toMatchObject({ response: { code: 'SANDBOX_TOKEN_NOT_ELIGIBLE' } });
+    expect(repo.insertToken).not.toHaveBeenCalled();
+  });
+
+  it('marks unsupported chains, missing contracts and cash equivalents ineligible', async () => {
+    const { service } = harness(
+      [],
+      [
+        candidate({ symbol: 'TRX', chain: 'tron' }),
+        candidate({ assetId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', contractAddress: null }),
+        candidate({ assetId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', isCashEquivalent: true }),
+      ],
+    );
+
+    const response = await service.candidates(userId);
+
+    expect(response.candidates.map((item) => [item.symbol, item.eligible])).toEqual([
+      ['TRX', false],
+      ['CAKE', false],
+      ['CAKE', false],
+    ]);
+    expect(response.candidates[0]?.reason).toContain('Сеть не поддерживается');
+    expect(response.candidates[1]?.reason).toContain('контракт');
+    expect(response.candidates[2]?.reason).toContain('cash');
+  });
+
+  it('uses favorite metadata instead of trusting client symbol and name', async () => {
+    const { service, repo } = harness([], [candidate({ symbol: 'REAL', name: 'Real Token' })]);
+
+    await service.create(
       userId,
-      { tokenKey: 'binance:btcusdt', symbol: 'BTC', name: 'Bitcoin' },
+      {
+        tokenKey: 'bsc:0xabcdef1111111111111111111111111111111111',
+        symbol: 'FAKE',
+        name: 'Fake Token',
+      },
       meta,
     );
 
     expect(repo.insertToken).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tokenKey: 'binance:BTCUSDT',
-        chain: 'binance',
-        contractAddress: null,
-      }),
+      expect.objectContaining({ symbol: 'REAL', name: 'Real Token' }),
     );
-    expect(created.enabled).toBe(true);
   });
 
   it('keeps an explicit disabled create and coingecko id', async () => {

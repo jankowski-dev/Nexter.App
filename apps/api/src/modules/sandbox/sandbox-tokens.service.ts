@@ -16,6 +16,8 @@ import {
   type SandboxCoverageResponse,
   type SandboxCoverageStatus,
   type SandboxToken,
+  type SandboxTokenCandidate,
+  type SandboxTokenCandidatesResponse,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
@@ -25,6 +27,7 @@ import { AuditService } from '../../shared/audit/audit.service';
 import { SandboxDataService } from './sandbox-data.service';
 import {
   SandboxRepository,
+  type DefaultWatchlistAsset,
   type SandboxCandleStats,
   type SandboxTokenRecord,
 } from './sandbox.repository';
@@ -61,6 +64,11 @@ export class SandboxTokensService {
     return { tokens: rows.map(toContract) };
   }
 
+  async candidates(userId: string): Promise<SandboxTokenCandidatesResponse> {
+    const rows = await this.repository.listDefaultWatchlistAssets(userId);
+    return { candidates: rows.map(toCandidate) };
+  }
+
   async create(
     userId: string,
     input: SandboxTokenCreateRequest,
@@ -90,16 +98,32 @@ export class SandboxTokensService {
       }
     }
 
+    const favoriteAssets = await this.repository.listDefaultWatchlistAssets(userId);
+    const favorite = favoriteAssets.find((item) => toCandidate(item).tokenKey === tokenKey);
+    if (!favorite) {
+      throw new BadRequestException({
+        code: 'SANDBOX_TOKEN_NOT_IN_FAVORITES',
+        message: 'Добавлять можно только токены из группы «Избранное»',
+      });
+    }
+    const candidate = toCandidate(favorite);
+    if (!candidate.eligible) {
+      throw new BadRequestException({
+        code: 'SANDBOX_TOKEN_NOT_ELIGIBLE',
+        message: candidate.reason ?? 'Токен не подходит для песочницы',
+      });
+    }
+
     let row: SandboxTokenRecord;
     try {
       row = await this.repository.insertToken({
         userId,
         tokenKey,
-        symbol: input.symbol.trim(),
-        name: input.name.trim(),
-        chain: parsed.chain,
-        contractAddress: parsed.contractAddress,
-        coingeckoId: input.coingeckoId ?? null,
+        symbol: candidate.symbol,
+        name: candidate.name,
+        chain: candidate.chain,
+        contractAddress: candidate.contractAddress,
+        coingeckoId: favorite.coingeckoId ?? input.coingeckoId ?? null,
         enabled: input.enabled ?? true,
       });
     } catch (error) {
@@ -322,6 +346,34 @@ export function buildSandboxCoverage(
     stale,
     status,
     warning: warnings.length > 0 ? warnings.join(' ') : null,
+  };
+}
+
+export function toCandidateList(rows: readonly DefaultWatchlistAsset[]): SandboxTokenCandidate[] {
+  return rows.map(toCandidate);
+}
+
+export function toCandidate(row: DefaultWatchlistAsset): SandboxTokenCandidate {
+  const supported = row.chain === 'bsc' || row.chain === 'ethereum';
+  const contract = row.contractAddress?.trim().toLowerCase() ?? null;
+  const validContract = Boolean(contract && /^0x[0-9a-f]{40}$/.test(contract));
+  const reason = !supported
+    ? 'Сеть не поддерживается песочницей (доступны BSC и Ethereum).'
+    : !validContract
+      ? 'Укажите контракт токена в базе токенов.'
+      : row.isCashEquivalent
+        ? 'Стейблкоины и cash-эквиваленты не торгуются в песочнице.'
+        : null;
+
+  return {
+    assetId: row.assetId,
+    tokenKey: `${row.chain}:${validContract ? contract : row.assetId}`,
+    symbol: row.symbol,
+    name: row.name,
+    chain: row.chain,
+    contractAddress: validContract ? contract : null,
+    eligible: reason === null,
+    reason,
   };
 }
 

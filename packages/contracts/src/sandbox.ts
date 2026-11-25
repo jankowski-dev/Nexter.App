@@ -1154,7 +1154,7 @@ export const sandboxTokenCandidateSchema = z.object({
   tokenKey: z.string().min(1).max(80),
   symbol: z.string().min(1).max(40),
   name: z.string().min(1).max(80),
-  chain: sandboxChainSchema,
+  chain: z.string().min(1),
   contractAddress: z.string().nullable(),
   eligible: z.boolean(),
   reason: z.string().nullable(),

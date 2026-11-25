@@ -221,7 +221,7 @@ export function TokenTradeDrawer({
       : !token.contractAddress
         ? 'У токена не указан контракт — ончейн-своп невозможен'
         : !assetAddress
-          ? 'Токен ещё не в swap-allowlist. Проверьте группу «Основная», переключатель «Ончейн-свопы» и подождите до минуты.'
+          ? 'Токен ещё не в swap-allowlist. Проверьте группу «Избранное», переключатель «Ончейн-свопы» и подождите до минуты.'
           : null;
   const quoteOptions = chainCode ? quoteAssetOptions(config.data, chainCode) : [];
   const quoteAsset = quoteOptions.find((item) => item.symbol === quoteSymbol) ?? quoteOptions[0];

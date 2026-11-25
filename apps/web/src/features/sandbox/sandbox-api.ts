@@ -24,6 +24,7 @@ import {
   sandboxRunSchema,
   sandboxRunsResponseSchema,
   sandboxStatusSchema,
+  sandboxTokenCandidatesResponseSchema,
   sandboxTokenCreateRequestSchema,
   sandboxTokenRefreshResponseSchema,
   sandboxTokenSchema,
@@ -54,6 +55,7 @@ import {
   type SandboxRunsResponse,
   type SandboxStatus,
   type SandboxToken,
+  type SandboxTokenCandidatesResponse,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
@@ -66,6 +68,7 @@ export const sandboxQueryKeys = {
   all: ['sandbox'] as const,
   status: ['sandbox', 'status'] as const,
   tokens: ['sandbox', 'tokens'] as const,
+  tokenCandidates: ['sandbox', 'token-candidates'] as const,
   coverage: ['sandbox', 'coverage'] as const,
   overview: ['sandbox', 'overview'] as const,
   runsRoot: ['sandbox', 'runs'] as const,
@@ -105,6 +108,10 @@ export function fetchSandboxStatus(): Promise<SandboxStatus> {
 
 export function fetchSandboxTokens(): Promise<SandboxTokensResponse> {
   return apiFetch('/api/v1/sandbox/tokens', {}, sandboxTokensResponseSchema);
+}
+
+export function fetchSandboxTokenCandidates(): Promise<SandboxTokenCandidatesResponse> {
+  return apiFetch('/api/v1/sandbox/tokens/candidates', {}, sandboxTokenCandidatesResponseSchema);
 }
 
 export function fetchSandboxCoverage(): Promise<SandboxCoverageResponse> {

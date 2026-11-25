@@ -347,7 +347,7 @@ export class WatchlistService {
       .insert(watchlistGroups)
       .values({
         userId,
-        name: 'Основная',
+        name: 'Избранное',
         sortOrder: 0,
         isDefault: true,
       })

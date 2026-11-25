@@ -60,6 +60,7 @@ import {
   type SandboxRunsResponse,
   type SandboxRunUpdateRequest,
   type SandboxToken,
+  type SandboxTokenCandidatesResponse,
   type SandboxTokenCreateRequest,
   type SandboxTokenRefreshResponse,
   type SandboxTokensResponse,
@@ -103,6 +104,13 @@ export class SandboxController {
   @UseGuards(SandboxEnabledGuard)
   listTokens(@CurrentAuth() auth: AuthContext): Promise<SandboxTokensResponse> {
     return this.tokens.list(auth.user.id);
+  }
+
+  @Get('tokens/candidates')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  tokenCandidates(@CurrentAuth() auth: AuthContext): Promise<SandboxTokenCandidatesResponse> {
+    return this.tokens.candidates(auth.user.id);
   }
 
   @Post('tokens')

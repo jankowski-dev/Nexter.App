@@ -977,7 +977,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
           <div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="text-sm text-zinc-600">
-                Токены из группы «{defaultGroup?.name ?? 'Основная'}»
+                Токены из группы «{defaultGroup?.name ?? 'Избранное'}»
               </div>
               <div className="text-xs text-zinc-500">Выбрано: {botForm.tokenAssetIds.length}</div>
             </div>
@@ -1000,7 +1000,7 @@ export function TestingPage({ mode = 'bots' }: { mode?: TestingMode }) {
                 </p>
               ) : tokenOptions.length === 0 ? (
                 <p className="text-xs text-zinc-500">
-                  В группе «{defaultGroup?.name ?? 'Основная'}» нет активных токенов.
+                  В группе «{defaultGroup?.name ?? 'Избранное'}» нет активных токенов.
                 </p>
               ) : visibleTokenEntries.length === 0 ? (
                 <p className="text-xs text-zinc-500">Ничего не найдено.</p>
