@@ -31,8 +31,6 @@ export interface SandboxReplayCandleStats {
 export interface SandboxReplayWindowStats {
   readonly tokenKey: string;
   readonly latestClosedOpenTime: Date | null;
-  readonly firstOpenTime: Date | null;
-  readonly lastOpenTime: Date | null;
   readonly requested: SandboxReplayCandleStats;
   readonly requestedPrefix: SandboxReplayCandleStats;
   readonly partial?: SandboxReplayCandleStats;
@@ -224,7 +222,11 @@ export function buildReplayCoverage(
   const gaps = Math.max(0, required - available);
   const prefixBars = Math.max(0, Math.trunc(prefixStats.available));
   const synthetic = stats.syntheticCandles > 0;
-  const stale = now.getTime() - to.getTime() > SANDBOX_STALE_AFTER_MS;
+  // Staleness is per token: a token whose own last closed bar is older than one
+  // bar is stale, even when another token carries the common window end.
+  const stale =
+    stats.lastOpenTime === null ||
+    now.getTime() - (stats.lastOpenTime.getTime() + SANDBOX_TIMEFRAME_MS) > SANDBOX_STALE_AFTER_MS;
   const status: SandboxCoverageStatus = available === 0 ? 'missing' : gaps === 0 ? 'ok' : 'partial';
 
   const warnings: string[] = [];

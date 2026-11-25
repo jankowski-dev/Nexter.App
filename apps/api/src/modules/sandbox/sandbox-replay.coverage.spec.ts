@@ -33,8 +33,6 @@ function entry(
   return {
     tokenKey,
     latestClosedOpenTime,
-    firstOpenTime: requested.firstOpenTime,
-    lastOpenTime: requested.lastOpenTime,
     requested,
     requestedPrefix,
     partial,

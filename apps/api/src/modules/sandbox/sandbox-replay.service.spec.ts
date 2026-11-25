@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it, vi } from 'vitest';
 import type { SandboxReplayCreateRequest } from '@nexter/contracts';
 import { DEFAULT_PAPER_SETTINGS, DEFAULT_SETTINGS } from '@nexter/sandbox-core';
@@ -136,21 +136,6 @@ function harness(options: HarnessOptions = {}) {
   }
 
   const lastOpen = new Date(TO - HOUR);
-  const candleStatsMany = vi.fn(async (tokenKeys: string[]) => {
-    const map = new Map<string, SandboxCandleStats>();
-    for (const tokenKey of tokenKeys) {
-      map.set(
-        tokenKey,
-        stats(
-          evaluationBars + prefixBars,
-          new Date(FROM_180 - prefixBars * HOUR),
-          latestClosedOpenTime ?? null,
-        ),
-      );
-    }
-    return map;
-  });
-
   const latestClosedOpenTimes = vi.fn(async (tokenKeys: string[]) => {
     const map = new Map<string, Date>();
     if (latestClosedOpenTime !== null) {
@@ -184,7 +169,6 @@ function harness(options: HarnessOptions = {}) {
 
   const candles = {
     listTokens: vi.fn(async (userId: string) => (userId === owner ? tokens : [])),
-    candleStatsMany,
     candleStatsBetween,
     latestClosedOpenTimes,
   };
@@ -247,7 +231,7 @@ function toSummaryRow(record: SandboxReplayDetailRecord): SandboxReplaySummaryRe
 
 async function expectCode(
   promise: Promise<unknown>,
-  type: typeof ConflictException | typeof NotFoundException,
+  type: typeof BadRequestException | typeof ConflictException | typeof NotFoundException,
   code: string,
 ): Promise<void> {
   let error: unknown;
@@ -331,7 +315,7 @@ describe('SandboxReplayService preflight', () => {
         },
         new Date(NOW),
       ),
-      NotFoundException,
+      BadRequestException,
       'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
     );
   });
@@ -490,6 +474,26 @@ describe('SandboxReplayService create', () => {
     );
   });
 
+  it('blocks a hole inside the window even when allowPartial is accepted', async () => {
+    const h = harness({ evaluationBars: 700, firstBarOffset: 0 });
+    await expectCode(
+      h.service.create(
+        USER,
+        {
+          name: '30 дней',
+          tokenKeys: [TOKEN_A],
+          periodDays: 30,
+          initialCapitalUsd: '1000.00',
+          allowPartial: true,
+        },
+        {},
+      ),
+      ConflictException,
+      'SANDBOX_REPLAY_COVERAGE_MISSING',
+    );
+    expect(h.createReplay).not.toHaveBeenCalled();
+  });
+
   it('stores the actual shortened window when allowPartial is accepted', async () => {
     const h = harness({ evaluationBars: 480, firstBarOffset: 240, prefixBars: 100 });
     const movedFrom = FROM_30 + 240 * HOUR;
@@ -534,7 +538,7 @@ describe('SandboxReplayService create', () => {
         },
         {},
       ),
-      NotFoundException,
+      BadRequestException,
       'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
     );
   });
@@ -570,6 +574,19 @@ describe('SandboxReplayService list and detail', () => {
       h.service.detail(OTHER, REPLAY),
       NotFoundException,
       'SANDBOX_REPLAY_NOT_FOUND',
+    );
+  });
+
+  it('rejects corrupt frozen settings with a typed state error', async () => {
+    const h = harness({ status: 'completed' });
+    const record = h.getRecord();
+    if (record === null) throw new Error('fixture record missing');
+    h.setRecord({ ...record, settings: { invalid: true } });
+
+    await expectCode(
+      h.service.detail(USER, REPLAY),
+      ConflictException,
+      'SANDBOX_REPLAY_STATE_INVALID',
     );
   });
 });

@@ -829,6 +829,36 @@ describe('sandbox historical replay contracts', () => {
         unexpected: true,
       }).success,
     ).toBe(false);
+
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey, bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+        seed: 2_147_483_647,
+      }).success,
+    ).toBe(true);
+
+    for (const seed of [-1, 2_147_483_648, 1.5]) {
+      expect(
+        sandboxReplayCreateRequestSchema.safeParse({
+          name: 'Прогон',
+          tokenKeys: [bscKey],
+          periodDays: 30,
+          initialCapitalUsd: '1000.00',
+          seed,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   it('validates the preflight request and coverage payload', () => {
@@ -838,6 +868,12 @@ describe('sandbox historical replay contracts', () => {
         periodDays: 30,
       }),
     ).toEqual({ tokenKeys: [bscKey], periodDays: 30, allowPartial: false });
+    expect(
+      sandboxReplayPreflightRequestSchema.safeParse({
+        tokenKeys: [bscKey, bscKey],
+        periodDays: 30,
+      }).success,
+    ).toBe(false);
 
     const coverage = {
       tokenKey: bscKey,

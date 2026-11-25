@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import Decimal from 'decimal.js';
 import {
   normalizeSandboxTokenKey,
@@ -253,17 +258,16 @@ export class SandboxReplayService {
     const owned = new Set(tokens.map((token) => token.tokenKey));
     const missing = tokenKeys.filter((key) => !owned.has(key));
     if (missing.length > 0) {
-      throw new NotFoundException({
+      // Matches the live-run `requireUniverse` convention: an unknown/foreign
+      // token key is an invalid request (400), not a hidden resource (404).
+      throw new BadRequestException({
         code: 'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
         message: 'Некоторые токены отсутствуют в песочнице',
         details: missing,
       });
     }
 
-    const [fullStats, latestClosed] = await Promise.all([
-      this.candles.candleStatsMany(tokenKeys),
-      this.candles.latestClosedOpenTimes(tokenKeys, now),
-    ]);
+    const latestClosed = await this.candles.latestClosedOpenTimes(tokenKeys, now);
 
     const latestValues = tokenKeys
       .map((key) => latestClosed.get(key) ?? null)
@@ -289,12 +293,9 @@ export class SandboxReplayService {
     ): Map<string, SandboxReplayWindowStats> =>
       new Map(
         tokenKeys.map((tokenKey) => {
-          const full = fullStats.get(tokenKey);
           const entry: SandboxReplayWindowStats = {
             tokenKey,
             latestClosedOpenTime: latestClosed.get(tokenKey) ?? null,
-            firstOpenTime: full?.firstOpenTime ?? null,
-            lastOpenTime: full?.lastOpenTime ?? null,
             requested: requested.get(tokenKey) ?? EMPTY_STATS,
             requestedPrefix: requestedPrefix.get(tokenKey) ?? EMPTY_STATS,
             ...(partial === undefined ? {} : { partial: partial.get(tokenKey) ?? EMPTY_STATS }),
@@ -427,7 +428,13 @@ export function toReplayDetail(record: SandboxReplayDetailRecord): SandboxReplay
   const settings = sandboxDecisionSettingsSchema.safeParse(record.settings);
   const paper = sandboxPaperSettingsSchema.safeParse(record.paper);
   if (!settings.success || !paper.success) {
-    throw new Error(`Sandbox replay ${record.id} has an invalid frozen configuration`);
+    // Frozen config is written from a validated request/defaults; a failure
+    // here means the stored row is corrupt. Surface a typed 409 contract code
+    // instead of a bare 500 path.
+    throw new ConflictException({
+      code: 'SANDBOX_REPLAY_STATE_INVALID',
+      message: 'Сохранённая конфигурация прогона повреждена',
+    });
   }
 
   return {

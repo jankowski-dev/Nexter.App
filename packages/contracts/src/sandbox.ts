@@ -941,12 +941,16 @@ export const sandboxReplayCreateRequestSchema = z
     tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(3),
     periodDays: sandboxReplayPeriodSchema,
     initialCapitalUsd: sandboxPositiveUsdSchema,
-    seed: z.number().int().optional(),
+    seed: z.number().int().min(0).max(2_147_483_647).optional(),
     settings: sandboxDecisionSettingsSchema.optional(),
     paper: sandboxPaperSettingsSchema.optional(),
     allowPartial: z.boolean().optional().default(false),
   })
-  .strict();
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
 export type SandboxReplayCreateRequest = z.infer<typeof sandboxReplayCreateRequestSchema>;
 
 export const sandboxReplayPreflightRequestSchema = z
@@ -955,7 +959,11 @@ export const sandboxReplayPreflightRequestSchema = z
     periodDays: sandboxReplayPeriodSchema,
     allowPartial: z.boolean().optional().default(false),
   })
-  .strict();
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
 export type SandboxReplayPreflightRequest = z.infer<typeof sandboxReplayPreflightRequestSchema>;
 
 export const sandboxReplayCoverageSchema = z.object({
