@@ -2,7 +2,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
-import { FileIcon, NotebookIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
+import {
+  FileIcon,
+  NotebookIcon,
+  PaperclipIcon,
+  PencilIcon,
+  PinIcon,
+  TrashIcon,
+} from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import {
   addNoteImage,
@@ -136,7 +143,7 @@ export function NoteDrawer({
   const [title, setTitle] = useState(note?.title ?? '');
   const [body, setBody] = useState(note?.body ?? '');
   const [tags, setTags] = useState(note?.tags.join(', ') ?? '');
-  const [pinned] = useState(note?.pinned ?? false);
+  const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
   const [audio, setAudio] = useState<NoteAudio[]>(note?.audio ?? []);
   const attachments = useQuery({
@@ -353,6 +360,20 @@ export function NoteDrawer({
     }
   }
 
+  async function togglePinned(): Promise<void> {
+    const next = !pinned;
+    setPinned(next);
+    if (!noteIdRef.current) return;
+    try {
+      const saved = await updateNote(noteIdRef.current, { pinned: next });
+      onSaved(saved);
+      setError(null);
+    } catch (err) {
+      setPinned(!next);
+      setError(toRussianError(err, 'Не удалось изменить закрепление'));
+    }
+  }
+
   async function confirmArchive(): Promise<void> {
     if (!noteIdRef.current) return;
     setDeleting(true);
@@ -407,6 +428,14 @@ export function NoteDrawer({
               >
                 <TrashIcon />
                 Удалить
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => void togglePinned()}
+                title={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
+              >
+                <PinIcon filled={pinned} className="h-[18px] w-[18px]" />
+                {pinned ? 'Открепить' : 'Закрепить'}
               </Button>
               <span role="status" className="text-xs">
                 {saveState === 'error' ? (
@@ -470,11 +499,12 @@ export function NoteDrawer({
               {mode === 'edit' ? (
                 <Button
                   variant="secondary"
-                  className="h-8 px-3 text-xs"
+                  className="h-9 px-3 text-xs"
                   onClick={() => fileRef.current?.click()}
                   disabled={uploading || images.length >= 5}
                 >
-                  {uploading ? 'Загружаю…' : 'Добавить файл'}
+                  <PaperclipIcon className="h-4 w-4" />
+                  {uploading ? 'Загружаю…' : 'Прикрепить файл'}
                 </Button>
               ) : null}
             </div>
