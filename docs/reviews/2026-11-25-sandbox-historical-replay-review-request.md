@@ -1,10 +1,12 @@
 # Sandbox Stage 2.1 — historical replay review request
 
 Date: 2026-11-25
-Branch: `feat/sandbox-replay`
+Branch: `feat/sandbox-replay` (pushed; draft PR #325, base `main`)
 Base: `3a6f94a` (Stage 2 merged, signed off, accepted and deployed; migration `0052` applied)
 Docs base: `f1ac808` (design, ADR 0085, plan)
-Frozen code head: `a040e4b` (Tasks 1–7; CI status below) plus this Task 8 docs/packet commit
+Frozen code head: `fcd2f77` (Tasks 1–7 plus the Markdown-report 404 fix)
+Docs/fix head: this Task 8 docs/fix commit
+CI: draft PR #325; see `CI evidence` below for the run at `ad46db4` (failed) and `fcd2f77` (pending at packet update).
 Status: **Stage 2.1 implemented; independent whole-branch review gate. Not deployed; migration `0053` is not applied.**
 
 Review this as one whole-branch Stage 2.1 review. The scope is paper only: no
@@ -35,36 +37,49 @@ real money, exchange orders, wallets, keys, signing or real-ledger writes.
 
 ## Tasks and commits
 
-| Task | Scope                                                   | Commits                         | Review                           |
-| ---- | ------------------------------------------------------- | ------------------------------- | -------------------------------- |
-| Docs | Design, ADR 0085, plan, plan fixes                      | `f1ac808`, `ea49aae`, `7b3a85a` | n/a                              |
-| 1    | `evaluateFrom`, `runPaperFromCandles`, CLI reuse        | `34c26c8`                       | complete                         |
-| 2    | `sandbox_replays` schema, migration `0053`, grants      | `19872f3`                       | complete                         |
-| 3    | Contracts, window coverage, repository, service, routes | `2d66475`, `1d74a4f`            | complete                         |
-| 4    | Worker thread executor, replay worker, lock, restart    | `cefb815`                       | complete                         |
-| 5    | Persisted report read/download endpoints                | `d76aee3`                       | complete                         |
-| 6    | API e2e, look-ahead, snapshot re-derivation, restart    | `1cb74cc`                       | complete (DB-gated CI)           |
-| 7    | `Прогон` UI tab, form, history, detail, downloads       | `a040e4b`                       | complete                         |
-| 8    | Full gate, security/ops evidence, runbook, this packet  | this commit                     | **awaiting whole-branch review** |
+| Task | Scope                                                   | Commits                          | Review                           |
+| ---- | ------------------------------------------------------- | -------------------------------- | -------------------------------- |
+| Docs | Design, ADR 0085, plan, plan fixes                      | `f1ac808`, `ea49aae`, `7b3a85a`  | n/a                              |
+| 1    | `evaluateFrom`, `runPaperFromCandles`, CLI reuse        | `34c26c8`                        | complete                         |
+| 2    | `sandbox_replays` schema, migration `0053`, grants      | `19872f3`                        | complete                         |
+| 3    | Contracts, window coverage, repository, service, routes | `2d66475`, `1d74a4f`             | complete                         |
+| 4    | Worker thread executor, replay worker, lock, restart    | `cefb815`                        | complete                         |
+| 5    | Persisted report read/download endpoints                | `d76aee3`, `fcd2f77`             | complete                         |
+| 6    | API e2e, look-ahead, snapshot re-derivation, restart    | `1cb74cc`                        | complete (DB-gated CI)           |
+| 7    | `Прогон` UI tab, form, history, detail, downloads       | `a040e4b`                        | complete                         |
+| 8    | Full gate, security/ops evidence, runbook, this packet  | `ad46db4` + this docs/fix commit | **awaiting whole-branch review** |
 
-Branch diff from `3a6f94a` through `a040e4b`: 64 files, +23,897/−180. Of that,
-`packages/db/drizzle/meta/0053_snapshot.json` is the 12,207-line generated
-Drizzle snapshot; excluding it the hand-written diff is 63 files, +11,689/−180.
-The Task 8 commit adds documentation and two static security assertions only. No
-production data or configuration was changed.
+Branch diff from `3a6f94a` through `fcd2f77`: 68 files, +24,549/−208 across 14
+commits. Of that, `packages/db/drizzle/meta/0053_snapshot.json` is the 12,208-line
+generated Drizzle snapshot; excluding it the hand-written diff is 67 files,
++12,341/−208. `ad46db4` added the docs/packet and two static security
+assertions; `fcd2f77` added the Markdown-report error path fix (2 module tests, 1
+live-read e2e test); this docs/fix commit touches 8 already-changed files for
++126 net lines (packet counts, runbook, one timeout test, one stricter lock
+assertion, dead-helper removal). The branch head is therefore **68 files,
++24,675/−208 across 15 commits**. No production data or configuration was
+changed.
 
 ## Commands and outputs
 
-| Command                         | Result                                                                                                                                                                                                                                                                                                                                                          |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npx pnpm@10.20.0 test`         | **exit 0**. `@nexter/contracts` 60 passed (5 files); `@nexter/sandbox-core` 560 passed (39 files, includes the unchanged Stage 1B/1C goldens); `@nexter/db` 1 passed; `apps/web` 315 passed (47 files); `@nexter/api` **548 passed / 159 skipped** (79 files passed / 25 skipped) in 541 s. Total 1,484 passed; the 159 skips are Postgres-gated/opt-in suites. |
-| `npx pnpm@10.20.0 typecheck`    | **exit 0**; config, contracts, sandbox-core, db, ui, e2e and web pass; API runs `tsconfig.json` **and** `tsconfig.test.json`, so `apps/api/test/**/*.ts` is type-checked.                                                                                                                                                                                       |
-| `npx pnpm@10.20.0 build`        | **exit 0**; web (31.98 s), sandbox-core, db, contracts and API (`nest build`) build. Existing Vite chunk-size warning only (`core` 587 kB, `index` 1,837 kB).                                                                                                                                                                                                   |
-| `npx pnpm@10.20.0 lint`         | **exit 0**; ESLint clean.                                                                                                                                                                                                                                                                                                                                       |
-| `npx pnpm@10.20.0 format:check` | **exit 0** after Prettier formatted this packet and the runbook; “All matched files use Prettier code style!”.                                                                                                                                                                                                                                                  |
-| Focused security/flag tests     | **17/17 passed** (`sandbox-isolation.spec.ts`, `sandbox.disabled.spec.ts`, `sandbox.module.spec.ts`), including the new replay lock/lock-gated-requeue, replay-only candle repository and replay-worker flag assertions. After the final test-file rename/assertion the two changed specs were re-run: **11/11 passed**.                                        |
-| Stage 1B/1C goldens             | Included in the 560 sandbox-core tests; hashes unchanged.                                                                                                                                                                                                                                                                                                       |
-| DB-gated replay suites          | **Skipped locally** (no PostgreSQL/Docker in this workspace); CI is the first real execution. See the list below.                                                                                                                                                                                                                                               |
+| Command                         | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx pnpm@10.20.0 test`         | **exit 0** at `ad46db4` (full suite). `@nexter/contracts` 60 passed (5 files); `@nexter/sandbox-core` 560 passed (39 files, includes the unchanged Stage 1B/1C goldens); `@nexter/db` 1 passed; `apps/web` 315 passed (47 files); `@nexter/api` **550 passed / 159 skipped** (79 files passed / 25 skipped). Total **1,486 passed**; the 159 skips are Postgres-gated/opt-in suites. The earlier 548/1,484 reading was a pre-final run. `fcd2f77` adds 3 API tests (2 module, 1 live-read e2e) and this fix adds 1 executor timeout test; those were run focused and are green, and CI runs the full suite at the final head. |
+| `npx pnpm@10.20.0 typecheck`    | **exit 0**; config, contracts, sandbox-core, db, ui, e2e and web pass; API runs `tsconfig.json` **and** `tsconfig.test.json`, so `apps/api/test/**/*.ts` is type-checked.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `npx pnpm@10.20.0 build`        | **exit 0**; web (31.98 s), sandbox-core, db, contracts and API (`nest build`) build. Existing Vite chunk-size warning only (`core` 587 kB, `index` 1,837 kB).                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `npx pnpm@10.20.0 lint`         | **exit 0**; ESLint clean.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `npx pnpm@10.20.0 format:check` | **exit 0** after Prettier formatted this packet and the runbook; “All matched files use Prettier code style!”.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Focused replay tests            | **63/63 passed** at the fix head: coverage 9, service 21, executor **11** (now includes `REPLAY_WORKER_TIMEOUT`), worker 14, report 8. At `fcd2f77` before the timeout test it was 62/62.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Focused security/flag tests     | **19/19 passed** (`sandbox-isolation.spec.ts` 9, `sandbox.disabled.spec.ts` 2, `sandbox.module.spec.ts` 8), including the replay lock/lock-gated-requeue guard-vs-call-site assertion, replay-only candle repository and replay-worker flag assertions. It was 17/17 before `fcd2f77` added the two Markdown-route module tests.                                                                                                                                                                                                                                                                                              |
+| Stage 1B/1C goldens             | Included in the 560 sandbox-core tests; hashes unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| DB-gated replay suites          | **Skipped locally** (no PostgreSQL/Docker in this workspace); CI is the first real execution. See the list below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+
+### CI evidence (PR #325, base `main`, head `feat/sandbox-replay`)
+
+| Run           | Head      | Result                                                                                                                                                                                                                                                                                                                                    |
+| ------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `45537895046` | `ad46db4` | **Failed** — 1 failure in `sandbox-replays.e2e` owner isolation: a foreign `report.md` returned `500` instead of `404` (route-level Markdown `Content-Type` serialized the JSON error).                                                                                                                                                   |
+| `45540307264` | `fcd2f77` | **Pending at packet update** (in progress when the packet was written). `fcd2f77` fixes both Markdown routes (live and replay) by setting the content type only after a successful read and adds the live 404 test. The full gate above is the local green run on the code before this small fix; CI is authoritative for the final head. |
 
 ## Schema, migration and grants
 
@@ -123,7 +138,8 @@ missing, each worker pass logs a claim failure and retries without crashing.
   synthetic, stale (`ok|partial|missing`). A gap inside the evaluation window or
   no candles blocks creation; `allowPartial` accepts a shorter available window
   (latest first candle across tokens) with at least 240 evaluation bars and
-  records the actual `from_time`/window. Staleness is per token.
+  records the actual `from_time`/window. Staleness is computed per token from the
+  windowed stats and is warning-only (see Deferred items).
 - Synthetic (CoinGecko) candles are flagged, not hidden; missing data never
   fabricates candles.
 - The snapshot is prefix + evaluation candles, sorted, gzip-compressed and hashed
@@ -139,9 +155,12 @@ missing, each worker pass logs a claim failure and retries without crashing.
 - A decision on closed bar `i` fills at the open of bar `i+1` with the frozen fee
   and slippage; a decision on the last bar is ignored (no next open); the
   end-of-window force-close remains.
-- Core tests: prefix-vs-evaluation boundary, `evaluateFrom` out of range, mutated
-  future candles leave earlier decisions unchanged, and the Stage 1B/1C goldens
-  are unchanged when `evaluateFrom` is absent.
+- Core tests assert the report/equity/ledger start at `evaluateFrom` (no
+  pre-window ledger rows), `evaluateFrom` out of range is rejected, and mutating
+  candles after a boundary leaves earlier decisions unchanged; the Stage 1B/1C
+  goldens are unchanged when `evaluateFrom` is absent. They do **not** prove that
+  an indicator (SMA/ATR/regime) actually consumed the pre-window prefix; that
+  remains a recorded test gap (see Deferred items).
 - API e2e inserts 48 hostile bars after `to_time` and asserts the stored report is
   unchanged; it also re-derives the report from the persisted gzip snapshot and
   asserts identical `reportHash`, event hash, metrics, trades, equity, intents and
@@ -167,6 +186,8 @@ missing, each worker pass logs a claim failure and retries without crashing.
   hard bound; a worker error, non-zero exit, timeout or malformed message marks
   the replay `failed` with a sanitized (≤1000 chars) message and audits
   `sandbox.replay_failed`. The API event loop and live runner stay responsive.
+  The timeout path is asserted by a focused executor test (`REPLAY_WORKER_TIMEOUT`,
+  worker terminated); a thread crash/timeout is marked `failed`, not requeued.
 - A cancelled-between-claim-and-start row is skipped; a concurrent state change
   during snapshot storage leaves the row for the next pass rather than publishing
   a mismatched report.
@@ -188,9 +209,11 @@ POST /api/v1/sandbox/replays/:id/cancel      queued only, 409 otherwise
 POST /api/v1/sandbox/replays/:id/archive     terminal only, 409 otherwise
 ```
 
-Errors: `SANDBOX_REPLAY_NOT_FOUND` (404, owner-scoped), `…_COVERAGE_MISSING`,
-`…_WINDOW_TOO_SHORT`, `…_CAPITAL_INVALID`, `…_TOKEN_NOT_FOUND`,
-`…_INVALID_STATUS`, `…_STATE_INVALID`, `…_NOT_COMPLETED` (409). No manual buy/add route.
+Errors and statuses: `SANDBOX_REPLAY_NOT_FOUND` 404 (owner-scoped);
+`SANDBOX_REPLAY_TOKEN_NOT_FOUND` **400** (unknown/foreign token key is an invalid
+request, matching the live-run `requireUniverse` convention);
+`…_COVERAGE_MISSING`, `…_WINDOW_TOO_SHORT`, `…_CAPITAL_INVALID`, `…_INVALID_STATUS`,
+`…_STATE_INVALID`, `…_NOT_COMPLETED` 409; Zod validation 400. No manual buy/add route.
 
 UI (`Прогон` tab, `#replay`):
 
@@ -210,9 +233,12 @@ UI (`Прогон` tab, `#replay`):
 
 - Every mutation audits: `sandbox.replay_created`, `replay_started`,
   `replay_completed`, `replay_failed`, `replay_cancelled`, `replay_archived`,
-  `replay_requeued`. Started/completed rows carry `executionMode:
-'historical-paper'`, hashes and the window. E2e asserts the exact sorted action
-  rows per flow (create→start→complete→archive, cancel, requeue→complete).
+  `replay_requeued`. `replay_started` carries `executionMode:
+'historical-paper'`, the window and seed but **no hashes** (they do not exist
+  yet); `replay_completed` carries `reportHash`, `eventHash`, `eventCount`,
+  `dataSnapshotId`, `candleSnapshotHash` and `executionMode`. E2e asserts the
+  exact sorted action rows per flow (create→start→complete→archive, cancel,
+  requeue→complete).
 - Owner isolation: a second owner gets `404` for detail and report; a
   non-completed report is `409`; the worker internal read is not exposed over HTTP.
 - Unauthenticated: all 8 replay routes return `401 AUTH_REQUIRED` (DB-free e2e).
@@ -227,33 +253,40 @@ UI (`Прогон` tab, `#replay`):
 - No DELETE grant/code path; archive is a soft `archived_at`. No secrets, keys,
   seed phrases or signing in the module. No real money or ledger writes; the
   replay uses an in-memory event log and the report only.
-- The candle snapshot/report are owner-only and `no-store` (server headers and e2e
-  `cache-control: no-store`).
-- Task 8 added only two static assertions: the replay lock/lock-gated requeue and
-  the replay-only candle repository, plus the replay worker flag gate.
+- Every replay route sets `Cache-Control: no-store` statically (controller
+  header). The DB e2e asserts it on `report.json`; list/detail and the Markdown
+  route rely on that header assertion, and there is no snapshot HTTP route.
+- `ad46db4` added only two static assertions: the replay lock/lock-gated requeue
+  and the replay-only candle repository, plus the replay worker flag gate.
+  `fcd2f77` added two module tests for the Markdown error path (JSON errors keep
+  their status) and this fix tightens the lock assertion to the actual call site.
 
 ## Tests and evidence
 
 - **Core (560 tests):** `run-paper.test.ts` covers deterministic report/event
-  hashes, the evaluation start at `evaluateFrom` with prefix lookback, mutated
+  hashes, the report period/equity/ledger starting at `evaluateFrom`, mutated
   future candles leaving earlier decisions unchanged, out-of-range rejection,
-  final marks and open-position marking. `paper-runner.test.ts` adds the
+  final marks and open-position marking; `paper-runner.test.ts` adds the
   `evaluateFrom` boundary, next-open fills, partial fills, stop cooldown, expiry
-  and state pass-through. The Stage 1B/1C goldens are unchanged.
-- **Contracts (60 tests, 25 in `sandbox.test.ts`):** replay create/preflight/list/
+  and state pass-through. Neither asserts that an indicator consumed the prefix
+  candles (deferred). The Stage 1B/1C goldens are unchanged.
+- **Contracts (60 tests, 34 in `sandbox.test.ts`):** replay create/preflight/list/
   detail/report schemas, period/status enums, decimal strings, hash regexes and
-  owner-facing shapes.
-- **API unit (69 replay-specific tests):** `sandbox-replay.coverage.spec.ts` (9:
-  common end, bars/gaps/prefix, `allowPartial` move, 240-bar floor, empty/missing,
-  synthetic/stale), `sandbox-replay.service.spec.ts` (22: defaults/freeze,
-  audit, owner 404, cancel/archive states, list filters, partial window),
-  `sandbox-replay.executor.spec.ts` (16: worker success/error/exit/timeout,
+  owner-facing shapes. (`sandbox.test.ts` has 25 `it` blocks; two `it.each`
+  tables expand to 34 cases.)
+- **API unit (63 replay-specific tests at the fix head; 62 at `fcd2f77`):**
+  `sandbox-replay.coverage.spec.ts` (9: common end, bars/gaps/prefix,
+  `allowPartial` move, 240-bar floor, empty/missing, synthetic/stale),
+  `sandbox-replay.service.spec.ts` (21: defaults/freeze, audit, owner 404,
+  cancel/archive states, list filters, partial window),
+  `sandbox-replay.executor.spec.ts` (11: worker success/error/exit/**timeout**,
   snapshot gzip/hash, corrupt snapshot, candle assertion, settings mapping),
   `sandbox-replay-worker.service.spec.ts` (14: lock held → no claim/no requeue,
   lock-gated requeue, claim→run→complete, failure sanitization, cancel race,
   snapshot reuse, transient claim failure, no double run, report identity) and
   `sandbox-replay-report.service.spec.ts` (8: wrapper/notes, 409 non-completed,
-  owner 404, corrupt report). The module/flag/isolation suites add 17.
+  owner 404, corrupt report). The module/flag/isolation suites add **19**
+  (module 8, disabled 2, isolation 9).
 - **Web (57 replay-specific tests):** form validation/preflight blocking/partial
   confirmation (6), helpers/status labels/tones (18), API URLs/parsing/download
   filename (12), list SSR states (7), detail SSR/progress/metrics/failed (10) and
@@ -285,50 +318,135 @@ Unverified in this environment (explicit):
    render tests and API contract tests cover the states, but no browser was run.
 3. Production migration `0053`, deploy and a real production replay; not applied,
    no production access was used.
-4. Report/snapshot row size at the 3-token × 180-day maximum (small fixtures only).
+4. Report/snapshot row size at the 3-token × 180-day maximum: expected to be a
+   few MB, **unmeasured**; fixtures are small.
+5. CI at the final docs/fix head; the `fcd2f77` run was still pending when this
+   packet was updated, so the `ad46db4` failed run/successful local gate plus the
+   focused fix tests are the recorded evidence.
 
-## Deferred items (recorded, not blocking Stage 2.1)
+## Fixed in this fix round
 
-- **Connection-loss split brain (no claim stamp).** If the API process stays
-  alive but its Postgres connection drops mid-run, the session advisory lock is
-  released; another instance could requeue/re-run the row while the first worker
-  thread is still computing. The first instance can only store while the row is
-  `running` and may lose the race. A `worker_id`/claim-token column would harden
-  this; the design accepts lock-until-connection-end semantics.
-- **No attempt bound/backoff.** `requeueRunningReplays` requeues _every_
-  `running` row on the first pass after the lock. A deterministic failure becomes
-  `failed`, and a worker-thread crash is marked `failed` (not requeued), but an
-  infrastructure exit can be retried every pass with no max-attempt column.
-- **Snapshot staging runs on the API event loop.** Loading rows, canonical JSON,
-  gzip and SHA-256 happen before the worker thread starts. For ≤3×180 days this is
-  short but not off-loop; moving staging into the worker would need the raw rows
-  passed across the thread.
-- **One claim per 60-second pass.** Multiple queued replays run sequentially and
-  each can wait up to a minute; no batch drain.
-- **Report body is not re-hashed on read.** The read service checks schema and the
-  identity columns (`runId`, `reportHash`, `dataSnapshotId`, `eventCount`,
-  `eventHash`) against the row but does not recompute `reportHash` from the JSONB
-  body. Tampering that keeps those columns consistent is out of the threat model.
-- **No persisted prefix-length column.** The prefix is derivable from the snapshot
-  and the first candle; notes state “up to 180 days”, but there is no explicit
-  `prefix_bars` field on the row/report period.
-- **Report + snapshot row size is unmeasured at the 3×180-day maximum.** The
-  design (§16) flags a few MB; fixtures are small. Measure on the first
-  production replay and cap tokens/compress the report if needed.
-- **Full event journal not persisted** (design choice): only `eventCount`/
-  `eventHash`; row-level event audit would need a separate compressed artifact.
-- **UI history is a fixed 50-row list** with a status filter only; no pagination,
-  search or sort.
-- **Preflight→create race.** Coverage can change between the UI preflight and the
+- Packet test counts corrected to measured values: replay-specific API **62** at
+  `fcd2f77` (coverage 9, service 21, executor 10, worker 14, report 8), now **63**
+  with the new timeout test; `sandbox.test.ts` **34**; module/flag/isolation **19**
+  (17 before `fcd2f77`). Full gate corrected to API **550 passed / 159 skipped**,
+  total **1,486** at `ad46db4` (the 548/1,484 figure was a pre-final run).
+- `REPLAY_WORKER_TIMEOUT` was previously claimed but untested; a focused executor
+  test now asserts the code, message and worker termination.
+- Prefix-lookback wording corrected: tests prove the report/equity/ledger start at
+  `evaluateFrom` and never include pre-window ledger rows, not that indicators
+  consumed the prefix.
+- PR/CI state reconciled: branch pushed, draft PR **#325**, CI run `45537895046`
+  failed and `fcd2f77` fixed the Markdown 404; head/diff/commit stats updated.
+- Runbook health URLs fixed to `/health`/`/ready`; missing-table first query
+  corrected to `requeueRunningReplays`; `sandbox.migration` marked local/static.
+- Packet wording fixed: `no-store` e2e coverage, started-audit hashes, unmeasured
+  row size, error status grouping (`SANDBOX_REPLAY_TOKEN_NOT_FOUND` is 400).
+- Lock-gating static test now asserts the guard string and the exact
+  `await this.requeueStaleReplays(now);` call site, not any method name.
+- Dead `SandboxReplayRepository.loadReplay` and its spec stub removed.
+
+## Deferred items (recorded, not blocking Stage 2.1; each marked fixed/deferred)
+
+**Task 1 — core replay**
+
+- **Indicator-prefix use is not asserted.** Deferred. Tests prove the evaluation
+  start and no pre-window ledger rows; no test proves an SMA/ATR/regime actually
+  consumed the pre-window candles.
+- **`evaluateFrom` is not part of `configVersion`.** Deferred. The frozen config
+  hashes settings/seed/run shape; `evaluateFrom` is request data, and the report
+  identity (`runId`, `dataSnapshotId`) plus the stored window bind it.
+- **Duplicate CLI re-export.** Deferred (harmless). `collectRejectedBuys` is
+  re-exported by `cli/paper.ts` although `paper/run-paper.ts` also exports it.
+- **No-ledger-entry assertion is weak on the monotone fixture.** Deferred
+  (test-quality only); the mutated-future test is non-vacuous.
+- **No-look-ahead test does not set `evaluateFrom`.** Deferred; the separate
+  boundary tests cover `evaluateFrom`.
+- **Imprecise `evaluateFrom` out-of-range message; report `firstBar` is the close
+  of the first evaluated bar while `from_time` is its open.** Deferred (wording);
+  the half-open math is tested.
+
+**Task 2 — schema/migration**
+
+- **Minor static-test gaps.** Deferred: trailing newline, index column order,
+  snapshot `prevId`/table-set, `jsonb_typeof` short-circuit, destructive-statement
+  assertion, and optional DB hash/window checks. The table/columns/indexes/SQL/
+  grants and runtime privileges are asserted.
+
+**Task 3 — coverage/service**
+
+- **Per-token staleness is window-derived.** Deferred (warning only): the stats'
+  last open time is bounded by the replay window, so a token with newer data
+  outside the window can be reported stale relative to `now`. It never blocks.
+- Fixed in `1d74a4f`: unknown token key now `400 SANDBOX_REPLAY_TOKEN_NOT_FOUND`,
+  corrupt stored settings fail closed, duplicate token keys are de-duplicated,
+  `allowPartial` hole coverage is tested, and dead `candleStatsMany` removed.
+
+**Task 4 — worker**
+
+- **Connection-loss split brain (no claim stamp).** Deferred. If the API process
+  stays alive but its Postgres connection drops mid-run, the advisory lock is
+  released; another instance could requeue/re-run while the first thread computes.
+  The first instance can only store while the row is `running` and may lose the
+  race. A `worker_id`/claim token would harden this; lock-until-connection-end is
+  accepted.
+- **Staging gzip runs on the API event loop.** Deferred (~60 ms measured in
+  review). Loading rows, canonical JSON, gzip and SHA-256 happen before the thread
+  starts; moving it into the worker needs raw rows passed across the thread.
+- **No attempt bound/backoff.** Deferred. `requeueRunningReplays` requeues every
+  `running` row on the first pass after the lock; deterministic/worker-thread
+  failures become `failed`, but an infrastructure exit can retry every pass.
+- **One claim per 60-second pass.** Deferred; no batch drain, so queued replays
+  wait sequentially.
+- **Claim row-lock comment/transaction and coverage first-bar equality.** Deferred
+  (documentation/DB-e2e gaps).
+- **DB e2e gaps.** Deferred: the DB suites are CI-first; local runs skip.
+
+**Task 5 — report/read**
+
+- **Report body is not re-hashed on read.** Deferred. The read service checks the
+  schema and identity columns (`runId`, `reportHash`, `dataSnapshotId`,
+  `eventCount`, `eventHash`) but does not recompute `reportHash` from JSONB;
+  tampering that keeps the columns consistent is out of the threat model.
+- **No persisted prefix-length column.** Deferred; the prefix is derivable from
+  the snapshot/first candle, and notes say “up to 180 days”.
+- **Corrupt-report status corner.** Fixed on the main path (`409
+SANDBOX_REPLAY_STATE_INVALID`) and the Markdown error path now preserved by
+  `fcd2f77`; a residual unexpected-status 500 remains only for an unmodelled
+  exception.
+- **No engine-import assertion test.** Deferred; the isolation suite checks
+  imports/table names, not that the report service cannot import the engine.
+- **Duplicate hash statement in notes.** Deferred (cosmetic).
+
+**Task 6 — e2e**
+
+- **No `allowPartial` success e2e.** Deferred; the service/coverage unit tests
+  cover the shortened-window path.
+- **Singleton index drop before `try`; empty reloaded assertion; over-stated
+  no-rerun comment; immutability label; truncation invariant note.** Deferred
+  (test robustness/comment wording).
+
+**Task 7 — UI**
+
+- **Preflight→create race.** Deferred. Coverage can change between preflight and
   POST; the server re-checks and returns `409`, which the UI surfaces, but the
-  stale preflight is not automatically refreshed and re-confirmed.
-- **Running replay cannot be cancelled**; bounded by the 15-minute thread timeout.
-- Only 30/90/180-day presets (no arbitrary dates), 1–3 tokens, 1h only.
+  stale preflight is not auto-refreshed/re-confirmed.
+- **Stale preflight on a long-lived form.** Deferred; same recovery gap.
+- **Unused pending input; unused `sandboxReplayCanDownloadReport` helper (tests
+  only); truncated preflight warnings; fixed 50-row history cap; “запуска”
+  copy; `createDisabled` ignores form validation.** Deferred (UI polish; no
+  wrong state or mutation).
+
+**Design-level deferrals**
+
+- **Full event journal not persisted** (design choice): only `eventCount` /
+  `eventHash`; row-level events need a compressed artifact.
+- **Running replay cannot be cancelled**; bounded by the 15-minute timeout.
+- Only 30/90/180-day presets, 1–3 tokens, 1h only.
 - No notifications, PDF or scheduled replays.
-- **Generated `bytea` quoting.** Drizzle-kit emitted `"candle_snapshot" "bytea"`;
-  the committed SQL uses unquoted `bytea` and `db:generate` reports no drift. A
-  future regeneration of an unrelated alter on this column should be re-checked.
-- The migration `0053` production apply and deploy are intentionally not done.
+- **Generated `bytea` quoting.** The committed SQL uses unquoted `bytea` and
+  `db:generate` reports no drift; re-check a future regeneration.
+- **Migration `0053` apply/deploy** intentionally not done (owner gate below).
 
 ## Gate
 

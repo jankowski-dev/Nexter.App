@@ -64,9 +64,10 @@ environment:
 Migration `0053_sandbox_replays.sql` is additive, creates the `sandbox_replays`
 table plus three indexes and grants `nexter_app` `SELECT/INSERT/UPDATE` with
 `DELETE` revoked. Nothing else changes; the table stays empty until the owner
-creates a replay. Apply it **before** deploying code that references
-`sandbox_replays`: with the flag on and the table missing, every replay worker
-pass fails its claim query (logged and retried, no crash, but no replays run).
+creates a replay. With the flag on and the table missing, every replay worker
+pass fails its first query — the stale `running` requeue (`requeueRunningReplays`)
+that runs before the claim — logged and retried, no crash, but no replays run.
+Apply the migration **before** deploying code that references the table.
 
 1. Encrypted backup + restore check + SHA-256 (see below). A migration without
    a verified backup is not approved.
@@ -86,7 +87,8 @@ pass fails its claim query (logged and retried, no crash, but no replays run).
 
    `sandbox_replays`: `SELECT/INSERT/UPDATE`, **no DELETE**; the provisioning
    script lists it in the delete-revoke/delete-check sets. Verify with `\dp
-sandbox_replays` and the CI `sandbox-schema`/`sandbox.migration` suites.
+sandbox_replays` and the CI `sandbox-schema` suite (`sandbox.migration.spec.ts`
+   is a local static check of the committed SQL/journal, not a runtime grant check).
 
 4. Deploy the Stage 2.1 API/UI with `SANDBOX_ENABLED=true`.
 5. Verify `/health` and `/ready` return 200, the replay routes return `401`
@@ -203,7 +205,7 @@ runs and never mutates them.
 
 ### Manual verification after deploy
 
-1. `GET /api/v1/health`, `/api/v1/ready` → 200; an unauthenticated
+1. `GET /health`, `/ready` → 200; an unauthenticated
    `GET /api/v1/sandbox/replays` → `401 AUTH_REQUIRED`.
 2. `Песочница → Прогон` renders; preflight for a covered token shows `ok` with
    available/required and prefix bars.
@@ -244,8 +246,9 @@ runs and never mutates them.
 - Historical replays use a separate 60-second worker and advisory lock
   (`nexter:sandbox-replay-worker`); they never write `sandbox_runs`,
   `sandbox_events`, positions or the live ledger. A queued replay waits while the
-  flag is off or another replay is running. Report/snapshot rows are a few MB at
-  most (1–3 tokens, ≤180 days) and are not pruned.
+  flag is off or another replay is running. Report/snapshot rows are expected to
+  be a few MB at most (1–3 tokens, ≤180 days; unmeasured at that maximum) and are
+  not pruned.
 
 ## Stage 2.1 gate
 

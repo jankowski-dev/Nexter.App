@@ -423,18 +423,6 @@ export class SandboxReplayRepository {
       .returning({ id: sandboxReplays.id, userId: sandboxReplays.userId });
   }
 
-  /** Worker/internal detail read by id without an owner filter (never HTTP). */
-  async loadReplay(id: string): Promise<SandboxReplayDetailRecord | null> {
-    const [row] = await this.db
-      .select(detailSelection)
-      .from(sandboxReplays)
-      .where(eq(sandboxReplays.id, id))
-      .limit(1);
-    if (!row) return null;
-
-    return detailFromRow(row);
-  }
-
   /**
    * Loads the exact replay data window from `sandbox_candles` only.
    *

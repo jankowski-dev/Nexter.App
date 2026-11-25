@@ -204,7 +204,6 @@ function harness(options: HarnessOptions = {}) {
     storeReplayReport,
     markReplayFailed,
     loadReplayCandles,
-    loadReplay: vi.fn(async () => record),
   };
 
   const client = {

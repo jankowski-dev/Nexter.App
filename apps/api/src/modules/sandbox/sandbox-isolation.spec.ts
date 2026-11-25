@@ -78,11 +78,13 @@ describe('sandbox isolation (stage 2 and 2.1)', () => {
     expect(worker?.source).toContain('pg_try_advisory_lock');
     expect(worker?.source).toContain("'nexter:sandbox-replay-worker'");
     expect(worker?.source).toContain('pg_advisory_unlock');
-    // Stale-running recovery must be lock-gated, i.e. after the lock check.
-    expect(worker?.source).toContain('requeueStaleReplays');
-    expect(worker?.source.indexOf('requeueStaleReplays')).toBeGreaterThan(
-      worker?.source.indexOf('if (!locked) return;') ?? -1,
-    );
+    // Stale-running recovery must be lock-gated: the guard precedes the call site.
+    const source = worker?.source ?? '';
+    const guard = 'if (!locked) return;';
+    const callSite = 'await this.requeueStaleReplays(now);';
+    expect(source).toContain(guard);
+    expect(source).toContain(callSite);
+    expect(source.indexOf(callSite)).toBeGreaterThan(source.indexOf(guard));
   });
 
   it('reads replay candles only from sandbox_candles and never calls a provider', () => {

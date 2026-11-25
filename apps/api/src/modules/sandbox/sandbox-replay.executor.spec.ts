@@ -237,6 +237,22 @@ describe('WorkerThreadReplayExecutor', () => {
 
     await expect(pending).rejects.toMatchObject({ code: 'REPLAY_WORKER_FAILED' });
   });
+
+  it('rejects with REPLAY_WORKER_TIMEOUT when the worker never answers', async () => {
+    const worker = stubWorker();
+    const executor = new WorkerThreadReplayExecutor({
+      workerPath: 'sandbox-replay.worker.js',
+      createWorker: () => worker,
+      timeoutMs: 20,
+    });
+
+    await expect(executor.run(replayInput())).rejects.toMatchObject({
+      name: 'ReplayExecutionError',
+      code: 'REPLAY_WORKER_TIMEOUT',
+      message: 'Replay worker exceeded 20 ms',
+    });
+    await vi.waitFor(() => expect(worker.terminate).toHaveBeenCalled());
+  });
 });
 
 describe('worker thread smoke', () => {
