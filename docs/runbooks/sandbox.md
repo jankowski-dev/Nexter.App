@@ -1,5 +1,3 @@
-successfully downloaded text file (SHA: 4e532b0699f1b73b139b3cae53df4068a47eb9aa)
-successfully downloaded text file (SHA: 921e3ca95c8ad64e602bbd9116e5eacbfa1a39b6)
 # Sandbox Runbook
 
 Owner-only `Песочница`: a persistent live paper loop on real 1h market data (Stage 2) and an owner-facing historical replay over stored candles (Stage 2.1), both with virtual money. No wallets, keys, signing, exchange orders or real ledger writes.
