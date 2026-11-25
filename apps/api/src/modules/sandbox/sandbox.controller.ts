@@ -12,6 +12,7 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
@@ -20,6 +21,9 @@ import {
   sandboxEquityQuerySchema,
   sandboxEventsQuerySchema,
   sandboxPageQuerySchema,
+  sandboxReplayCreateRequestSchema,
+  sandboxReplayListQuerySchema,
+  sandboxReplayPreflightRequestSchema,
   sandboxRunCreateRequestSchema,
   sandboxRunStartRequestSchema,
   sandboxRunUpdateRequestSchema,
@@ -36,6 +40,13 @@ import {
   type SandboxOverview,
   type SandboxPageQuery,
   type SandboxPositionsResponse,
+  type SandboxReplayCreateRequest,
+  type SandboxReplayDetail,
+  type SandboxReplayListQuery,
+  type SandboxReplayListResponse,
+  type SandboxReplayPreflightRequest,
+  type SandboxReplayPreflightResponse,
+  type SandboxReplayReportResponse,
   type SandboxReportResponse,
   type SandboxRun,
   type SandboxRunCreateRequest,
@@ -51,12 +62,14 @@ import {
   type SandboxTokenUpdateRequest,
   type SandboxTradesResponse,
 } from '@nexter/contracts';
-import type { FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayReportService } from './sandbox-replay-report.service';
+import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
 import { SandboxTokensService } from './sandbox-tokens.service';
 import { SANDBOX_ENABLED, SANDBOX_VERSION, type SandboxStatus } from './sandbox.types';
@@ -69,6 +82,8 @@ export class SandboxController {
     private readonly tokens: SandboxTokensService,
     private readonly runs: SandboxRunService,
     private readonly read: SandboxReadService,
+    private readonly replay: SandboxReplayService,
+    private readonly replayReports: SandboxReplayReportService,
   ) {}
 
   @Get('status')
@@ -139,6 +154,100 @@ export class SandboxController {
   @Header('Cache-Control', 'no-store')
   overview(@CurrentAuth() auth: AuthContext): Promise<SandboxOverview> {
     return this.read.overview(auth.user.id);
+  }
+
+  @Post('replays/preflight')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayPreflight(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(sandboxReplayPreflightRequestSchema))
+    body: SandboxReplayPreflightRequest,
+  ): Promise<SandboxReplayPreflightResponse> {
+    return this.replay.preflight(auth.user.id, body);
+  }
+
+  @Post('replays')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  createReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Body(new ZodValidationPipe(sandboxReplayCreateRequestSchema))
+    body: SandboxReplayCreateRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.create(auth.user.id, body, auditMeta(request));
+  }
+
+  @Get('replays')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  listReplays(
+    @CurrentAuth() auth: AuthContext,
+    @Query(new ZodValidationPipe(sandboxReplayListQuerySchema)) query: SandboxReplayListQuery,
+  ): Promise<SandboxReplayListResponse> {
+    return this.replay.list(auth.user.id, query);
+  }
+
+  @Get('replays/:id')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  getReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.detail(auth.user.id, id);
+  }
+
+  @Get('replays/:id/report.json')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayReportJson(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReplayReportResponse> {
+    return this.replayReports.getReport(auth.user.id, id);
+  }
+
+  @Get('replays/:id/report.md')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  async replayReportMarkdown(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<string> {
+    const markdown = await this.replayReports.getReportMarkdown(auth.user.id, id);
+    // Set the Markdown type only after a successful read: an exception must
+    // keep the normal JSON error content type instead of a markdown body type.
+    reply.header('Content-Type', 'text/markdown; charset=utf-8');
+    return markdown;
+  }
+
+  @Post('replays/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  cancelReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.cancel(auth.user.id, id, auditMeta(request));
+  }
+
+  @Post('replays/:id/archive')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  archiveReplay(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Req() request: FastifyRequest,
+  ): Promise<SandboxReplayDetail> {
+    return this.replay.archive(auth.user.id, id, auditMeta(request));
   }
 
   @Get('runs')
@@ -228,12 +337,15 @@ export class SandboxController {
   @Get('runs/:id/report.md')
   @UseGuards(SandboxEnabledGuard)
   @Header('Cache-Control', 'no-store')
-  @Header('Content-Type', 'text/markdown; charset=utf-8')
-  reportMarkdown(
+  async reportMarkdown(
     @CurrentAuth() auth: AuthContext,
     @Param('id', new ParseUUIDPipe()) id: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<string> {
-    return this.read.reportMarkdown(auth.user.id, id);
+    const markdown = await this.read.reportMarkdown(auth.user.id, id);
+    // See the replay route: keep the JSON error type when the read throws.
+    reply.header('Content-Type', 'text/markdown; charset=utf-8');
+    return markdown;
   }
 
   @Post('runs')

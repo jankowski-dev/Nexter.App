@@ -914,3 +914,148 @@ export const sandboxReportResponseSchema = z.object({
   notes: z.array(z.string()),
 });
 export type SandboxReportResponse = z.infer<typeof sandboxReportResponseSchema>;
+
+/*
+ * Historical replay contracts (Stage 2.1).
+ *
+ * A replay is a bounded, deterministic paper run over the owner's stored 1h
+ * `sandbox_candles`. `fromTime` is the first evaluation candle **open** and
+ * `toTime` the last evaluation candle **close**; prefix candles are lookback
+ * history and are not part of the reported period.
+ */
+export const sandboxReplayStatusSchema = z.enum([
+  'queued',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+export type SandboxReplayStatus = z.infer<typeof sandboxReplayStatusSchema>;
+
+export const sandboxReplayPeriodSchema = z.union([z.literal(30), z.literal(90), z.literal(180)]);
+export type SandboxReplayPeriod = z.infer<typeof sandboxReplayPeriodSchema>;
+
+export const sandboxReplayCreateRequestSchema = z
+  .object({
+    name: z.string().min(1).max(80),
+    tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(3),
+    periodDays: sandboxReplayPeriodSchema,
+    initialCapitalUsd: sandboxPositiveUsdSchema,
+    seed: z.number().int().min(0).max(2_147_483_647).optional(),
+    settings: sandboxDecisionSettingsSchema.optional(),
+    paper: sandboxPaperSettingsSchema.optional(),
+    allowPartial: z.boolean().optional().default(false),
+  })
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
+export type SandboxReplayCreateRequest = z.infer<typeof sandboxReplayCreateRequestSchema>;
+
+export const sandboxReplayPreflightRequestSchema = z
+  .object({
+    tokenKeys: z.array(sandboxTokenKeySchema).min(1).max(3),
+    periodDays: sandboxReplayPeriodSchema,
+    allowPartial: z.boolean().optional().default(false),
+  })
+  .strict()
+  .refine(uniqueTokenKeys, {
+    path: ['tokenKeys'],
+    message: 'Ключи токенов не должны повторяться',
+  });
+export type SandboxReplayPreflightRequest = z.infer<typeof sandboxReplayPreflightRequestSchema>;
+
+export const sandboxReplayCoverageSchema = z.object({
+  tokenKey: z.string().min(1),
+  fromTime: z.iso.datetime(),
+  toTime: z.iso.datetime(),
+  available: z.number().int().nonnegative(),
+  required: z.number().int().positive(),
+  prefixBars: z.number().int().nonnegative(),
+  gaps: z.number().int().nonnegative(),
+  synthetic: z.boolean(),
+  stale: z.boolean(),
+  status: sandboxCoverageStatusSchema,
+  warning: z.string().nullable(),
+});
+export type SandboxReplayCoverage = z.infer<typeof sandboxReplayCoverageSchema>;
+
+export const sandboxReplayPreflightResponseSchema = z.object({
+  fromTime: z.iso.datetime(),
+  toTime: z.iso.datetime(),
+  status: sandboxCoverageStatusSchema,
+  warnings: z.array(z.string()),
+  coverage: z.array(sandboxReplayCoverageSchema),
+});
+export type SandboxReplayPreflightResponse = z.infer<typeof sandboxReplayPreflightResponseSchema>;
+
+export const sandboxReplayListQuerySchema = z.object({
+  status: sandboxReplayStatusSchema.optional(),
+  includeArchived: z
+    .union([z.boolean(), z.enum(['true', 'false'])])
+    .transform((value) => value === true || value === 'true')
+    .default(false),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+export type SandboxReplayListQuery = z.infer<typeof sandboxReplayListQuerySchema>;
+
+export const sandboxReplaySummarySchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  status: sandboxReplayStatusSchema,
+  tokenKeys: z.array(z.string()),
+  periodDays: z.number().int(),
+  fromTime: z.iso.datetime(),
+  toTime: z.iso.datetime(),
+  initialCapitalUsd: sandboxDecimalSchema,
+  finalEquityUsd: sandboxDecimalSchema.nullable(),
+  returnPct: sandboxDecimalSchema.nullable(),
+  maxDrawdownPct: sandboxDecimalSchema.nullable(),
+  reportHash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
+  error: z.string().nullable(),
+  queuedAt: z.iso.datetime(),
+  startedAt: z.iso.datetime().nullable(),
+  finishedAt: z.iso.datetime().nullable(),
+  archivedAt: z.iso.datetime().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type SandboxReplaySummary = z.infer<typeof sandboxReplaySummarySchema>;
+
+export const sandboxReplayDetailSchema = sandboxReplaySummarySchema.extend({
+  settings: sandboxDecisionSettingsSchema,
+  paper: sandboxPaperSettingsSchema,
+  seed: z.number().int(),
+  eventCount: z.number().int().nullable(),
+  eventHash: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/)
+    .nullable(),
+  dataSnapshotId: z.string().nullable(),
+  candleSnapshotHash: z.string().nullable(),
+});
+export type SandboxReplayDetail = z.infer<typeof sandboxReplayDetailSchema>;
+
+export const sandboxReplayListResponseSchema = z.object({
+  replays: z.array(sandboxReplaySummarySchema),
+  total: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  offset: z.number().int().nonnegative(),
+});
+export type SandboxReplayListResponse = z.infer<typeof sandboxReplayListResponseSchema>;
+
+/** Execution label of a historical replay (the core report hash is unchanged). */
+export const SANDBOX_HISTORICAL_EXECUTION_MODE = 'historical-paper' as const;
+export type SandboxHistoricalExecutionMode = typeof SANDBOX_HISTORICAL_EXECUTION_MODE;
+
+export const sandboxReplayReportResponseSchema = z.object({
+  executionMode: z.literal(SANDBOX_HISTORICAL_EXECUTION_MODE),
+  report: sandboxRunReportSchema,
+  notes: z.array(z.string()),
+});
+export type SandboxReplayReportResponse = z.infer<typeof sandboxReplayReportResponseSchema>;

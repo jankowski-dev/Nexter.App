@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseSandboxTokenKey,
+  SANDBOX_HISTORICAL_EXECUTION_MODE,
   sandboxCoverageQuerySchema,
   sandboxCoverageResponseSchema,
   sandboxCoverageSchema,
@@ -12,6 +13,17 @@ import {
   sandboxOverviewSchema,
   sandboxPageQuerySchema,
   sandboxPositionSchema,
+  sandboxReplayCoverageSchema,
+  sandboxReplayCreateRequestSchema,
+  sandboxReplayDetailSchema,
+  sandboxReplayListQuerySchema,
+  sandboxReplayListResponseSchema,
+  sandboxReplayPeriodSchema,
+  sandboxReplayPreflightRequestSchema,
+  sandboxReplayPreflightResponseSchema,
+  sandboxReplayReportResponseSchema,
+  sandboxReplayStatusSchema,
+  sandboxReplaySummarySchema,
   sandboxReportResponseSchema,
   sandboxRunConfigSchema,
   sandboxRunCreateRequestSchema,
@@ -709,5 +721,294 @@ describe('sandbox read contracts', () => {
       notes: [],
     });
     expect(bad.success).toBe(false);
+  });
+});
+
+describe('sandbox historical replay contracts', () => {
+  const fromTime = '2025-12-11T00:00:00.000Z';
+  const toTime = '2026-01-10T00:00:00.000Z';
+  const createdAt = '2026-01-10T00:01:00.000Z';
+  const hash = 'a'.repeat(64);
+
+  const summary = {
+    id: '11111111-1111-4111-8111-111111111111',
+    name: '30 дней',
+    status: 'queued',
+    tokenKeys: [bscKey],
+    periodDays: 30,
+    fromTime,
+    toTime,
+    initialCapitalUsd: '1000.00',
+    finalEquityUsd: null,
+    returnPct: null,
+    maxDrawdownPct: null,
+    reportHash: null,
+    error: null,
+    queuedAt: createdAt,
+    startedAt: null,
+    finishedAt: null,
+    archivedAt: null,
+    createdAt,
+    updatedAt: createdAt,
+  };
+
+  it('accepts only the replay statuses and periods', () => {
+    for (const status of ['queued', 'running', 'completed', 'failed', 'cancelled']) {
+      expect(sandboxReplayStatusSchema.parse(status)).toBe(status);
+    }
+    expect(sandboxReplayStatusSchema.safeParse('archived').success).toBe(false);
+
+    for (const period of [30, 90, 180]) {
+      expect(sandboxReplayPeriodSchema.parse(period)).toBe(period);
+    }
+    expect(sandboxReplayPeriodSchema.safeParse(60).success).toBe(false);
+    expect(sandboxReplayPeriodSchema.safeParse('30').success).toBe(false);
+  });
+
+  it('validates the create request and defaults allowPartial', () => {
+    const parsed = sandboxReplayCreateRequestSchema.parse({
+      name: 'Первый прогон',
+      tokenKeys: [bscKey],
+      periodDays: 90,
+      initialCapitalUsd: '1000.00',
+    });
+    expect(parsed).toEqual({
+      name: 'Первый прогон',
+      tokenKeys: [bscKey],
+      periodDays: 90,
+      initialCapitalUsd: '1000.00',
+      allowPartial: false,
+    });
+
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey],
+        periodDays: 60,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey, bscKey, bscKey, bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '0',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: ['solana:0x1111111111111111111111111111111111111111'],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+        unexpected: true,
+      }).success,
+    ).toBe(false);
+
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey, bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+      }).success,
+    ).toBe(false);
+    expect(
+      sandboxReplayCreateRequestSchema.safeParse({
+        name: 'Прогон',
+        tokenKeys: [bscKey],
+        periodDays: 30,
+        initialCapitalUsd: '1000.00',
+        seed: 2_147_483_647,
+      }).success,
+    ).toBe(true);
+
+    for (const seed of [-1, 2_147_483_648, 1.5]) {
+      expect(
+        sandboxReplayCreateRequestSchema.safeParse({
+          name: 'Прогон',
+          tokenKeys: [bscKey],
+          periodDays: 30,
+          initialCapitalUsd: '1000.00',
+          seed,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  it('validates the preflight request and coverage payload', () => {
+    expect(
+      sandboxReplayPreflightRequestSchema.parse({
+        tokenKeys: [bscKey],
+        periodDays: 30,
+      }),
+    ).toEqual({ tokenKeys: [bscKey], periodDays: 30, allowPartial: false });
+    expect(
+      sandboxReplayPreflightRequestSchema.safeParse({
+        tokenKeys: [bscKey, bscKey],
+        periodDays: 30,
+      }).success,
+    ).toBe(false);
+
+    const coverage = {
+      tokenKey: bscKey,
+      fromTime,
+      toTime,
+      available: 700,
+      required: 720,
+      prefixBars: 100,
+      gaps: 20,
+      synthetic: false,
+      stale: false,
+      status: 'partial',
+      warning: 'Доступно 700 из 720 часовых свечей.',
+    };
+    expect(sandboxReplayCoverageSchema.parse(coverage)).toEqual(coverage);
+
+    const preflight = {
+      fromTime,
+      toTime,
+      status: 'partial',
+      warnings: ['Доступно 700 из 720 часовых свечей.'],
+      coverage: [coverage],
+    };
+    expect(sandboxReplayPreflightResponseSchema.parse(preflight)).toEqual(preflight);
+  });
+
+  it('parses the list query, summary, detail and list response', () => {
+    expect(sandboxReplayListQuerySchema.parse({})).toEqual({
+      includeArchived: false,
+      limit: 50,
+      offset: 0,
+    });
+    expect(
+      sandboxReplayListQuerySchema.parse({
+        status: 'completed',
+        includeArchived: 'true',
+        limit: '10',
+        offset: '20',
+      }),
+    ).toEqual({
+      status: 'completed',
+      includeArchived: true,
+      limit: 10,
+      offset: 20,
+    });
+
+    const parsed = sandboxReplaySummarySchema.parse(summary);
+    expect(parsed.status).toBe('queued');
+    expect(parsed.finalEquityUsd).toBeNull();
+
+    const detail = sandboxReplayDetailSchema.parse({
+      ...summary,
+      settings: {
+        timeframe: '1h',
+        maxPositions: 3,
+        maxTokenExposurePct: 40,
+        maxStrategyExposurePct: 40,
+        cashBufferPct: 20,
+        dailyLossLimitPct: 5,
+        maxDrawdownPct: 25,
+        perTradeRiskPct: 2,
+        minOrderUsd: '10.00',
+        liquidityCapPct: 25,
+        defaultStopPct: 8,
+        regime: {
+          fastHours: 6,
+          slowHours: 24,
+          longHours: 72,
+          atrPeriod: 14,
+          rangeWindowHours: 24,
+          liquidityWindowHours: 24,
+          trendSpreadPct: 1,
+          trendMaxAtrPct: 5,
+          rangeSpreadPct: 1,
+          rangeMaxAtrPct: 4,
+          crashDrawdownPct: 12,
+          crashAtrPct: 3,
+          recoveryConfirmBars: 3,
+          regimeDwellBars: 2,
+          minLiquidityUsd: '25000.00',
+        },
+        strategies: {
+          trendPullback: {
+            fastPeriod: 9,
+            slowPeriod: 21,
+            pullbackPct: 1,
+            atrStopMult: 2,
+            trailActivationPct: 4,
+            trailPct: 2,
+          },
+          rangeReversion: { lookback: 24, bandAtrMult: 2, stopAtrMult: 2 },
+          recovery: { fastPeriod: 9, confirmBars: 3, stopPct: 5, riskWeight: 0.5 },
+        },
+      },
+      paper: {
+        feeBps: 25,
+        slippageBps: 10,
+        liquidityCapPct: 25,
+        maxPendingBars: 2,
+        cooldownHoursAfterStop: 24,
+        counterfactualHorizonHours: 24,
+      },
+      seed: 7,
+      eventCount: 10,
+      eventHash: hash,
+      dataSnapshotId: 'snap-1',
+      candleSnapshotHash: hash,
+    });
+    expect(detail.seed).toBe(7);
+    expect(detail.eventHash).toBe(hash);
+
+    const list = sandboxReplayListResponseSchema.parse({
+      replays: [summary],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    expect(list.replays).toHaveLength(1);
+
+    expect(
+      sandboxReplaySummarySchema.safeParse({ ...summary, reportHash: 'not-a-hash' }).success,
+    ).toBe(false);
+    expect(sandboxReplaySummarySchema.safeParse({ ...summary, status: 'archived' }).success).toBe(
+      false,
+    );
+  });
+
+  it('labels the replay report as historical paper', () => {
+    expect(SANDBOX_HISTORICAL_EXECUTION_MODE).toBe('historical-paper');
+    expect(
+      sandboxReplayReportResponseSchema.safeParse({
+        executionMode: 'live-paper',
+        report: null,
+        notes: [],
+      }).success,
+    ).toBe(false);
   });
 });

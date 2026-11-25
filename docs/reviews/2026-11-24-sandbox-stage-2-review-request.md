@@ -8,7 +8,7 @@ Task 8 base: `efb28e4`
 Frozen code head: `2e631c4` (Stage 2 review fixes + deterministic core
 fail-closed fix; CI green) plus the final docs/packet commit. Previous heads
 `4acc900`/`e4dadda` and `5fe93cf`/`b4b1e03` predate this scoped re-review fix.
-Status: **Stage 2 signed off by the independent whole-branch review on 2026-11-25; owner acceptance pending.** Owner report: `docs/reviews/2026-11-25-sandbox-stage-2-report.md`.
+Status: **Stage 2 signed off by the independent whole-branch review on 2026-11-25, accepted by the owner and deployed** (`3a6f94a`, deployment `ad0b0b73-2df2-46bd-a403-f83074c598c5`, migration `0052` applied). Owner report: `docs/reviews/2026-11-25-sandbox-stage-2-report.md`.
 
 CI: draft PR #324, first DB execution failed 10 tests (test defects only); fixed
 in `b1f8bf2` (CI green) and the review findings in `e01c5cd` (CI green). A

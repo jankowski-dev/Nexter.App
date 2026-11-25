@@ -18,8 +18,14 @@ describe('sandbox navigation and tabs', () => {
     expect(sandboxNavItem.to).toBe('/sandbox');
   });
 
-  it('lists the four owner sections in order', () => {
-    expect(sandboxTabs.map((tab) => tab.label)).toEqual(['Обзор', 'Запуски', 'Журнал', 'Отчёты']);
+  it('lists the five owner sections in order', () => {
+    expect(sandboxTabs.map((tab) => tab.label)).toEqual([
+      'Обзор',
+      'Запуски',
+      'Прогон',
+      'Журнал',
+      'Отчёты',
+    ]);
   });
 
   it('hides the section unless the status flag is explicitly enabled', () => {
@@ -33,6 +39,7 @@ describe('sandbox navigation and tabs', () => {
     expect(sandboxTabFromHash('')).toBe('overview');
     expect(sandboxTabFromHash('#unknown')).toBe('overview');
     expect(sandboxTabFromHash('#runs')).toBe('runs');
+    expect(sandboxTabFromHash('#replay')).toBe('replay');
     for (const tab of sandboxTabs) {
       expect(sandboxTabFromHash(sandboxHashForTab(tab.value))).toBe(tab.value);
     }

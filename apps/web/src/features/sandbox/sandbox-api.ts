@@ -1,5 +1,6 @@
 import { ApiError, apiFetch, apiPatch, apiPost } from '@/lib/api';
 import { notifyUnauthorized } from '@/lib/auth-events';
+import { sandboxReplayReportFileName } from './sandbox-replay-helpers';
 import { sandboxReportFileName } from './sandbox-report-helpers';
 import {
   errorEnvelopeSchema,
@@ -9,6 +10,12 @@ import {
   sandboxIntentsResponseSchema,
   sandboxOverviewSchema,
   sandboxPositionsResponseSchema,
+  sandboxReplayCreateRequestSchema,
+  sandboxReplayDetailSchema,
+  sandboxReplayListResponseSchema,
+  sandboxReplayPreflightRequestSchema,
+  sandboxReplayPreflightResponseSchema,
+  sandboxReplayReportResponseSchema,
   sandboxReportResponseSchema,
   sandboxRunCreateRequestSchema,
   sandboxRunDetailSchema,
@@ -26,6 +33,13 @@ import {
   type SandboxIntentsResponse,
   type SandboxOverview,
   type SandboxPositionsResponse,
+  type SandboxReplayCreateRequest,
+  type SandboxReplayDetail,
+  type SandboxReplayListResponse,
+  type SandboxReplayPreflightRequest,
+  type SandboxReplayPreflightResponse,
+  type SandboxReplayReportResponse,
+  type SandboxReplayStatus,
   type SandboxReportResponse,
   type SandboxRun,
   type SandboxRunCreateRequest,
@@ -63,6 +77,18 @@ export const sandboxQueryKeys = {
   equity: (runId: string, limit: number, offset: number) =>
     ['sandbox', 'equity', runId, limit, offset] as const,
   report: (runId: string) => ['sandbox', 'report', runId] as const,
+  /** Prefix shared by every replay query (list, detail, report, preflight). */
+  replayRoot: ['sandbox', 'replay'] as const,
+  replays: (
+    status: SandboxReplayStatus | 'all',
+    includeArchived: boolean,
+    limit: number,
+    offset: number,
+  ) => ['sandbox', 'replay', 'list', status, includeArchived, limit, offset] as const,
+  replay: (replayId: string) => ['sandbox', 'replay', replayId] as const,
+  replayReport: (replayId: string) => ['sandbox', 'replay', replayId, 'report'] as const,
+  replayPreflight: (tokenKeys: readonly string[], periodDays: number, allowPartial: boolean) =>
+    ['sandbox', 'replay', 'preflight', tokenKeys.join('|'), periodDays, allowPartial] as const,
 };
 
 export function fetchSandboxStatus(): Promise<SandboxStatus> {
@@ -241,6 +267,105 @@ export async function downloadSandboxReportMarkdown(runId: string): Promise<void
   triggerSandboxDownload(
     new Blob([markdown], { type: 'text/markdown;charset=utf-8' }),
     sandboxReportFileName(runId, 'md'),
+  );
+}
+
+export interface SandboxReplayListOptions {
+  status?: SandboxReplayStatus;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** Read-only coverage gate for a historical replay; never mutates data. */
+export function preflightSandboxReplay(
+  body: SandboxReplayPreflightRequest,
+): Promise<SandboxReplayPreflightResponse> {
+  return apiPost(
+    '/api/v1/sandbox/replays/preflight',
+    sandboxReplayPreflightRequestSchema.parse(body),
+    sandboxReplayPreflightResponseSchema,
+  );
+}
+
+/** Queues a bounded historical replay (202); the worker executes it. */
+export function createSandboxReplay(
+  body: SandboxReplayCreateRequest,
+): Promise<SandboxReplayDetail> {
+  return apiPost(
+    '/api/v1/sandbox/replays',
+    sandboxReplayCreateRequestSchema.parse(body),
+    sandboxReplayDetailSchema,
+  );
+}
+
+export function fetchSandboxReplays(
+  options: SandboxReplayListOptions = {},
+): Promise<SandboxReplayListResponse> {
+  const params = new URLSearchParams();
+  if (options.status) params.set('status', options.status);
+  params.set('includeArchived', options.includeArchived ? 'true' : 'false');
+  params.set('limit', String(options.limit ?? 50));
+  params.set('offset', String(options.offset ?? 0));
+  return apiFetch(
+    `/api/v1/sandbox/replays?${params.toString()}`,
+    {},
+    sandboxReplayListResponseSchema,
+  );
+}
+
+export function fetchSandboxReplay(replayId: string): Promise<SandboxReplayDetail> {
+  return apiFetch(`/api/v1/sandbox/replays/${replayId}`, {}, sandboxReplayDetailSchema);
+}
+
+export function cancelSandboxReplay(replayId: string): Promise<SandboxReplayDetail> {
+  return apiPost(`/api/v1/sandbox/replays/${replayId}/cancel`, {}, sandboxReplayDetailSchema);
+}
+
+export function archiveSandboxReplay(replayId: string): Promise<SandboxReplayDetail> {
+  return apiPost(`/api/v1/sandbox/replays/${replayId}/archive`, {}, sandboxReplayDetailSchema);
+}
+
+export function fetchSandboxReplayReport(replayId: string): Promise<SandboxReplayReportResponse> {
+  return apiFetch(
+    `/api/v1/sandbox/replays/${replayId}/report.json`,
+    {},
+    sandboxReplayReportResponseSchema,
+  );
+}
+
+/** Raw Markdown replay report body; used by the downloadable artifact. */
+export async function fetchSandboxReplayReportMarkdown(replayId: string): Promise<string> {
+  const response = await fetch(`/api/v1/sandbox/replays/${replayId}/report.md`, {
+    credentials: 'include',
+    headers: { Accept: 'text/markdown' },
+  });
+
+  if (!response.ok) {
+    throw await sandboxDownloadError(response);
+  }
+
+  return response.text();
+}
+
+/** Downloads the deterministic replay report, via the same parsed contract. */
+export async function downloadSandboxReplayReport(
+  replayId: string,
+  format: 'json' | 'md',
+): Promise<void> {
+  if (format === 'json') {
+    const response = await fetchSandboxReplayReport(replayId);
+    triggerSandboxDownload(
+      new Blob([`${JSON.stringify(response, null, 2)}\n`], { type: 'application/json' }),
+      sandboxReplayReportFileName(replayId, 'json'),
+    );
+    return;
+  }
+
+  const markdown = await fetchSandboxReplayReportMarkdown(replayId);
+  triggerSandboxDownload(
+    new Blob([markdown], { type: 'text/markdown;charset=utf-8' }),
+    sandboxReplayReportFileName(replayId, 'md'),
   );
 }
 

@@ -1,27 +1,20 @@
 import Decimal from 'decimal.js';
 import { loadJsonlCandles } from '../data/jsonl-candles';
 import { snapshotCandles } from '../data/snapshot';
-import { DEFAULT_SETTINGS, settingsVersion } from '../decision/defaults';
-import { Reason } from '../decision/reason-codes';
-import type { ReasonCode } from '../decision/reason-codes';
-import { MemoryEventLog } from '../events/memory-event-log';
-import type { SandboxEvent } from '../events/event-types';
-import { candleCloseTime } from '../timeframes';
-import type { Candle, Timestamp } from '../types';
+import { DEFAULT_SETTINGS } from '../decision/defaults';
 import { paperConfigVersion } from '../paper/defaults';
-import { markPortfolio } from '../paper/ledger';
-import { computeMetrics } from '../paper/metrics';
-import { PaperRunner } from '../paper/paper-runner';
-import { analyzeRejectedBuys } from '../paper/counterfactual';
-import { assertFreshOutputDirectory, buildReport, writePaperArtifacts } from '../paper/report';
+import { runPaperFromCandles } from '../paper/run-paper';
+import { assertFreshOutputDirectory, writePaperArtifacts } from '../paper/report';
+import type { Candle } from '../types';
 import type {
   PaperArtifactPaths,
   PaperRunConfig,
   PaperRunResult,
   PaperRunSettings,
-  RejectedBuy,
   RunReport,
 } from '../paper/types';
+
+export { collectRejectedBuys } from '../paper/run-paper';
 
 /**
  * Import-safe paper CLI.
@@ -79,22 +72,6 @@ export interface PaperFromFilesResult {
   readonly report: RunReport;
   readonly result: PaperRunResult;
   readonly artifacts: PaperArtifactPaths;
-}
-
-const REASON_CODES: ReadonlySet<string> = new Set<string>(Object.values(Reason));
-
-/**
- * Blocked reasons that are structurally not missed buys.
- *
- * `ALLOC_EXISTING_POSITION` means the token is already held and the sandbox
- * never adds to a position, so there is no omitted entry to replay.
- */
-const NON_COUNTERFACTUAL_REASONS: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
-  Reason.ALLOC_EXISTING_POSITION,
-]);
-
-function toReasonCode(value: unknown): ReasonCode | null {
-  return typeof value === 'string' && REASON_CODES.has(value) ? (value as ReasonCode) : null;
 }
 
 const INTEGER = /^\d+$/;
@@ -231,11 +208,10 @@ function compareCodeUnits(left: string, right: string): number {
 /**
  * Loads the candle files, runs one paper simulation and writes the artifacts.
  *
- * Final marks use the last close for each open position at or before the last
- * bar close, so the report's positions and reconciliation describe the same
- * instant as the final equity point. Rejected opportunities combine terminal
- * buy intents with blocked `opportunity.dropped`/`portfolio.dropped` and buy
- * `risk.checked` events; the analyzer deduplicates them.
+ * File loading, validation, snapshotting and artifact writing live here; the
+ * simulation and report pipeline are delegated to the reusable
+ * `runPaperFromCandles` so the CLI and the historical replay worker cannot
+ * diverge.
  */
 export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFilesResult> {
   // Fail before the costly load/run if the destination is already occupied.
@@ -279,9 +255,8 @@ export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFiles
     ...paper,
   };
   const configVersion = paperConfigVersion(config);
-  const log = new MemoryEventLog();
 
-  const result = await new PaperRunner(log).run({
+  const { report, result, events } = await runPaperFromCandles({
     runId: config.runId,
     seed: config.seed,
     configVersion,
@@ -292,110 +267,7 @@ export async function runPaperFromFiles(args: PaperArgs): Promise<PaperFromFiles
     paper,
     initialCapitalUsd: config.initialCapitalUsd,
   });
-  const events = log.events();
-
-  const lastBar = result.equityCurve[result.equityCurve.length - 1]?.clockTime;
-  if (lastBar === undefined) throw new Error('The paper run produced no bars');
-
-  const marks: Record<string, string> = {};
-  for (const tokenId of Object.keys(result.ledger.positions).sort(compareCodeUnits)) {
-    const mark = lastMarkAtOrBefore(snapshot.candles, tokenId, lastBar);
-    if (mark === null) throw new Error(`No mark price is available for ${tokenId} at the last bar`);
-    marks[tokenId] = mark;
-  }
-
-  const finalMark = markPortfolio(result.ledger, marks);
-  const metrics = computeMetrics({
-    initialCapitalUsd: result.ledger.initialCapitalUsd,
-    finalEquityUsd: finalMark.equityUsd,
-    finalPositionsValueUsd: finalMark.positionsValueUsd,
-    unrealizedPnlUsd: finalMark.unrealizedPnlUsd,
-    equityCurve: result.equityCurve,
-    ledger: result.ledger,
-    closedTrades: result.ledger.closedTrades,
-  });
-
-  const rejected = collectRejectedBuys(result, events);
-  const counterfactuals = analyzeRejectedBuys({
-    rejected,
-    candles: snapshot.candles,
-    horizonHours: paper.counterfactualHorizonHours,
-    feeBps: paper.feeBps,
-    slippageBps: paper.slippageBps,
-  });
-
-  const report = buildReport({
-    result,
-    finalMark,
-    marks,
-    events,
-    counterfactuals,
-    settingsVersion: settingsVersion(DEFAULT_SETTINGS),
-    metrics,
-  });
   const artifacts = await writePaperArtifacts({ outputDir: args.outputDir, report, events });
 
   return { report, result, artifacts };
-}
-
-/** Last candle close for a token whose bar closed at or before `lastBar`. */
-function lastMarkAtOrBefore(
-  candles: readonly Candle[],
-  tokenId: string,
-  lastBar: Timestamp,
-): string | null {
-  for (let index = candles.length - 1; index >= 0; index -= 1) {
-    const candle = candles[index];
-    if (candle === undefined || candle.tokenId !== tokenId) continue;
-    if (candleCloseTime(candle) <= lastBar) return candle.close;
-  }
-  return null;
-}
-
-/**
- * Rejected buys for the hindsight analysis.
- *
- * Terminal rejected/expired buy intents carry the decision time directly. The
- * decision-engine drops and buy risk vetoes describe buys that never became
- * intents; their event clock is the decision bar close, matching the runner's
- * intent stamp. The analyzer deduplicates identical rows.
- */
-export function collectRejectedBuys(
-  result: Pick<PaperRunResult, 'intents'>,
-  events: readonly SandboxEvent[],
-): RejectedBuy[] {
-  const rejected: RejectedBuy[] = [];
-
-  for (const intent of result.intents) {
-    if (intent.side === 'buy' && (intent.status === 'rejected' || intent.status === 'expired')) {
-      rejected.push({
-        tokenId: intent.tokenId,
-        decisionTime: intent.decisionTime,
-        reasonCode: intent.reasonCode,
-      });
-    }
-  }
-
-  for (const event of events) {
-    if (event.decision?.action !== 'block') continue;
-    const isDrop =
-      event.eventType === 'opportunity.dropped' || event.eventType === 'portfolio.dropped';
-    const isBuyRisk = event.eventType === 'risk.checked' && event.inputs?.kind === 'buy';
-    if (!isDrop && !isBuyRisk) continue;
-
-    const tokenId = event.tokenId;
-    if (typeof tokenId !== 'string' || tokenId.length === 0) continue;
-    const decisionTime = Date.parse(event.clockTime);
-    if (!Number.isFinite(decisionTime)) {
-      throw new Error(`Blocked ${event.eventType} event has an invalid clock: ${event.clockTime}`);
-    }
-    const reasonCode = toReasonCode(event.reasonCode ?? event.decision.reasonCode);
-    if (reasonCode === null) {
-      throw new Error(`Blocked ${event.eventType} event has an unknown reason code`);
-    }
-    if (NON_COUNTERFACTUAL_REASONS.has(reasonCode)) continue;
-    rejected.push({ tokenId, decisionTime, reasonCode });
-  }
-
-  return rejected;
 }

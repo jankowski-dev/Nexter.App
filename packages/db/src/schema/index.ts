@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  customType,
   date,
   index,
   integer,
@@ -14,6 +15,13 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+
+/** PostgreSQL `bytea` for the persisted gzip candle snapshot. */
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return 'bytea';
+  },
+});
 
 export const users = pgTable(
   'users',
@@ -2108,6 +2116,56 @@ export const sandboxReports = pgTable(
   (table) => [primaryKey({ name: 'sandbox_reports_pk', columns: [table.runId, table.reportHash] })],
 );
 
+export const sandboxReplays = pgTable(
+  'sandbox_replays',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    status: text('status').notNull().default('queued'),
+    tokenKeys: jsonb('token_keys').$type<string[]>().notNull(),
+    periodDays: integer('period_days').notNull(),
+    fromTime: timestamp('from_time', { withTimezone: true }).notNull(),
+    toTime: timestamp('to_time', { withTimezone: true }).notNull(),
+    initialCapitalUsd: numeric('initial_capital_usd', { precision: 18, scale: 2 }).notNull(),
+    seed: integer('seed').notNull().default(7),
+    settings: jsonb('settings').$type<Record<string, unknown>>().notNull(),
+    paper: jsonb('paper').$type<Record<string, unknown>>().notNull(),
+    report: jsonb('report').$type<Record<string, unknown>>(),
+    reportHash: text('report_hash'),
+    eventCount: integer('event_count'),
+    eventHash: text('event_hash'),
+    dataSnapshotId: text('data_snapshot_id'),
+    candleSnapshot: bytea('candle_snapshot'),
+    candleSnapshotHash: text('candle_snapshot_hash'),
+    error: text('error'),
+    queuedAt: timestamp('queued_at', { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp('started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('sandbox_replays_user_created_idx').on(table.userId, table.createdAt),
+    index('sandbox_replays_status_queued_idx').on(table.status, table.queuedAt),
+    index('sandbox_replays_user_archived_idx').on(table.userId, table.archivedAt),
+    check(
+      'sandbox_replays_status_check',
+      sql`${table.status} in ('queued', 'running', 'completed', 'failed', 'cancelled')`,
+    ),
+    check('sandbox_replays_period_days_check', sql`${table.periodDays} in (30, 90, 180)`),
+    check('sandbox_replays_capital_positive', sql`${table.initialCapitalUsd} > 0`),
+    check('sandbox_replays_name_length', sql`char_length(${table.name}) between 1 and 80`),
+    check(
+      'sandbox_replays_token_keys_count',
+      sql`jsonb_typeof(${table.tokenKeys}) = 'array' and jsonb_array_length(${table.tokenKeys}) between 1 and 3`,
+    ),
+  ],
+);
+
 export type Chain = typeof chains.$inferSelect;
 export type Asset = typeof assets.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
@@ -2161,3 +2219,4 @@ export type SandboxLedgerEntryRecord = typeof sandboxLedgerEntries.$inferSelect;
 export type SandboxEquityPointRecord = typeof sandboxEquityPoints.$inferSelect;
 export type SandboxIntentRecord = typeof sandboxIntents.$inferSelect;
 export type SandboxReportRecord = typeof sandboxReports.$inferSelect;
+export type SandboxReplayRecord = typeof sandboxReplays.$inferSelect;

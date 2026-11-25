@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   NotFoundException,
@@ -51,6 +52,51 @@ describe('AllExceptionsFilter cache headers', () => {
     ]) {
       const { reply, host } = harness('/api/v1/trading-bots/bots');
       new AllExceptionsFilter().catch(new BadRequestException({ code, message: code }), host);
+      const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
+      expect(payload.error?.code).toBe(code);
+    }
+  });
+
+  it('preserves sandbox replay contract codes on 400/404/409 responses', () => {
+    const cases: Array<{
+      exception: HttpException;
+      status: number;
+      code: string;
+    }> = [
+      {
+        exception: new BadRequestException({
+          code: 'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
+          message: 'Unknown replay token',
+        }),
+        status: 400,
+        code: 'SANDBOX_REPLAY_TOKEN_NOT_FOUND',
+      },
+      {
+        exception: new NotFoundException({
+          code: 'SANDBOX_REPLAY_NOT_FOUND',
+          message: 'Replay not found',
+        }),
+        status: 404,
+        code: 'SANDBOX_REPLAY_NOT_FOUND',
+      },
+      ...[
+        'SANDBOX_REPLAY_INVALID_STATUS',
+        'SANDBOX_REPLAY_COVERAGE_MISSING',
+        'SANDBOX_REPLAY_WINDOW_TOO_SHORT',
+        'SANDBOX_REPLAY_CAPITAL_INVALID',
+        'SANDBOX_REPLAY_STATE_INVALID',
+        'SANDBOX_REPLAY_NOT_COMPLETED',
+      ].map((code) => ({
+        exception: new ConflictException({ code, message: code }),
+        status: 409,
+        code,
+      })),
+    ];
+
+    for (const { exception, status, code } of cases) {
+      const { reply, host } = harness('/api/v1/sandbox/replays');
+      new AllExceptionsFilter().catch(exception, host);
+      expect(reply.status).toHaveBeenCalledWith(status);
       const payload = reply.send.mock.calls[0]?.[0] as { error?: { code?: string } };
       expect(payload.error?.code).toBe(code);
     }

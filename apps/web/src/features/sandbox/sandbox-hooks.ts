@@ -1,5 +1,8 @@
 import {
+  archiveSandboxReplay,
+  cancelSandboxReplay,
   closeSandboxTrade,
+  createSandboxReplay,
   createSandboxRun,
   createSandboxToken,
   fetchSandboxCoverage,
@@ -8,22 +11,30 @@ import {
   fetchSandboxIntents,
   fetchSandboxOverview,
   fetchSandboxPositions,
+  fetchSandboxReplay,
+  fetchSandboxReplayReport,
+  fetchSandboxReplays,
   fetchSandboxReport,
   fetchSandboxRun,
   fetchSandboxRuns,
   fetchSandboxStatus,
   fetchSandboxTokens,
   fetchSandboxTrades,
+  preflightSandboxReplay,
   refreshSandboxToken,
   runSandboxLifecycle,
   sandboxQueryKeys,
   updateSandboxRun,
   updateSandboxToken,
   type SandboxLifecycleAction,
+  type SandboxReplayListOptions,
 } from './sandbox-api';
 import { sandboxTailEventsAfterSeq } from './sandbox-dashboard-helpers';
 import type {
   SandboxEventsResponse,
+  SandboxReplayCreateRequest,
+  SandboxReplayPreflightRequest,
+  SandboxReplayStatus,
   SandboxRunCreateRequest,
   SandboxRunUpdateRequest,
   SandboxTokenCreateRequest,
@@ -39,6 +50,8 @@ import {
 } from '@tanstack/react-query';
 
 export const SANDBOX_POLL_MS = 30_000;
+/** Historical replays are short; poll their progress every 5 s while active. */
+export const SANDBOX_REPLAY_POLL_MS = 5_000;
 
 /** Live runs poll every 30 s; everything else never polls. */
 export function sandboxLiveRefetchInterval(live: boolean): number | false {
@@ -50,6 +63,21 @@ export function sandboxOverviewRefetchInterval(runningRuns: number | undefined):
   return runningRuns !== undefined && runningRuns > 0 ? SANDBOX_POLL_MS : false;
 }
 
+/** Replay detail/history poll only while a replay is queued or running. */
+export function sandboxReplayRefetchInterval(
+  status: SandboxReplayStatus | undefined,
+): number | false {
+  return status === 'queued' || status === 'running' ? SANDBOX_REPLAY_POLL_MS : false;
+}
+
+export function sandboxReplayListRefetchInterval(
+  replays: readonly { status: SandboxReplayStatus }[] | undefined,
+): number | false {
+  return replays?.some((replay) => sandboxReplayRefetchInterval(replay.status) !== false)
+    ? SANDBOX_REPLAY_POLL_MS
+    : false;
+}
+
 /** Invalidates every sandbox query after a mutation (list, detail and counts). */
 export function invalidateSandboxQueries(queryClient: QueryClient): Promise<void> {
   return queryClient.invalidateQueries({ queryKey: sandboxQueryKeys.all }).then(() => undefined);
@@ -58,12 +86,24 @@ export function invalidateSandboxQueries(queryClient: QueryClient): Promise<void
 /**
  * Invalidates the token universe and its coverage. Run setup reads both, so a
  * token add/patch/refresh updates the selection list without a page reload.
+ * The replay preflight reads the same candles, so refreshing data must also
+ * re-check the historical window.
  */
 export function invalidateSandboxUniverseQueries(queryClient: QueryClient): Promise<void> {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: sandboxQueryKeys.tokens }),
     queryClient.invalidateQueries({ queryKey: sandboxQueryKeys.coverage }),
+    queryClient.invalidateQueries({
+      queryKey: [...sandboxQueryKeys.replayRoot, 'preflight'],
+    }),
   ]).then(() => undefined);
+}
+
+/** Invalidates the whole replay prefix: list, detail, report and preflight. */
+export function invalidateSandboxReplayQueries(queryClient: QueryClient): Promise<void> {
+  return queryClient
+    .invalidateQueries({ queryKey: sandboxQueryKeys.replayRoot })
+    .then(() => undefined);
 }
 
 export function useSandboxStatus() {
@@ -244,6 +284,85 @@ export function useSandboxReport(runId: string | null, enabled = true) {
     enabled: runId !== null && enabled,
     refetchOnWindowFocus: false,
     retry: false,
+  });
+}
+
+export function useSandboxReplays(options: SandboxReplayListOptions = {}, enabled = true) {
+  const status = options.status;
+  const includeArchived = options.includeArchived ?? false;
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
+
+  return useQuery({
+    queryKey: sandboxQueryKeys.replays(status ?? 'all', includeArchived, limit, offset),
+    queryFn: () => fetchSandboxReplays({ status, includeArchived, limit, offset }),
+    enabled,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => sandboxReplayListRefetchInterval(query.state.data?.replays),
+  });
+}
+
+export function useSandboxReplay(replayId: string | null, poll = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.replay(replayId ?? 'none'),
+    queryFn: () => fetchSandboxReplay(replayId as string),
+    enabled: replayId !== null,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) =>
+      poll ? sandboxReplayRefetchInterval(query.state.data?.status) : false,
+  });
+}
+
+/**
+ * Read-only coverage gate. The form asks with `allowPartial: true` so the
+ * response shows the exact shortened window a confirmed run would use.
+ */
+export function useSandboxReplayPreflight(payload: SandboxReplayPreflightRequest | null) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.replayPreflight(
+      payload?.tokenKeys ?? [],
+      payload?.periodDays ?? 0,
+      payload?.allowPartial ?? false,
+    ),
+    queryFn: () => preflightSandboxReplay(payload as SandboxReplayPreflightRequest),
+    enabled: payload !== null,
+    staleTime: 30_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useSandboxReplayReport(replayId: string | null, enabled = true) {
+  return useQuery({
+    queryKey: sandboxQueryKeys.replayReport(replayId ?? 'none'),
+    queryFn: () => fetchSandboxReplayReport(replayId as string),
+    enabled: replayId !== null && enabled,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useCreateSandboxReplay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SandboxReplayCreateRequest) => createSandboxReplay(body),
+    onSuccess: () => invalidateSandboxReplayQueries(queryClient),
+  });
+}
+
+export function useCancelSandboxReplay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (replayId: string) => cancelSandboxReplay(replayId),
+    onSuccess: () => invalidateSandboxReplayQueries(queryClient),
+  });
+}
+
+export function useArchiveSandboxReplay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (replayId: string) => archiveSandboxReplay(replayId),
+    onSuccess: () => invalidateSandboxReplayQueries(queryClient),
   });
 }
 
