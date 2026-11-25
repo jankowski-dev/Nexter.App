@@ -7,7 +7,7 @@ Docs base: `f1ac808` (design, ADR 0085, plan)
 Last behavioral change: `fcd2f77` (Tasks 1–7 plus the Markdown-report 404 fix); code/test head `92338d1` (dead-code removal + timeout test)
 Final code/test head: `92338d1` (CI green); this docs commit is docs-only
 CI: draft PR #325 — run `45543116107` at `92338d1` **passed**; earlier failures/fixes are in `CI evidence` below.
-Status: **Stage 2.1 independently signed off by the whole-branch review on 2026-11-25; owner acceptance and production rollout pending. Not deployed; migration `0053` is not applied.** Owner report: `docs/reviews/2026-11-25-sandbox-historical-replay-report.md`.
+Status: **Stage 2.1 independently signed off by the whole-branch review on 2026-11-25, accepted by the owner and deployed** (`c3e74da`; deployment `642c0841-fbdf-4daf-b695-df779ba7aa3f`; migration `0053` applied). Owner report: `docs/reviews/2026-11-25-sandbox-historical-replay-report.md`.
 
 Review this as one whole-branch Stage 2.1 review. The scope is paper only: no
 real money, exchange orders, wallets, keys, signing or real-ledger writes.
