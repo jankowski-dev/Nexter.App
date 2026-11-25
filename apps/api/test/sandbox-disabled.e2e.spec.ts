@@ -31,6 +31,7 @@ const previousSandboxFlag = process.env.SANDBOX_ENABLED;
 process.env.SANDBOX_ENABLED = 'false';
 
 const password = 'correct horse battery staple';
+const replayTokenKey = 'bsc:0x1111111111111111111111111111111111111111';
 
 function csrfFrom(response: request.Response): string {
   const setCookie = response.headers['set-cookie'];
@@ -126,5 +127,16 @@ describe.runIf(canRun)('Sandbox feature flag off (e2e)', () => {
 
     const overview = await agent.get('/api/v1/sandbox/overview').expect(404);
     expect(overview.body).toMatchObject({ error: { code: 'SANDBOX_DISABLED' } });
+
+    // The Stage 2.1 historical replay API is hidden by the same flag.
+    const replays = await agent.get('/api/v1/sandbox/replays').expect(404);
+    expect(replays.body).toMatchObject({ error: { code: 'SANDBOX_DISABLED' } });
+
+    const replayPreflight = await agent
+      .post('/api/v1/sandbox/replays/preflight')
+      .set('x-csrf-token', csrf)
+      .send({ tokenKeys: [replayTokenKey], periodDays: 30 })
+      .expect(404);
+    expect(replayPreflight.body).toMatchObject({ error: { code: 'SANDBOX_DISABLED' } });
   });
 });
