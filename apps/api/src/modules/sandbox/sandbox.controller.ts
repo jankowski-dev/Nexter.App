@@ -22,6 +22,7 @@ import {
   sandboxEventsQuerySchema,
   sandboxPageQuerySchema,
   sandboxReplayCreateRequestSchema,
+  sandboxReplayDecisionsQuerySchema,
   sandboxReplayListQuerySchema,
   sandboxReplayPreflightRequestSchema,
   sandboxRunCreateRequestSchema,
@@ -40,7 +41,10 @@ import {
   type SandboxOverview,
   type SandboxPageQuery,
   type SandboxPositionsResponse,
+  type SandboxReplayChartResponse,
   type SandboxReplayCreateRequest,
+  type SandboxReplayDecisionsQuery,
+  type SandboxReplayDecisionsResponse,
   type SandboxReplayDetail,
   type SandboxReplayListQuery,
   type SandboxReplayListResponse,
@@ -68,6 +72,7 @@ import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
 import { SandboxEnabledGuard } from './sandbox-enabled.guard';
 import { SandboxReadService } from './sandbox-read.service';
+import { SandboxReplayChartService } from './sandbox-replay-chart.service';
 import { SandboxReplayReportService } from './sandbox-replay-report.service';
 import { SandboxReplayService } from './sandbox-replay.service';
 import { SandboxRunService } from './sandbox-run.service';
@@ -84,6 +89,7 @@ export class SandboxController {
     private readonly read: SandboxReadService,
     private readonly replay: SandboxReplayService,
     private readonly replayReports: SandboxReplayReportService,
+    private readonly chartService: SandboxReplayChartService,
   ) {}
 
   @Get('status')
@@ -209,6 +215,28 @@ export class SandboxController {
     @Param('id', new ParseUUIDPipe()) id: string,
   ): Promise<SandboxReplayReportResponse> {
     return this.replayReports.getReport(auth.user.id, id);
+  }
+
+  @Get('replays/:id/chart')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayChart(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<SandboxReplayChartResponse> {
+    return this.chartService.getChart(auth.user.id, id);
+  }
+
+  @Get('replays/:id/decisions')
+  @UseGuards(SandboxEnabledGuard)
+  @Header('Cache-Control', 'no-store')
+  replayDecisions(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Query(new ZodValidationPipe(sandboxReplayDecisionsQuerySchema))
+    query: SandboxReplayDecisionsQuery,
+  ): Promise<SandboxReplayDecisionsResponse> {
+    return this.chartService.getDecisions(auth.user.id, id, query);
   }
 
   @Get('replays/:id/report.md')

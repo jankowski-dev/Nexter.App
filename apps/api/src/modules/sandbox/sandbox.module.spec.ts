@@ -103,6 +103,7 @@ describe('SandboxController', () => {
       read as never,
       {} as never,
       replayReports as never,
+      {} as never,
     );
     const auth = { user: { id: '22222222-2222-4222-8222-222222222222' } } as never;
     const liveReply = { header: vi.fn() };
@@ -145,6 +146,7 @@ describe('SandboxController', () => {
       read as never,
       {} as never,
       replayReports as never,
+      {} as never,
     );
     const auth = { user: { id: '22222222-2222-4222-8222-222222222222' } } as never;
     const liveReply = { header: vi.fn() };

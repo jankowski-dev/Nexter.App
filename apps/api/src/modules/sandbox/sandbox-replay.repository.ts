@@ -96,6 +96,12 @@ export interface SandboxReplayReportRecord extends SandboxReplayDetailRecord {
   readonly report: Record<string, unknown> | null;
 }
 
+/** Owner-facing chart source: the detail/report row plus its exact input snapshot. */
+export interface SandboxReplayChartSource {
+  readonly replay: SandboxReplayReportRecord;
+  readonly candleSnapshot: Buffer | null;
+}
+
 export interface SandboxReplaySnapshotWrite {
   readonly dataSnapshotId: string;
   readonly candleSnapshot: Buffer;
@@ -166,6 +172,12 @@ const workerSelection = {
 const reportSelection = {
   ...detailSelection,
   report: sandboxReplays.report,
+};
+
+/** Chart read selection: detail, report and the persisted input snapshot. */
+const chartSelection = {
+  ...reportSelection,
+  candleSnapshot: sandboxReplays.candleSnapshot,
 };
 
 /** Drizzle access for persisted historical replays. No DELETE is ever issued. */
@@ -258,6 +270,28 @@ export class SandboxReplayRepository {
     if (!row) return null;
 
     return { ...detailFromRow(row), report: row.report ?? null };
+  }
+
+  /**
+   * Owner-scoped chart source: the validated report row plus the gzip snapshot
+   * used to draw the evaluation-window candles. Read-only; never recomputes or
+   * writes the replay.
+   */
+  async findReplayChartSource(
+    userId: string,
+    id: string,
+  ): Promise<SandboxReplayChartSource | null> {
+    const [row] = await this.db
+      .select(chartSelection)
+      .from(sandboxReplays)
+      .where(and(eq(sandboxReplays.id, id), eq(sandboxReplays.userId, userId)))
+      .limit(1);
+    if (!row) return null;
+
+    return {
+      replay: { ...detailFromRow(row), report: row.report ?? null },
+      candleSnapshot: row.candleSnapshot ?? null,
+    };
   }
 
   /** Queued -> cancelled only; returns false when the row moved on. */

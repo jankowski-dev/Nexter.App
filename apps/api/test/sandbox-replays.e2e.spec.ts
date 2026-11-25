@@ -7,6 +7,8 @@ import request from 'supertest';
 import { auditLog, createDb, sandboxReplays, users, type Database } from '@nexter/db';
 import {
   SANDBOX_TIMEFRAME,
+  sandboxReplayChartResponseSchema,
+  sandboxReplayDecisionsResponseSchema,
   sandboxReplayDetailSchema,
   sandboxReplayListResponseSchema,
   sandboxReplayPreflightResponseSchema,
@@ -418,6 +420,8 @@ describe('Sandbox historical replay (e2e)', () => {
       ['get', `/api/v1/sandbox/replays/${replayId}`],
       ['get', `/api/v1/sandbox/replays/${replayId}/report.json`],
       ['get', `/api/v1/sandbox/replays/${replayId}/report.md`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/chart`],
+      ['get', `/api/v1/sandbox/replays/${replayId}/decisions`],
       ['post', `/api/v1/sandbox/replays/${replayId}/cancel`],
       ['post', `/api/v1/sandbox/replays/${replayId}/archive`],
     ];
@@ -565,6 +569,27 @@ describe('Sandbox historical replay (e2e)', () => {
       expect(report.metrics.finalEquityUsd).toBe(completed.finalEquityUsd);
       expect(report.metrics.totalReturnPct).toBe(completed.returnPct);
       expect(report.metrics.maxDrawdownPct).toBe(completed.maxDrawdownPct);
+
+      const chartResponse = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${created.id}/chart`,
+      ).expect(200);
+      const chart = sandboxReplayChartResponseSchema.parse(chartResponse.body);
+      expect(chart.replayId).toBe(created.id);
+      expect(chart.tokens[0]?.candles[0]?.time).toBe(Date.parse(created.fromTime));
+      expect(chart.actions.length).toBeGreaterThan(0);
+
+      const decisionsResponse = await api(
+        app,
+        cookies,
+        'get',
+        `/api/v1/sandbox/replays/${created.id}/decisions?limit=5&offset=0`,
+      ).expect(200);
+      const decisions = sandboxReplayDecisionsResponseSchema.parse(decisionsResponse.body);
+      expect(decisions.total).toBeGreaterThan(0);
+      expect(decisions.items).toHaveLength(5);
 
       // The report period is exactly the 30-day evaluation window; the 30-day
       // prefix is lookback only and is not evaluated.
