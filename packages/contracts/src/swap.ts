@@ -224,6 +224,8 @@ export const approvalBuildResponseSchema = z.object({
     revertReason: z.string().nullable(),
     gasEstimate: z.string().nullable(),
   }),
+  /** Buffered, actionable gas limit for the approval transaction. */
+  gasLimit: z.string().nullable(),
 });
 
 export const approvalsQuerySchema = z.object({
@@ -246,6 +248,8 @@ export const swapBuildResponseSchema = swapOrderDetailSchema.extend({
       gasEstimate: z.string().nullable(),
     })
     .nullable(),
+  /** Buffered, actionable gas limit for the swap transaction. */
+  gasLimit: z.string().nullable(),
   validation: z.array(
     z.object({
       check: z.string(),

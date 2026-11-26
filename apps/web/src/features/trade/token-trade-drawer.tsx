@@ -517,6 +517,7 @@ export function TokenTradeDrawer({
               to: prepared.to,
               data: prepared.calldata,
               value: prepared.value,
+              gas: prepared.gasLimit ?? undefined,
             });
           } catch (err) {
             await cancelSwap(quoted.id).catch(() => undefined);
@@ -558,6 +559,7 @@ export function TokenTradeDrawer({
           to: built.routerAddress,
           data: built.calldata,
           value: built.transactionValue ?? '0',
+          gas: built.gasLimit ?? undefined,
         });
       } catch (err) {
         await cancelSwapSigning(quoted.id).catch(() => undefined);

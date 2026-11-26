@@ -108,6 +108,8 @@
 | GET   | `/swap/orders/:id`                | детали ордера                                             |
 | POST  | `/swap/orders/:id/cancel`         | отменить unsigned order                                   |
 
+`POST /swap/build`, `/swap/orders/:id/ready` and `/swap/approvals/build` return a buffered, actionable `gasLimit` (decimal string): the API takes the larger of the Kyber build gas and the RPC `eth_estimateGas`, adds 20% and clamps to `[150,000, 10,000,000]`. The web wallet must pass this value as the hex `gas` field of `eth_sendTransaction`; if it is absent, the wallet keeps its own estimator. See ADR 0092.
+
 ## 7. Imports
 
 | Метод | Путь                          | Описание                                                  |
