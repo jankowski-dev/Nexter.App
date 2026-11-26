@@ -47,7 +47,10 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page).toHaveURL(/\/dashboard$/);
 
   const header = page.locator('header');
-  await expect(header.getByText(email, { exact: true })).toBeVisible();
+  await expect(header.getByRole('button', { name: 'Текущий пользователь' })).toHaveAttribute(
+    'title',
+    email,
+  );
   await expect(header.getByRole('button', { name: 'BNB' })).toHaveAttribute('aria-pressed', 'true');
   await expect(header.getByRole('button', { name: 'Ethereum' })).toHaveAttribute(
     'aria-pressed',
