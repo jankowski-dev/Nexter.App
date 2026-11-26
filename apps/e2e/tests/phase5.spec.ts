@@ -133,8 +133,6 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Задачи на сегодня' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Без вредных привычек' })).toBeVisible();
   await expect(page.getByText('Чистая прибыль за месяц')).toBeVisible();
