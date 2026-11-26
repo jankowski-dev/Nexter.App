@@ -18,3 +18,4 @@ export * from './runner/context';
 export * from './runner/replay-runner';
 export * from './decision';
 export * from './paper';
+export * from './diagnostics';

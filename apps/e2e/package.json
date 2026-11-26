@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "test:e2e": "playwright test",
+    "diagnostic-jpg": "node scripts/render-diagnostic-jpg.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

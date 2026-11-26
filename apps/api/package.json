@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "diagnostics": "pnpm --filter @nexter/sandbox-core build && node scripts/replay-diagnostics.mjs",
     "prebuild": "pnpm --filter @nexter/sandbox-core build",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",

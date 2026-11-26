@@ -259,6 +259,51 @@ runs and never mutates them.
    `sandbox_replays` row was deleted.
 6. Optionally cancel a queued replay (`cancelled` + `sandbox.replay_cancelled`).
 
+## Research-only diagnostic replay
+
+This pack explains why the engine did or did not act at each bar. It re-runs the
+existing `runPaperFromCandles` pipeline over a frozen candle file and writes
+local artifacts only; it does not touch Stage 3, replay rows, report hashes,
+decision rules or the live runner.
+
+Prepare a candle JSONL from `sandbox_candles` (read-only). Set `ETH_TOKEN_KEY`
+to the Stage 3 ETH/BSC key from `docs/sandbox/stage-3-baseline.md`, then run:
+
+```bash
+npx pnpm@10.20.0 --filter @nexter/api diagnostics -- \
+  --candles out/eth-bsc-1h.jsonl \
+  --out out/eth-diagnostic-2026-11-26 \
+  --token "$ETH_TOKEN_KEY"
+```
+
+Outputs: `diagnostics.csv`, `diagnostics.json`, `annotations.csv`, `chart.pdf`,
+`chart/page-*.svg`, optional `chart/page-*.jpg`, and `summary.md`. Render JPGs
+from the SVG pages with:
+
+```bash
+npx pnpm@10.20.0 --filter @nexter/e2e diagnostic-jpg -- \
+  out/eth-diagnostic-2026-11-26
+```
+
+The PDF is A3
+landscape, 15 days per page, with regime bands, candles, EMA24/EMA168, action
+markers, volume and RSI14. `annotations.csv` accepts `entry`, `exit`, `hold` or
+`no-trade`; match by timestamp or the printed bar number.
+
+After the owner fills the CSV:
+
+```bash
+npx pnpm@10.20.0 --filter @nexter/api diagnostics -- \
+  --annotate out/eth-diagnostic-2026-11-26/annotations.csv \
+  --out out/eth-diagnostic-2026-11-26
+```
+
+This writes `annotation-report.md` with the nearest bar, regime, strategy/risk
+reason and aggregate blockers. Generated artifacts stay under `out/` and are not
+committed. For rule experiments, pass a `--settings <json>` file deep-merged over
+the defaults and compare P/L, trades and max drawdown on ETH plus the five Stage 3
+tokens. No variant becomes a default without an explicit owner decision.
+
 ## Operations
 
 - One API instance is expected; the runner is serialized by
