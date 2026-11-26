@@ -41,6 +41,7 @@ import {
   healthResponseSchema,
   importResponseSchema,
   importsResponseSchema,
+  marketTickerResponseSchema,
   manualTransactionResponseSchema,
   noteImageSchema,
   noteImproveResponseSchema,
@@ -144,6 +145,7 @@ import {
   type ImportsResponse,
   type ManualTransactionRequest,
   type ManualTransactionResponse,
+  type MarketTickerResponse,
   type Note,
   type NoteCreateRequest,
   type NoteImage,
@@ -470,6 +472,10 @@ export async function commitImport(importId: string): Promise<ImportResponse> {
 
 export async function rollbackImport(importId: string): Promise<ImportResponse> {
   return apiPost(`/api/v1/imports/${importId}/rollback`, {}, importResponseSchema);
+}
+
+export async function fetchMarketTicker(): Promise<MarketTickerResponse> {
+  return apiFetch('/api/v1/market/ticker', {}, marketTickerResponseSchema);
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary> {

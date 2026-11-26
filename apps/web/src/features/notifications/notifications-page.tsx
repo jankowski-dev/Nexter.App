@@ -7,7 +7,8 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { NavIcon } from '@/components/nav-icon';
 import { clearNotifications, fetchNotifications, markAllNotificationsRead } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, pnlTone } from '@/lib/format';
+import { closedTradePnl } from './notification-pnl';
 import { useConfirm } from '@/lib/confirm';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -108,40 +109,51 @@ export function NotificationsPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {(notifications.data?.data ?? []).map((notification) => (
-              <Card
-                key={notification.id}
-                className={`p-4 ${
-                  notification.readAt ? '' : 'border-emerald-200 bg-emerald-50/60'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600">
-                    <NavIcon name="notifications" className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-zinc-900">{notification.title}</span>
-                      {notification.readAt ? null : <Badge tone="success">новое</Badge>}
-                      <span className="text-xs text-zinc-500">
-                        {formatDateTime(notification.createdAt)}
-                      </span>
+            {(notifications.data?.data ?? []).map((notification) => {
+              const pnl = closedTradePnl(notification.type, notification.payload);
+              const [bodyHead, ...bodyTail] = (notification.body ?? '').split(' · ');
+              return (
+                <Card
+                  key={notification.id}
+                  className={`p-4 ${
+                    notification.readAt ? '' : 'border-emerald-200 bg-emerald-50/60'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 text-zinc-600">
+                      <NavIcon name="notifications" className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-zinc-900">{notification.title}</span>
+                        {notification.readAt ? null : <Badge tone="success">новое</Badge>}
+                        <span className="text-xs text-zinc-500">
+                          {formatDateTime(notification.createdAt)}
+                        </span>
+                      </div>
+                      {notification.body ? (
+                        <p
+                          className={`mt-1 text-sm leading-6 ${pnl ? pnlTone(pnl) : 'text-zinc-600'}`}
+                        >
+                          {bodyHead}
+                          {bodyTail.length > 0 ? (
+                            <span className="text-zinc-600"> · {bodyTail.join(' · ')}</span>
+                          ) : null}
+                        </p>
+                      ) : null}
+                      {notification.href ? (
+                        <a
+                          href={notification.href}
+                          className="mt-2 inline-block text-xs font-medium text-emerald-800 hover:text-emerald-700"
+                        >
+                          Открыть
+                        </a>
+                      ) : null}
                     </div>
-                    {notification.body ? (
-                      <p className="mt-1 text-sm leading-6 text-zinc-600">{notification.body}</p>
-                    ) : null}
-                    {notification.href ? (
-                      <a
-                        href={notification.href}
-                        className="mt-2 inline-block text-xs font-medium text-emerald-800 hover:text-emerald-700"
-                      >
-                        Открыть
-                      </a>
-                    ) : null}
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )
       ) : null}

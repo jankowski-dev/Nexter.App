@@ -24,7 +24,44 @@ export interface CoinGeckoMarket {
   volume24hUsd: string | null;
 }
 
+export interface CoinGeckoTopMarket {
+  id: string;
+  symbol: string;
+  name: string;
+  priceUsd: string;
+  change24hPct: string | null;
+}
+
+/** Pure mapper kept exported so the ticker contract can be tested without HTTP. */
+export function mapTopMarketsResponse(body: unknown, limit = 10): CoinGeckoTopMarket[] {
+  if (!Array.isArray(body)) return [];
+  const result: CoinGeckoTopMarket[] = [];
+  for (const item of body) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as {
+      id?: unknown;
+      symbol?: unknown;
+      name?: unknown;
+      current_price?: unknown;
+      price_change_percentage_24h?: unknown;
+    };
+    if (typeof row.id !== 'string' || typeof row.symbol !== 'string') continue;
+    const price = optionalNumber(row.current_price);
+    if (!price || decimal(price).lte(0)) continue;
+    result.push({
+      id: row.id,
+      symbol: row.symbol.toUpperCase(),
+      name: typeof row.name === 'string' && row.name ? row.name : row.symbol.toUpperCase(),
+      priceUsd: price,
+      change24hPct: optionalPercent(row.price_change_percentage_24h),
+    });
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const TICKER_CACHE_TTL_MS = 60 * 1000;
 const PLATFORM: Record<string, string> = {
   bsc: 'binance-smart-chain',
   ethereum: 'ethereum',
@@ -95,6 +132,21 @@ export class CoinGeckoClient {
     };
 
     this.write(key, result);
+    return result;
+  }
+
+  async getTopMarkets(limit = 10): Promise<CoinGeckoTopMarket[]> {
+    if (env.NODE_ENV === 'test') return [];
+    const bounded = Math.min(Math.max(Math.trunc(limit), 1), 25);
+    const key = `ticker:top:${bounded}`;
+    const cached = this.read<CoinGeckoTopMarket[]>(key);
+    if (cached !== undefined) return cached ?? [];
+
+    const body = await this.fetchJson(
+      `/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${bounded}&page=1&price_change_percentage=24h&sparkline=false`,
+    );
+    const result = mapTopMarketsResponse(body, bounded);
+    this.write(key, result, result.length > 0 ? TICKER_CACHE_TTL_MS : 15_000);
     return result;
   }
 
@@ -299,12 +351,12 @@ export class CoinGeckoClient {
     return entry.value as T | null;
   }
 
-  private write(key: string, value: unknown): void {
+  private write(key: string, value: unknown, ttlMs = CACHE_TTL_MS): void {
     if (this.cache.size > 500) {
       const oldest = this.cache.keys().next().value;
       if (oldest) this.cache.delete(oldest);
     }
-    this.cache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+    this.cache.set(key, { expiresAt: Date.now() + ttlMs, value });
   }
 
   private async fetchJson(path: string): Promise<unknown | null> {

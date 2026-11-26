@@ -1,4 +1,5 @@
 import { ChainToggle } from '@/components/chain-toggle';
+import { HeaderTicker } from '@/components/header-ticker';
 import { NavIcon } from '@/components/nav-icon';
 import { NexterLogo } from '@/components/nexter-logo';
 import { useLiveRefreshing } from '@/components/live-refresh-indicator';
@@ -13,10 +14,11 @@ import { useWallet, WalletProvider } from '@/lib/wallet-context';
 import { LockProvider, useAppLock } from '@/lib/app-lock';
 import { ConfirmProvider } from '@/lib/confirm';
 import { readTheme, subscribeUiPreference, writeTheme } from '@/lib/ui-preferences';
+import { cn } from '@/lib/utils';
 import { authMeResponseSchema } from '@nexter/contracts';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 const cryptoPaths = ['/portfolio', '/operations', '/watchlist', '/statistics', '/trades'] as const;
 
@@ -112,35 +114,84 @@ function WalletIcon() {
   );
 }
 
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
+      <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M5.5 19.2c.7-3.1 3.1-5 6.5-5s5.8 1.9 6.5 5"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function HeaderGroup({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(
+        'flex h-9 items-center gap-0.5 rounded-xl border border-zinc-200 bg-white p-1',
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function shortAddress(address: string): string {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
 function WalletControls() {
   const wallet = useWallet();
+  const busy = wallet.connecting || wallet.restoring;
 
   return (
-    <>
-      {wallet.connected ? (
-        <Button
-          variant="secondary"
-          className="h-8 gap-1.5 px-2.5 text-xs"
-          title={wallet.address ?? undefined}
-          onClick={() => void wallet.disconnect()}
-        >
-          <WalletIcon />
-          Отключить
-        </Button>
-      ) : (
-        <Button
-          className="h-8 gap-1.5 px-2.5 text-xs"
-          onClick={() => void wallet.connect()}
-          disabled={wallet.connecting || wallet.restoring || !wallet.projectId}
-          title={!wallet.projectId ? 'WalletConnect не настроен на сервере' : undefined}
-        >
-          <WalletIcon />
-          {wallet.restoring ? 'Восстанавливаю…' : wallet.connecting ? 'Подключаю…' : 'Подключить'}
-        </Button>
-      )}
-
-      <ChainToggle value={wallet.chain} onChange={wallet.selectChain} />
-    </>
+    <HeaderGroup label="Кошелёк">
+      <button
+        type="button"
+        aria-label={wallet.connected ? 'Отключить кошелёк' : 'Подключить кошелёк'}
+        title={
+          wallet.connected
+            ? (wallet.address ?? undefined)
+            : !wallet.projectId
+              ? 'WalletConnect не настроен на сервере'
+              : 'Подключить кошелёк'
+        }
+        disabled={!wallet.connected && (busy || !wallet.projectId)}
+        onClick={() => void (wallet.connected ? wallet.disconnect() : wallet.connect())}
+        className={cn(
+          'flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition',
+          wallet.connected
+            ? 'text-zinc-700 hover:bg-zinc-100'
+            : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-500',
+        )}
+      >
+        <WalletIcon />
+        <span className="hidden sm:inline">
+          {wallet.connected
+            ? shortAddress(wallet.address ?? '')
+            : wallet.restoring
+              ? 'Восстанавливаю…'
+              : wallet.connecting
+                ? 'Подключаю…'
+                : 'Подключить'}
+        </span>
+      </button>
+    </HeaderGroup>
   );
 }
 
@@ -278,7 +329,7 @@ function RootLayoutContent() {
 
       <div className="flex min-h-dvh w-full">
         <aside className="sticky top-0 hidden h-dvh w-56 shrink-0 overflow-hidden border-r border-zinc-800 bg-[#202329] p-4 md:flex md:flex-col">
-          <Link to="/dashboard" className="mb-6 flex shrink-0 items-center gap-3 px-2">
+          <Link to="/dashboard" className="mb-8 flex shrink-0 items-center gap-3 px-2">
             <NexterLogo lit={8} refreshing={refreshing} className="h-9 w-8 shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold leading-tight text-white">
@@ -292,7 +343,7 @@ function RootLayoutContent() {
 
           <nav
             aria-label="Основная навигация"
-            className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1"
+            className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1"
           >
             {topNavigation.map((item) => (
               <Link
@@ -368,20 +419,19 @@ function RootLayoutContent() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-4 md:px-6">
-            <div className="flex items-center gap-3">
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-zinc-200 bg-white px-4 md:px-6">
+            <div className="flex shrink-0 items-center gap-3">
               <NexterLogo lit={8} refreshing={refreshing} className="h-8 w-7 shrink-0 md:hidden" />
               <HeaderClock />
             </div>
             <span className="sr-only" role="status" aria-live="polite">
               {refreshing ? 'Синхронизация данных' : ''}
             </span>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div
-                className="flex items-center gap-0.5 rounded-full border border-zinc-200 bg-zinc-50 p-1"
-                role="group"
-                aria-label="Тема оформления"
-              >
+
+            <HeaderTicker />
+
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <HeaderGroup label="Тема оформления">
                 <button
                   type="button"
                   aria-label="Светлая тема"
@@ -390,11 +440,12 @@ function RootLayoutContent() {
                     writeTheme('light');
                     setTheme('light');
                   }}
-                  className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-lg transition',
                     theme === 'light'
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
+                      ? 'bg-zinc-900 text-white'
+                      : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800',
+                  )}
                 >
                   <SunIcon />
                 </button>
@@ -406,24 +457,39 @@ function RootLayoutContent() {
                     writeTheme('dark');
                     setTheme('dark');
                   }}
-                  className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-lg transition',
                     theme === 'dark'
-                      ? 'bg-zinc-800 text-white shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-800'
-                  }`}
+                      ? 'bg-zinc-900 text-white'
+                      : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800',
+                  )}
                 >
                   <MoonIcon />
                 </button>
-              </div>
+              </HeaderGroup>
 
-              <div
-                className="hidden max-w-64 truncate text-xs text-zinc-500 lg:block"
-                title={me.data?.user.email}
-              >
-                {me.data?.user.email}
-              </div>
+              <HeaderGroup label="Пользователь">
+                <button
+                  type="button"
+                  aria-label="Текущий пользователь"
+                  title={me.data?.user.email ?? 'Пользователь'}
+                  className="relative flex h-7 w-7 items-center justify-center rounded-lg text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-900"
+                >
+                  <UserIcon />
+                  <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                </button>
+              </HeaderGroup>
 
               <WalletControls />
+
+              <HeaderGroup label="Сеть кошелька">
+                <ChainToggle
+                  value={wallet.chain}
+                  onChange={wallet.selectChain}
+                  iconOnly
+                  className="gap-0 border-0 bg-transparent p-0"
+                />
+              </HeaderGroup>
 
               <Button
                 className="h-8 w-8 px-0 md:hidden"

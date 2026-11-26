@@ -7,6 +7,7 @@ export * from './audit';
 export * from './finance';
 export * from './habits';
 export * from './imports';
+export * from './market';
 export * from './notes';
 export * from './notifications';
 export * from './pagination';

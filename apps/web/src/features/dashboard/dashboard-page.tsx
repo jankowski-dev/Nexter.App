@@ -179,15 +179,7 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Дашборд"
-        subtitle="Крипта, финансы, задачи и привычки в одном месте."
-        actions={
-          <Button variant="secondary" asChild>
-            <Link to="/statistics">Статистика</Link>
-          </Button>
-        }
-      />
+      <PageHeader title="Дашборд" subtitle="Крипта, финансы, задачи и привычки в одном месте." />
 
       {hasCriticalError ? (
         <ErrorState
@@ -207,14 +199,9 @@ export function DashboardPage() {
 
       {summary.isPending ? <LoadingRows rows={4} /> : null}
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold tracking-tight text-zinc-900">Крипта</h2>
-          <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
-            <Link to="/portfolio">Торговля</Link>
-          </Button>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <div className="space-y-3" aria-label="Крипта">
+          <h2 className="sr-only">Крипта</h2>
           <StatCard
             size="compact"
             title="Чистая прибыль за месяц"
@@ -252,16 +239,9 @@ export function DashboardPage() {
             live
           />
         </div>
-      </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold tracking-tight text-zinc-900">Финансы</h2>
-          <Button variant="ghost" className="h-8 px-3 text-xs" asChild>
-            <Link to="/finance">Финансы</Link>
-          </Button>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="space-y-3" aria-label="Финансы">
+          <h2 className="sr-only">Финансы</h2>
           <StatCard
             size="compact"
             title="Средний расход в день"
@@ -299,7 +279,7 @@ export function DashboardPage() {
             live
           />
         </div>
-      </section>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
         <Card>
