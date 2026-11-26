@@ -5,8 +5,7 @@ import {
   CalendarIcon,
   CheckIcon,
   ClipboardIcon,
-  ImageIcon,
-  TagIcon,
+  PaperclipIcon,
   TrashIcon,
   UndoIcon,
 } from '@/components/ui/icons';
@@ -90,17 +89,10 @@ export function TaskCompactRow({
               {formatTaskDue(task.dueAt, task.dueHasTime)}
             </span>
             <span>{taskPriorityLabels[task.priority] ?? 'Обычный'}</span>
-            {task.recurrence ? <span>↻ Повтор</span> : null}
-            {task.tags.length > 0 ? (
-              <span className="flex min-w-0 items-center gap-1">
-                <TagIcon />
-                <span className="truncate">{task.tags.join(', ')}</span>
-              </span>
-            ) : null}
-            {task.images.length > 0 ? (
+            {(task.attachmentCount ?? task.images.length) > 0 ? (
               <span className="flex items-center gap-1">
-                <ImageIcon />
-                {task.images.length}
+                <PaperclipIcon />
+                {task.attachmentCount ?? task.images.length}
               </span>
             ) : null}
           </span>

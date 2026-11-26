@@ -6,16 +6,26 @@ import {
   CalendarIcon,
   CheckIcon,
   ClipboardIcon,
+  FileIcon,
   PencilIcon,
-  TagIcon,
   TrashIcon,
   UndoIcon,
 } from '@/components/ui/icons';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { TimeField } from '@/components/ui/time-field';
-import { addTaskImage, createTask, removeTaskImage, updateTask } from '@/lib/api';
+import { addTaskImage, createTask, fetchTask, removeTaskImage, updateTask } from '@/lib/api';
+import {
+  MAX_TASK_ATTACHMENTS,
+  MAX_TASK_ATTACHMENT_BYTES,
+  TASK_ATTACHMENT_ACCEPT,
+  decodedBase64Bytes,
+  formatBytes,
+  isImageMime,
+  mimeTypeForFile,
+  readDataUrl,
+} from '@/lib/attachments';
 import { toRussianError } from '@/lib/error-messages';
 import { formatDate } from '@/lib/format';
 import { compressTaskImage } from '@/lib/image';
@@ -23,25 +33,13 @@ import { formatTaskDue, localDateKey } from '@/lib/tasks';
 import { useSaveFlash } from '@/lib/use-save-flash';
 import { useRuntimeSettings } from '../settings/use-settings';
 import { useEffect, useRef, useState } from 'react';
-import type {
-  Task,
-  TaskCreateRequest,
-  TaskImage,
-  TaskRecurrence,
-  TaskStatus,
-} from '@nexter/contracts';
+import type { Task, TaskCreateRequest, TaskImage, TaskStatus } from '@nexter/contracts';
 
 const priorityLabels: Record<number, string> = {
   0: 'Низкий',
   1: 'Обычный',
   2: 'Высокий',
   3: 'Критичный',
-};
-
-const recurrenceLabels: Record<TaskRecurrence, string> = {
-  daily: 'Ежедневно',
-  weekly: 'Еженедельно',
-  monthly: 'Ежемесячно',
 };
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -78,14 +76,6 @@ function toIsoDate(
   return value
     ? new Date(`${value}T${hasTime && time ? time : defaultTime}:00`).toISOString()
     : null;
-}
-
-function tagsFromInput(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 20);
 }
 
 function dueLabel(value: string, time: string, hasTime: boolean, defaultTime = '12:00'): string {
@@ -131,25 +121,13 @@ export function TaskDialog({
   const [dueTimeValue, setDueTimeValue] = useState(
     dueClock(sourceDueAt, Boolean(source?.dueHasTime)),
   );
-  const [tags, setTags] = useState(source?.tags.join(', ') ?? '');
   const [status, setStatus] = useState<TaskStatus>(duplicate ? 'open' : (source?.status ?? 'open'));
   const [completedAt, setCompletedAt] = useState<string | null>(
     duplicate ? null : (source?.completedAt ?? null),
   );
   const [createdAt, setCreatedAt] = useState<string | null>(task?.createdAt ?? null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(task?.updatedAt ?? null);
-  const [recurrence, setRecurrence] = useState<TaskRecurrence | 'none'>(
-    duplicate ? 'none' : (source?.recurrence ?? 'none'),
-  );
-  const [recurrenceEnds, setRecurrenceEnds] = useState(
-    duplicate
-      ? ''
-      : source?.recurrenceEndsAt
-        ? localDateKey(new Date(source.recurrenceEndsAt))
-        : '',
-  );
   const [images, setImages] = useState<TaskImage[]>(task?.images ?? []);
-  const [seriesLocked, setSeriesLocked] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const showSaving = useSaveFlash(saveState);
   const [error, setError] = useState<string | null>(null);
@@ -165,11 +143,8 @@ export function TaskDialog({
           title: task.title,
           description: task.description,
           priority: task.priority,
-          tags: task.tags,
           dueAt: task.dueAt,
           dueHasTime: task.dueHasTime,
-          recurrence: task.recurrence,
-          recurrenceEndsAt: task.recurrenceEndsAt,
         })
       : null,
   );
@@ -180,9 +155,6 @@ export function TaskDialog({
     due,
     dueTime: dueTimeValue,
     dueHasTime,
-    tags,
-    recurrence,
-    recurrenceEnds,
   });
   draftRef.current = {
     title,
@@ -191,16 +163,12 @@ export function TaskDialog({
     due,
     dueTime: dueTimeValue,
     dueHasTime,
-    tags,
-    recurrence,
-    recurrenceEnds,
   };
 
   function basePayload(draft: typeof draftRef.current): {
     title: string;
     description: string | null;
     priority: number;
-    tags: string[];
     dueAt: string | null;
     dueHasTime: boolean;
   } {
@@ -208,7 +176,6 @@ export function TaskDialog({
       title: draft.title.trim(),
       description: draft.description.trim() || null,
       priority: Number.parseInt(draft.priority, 10) || 0,
-      tags: tagsFromInput(draft.tags),
       dueAt: toIsoDate(draft.due, draft.dueTime, draft.dueHasTime, runtime.taskDefaultDueTime),
       dueHasTime: Boolean(draft.due && draft.dueHasTime),
     };
@@ -227,45 +194,14 @@ export function TaskDialog({
       return true;
     }
 
-    if (images.length > 5) {
-      setError('Не больше 5 картинок на задачу.');
-      setSaveState('error');
-      return false;
-    }
-
-    if (draft.recurrence !== 'none' && !draft.due) {
-      setError('Для повторяющейся задачи укажите первый срок.');
-      setSaveState('error');
-      return false;
-    }
-
-    if (
-      draft.recurrenceEnds &&
-      (!draft.due || new Date(draft.recurrenceEnds) < new Date(draft.due))
-    ) {
-      setError('Дата окончания повтора не может быть раньше первого срока.');
+    if (images.length > MAX_TASK_ATTACHMENTS) {
+      setError(`Не больше ${MAX_TASK_ATTACHMENTS} файлов на задачу.`);
       setSaveState('error');
       return false;
     }
 
     const payload = basePayload(draft);
-    const recurrencePayload =
-      draft.recurrence !== 'none'
-        ? {
-            recurrence: draft.recurrence,
-            ...(draft.recurrenceEnds
-              ? {
-                  recurrenceEndsAt: toIsoDate(
-                    draft.recurrenceEnds,
-                    '',
-                    false,
-                    runtime.taskDefaultDueTime,
-                  ),
-                }
-              : {}),
-          }
-        : {};
-    const signature = JSON.stringify({ ...payload, ...recurrencePayload });
+    const signature = JSON.stringify(payload);
 
     if (signature === savedSignatureRef.current) {
       setSaveState('saved');
@@ -277,11 +213,8 @@ export function TaskDialog({
 
     try {
       const saved = taskIdRef.current
-        ? await updateTask(taskIdRef.current, { ...payload, ...recurrencePayload })
-        : await createTask({
-            ...payload,
-            ...recurrencePayload,
-          } satisfies TaskCreateRequest);
+        ? await updateTask(taskIdRef.current, payload)
+        : await createTask(payload satisfies TaskCreateRequest);
 
       taskIdRef.current = saved.id;
       savedSignatureRef.current = signature;
@@ -289,7 +222,6 @@ export function TaskDialog({
       setCompletedAt(saved.completedAt);
       setCreatedAt(saved.createdAt);
       setUpdatedAt(saved.updatedAt);
-      if (draft.recurrence !== 'none') setSeriesLocked(true);
       setSaveState('saved');
       onSaved();
       return true;
@@ -317,12 +249,27 @@ export function TaskDialog({
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      // Keep the recurrence controls available until the first explicit save of a new task.
       if (mode === 'edit' && taskIdRef.current) void saveNowRef.current();
     }, runtime.autosaveIntervalSeconds * 1000);
 
     return () => window.clearInterval(timer);
   }, [mode, runtime.autosaveIntervalSeconds]);
+
+  useEffect(() => {
+    const id = task?.id;
+    if (!id) return;
+    if ((task.attachmentCount ?? task.images.length) <= task.images.length) return;
+
+    let cancelled = false;
+    void fetchTask(id)
+      .then((detail) => {
+        if (!cancelled) setImages(detail.images);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [task?.id, task?.attachmentCount, task?.images.length]);
 
   async function attemptClose(): Promise<void> {
     if (mode === 'view') {
@@ -338,20 +285,6 @@ export function TaskDialog({
 
     const saved = await saveNow();
     if (saved) onClose();
-  }
-
-  async function finishEditing(): Promise<void> {
-    if (!draftRef.current.title.trim()) {
-      setError('Название задачи не может быть пустым.');
-      setSaveState('error');
-      return;
-    }
-
-    const saved = await saveNow();
-    if (saved) {
-      setError(null);
-      setMode('view');
-    }
   }
 
   async function toggleStatus(): Promise<void> {
@@ -393,8 +326,8 @@ export function TaskDialog({
       return;
     }
 
-    if (images.length + files.length > 5) {
-      setError('Не больше 5 картинок на задачу.');
+    if (images.length + files.length > MAX_TASK_ATTACHMENTS) {
+      setError(`Не больше ${MAX_TASK_ATTACHMENTS} файлов на задачу.`);
       return;
     }
 
@@ -403,13 +336,38 @@ export function TaskDialog({
 
     try {
       for (const file of Array.from(files)) {
-        const prepared = await compressTaskImage(file);
+        const mimeType = mimeTypeForFile(file);
+        if (!mimeType) {
+          throw new Error(`Формат файла ${file.name} не поддерживается.`);
+        }
+
+        let prepared: { name: string; mimeType: string; dataUrl: string; sizeBytes: number };
+        if (isImageMime(mimeType)) {
+          const image = await compressTaskImage(file);
+          prepared = { ...image, mimeType: image.mimeType };
+        } else {
+          if (file.size > MAX_TASK_ATTACHMENT_BYTES) {
+            throw new Error(`Файл ${file.name} больше 1,5 МБ.`);
+          }
+          const dataUrl = await readDataUrl(file);
+          prepared = {
+            name: file.name,
+            mimeType,
+            dataUrl,
+            sizeBytes: decodedBase64Bytes(dataUrl),
+          };
+        }
+
+        if (prepared.sizeBytes > MAX_TASK_ATTACHMENT_BYTES) {
+          throw new Error(`Файл ${prepared.name} больше 1,5 МБ.`);
+        }
+
         const saved = await saveNow();
         if (!saved || !taskIdRef.current) return;
 
         const image = await addTaskImage(taskIdRef.current, {
           name: prepared.name,
-          mimeType: prepared.mimeType,
+          mimeType: prepared.mimeType as TaskImage['mimeType'],
           dataUrl: prepared.dataUrl,
         });
         setImages((current) => [...current, image]);
@@ -417,7 +375,7 @@ export function TaskDialog({
       }
     } catch (err) {
       setError(
-        toRussianError(err, err instanceof Error ? err.message : 'Не удалось добавить картинку'),
+        toRussianError(err, err instanceof Error ? err.message : 'Не удалось добавить файл'),
       );
     } finally {
       setUploading(false);
@@ -439,13 +397,12 @@ export function TaskDialog({
       setImages((current) => current.filter((item) => item.id !== image.id));
       onSaved();
     } catch (err) {
-      setError(toRussianError(err, 'Не удалось удалить картинку'));
+      setError(toRussianError(err, 'Не удалось удалить файл'));
     } finally {
       setUploading(false);
     }
   }
 
-  const effectiveRecurrence = task?.recurrence ?? (recurrence !== 'none' ? recurrence : null);
   const persisted = Boolean(taskIdRef.current);
   const overdue =
     status === 'open' &&
@@ -502,11 +459,7 @@ export function TaskDialog({
                   <PencilIcon />
                   Изменить
                 </Button>
-              ) : (
-                <Button variant="secondary" onClick={() => void finishEditing()}>
-                  Готово
-                </Button>
-              )}
+              ) : null}
             </div>
           </div>
         }
@@ -524,9 +477,6 @@ export function TaskDialog({
                     {priorityLabels[Number(priority)] ?? 'Обычный'}
                   </Badge>
                   {overdue ? <Badge tone="danger">Просрочена</Badge> : null}
-                  {effectiveRecurrence ? (
-                    <Badge tone="info">↻ {recurrenceLabels[effectiveRecurrence]}</Badge>
-                  ) : null}
                 </div>
               </div>
 
@@ -547,27 +497,40 @@ export function TaskDialog({
                 </p>
               </div>
 
-              {tagsFromInput(tags).length > 0 ? (
-                <div className="flex items-start gap-1.5 text-sm text-zinc-600">
-                  <TagIcon className="mt-0.5" />
-                  <span>{tagsFromInput(tags).join(', ')}</span>
-                </div>
-              ) : null}
-
               {images.length > 0 ? (
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                    Картинки
+                    Файлы
                   </div>
                   <div className="mt-2 grid grid-cols-3 gap-2">
-                    {images.map((image) => (
-                      <img
-                        key={image.id}
-                        src={image.dataUrl}
-                        alt={image.name}
-                        className="h-24 w-full rounded-lg border border-zinc-200 object-cover"
-                      />
-                    ))}
+                    {images
+                      .filter((image) => isImageMime(image.mimeType))
+                      .map((image) => (
+                        <img
+                          key={image.id}
+                          src={image.dataUrl}
+                          alt={image.name}
+                          className="h-24 w-full rounded-lg border border-zinc-200 object-cover"
+                        />
+                      ))}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {images
+                      .filter((image) => !isImageMime(image.mimeType))
+                      .map((image) => (
+                        <a
+                          key={image.id}
+                          href={image.dataUrl}
+                          download={image.name}
+                          className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-800"
+                        >
+                          <FileIcon className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{image.name}</span>
+                          <span className="shrink-0 text-xs text-zinc-500">
+                            {formatBytes(image.sizeBytes)}
+                          </span>
+                        </a>
+                      ))}
                   </div>
                 </div>
               ) : null}
@@ -584,167 +547,146 @@ export function TaskDialog({
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm text-zinc-600">
-                  Приоритет
-                  <Select
-                    className="mt-1"
-                    value={priority}
-                    onChange={(event) => setPriority(event.target.value)}
+              <div className="space-y-3">
+                <div>
+                  <div className="text-sm text-zinc-600">Приоритет</div>
+                  <div
+                    role="radiogroup"
+                    aria-label="Приоритет"
+                    className="mt-1 grid grid-cols-2 gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1 sm:grid-cols-4"
                   >
-                    {Object.entries(priorityLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-                <div className="sm:col-span-2">
-                  <div className="grid grid-cols-[1fr_auto] gap-3">
-                    <label className="block text-sm text-zinc-600">
-                      Срок
-                      <Input
-                        className="mt-1"
-                        type="date"
-                        value={due}
-                        onChange={(event) => setDue(event.target.value)}
-                      />
-                    </label>
-                    <div className="block text-sm text-zinc-600">
-                      Время
-                      <TimeField
-                        value={dueTimeValue}
-                        onChange={(value) => {
-                          setDueTimeValue(value);
-                          setDueHasTime(Boolean(value));
-                        }}
-                        disabled={!due}
-                        ariaLabel="Время задачи"
-                      />
-                    </div>
+                    {Object.entries(priorityLabels).map(([value, label]) => {
+                      const active = priority === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setPriority(value)}
+                          className={`rounded-lg px-2 py-1.5 text-xs font-medium transition ${
+                            active
+                              ? 'bg-white text-zinc-900 shadow-sm'
+                              : 'text-zinc-500 hover:text-zinc-900'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
-                    Время необязательно. Без него задача считается задачей на день.
-                  </p>
                 </div>
-              </div>
 
-              {!task?.seriesId && !seriesLocked ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block text-sm text-zinc-600">
-                    Повтор
-                    <Select
-                      className="mt-1"
-                      value={recurrence}
-                      disabled={seriesLocked}
-                      onChange={(event) =>
-                        setRecurrence(event.target.value as TaskRecurrence | 'none')
-                      }
-                    >
-                      <option value="none">Не повторять</option>
-                      {(Object.keys(recurrenceLabels) as TaskRecurrence[]).map((value) => (
-                        <option key={value} value={value}>
-                          {recurrenceLabels[value]}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                  {recurrence !== 'none' ? (
-                    <label className="block text-sm text-zinc-600">
-                      Повторять до (необязательно)
-                      <Input
-                        className="mt-1"
-                        type="date"
-                        value={recurrenceEnds}
-                        min={due || undefined}
-                        disabled={seriesLocked}
-                        onChange={(event) => setRecurrenceEnds(event.target.value)}
-                      />
-                    </label>
-                  ) : null}
-                  {recurrence !== 'none' ? (
-                    <p className="text-xs text-zinc-500 sm:col-span-2">
-                      Изменения и удаление применятся ко всей серии; «выполнено» отмечается отдельно
-                      в каждом дне.
-                    </p>
-                  ) : null}
+                <div className="grid grid-cols-[1fr_auto] gap-3">
+                  <div>
+                    <div className="text-sm text-zinc-600">Срок</div>
+                    <DatePicker value={due} onChange={setDue} />
+                  </div>
+                  <div className="block text-sm text-zinc-600">
+                    Время
+                    <TimeField
+                      value={dueTimeValue}
+                      onChange={(value) => {
+                        setDueTimeValue(value);
+                        setDueHasTime(Boolean(value));
+                      }}
+                      disabled={!due}
+                      ariaLabel="Время задачи"
+                    />
+                  </div>
                 </div>
-              ) : effectiveRecurrence ? (
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-600">
-                  Повтор: {recurrenceLabels[effectiveRecurrence]}. Изменения и удаление применяются
-                  ко всей серии; отметка «выполнено» остаётся у каждого дня своя.
-                </div>
-              ) : null}
+                <p className="text-[11px] text-zinc-500">
+                  Время необязательно. Без него задача считается задачей на день.
+                </p>
+              </div>
 
               <label className="block text-sm text-zinc-600">
                 Описание
                 <Textarea
-                  className="mt-1 min-h-52"
+                  className="mt-1 min-h-52 border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder="Детали, ссылки, следующий шаг"
                 />
               </label>
 
-              <label className="block text-sm text-zinc-600">
-                Теги (через запятую)
-                <Input
-                  className="mt-1"
-                  value={tags}
-                  onChange={(event) => setTags(event.target.value)}
-                  placeholder="Топ, Дашборд, Риск"
-                />
-              </label>
-
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium text-zinc-700">Картинки</div>
+                  <div className="text-sm font-medium text-zinc-700">Файлы</div>
                   <Button
                     type="button"
                     variant="secondary"
                     className="h-8 px-3 text-xs"
                     onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading || images.length >= 5}
+                    disabled={uploading || images.length >= MAX_TASK_ATTACHMENTS}
                   >
-                    {uploading ? 'Загружаю…' : 'Добавить картинку'}
+                    {uploading ? 'Загружаю…' : 'Добавить файл'}
                   </Button>
                 </div>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/png,image/jpeg,image/webp"
+                  accept={TASK_ATTACHMENT_ACCEPT}
                   multiple
                   className="hidden"
-                  aria-label="Добавить картинку"
+                  aria-label="Добавить файл"
                   onChange={(event) => void handleFiles(event.target.files)}
                 />
                 {images.length > 0 ? (
-                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
-                    {images.map((image) => (
-                      <div
-                        key={image.id}
-                        className="relative overflow-hidden rounded-lg border border-zinc-200"
-                      >
-                        <img
-                          src={image.dataUrl}
-                          alt={image.name}
-                          className="h-24 w-full object-cover"
-                        />
-                        <button
-                          type="button"
-                          aria-label={`Удалить ${image.name}`}
-                          className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs text-zinc-700 shadow hover:text-red-700"
-                          onClick={() => void handleRemoveImage(image)}
-                          disabled={uploading}
+                  <div className="mt-3 space-y-2">
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                      {images
+                        .filter((image) => isImageMime(image.mimeType))
+                        .map((image) => (
+                          <div
+                            key={image.id}
+                            className="relative overflow-hidden rounded-lg border border-zinc-200"
+                          >
+                            <img
+                              src={image.dataUrl}
+                              alt={image.name}
+                              className="h-24 w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              aria-label={`Удалить ${image.name}`}
+                              className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs text-zinc-700 shadow hover:text-red-700"
+                              onClick={() => void handleRemoveImage(image)}
+                              disabled={uploading}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                    {images
+                      .filter((image) => !isImageMime(image.mimeType))
+                      .map((image) => (
+                        <div
+                          key={image.id}
+                          className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700"
                         >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                          <FileIcon className="h-4 w-4 shrink-0" />
+                          <span className="min-w-0 flex-1 truncate">{image.name}</span>
+                          <span className="shrink-0 text-xs text-zinc-500">
+                            {formatBytes(image.sizeBytes)}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Удалить ${image.name}`}
+                            className="text-zinc-500 hover:text-red-700"
+                            onClick={() => void handleRemoveImage(image)}
+                            disabled={uploading}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                   </div>
                 ) : (
                   <p className="mt-2 text-xs text-zinc-500">
-                    До 5 картинок. Они сжимаются в браузере и хранятся вместе с задачей.
+                    До {MAX_TASK_ATTACHMENTS} файлов, до 1,5 МБ каждый. Изображения сжимаются в
+                    браузере.
                   </p>
                 )}
               </div>
@@ -756,19 +698,13 @@ export function TaskDialog({
               {error}
             </div>
           ) : null}
-
-          {seriesLocked ? <Badge tone="info">Изменения применяются ко всей серии</Badge> : null}
         </div>
       </Drawer>
 
       <ConfirmDialog
         open={confirmDelete}
         title="Удалить задачу?"
-        description={
-          effectiveRecurrence
-            ? 'Все задачи серии переместятся в архив; вернуть можно будет всю серию.'
-            : 'Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть.'
-        }
+        description="Задача не удалится безвозвратно: она переместится в архив, откуда её можно вернуть."
         confirmAriaLabel="Подтвердить удаление задачи"
         cancelAriaLabel="Отменить удаление задачи"
         busy={deleting}

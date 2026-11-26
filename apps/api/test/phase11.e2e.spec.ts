@@ -210,8 +210,27 @@ describe.runIf(canRun)('Phase 11 e2e', () => {
     const withImage = (await agent.get('/api/v1/tasks').expect(200)).body.data as Array<{
       id: string;
       images: Array<{ id: string }>;
+      attachmentCount?: number;
     }>;
-    expect(withImage.find((item) => item.id === task.body.id)?.images).toHaveLength(1);
+    const listRow = withImage.find((item) => item.id === task.body.id);
+    expect(listRow?.images).toHaveLength(0);
+    expect(listRow?.attachmentCount).toBe(1);
+
+    const detail = await agent.get(`/api/v1/tasks/${task.body.id}`).expect(200);
+    expect(detail.body.images).toHaveLength(1);
+
+    const pdfDataUrl =
+      'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKMSAwIG9iago8PC9UeXBlL0NhdGFsb2c+PgplbmRvYmoK';
+    const pdf = await agent
+      .post(`/api/v1/tasks/${task.body.id}/images`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ name: 'report.pdf', mimeType: 'application/pdf', dataUrl: pdfDataUrl })
+      .expect(201);
+    expect(pdf.body).toMatchObject({ name: 'report.pdf', mimeType: 'application/pdf' });
+    await agent
+      .delete(`/api/v1/tasks/${task.body.id}/images/${pdf.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .expect(200);
 
     await agent
       .delete(`/api/v1/tasks/${task.body.id}/images/${image.body.id}`)

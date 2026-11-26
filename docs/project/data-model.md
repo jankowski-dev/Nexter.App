@@ -96,7 +96,7 @@
 | `note_images` | attachments notes (images/files, data URL, 5 × 1.5 MB)                                                                                              |
 | `habits`      | name, startedOn, archivedAt                                                                                                                         |
 
-`tasks.seriesId` объединяет повторяющиеся occurrences; `occurrenceIndex` — номер. `note_images`/`task_images` хранят MIME и data URL; лимит проверяется сервисом.
+`tasks.seriesId` объединяет повторяющиеся occurrences; `occurrenceIndex` — номер. С 2026-11-27 UI задач не создаёт новые серии/теги; существующие строки и колонки остаются. `note_images`/`task_images` хранят MIME и data URL; лимит проверяется сервисом. Список задач отдаёт `attachmentCount` без base64, полные вложения — `GET /tasks/:id`.
 
 ## 9. Vault
 

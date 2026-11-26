@@ -144,25 +144,39 @@ If the wallet broadcast a transaction but did not return its hash, the owner can
 | POST  | `/finance/import/commit`            | commit                                                                |
 | POST  | `/finance/import/rollback`          | rollback                                                              |
 
+## 8.1 Market quotes
+
+| Метод | Путь             | Описание                                                   |
+| ----- | ---------------- | ---------------------------------------------------------- |
+| GET   | `/market/ticker` | топ-10 CoinGecko по капитализации; серверный кэш 60 секунд |
+
+`/market/ticker` read-only: пустой список при недоступности провайдера, без записи в БД.
+
 ## 9. Tasks / Notes / Habits
 
-| Метод  | Путь                         | Описание                                           |
-| ------ | ---------------------------- | -------------------------------------------------- |
-| GET    | `/tasks`                     | список (status/search/range/archived)              |
-| POST   | `/tasks`                     | создать (recurrence → series)                      |
-| PATCH  | `/tasks/:id`                 | изменить (`applyToSeries` default true для series) |
-| POST   | `/tasks/:id/images`          | attachment                                         |
-| DELETE | `/tasks/:id/images/:imageId` | удалить attachment                                 |
-| GET    | `/notes`                     | список (search/archive/offset/limit)               |
-| GET    | `/notes/:id`                 | детали + attachments                               |
-| POST   | `/notes`                     | создать                                            |
-| POST   | `/notes/improve`             | улучшить текст заметки через ИИ                    |
-| PATCH  | `/notes/:id`                 | изменить/архивировать/pin                          |
-| POST   | `/notes/:id/images`          | attachment (image/file)                            |
-| DELETE | `/notes/:id/images/:imageId` | удалить attachment                                 |
-| GET    | `/habits`                    | привычки                                           |
-| POST   | `/habits`                    | создать                                            |
-| PATCH  | `/habits/:id`                | изменить/архивировать                              |
+| Метод  | Путь                         | Описание                                              |
+| ------ | ---------------------------- | ----------------------------------------------------- |
+| GET    | `/tasks`                     | список; `images: []` + `attachmentCount`              |
+| GET    | `/tasks/:id`                 | детали + полные attachments                           |
+| POST   | `/tasks`                     | создать (recurrence API оставлен для совместимости)   |
+| PATCH  | `/tasks/:id`                 | изменить (`applyToSeries` default true для series)    |
+| POST   | `/tasks/:id/images`          | attachment (images/PDF/TXT/DOC/DOCX/XLS/XLSX/RAR/ZIP) |
+| DELETE | `/tasks/:id/images/:imageId` | удалить attachment                                    |
+
+Список задач больше не раздувается base64-вложениями: он отдаёт только
+`attachmentCount`; полные `dataUrl` возвращает `GET /tasks/:id`. Лимит — 5 файлов
+по 1,5 МБ, MIME-allowlist как у заметок. UI задач больше не создаёт теги/повторы;
+старые строки и API-поля остаются дормантными.
+| GET | `/notes` | список (search/archive/offset/limit) |
+| GET | `/notes/:id` | детали + attachments |
+| POST | `/notes` | создать |
+| POST | `/notes/improve` | улучшить текст заметки через ИИ |
+| PATCH | `/notes/:id` | изменить/архивировать/pin |
+| POST | `/notes/:id/images` | attachment (image/file) |
+| DELETE | `/notes/:id/images/:imageId` | удалить attachment |
+| GET | `/habits` | привычки |
+| POST | `/habits` | создать |
+| PATCH | `/habits/:id` | изменить/архивировать |
 
 ## 10. Vault
 

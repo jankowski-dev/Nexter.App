@@ -40,7 +40,7 @@ function monthRange(month: Date): { from: string; to: string } {
 
 export function TasksPage() {
   const queryClient = useQueryClient();
-  const [view, setView] = useState<TaskView>('list');
+  const [view, setView] = useState<TaskView>('calendar');
   const [month, setMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );

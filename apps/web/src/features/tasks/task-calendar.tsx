@@ -180,7 +180,7 @@ export function TaskCalendar({
                           type="button"
                           draggable
                           data-task-id={task.id}
-                          title={`${task.title}${task.recurrence ? ' · повтор' : ''} · правый клик — копия`}
+                          title={`${task.title} · правый клик — копия на следующий день`}
                           className={`w-full rounded border px-1.5 py-1 text-left text-xs ${taskTone(
                             task,
                             now,
@@ -206,8 +206,7 @@ export function TaskCalendar({
                               </span>
                             ) : null}
                             <span className="min-w-0 flex-1 truncate">
-                              {task.status === 'done' ? '✓ ' : task.recurrence ? '↻ ' : ''}
-                              {task.recurrence && task.status === 'done' ? '↻ ' : ''}
+                              {task.status === 'done' ? '✓ ' : ''}
                               {task.title}
                             </span>
                           </span>

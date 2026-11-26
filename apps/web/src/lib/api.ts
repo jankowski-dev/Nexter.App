@@ -868,6 +868,10 @@ export async function fetchTasks(params: Partial<TaskListQuery> = {}): Promise<T
   return apiFetch(`/api/v1/tasks${queryString(params)}`, {}, tasksResponseSchema);
 }
 
+export async function fetchTask(id: string): Promise<Task> {
+  return apiFetch(`/api/v1/tasks/${id}`, {}, taskSchema);
+}
+
 export async function createTask(body: TaskCreateRequest): Promise<Task> {
   return apiPost('/api/v1/tasks', body, taskSchema);
 }

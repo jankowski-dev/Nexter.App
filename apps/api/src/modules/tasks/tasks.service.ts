@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, count, eq, gte, ilike, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import {
   assets,
   taskImages,
@@ -69,7 +69,29 @@ async function loadImages(
   return byTask;
 }
 
-function toContract(row: TaskRecord, images: TaskImage[] = []): Task {
+async function loadAttachmentCounts(
+  executor: DbExecutor,
+  userId: string,
+  taskIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (taskIds.length === 0) return counts;
+
+  const rows = await executor
+    .select({ taskId: taskImages.taskId, count: count() })
+    .from(taskImages)
+    .where(and(eq(taskImages.userId, userId), inArray(taskImages.taskId, taskIds)))
+    .groupBy(taskImages.taskId);
+
+  for (const row of rows) counts.set(row.taskId, Number(row.count));
+  return counts;
+}
+
+function toContract(
+  row: TaskRecord,
+  images: TaskImage[] = [],
+  attachmentCount = images.length,
+): Task {
   return {
     id: row.id,
     title: row.title,
@@ -78,6 +100,7 @@ function toContract(row: TaskRecord, images: TaskImage[] = []): Task {
     priority: row.priority,
     tags: row.tags,
     images,
+    attachmentCount,
     dueAt: row.dueAt?.toISOString() ?? null,
     dueHasTime: row.dueHasTime,
     completedAt: row.completedAt?.toISOString() ?? null,
@@ -157,13 +180,30 @@ export class TasksService {
       )
       .limit(query.limit);
 
-    const images = await loadImages(
+    const counts = await loadAttachmentCounts(
       this.db,
       userId,
       rows.map((row) => row.id),
     );
 
-    return { data: rows.map((row) => toContract(row, images.get(row.id) ?? [])) };
+    return {
+      data: rows.map((row) => toContract(row, [], counts.get(row.id) ?? 0)),
+    };
+  }
+
+  async get(userId: string, id: string): Promise<Task> {
+    const [row] = await this.db
+      .select()
+      .from(tasks)
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'Task not found' });
+    }
+
+    const images = await loadImages(this.db, userId, [row.id]);
+    return toContract(row, images.get(row.id) ?? []);
   }
 
   async create(userId: string, input: TaskCreateRequest, meta: TaskMeta): Promise<Task> {

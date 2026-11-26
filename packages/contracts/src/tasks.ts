@@ -2,7 +2,21 @@ import { z } from 'zod';
 
 export const taskStatusSchema = z.enum(['open', 'done', 'cancelled']);
 export const taskRecurrenceSchema = z.enum(['daily', 'weekly', 'monthly']);
-export const taskImageMimeSchema = z.enum(['image/png', 'image/jpeg', 'image/webp']);
+export const TASK_ATTACHMENT_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'application/pdf',
+  'text/plain',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.rar',
+  'application/zip',
+] as const;
+
+export const taskImageMimeSchema = z.enum(TASK_ATTACHMENT_MIME_TYPES);
 
 export const taskImageSchema = z.object({
   id: z.uuid(),
@@ -21,6 +35,8 @@ export const taskSchema = z.object({
   priority: z.number().int().min(0).max(3),
   tags: z.array(z.string()),
   images: z.array(taskImageSchema),
+  /** Present on list rows; full images are returned by GET /tasks/:id. */
+  attachmentCount: z.number().int().nonnegative().optional(),
   dueAt: z.iso.datetime().nullable(),
   dueHasTime: z.boolean(),
   completedAt: z.iso.datetime().nullable(),
