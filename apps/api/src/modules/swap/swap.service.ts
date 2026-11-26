@@ -1629,17 +1629,17 @@ export class SwapService {
     const userId = auth.user.id;
     const order = await this.requireOrder(userId, orderId);
 
-    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE', 'EXPIRED'].includes(order.status)) {
+    if (!['BUILT', 'READY', 'AWAITING_SIGNATURE', 'EXPIRED', 'CANCELLED'].includes(order.status)) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
         message: `Swap order is ${order.status}`,
       });
     }
 
-    if (order.status === 'EXPIRED' && !order.calldata) {
+    if (['EXPIRED', 'CANCELLED'].includes(order.status) && !order.calldata) {
       throw new ConflictException({
         code: 'SWAP_STATE_INVALID',
-        message: 'Expired order has no signed build',
+        message: `${order.status === 'CANCELLED' ? 'Cancelled' : 'Expired'} order has no signed build`,
       });
     }
 
@@ -1654,12 +1654,19 @@ export class SwapService {
             txHash,
             submittedAt: new Date(),
             updatedAt: new Date(),
+            ...(order.status === 'CANCELLED' ? { cancelledAt: null } : {}),
           })
           .where(
             and(
               eq(swapOrders.id, orderId),
               eq(swapOrders.userId, userId),
-              inArray(swapOrders.status, ['BUILT', 'READY', 'AWAITING_SIGNATURE', 'EXPIRED']),
+              inArray(swapOrders.status, [
+                'BUILT',
+                'READY',
+                'AWAITING_SIGNATURE',
+                'EXPIRED',
+                'CANCELLED',
+              ]),
             ),
           )
           .returning({ id: swapOrders.id });

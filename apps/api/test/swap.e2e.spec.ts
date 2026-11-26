@@ -467,6 +467,14 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .expect(200);
     expect(cancelled.body.status).toBe('CANCELLED');
+
+    const recovered = await agent
+      .post(`/api/v1/swap/orders/${orderId}/submitted`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ txHash: `0x${'c'.repeat(63)}1` })
+      .expect(200);
+    expect(recovered.body.status).toBe('SUBMITTED');
+    expect(recovered.body.cancelledAt).toBeNull();
   }, 60_000);
 
   it('serves an unchanged preview from the 15s cache and calls the provider once', async () => {

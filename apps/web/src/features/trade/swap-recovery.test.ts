@@ -4,13 +4,20 @@ import { selectRecoverableSwapOrders } from './swap-recovery';
 const now = Date.parse('2026-11-26T16:00:00.000Z');
 
 function order(
-  overrides: Partial<{ id: string; status: string; txHash: string | null; createdAt: string }>,
+  overrides: Partial<{
+    id: string;
+    status: string;
+    txHash: string | null;
+    createdAt: string;
+    builtAt: string | null;
+  }>,
 ) {
   return {
     id: 'order-1',
     status: 'AWAITING_SIGNATURE',
     txHash: null,
     createdAt: '2026-11-26T15:53:58.000Z',
+    builtAt: '2026-11-26T15:53:59.000Z',
     ...overrides,
   };
 }
@@ -25,6 +32,13 @@ describe('selectRecoverableSwapOrders', () => {
       [],
     );
     expect(selectRecoverableSwapOrders([order({ status: 'SUBMITTED' })], now)).toEqual([]);
+  });
+
+  it('keeps a recently cancelled order that had a build', () => {
+    expect(selectRecoverableSwapOrders([order({ status: 'CANCELLED' })], now)).toHaveLength(1);
+    expect(
+      selectRecoverableSwapOrders([order({ status: 'CANCELLED', builtAt: null })], now),
+    ).toEqual([]);
   });
 
   it('drops awaiting-signature orders older than the recovery window', () => {

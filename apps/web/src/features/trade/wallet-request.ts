@@ -27,6 +27,7 @@ export function trackWalletRequest(
   options: { timeoutMs: number; onStalled: () => void },
 ): TrackedWalletRequest {
   let settled = false;
+  let stalled = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let resolveOutcome!: (outcome: WalletHashOutcome) => void;
 
@@ -43,12 +44,19 @@ export function trackWalletRequest(
 
   timer = setTimeout(() => {
     if (settled) return;
+    stalled = true;
     options.onStalled();
   }, options.timeoutMs);
 
   request.then(
     (hash) => finish({ status: 'hash', hash }),
-    (error) => finish({ status: 'error', error }),
+    (error) => {
+      // A rejection after a stall is ambiguous: the wallet may have broadcast
+      // the transaction and then lost the connection. Keep the recovery UI open
+      // instead of cancelling an order that may already be on-chain.
+      if (stalled) return;
+      finish({ status: 'error', error });
+    },
   );
 
   return {
