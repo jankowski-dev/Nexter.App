@@ -91,7 +91,7 @@ export function DatePicker({
       {open ? (
         <div
           role="dialog"
-          aria-label={`${label}: календарь`}
+          aria-label="Календарь"
           className="mt-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg"
         >
           <div className="mb-2 flex items-center justify-between gap-2">
