@@ -1,5 +1,14 @@
 import { DEFAULT_REGIME_SETTINGS, DEFAULT_STRATEGY_SETTINGS } from '../defaults';
-import { atrPct, closes, formatPct, formatUsd, numeric, sma } from '../indicators';
+import {
+  atrPct,
+  averageVolumeUsd,
+  closes,
+  formatPct,
+  formatUsd,
+  highestHigh,
+  numeric,
+  sma,
+} from '../indicators';
 import { Reason } from '../reason-codes';
 import type { Regime, TrendPullbackParams } from '../types';
 import type { StrategyContext, StrategyDefinition, StrategySignal } from './index';
@@ -81,6 +90,40 @@ export const trendPullbackStrategy: StrategyDefinition<TrendPullbackParams> = {
           nextState,
           formatPct(params.atrStopMult * atr),
         );
+      }
+
+      // Optional research fallback: a vertical trend may never pull back to the
+      // fast SMA. Buy a confirmed break of the prior lookback high only when
+      // volume expands and volatility is still within the breakout limit.
+      const breakout = params.breakout;
+      if (breakout?.enabled) {
+        const prior = ctx.candles.slice(0, -1);
+        const priorHigh = highestHigh(prior, breakout.lookbackHours);
+        const averageVolume = averageVolumeUsd(prior, breakout.lookbackHours);
+        const currentVolume = Number(
+          (ctx.candles[ctx.candles.length - 1] as (typeof ctx.candles)[number]).volumeUsd,
+        );
+        if (
+          fast > slow &&
+          close > slow &&
+          priorHigh !== null &&
+          Number.isFinite(priorHigh) &&
+          close > priorHigh &&
+          averageVolume !== null &&
+          Number.isFinite(averageVolume) &&
+          averageVolume > 0 &&
+          Number.isFinite(currentVolume) &&
+          currentVolume >= averageVolume * breakout.minVolumeRatio &&
+          atr <= breakout.maxAtrPct
+        ) {
+          return signal(
+            'buy',
+            Reason.TREND_PULLBACK_BREAKOUT,
+            `Trend breakout entry: close ${formatUsd(close)} broke the prior ${breakout.lookbackHours}h high ${formatUsd(priorHigh)} on ${formatPct((currentVolume / averageVolume) * 100)} of average volume while fast SMA ${formatUsd(fast)} leads slow SMA ${formatUsd(slow)}`,
+            nextState,
+            formatPct(params.atrStopMult * atr),
+          );
+        }
       }
 
       return signal(

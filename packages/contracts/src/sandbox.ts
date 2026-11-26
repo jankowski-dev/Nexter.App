@@ -251,6 +251,11 @@ export const sandboxRegimeSettingsSchema = z
     recoveryConfirmBars: sandboxPositiveInteger,
     regimeDwellBars: sandboxPositiveInteger,
     minLiquidityUsd: sandboxNonNegativeDecimalSchema,
+    /**
+     * Optional research mode. Missing means the legacy volume gate so old
+     * settings keep their exact hash and report identity.
+     */
+    liquidityMode: z.enum(['volume', 'execution']).optional(),
   })
   .strict();
 
@@ -264,6 +269,19 @@ export const sandboxStrategySettingsSchema = z
         atrStopMult: z.number().positive(),
         trailActivationPct: sandboxNonNegativeNumber,
         trailPct: sandboxNonNegativeNumber,
+        /**
+         * Optional research breakout fallback. Missing means disabled so old
+         * settings keep their exact hash and report identity.
+         */
+        breakout: z
+          .object({
+            enabled: z.boolean(),
+            lookbackHours: sandboxPositiveInteger,
+            minVolumeRatio: z.number().positive(),
+            maxAtrPct: sandboxNonNegativeNumber,
+          })
+          .strict()
+          .optional(),
       })
       .strict(),
     rangeReversion: z
