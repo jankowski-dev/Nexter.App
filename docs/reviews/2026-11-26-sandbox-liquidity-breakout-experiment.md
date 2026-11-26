@@ -33,6 +33,22 @@ Breakout configuration sweep (lookback 12/24/48, volume ratio 1.5/2, ATR cap 6/8
 - **LINK needs a data/liquidity fix regardless.** Its top-pool 24h average is ~4–9k, so the current volume gate makes the Stage 3 LINK run effectively inactive. The next design should measure liquidity from aggregated pool depth or a broader source, not a single GeckoTerminal pool.
 - **The system intentionally sleeps in CRASH/TREND_DOWN/ILLIQUID.** Volatility alone is not a signal; only TREND_UP/RANGE/RECOVERY have a strategy. Breakout adds an entry for the no-pullback TREND_UP case, not for CRASH.
 
+## Liquidity assumed sufficient (sensitivity)
+
+The owner asked what happens if liquidity is temporarily disabled as a factor. This is exactly `regime.liquidityMode: 'execution'` plus `paper.liquidityCapPct: 100`, i.e. no 24h-volume eligibility and no practical per-bar cap.
+
+| Token   | Baseline |     Assume sufficient | Assume + breakout |
+| ------- | -------: | --------------------: | ----------------: |
+| APR     |   −6.07% | **+0.06%**, DD 15.42% | −5.05%, DD 16.45% |
+| BTCB    |   −9.53% |                −9.52% |            −9.38% |
+| CAKE    |   +1.19% |      +0.25%, DD 7.64% |            −4.40% |
+| ETH     |   −6.89% |                −6.89% |            −4.34% |
+| LINK    |       0% |      −4.76%, DD 8.19% |            −0.98% |
+| WBNB    |   −4.04% |                −4.04% |            −6.75% |
+| Average |   −4.22% |            **−4.15%** |            −5.15% |
+
+Assumed-sufficient liquidity barely changes aggregate return, materially raises drawdown, and makes LINK lose money. It is useful as a **correctness/sensitivity test**, not as a default. Absolute values in this table were produced from a later 4,320-bar window than the first table (small shifts, <0.15 pp), because Stage 3 live runs keep appending candles.
+
 ## Recommendation
 
 Do not change defaults. Keep the new fields opt-in for research. Next: design a proper liquidity measurement (aggregated depth/volume) and a selective breakout rule, then rerun six-token and walk-forward validation before any Stage 3 baseline change.
