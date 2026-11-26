@@ -26,6 +26,10 @@ Owner-approved research experiment. No production defaults, Stage 3 runs, report
 
 Breakout configuration sweep (lookback 12/24/48, volume ratio 1.5/2, ATR cap 6/8/10/12) did not produce a configuration that improved all tokens. The APR result was identical across breakout configs because only the first August entry mattered; BTCB/ETH improved slightly with the tighter filters, while CAKE/WBNB remained worse than baseline.
 
+## Liquidity measurement correction
+
+The earlier "LINK ~4–9k" figure was **not LINK liquidity**. It was the average hourly volume of one GeckoTerminal BSC pool. DexScreener shows the BSC Binance-Peg LINK token with roughly $804k + $188k + smaller pools and ~$200k daily volume; Ethereum LINK is much larger again. A `minLiquidityUsd = 50,000` **average hourly volume** gate therefore requires ~$1.2M daily volume, which is why it excludes BSC LINK even though its pool depth is ample for $100–200 orders. The gate conflates depth, volume and chain/pool selection.
+
 ## Observations
 
 - **Execution liquidity is not a good default.** It wakes LINK and CAKE, but adds many low-quality trades and worsens aggregate return.
