@@ -17,10 +17,12 @@ Current product areas:
 
 Removed (ADR 0090): `ИИ-торговля` module/UI/contracts/API/tab and the bot backtest module/UI/API/contracts/`backtestDefault*` settings. Do not reintroduce them. `ai_*` and `bot_backtest_runs` tables and AI-origin bot columns remain dormant; do not drop them without a separate approved destructive migration and backup.
 
-## Current state (2026-11-25)
+## Current state (2026-11-26)
 
-- Production: `089f052`, deployment `b5a46242-0cdd-41de-9240-8deb7f5b0446`, migration `0055` applied (56 migrations), bundle `assets/index-C_LjVbrf.js`; `/health`/`/ready` 200.
-- The sandbox visual-cleanup batch is deployed: replay timeline/PDF/favorites/strategies Settings/legacy AI+backtest removal. Pre-deploy encrypted backup dump SHA-256 `858c4d761c4f8a5a68e189b7811b7b4f46e1e03f40bc4d1889eb2c1c764e568a`, encrypted `ef9f288e80e015420c48c4a93aabe897821a28ec3ae02d4331c59287bbdfbaad`; restore drill passed (82 tables, 194,651 rows, zero orphan invariants).
+- Production: `0bb85c0`, deployment `948833c7-3811-4b1b-b1b5-002d19fb0d90`, migration `0055` applied (56 migrations), bundle `assets/index--5hzhK8R.js`; `/health`/`/ready` 200.
+- The swap gas-limit fix is deployed (ADR 0092): build/ready/approval return a buffered `gasLimit`, and the wallet sends it as hex `gas`. The failed XNY→USDC order remains `FAILED` with `gas_estimate 531977`; no tokens moved and no ledger rows were created. Verify with a fresh order; never retry the old failed order.
+- Pre-deploy encrypted backup `nexter-2026-11-26T15-14-45-752Z.dump.enc`: dump SHA-256 `46413c164c6e566a4fec111796bc37464ea14af2bb4319ae2d7ae0ca86f15e91`, encrypted SHA-256 `0c5ebe3570db9fc3bb26aa9dd8d74741e9cde121d4f9c2adfa4198c89408aad0`. Restore drill restored 82 tables / 204,870 rows with zero orphan invariants; four count/checksum differences were limited to live `bot_equity_snapshots`/`bot_quote_samples` writes during the drill, so the code-only deploy proceeded.
+- The sandbox visual-cleanup batch (2026-11-25) remains deployed: replay timeline/PDF/favorites/strategies Settings/legacy AI+backtest removal. Its backup evidence: dump SHA-256 `858c4d761c4f8a5a68e189b7811b7b4f46e1e03f40bc4d1889eb2c1c764e568a`, encrypted `ef9f288e80e015420c48c4a93aabe897821a28ec3ae02d4331c59287bbdfbaad`; restore drill passed (82 tables, 194,651 rows, zero orphan invariants).
 - Six sandbox runs are `running`: five Stage 3 (CAKE/BTCB/ETH/LINK/WBNB) plus the owner's Quack AI run. Stage 3 ends 2027-01-20.
 - Stage 3 forward paper validation is active (2026-11-25 → 2027-01-20): five separate clean runs CAKE/BTCB/ETH/LINK/WBNB (BSC/GeckoTerminal 1h, $1,000 each, current Stage 1B/1C defaults). They must remain `running`; never stop/start/edit/re-run them without explicit owner approval.
 - Stage 4 (real money) remains a separate decision. No real-money code path exists in the sandbox.
