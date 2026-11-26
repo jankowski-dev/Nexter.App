@@ -164,9 +164,10 @@ function validateRegimeSettings(settings: SandboxDecisionSettings): void {
   if (
     regime.liquidityMode !== undefined &&
     regime.liquidityMode !== 'volume' &&
-    regime.liquidityMode !== 'execution'
+    regime.liquidityMode !== 'execution' &&
+    regime.liquidityMode !== 'ignored'
   ) {
-    invalid('settings.regime.liquidityMode must be volume or execution');
+    invalid('settings.regime.liquidityMode must be volume, execution or ignored');
   }
   for (const key of [
     'trendSpreadPct',

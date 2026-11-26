@@ -64,7 +64,7 @@ export class SandboxRunService {
 
     const initialCapitalUsd = normalizeCapital(input.initialCapitalUsd);
     const settings = input.settings ?? DEFAULT_SETTINGS;
-    const paper = input.paper ?? DEFAULT_PAPER_SETTINGS;
+    const paper = effectivePaper(settings, input.paper ?? DEFAULT_PAPER_SETTINGS);
     const config = runConfig(tokenKeys, settings, paper);
 
     const runId = await this.repository.createRun({
@@ -118,7 +118,7 @@ export class SandboxRunService {
     }
 
     const settings = input.settings ?? current.settings;
-    const paper = input.paper ?? current.paper;
+    const paper = effectivePaper(settings, input.paper ?? current.paper);
     const initialCapitalUsd =
       input.initialCapitalUsd === undefined
         ? normalizeCapital(run.initialCapitalUsd)
@@ -538,6 +538,16 @@ function normalizeCapital(value: string): string {
     });
   }
   return parsed.toFixed(2);
+}
+
+function effectivePaper(
+  settings: SandboxDecisionSettings,
+  paper: PaperRunSettings,
+): PaperRunSettings {
+  // `ignored` is an explicit research mode: no volume gate and no practical
+  // per-bar cap. Persist the effective 100% cap so the frozen config and its
+  // version describe what actually executed.
+  return settings.regime.liquidityMode === 'ignored' ? { ...paper, liquidityCapPct: 100 } : paper;
 }
 
 function runConfig(

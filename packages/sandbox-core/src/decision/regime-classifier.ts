@@ -232,9 +232,10 @@ function evaluateRaw(
   if (avgVolumeUsd === null) {
     return { rawRegime: 'UNKNOWN', rawReason: Reason.REGIME_UNKNOWN, features };
   }
-  // Research mode: keep the token eligible and let the per-bar execution cap
-  // size/partial-fill orders instead of rejecting the whole token by 24h volume.
-  if (settings.liquidityMode !== 'execution') {
+  // Research modes: keep the token eligible instead of rejecting the whole
+  // token by 24h volume. `execution` still caps fills; `ignored` removes the
+  // cap inside PaperRunner as well.
+  if ((settings.liquidityMode ?? 'volume') === 'volume') {
     const minLiquidityUsd = Number(settings.minLiquidityUsd);
     if (!Number.isFinite(minLiquidityUsd)) {
       return { rawRegime: 'UNKNOWN', rawReason: Reason.REGIME_UNKNOWN, features };

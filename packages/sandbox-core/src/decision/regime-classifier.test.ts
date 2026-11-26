@@ -307,11 +307,17 @@ describe('classifyRegime raw priority', () => {
       ...SETTINGS,
       liquidityMode: 'execution',
     });
+    const ignoredGate = classifyAtEnd(candles, null, {
+      ...SETTINGS,
+      liquidityMode: 'ignored',
+    });
 
     expect(volumeGate.rawRegime).toBe('ILLIQUID');
     expect(volumeGate.reasonCode).toBe(Reason.REGIME_LOW_LIQUIDITY);
     expect(executionGate.rawRegime).toBe('TREND_UP');
     expect(executionGate.reasonCode).toBe(Reason.REGIME_TREND_UP);
+    expect(ignoredGate.rawRegime).toBe('TREND_UP');
+    expect(ignoredGate.reasonCode).toBe(Reason.REGIME_TREND_UP);
   });
 
   it('classifies a strong uptrend as TREND_UP with normal ATR', () => {

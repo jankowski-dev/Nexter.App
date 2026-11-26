@@ -164,7 +164,7 @@ export interface RegimeSettings {
   readonly regimeDwellBars: number;
   readonly minLiquidityUsd: string;
   /** Optional research mode; absent means the legacy volume gate. */
-  readonly liquidityMode?: 'volume' | 'execution';
+  readonly liquidityMode?: 'volume' | 'execution' | 'ignored';
 }
 
 export interface SandboxDecisionSettings {

@@ -255,7 +255,7 @@ export const sandboxRegimeSettingsSchema = z
      * Optional research mode. Missing means the legacy volume gate so old
      * settings keep their exact hash and report identity.
      */
-    liquidityMode: z.enum(['volume', 'execution']).optional(),
+    liquidityMode: z.enum(['volume', 'execution', 'ignored']).optional(),
   })
   .strict();
 

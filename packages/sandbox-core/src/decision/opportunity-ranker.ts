@@ -100,7 +100,9 @@ export function rankOpportunities(
   settings: SandboxDecisionSettings,
 ): RankingResult {
   const minimumLiquidity =
-    settings.regime.liquidityMode === 'execution' ? 0 : Number(settings.regime.minLiquidityUsd);
+    (settings.regime.liquidityMode ?? 'volume') === 'volume'
+      ? Number(settings.regime.minLiquidityUsd)
+      : 0;
   const minimum = Number.isFinite(minimumLiquidity) ? minimumLiquidity : 0;
   const scored: ScoredCandidate[] = [];
   const dropped: RankingDrop[] = [];

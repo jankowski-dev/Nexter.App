@@ -109,7 +109,10 @@ export class SandboxReplayService {
 
     const initialCapitalUsd = normalizeCapital(input.initialCapitalUsd);
     const settings = (input.settings ?? DEFAULT_SETTINGS) as unknown as Record<string, unknown>;
-    const paper = (input.paper ?? DEFAULT_PAPER_SETTINGS) as unknown as Record<string, unknown>;
+    const paper = effectivePaper(
+      settings,
+      (input.paper ?? DEFAULT_PAPER_SETTINGS) as unknown as Record<string, unknown>,
+    );
     const seed = input.seed ?? SANDBOX_REPLAY_DEFAULT_SEED;
 
     const record = await this.replays.createReplay({
@@ -396,6 +399,14 @@ function isTerminal(record: SandboxReplayDetailRecord): boolean {
   return (
     record.status === 'completed' || record.status === 'failed' || record.status === 'cancelled'
   );
+}
+
+function effectivePaper(
+  settings: Record<string, unknown>,
+  paper: Record<string, unknown>,
+): Record<string, unknown> {
+  const regime = settings.regime as { liquidityMode?: string } | undefined;
+  return regime?.liquidityMode === 'ignored' ? { ...paper, liquidityCapPct: 100 } : paper;
 }
 
 /** Converts a repository row to the owner-facing summary. */

@@ -9,9 +9,10 @@ The APR replay exposed two problems: the regime's liquidity gate marked most bar
 
 ## Decisions
 
-1. **Liquidity mode.** `regime.liquidityMode?: 'volume' | 'execution'`.
+1. **Liquidity mode.** `regime.liquidityMode?: 'volume' | 'execution' | 'ignored'`.
    - Missing field / `volume`: current behavior, 24h average volume below `minLiquidityUsd` → `ILLIQUID`; ranking drops below the same minimum.
    - `execution`: the token is not rejected by the 24h volume gate; actual fills remain capped by `liquidityCapPct` of the latest 1h volume and can partially fill. Ranking uses a zero liquidity minimum, so a low-volume token can still be ranked and sized down by execution.
+   - `ignored`: research-only "assume sufficient liquidity". The gate and ranking minimum are removed and the API freezes the effective paper cap at 100%; `PaperRunner` also applies that cap for direct/live calls. The report config shows the effective 100% cap.
    - No schema migration: settings are JSON. Existing rows and their `settingsVersion` stay byte-identical because the field is optional and **no default is injected on parse**.
 2. **Breakout entry.** `strategies.trendPullback.breakout?: { enabled, lookbackHours, minVolumeRatio, maxAtrPct }`.
    - Disabled when absent. When enabled and there is no position, a TREND_UP token may enter if close > highest high of the prior `lookbackHours`, current volume ≥ `minVolumeRatio` × prior average volume, and ATR% ≤ `maxAtrPct`. Stop/trailing remain the existing ATR/trailing rules.

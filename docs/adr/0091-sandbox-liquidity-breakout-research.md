@@ -14,9 +14,10 @@ The sandbox rules are frozen for Stage 3, and existing replay hashes must remain
 
 ## Decision
 
-1. Add `regime.liquidityMode?: 'volume' | 'execution'`.
+1. Add `regime.liquidityMode?: 'volume' | 'execution' | 'ignored'`.
    - Missing / `volume` is the current gate.
    - `execution` removes the 24h-volume eligibility and ranking gate; fills remain bounded by `liquidityCapPct` of the current 1h volume and may partially fill.
+   - `ignored` additionally removes the practical per-bar cap: the API freezes `paper.liquidityCapPct = 100` and `PaperRunner` uses the same effective cap. This is explicitly a research-only "assume sufficient liquidity" mode and its report config shows 100%.
 2. Add `strategies.trendPullback.breakout?: { enabled, lookbackHours, minVolumeRatio, maxAtrPct }`.
    - Missing / disabled is the current behavior.
    - When enabled and flat in `TREND_UP`, buy a close above the prior lookback high only if current volume ≥ the prior average × `minVolumeRatio` and ATR% ≤ `maxAtrPct`.

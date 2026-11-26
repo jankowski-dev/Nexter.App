@@ -74,6 +74,12 @@ describe('sandbox research settings contracts', () => {
     });
 
     expect(parsed.regime.liquidityMode).toBe('execution');
+    expect(
+      sandboxDecisionSettingsSchema.parse({
+        ...input,
+        regime: { ...input.regime, liquidityMode: 'ignored' },
+      }).regime.liquidityMode,
+    ).toBe('ignored');
     expect(parsed.strategies.trendPullback.breakout).toEqual({
       enabled: true,
       lookbackHours: 24,

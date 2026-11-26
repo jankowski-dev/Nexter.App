@@ -39,7 +39,7 @@ The earlier "LINK ~4–9k" figure was **not LINK liquidity**. It was the average
 
 ## Liquidity assumed sufficient (sensitivity)
 
-The owner asked what happens if liquidity is temporarily disabled as a factor. This is exactly `regime.liquidityMode: 'execution'` plus `paper.liquidityCapPct: 100`, i.e. no 24h-volume eligibility and no practical per-bar cap.
+The owner asked what happens if liquidity is temporarily disabled as a factor. This is now the explicit `regime.liquidityMode: 'ignored'` research mode: no 24h-volume eligibility, no ranking minimum and the effective paper cap frozen at 100%. The results below were produced with the equivalent `execution` + `paper.liquidityCapPct: 100` before the explicit mode was added; the effective execution is identical.
 
 | Token   | Baseline |     Assume sufficient | Assume + breakout |
 | ------- | -------: | --------------------: | ----------------: |
