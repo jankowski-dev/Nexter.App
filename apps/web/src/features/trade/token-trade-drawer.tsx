@@ -49,6 +49,12 @@ import {
   isSwapSettled,
   phaseAfterExecutionFailure,
 } from './swap-execution';
+import {
+  isTransactionHash,
+  trackWalletRequest,
+  WALLET_RESPONSE_TIMEOUT_MS,
+  type TrackedWalletRequest,
+} from './wallet-request';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
 import { useDebouncedValue } from '@/lib/use-debounced-value';
@@ -69,6 +75,7 @@ type Phase =
   | 'building'
   | 'approval'
   | 'signing'
+  | 'wallet_stalled'
   | 'submitting'
   | 'submit_failed'
   | 'confirming'
@@ -182,6 +189,10 @@ export function TokenTradeDrawer({
   const [, setBuild] = useState<SwapBuildResponse | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>('idle');
+  const [stalledKind, setStalledKind] = useState<'approval' | 'swap'>('swap');
+  const [manualHash, setManualHash] = useState('');
+  const [manualHashError, setManualHashError] = useState<string | null>(null);
+  const walletRequestRef = useRef<TrackedWalletRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stepUpOpen, setStepUpOpen] = useState(false);
   const [stepUpCode, setStepUpCode] = useState('');
@@ -228,6 +239,11 @@ export function TokenTradeDrawer({
   const quoteAddress = quoteAsset?.address ?? null;
   const tokenIn = mode === 'buy' ? quoteAddress : assetAddress;
   const tokenOut = mode === 'buy' ? assetAddress : quoteAddress;
+  const explorerUrl = wallet.address
+    ? chainCode === 'ethereum'
+      ? `https://etherscan.io/address/${wallet.address}`
+      : `https://bscscan.com/address/${wallet.address}`
+    : null;
   const allowlistRequired = config.data?.walletAllowlistConfigured ?? false;
   const previewAmount = useDebouncedValue(amount, 500);
   const remainingForSell =
@@ -452,6 +468,44 @@ export function TokenTradeDrawer({
     throw new Error('Не удалось собрать обмен');
   }
 
+  async function walletHash(request: Promise<string>, kind: 'approval' | 'swap'): Promise<string> {
+    const tracked = trackWalletRequest(request, {
+      timeoutMs: WALLET_RESPONSE_TIMEOUT_MS,
+      onStalled: () => {
+        if (!mountedRef.current) return;
+        setStalledKind(kind);
+        setManualHashError(null);
+        setPhase('wallet_stalled');
+      },
+    });
+    walletRequestRef.current = tracked;
+
+    try {
+      const outcome = await tracked.outcome;
+      if (outcome.status === 'error') throw outcome.error;
+      return outcome.hash;
+    } finally {
+      if (walletRequestRef.current === tracked) walletRequestRef.current = null;
+    }
+  }
+
+  function applyManualHash(): void {
+    const hash = manualHash.trim();
+    if (!isTransactionHash(hash)) {
+      setManualHashError('Введите хеш транзакции: 0x и 64 hex-символа.');
+      return;
+    }
+    if (!walletRequestRef.current) {
+      setManualHashError('Ожидание уже завершено. Обновите страницу и проверьте ордер.');
+      return;
+    }
+
+    setManualHashError(null);
+    setManualHash('');
+    walletRequestRef.current.submitManualHash(hash);
+    setPhase(stalledKind === 'approval' ? 'approval' : 'submitting');
+  }
+
   async function execute(): Promise<void> {
     if (!chainCode || !chain || !tokenIn || !tokenOut || !isPositiveDecimal(amount)) {
       setError('Заполните сумму и проверьте сеть.');
@@ -472,6 +526,9 @@ export function TokenTradeDrawer({
 
     handledOrderRef.current = null;
     cancelWaitRef.current = false;
+    walletRequestRef.current = null;
+    setManualHash('');
+    setManualHashError(null);
     setError(null);
     setPhase('quoting');
     setBuild(null);
@@ -512,13 +569,16 @@ export function TokenTradeDrawer({
           let approvalHash: string;
 
           try {
-            approvalHash = await wallet.sendTransaction({
-              chainId: chainIdFor(quoted.chain as 'bsc' | 'ethereum'),
-              to: prepared.to,
-              data: prepared.calldata,
-              value: prepared.value,
-              gas: prepared.gasLimit ?? undefined,
-            });
+            approvalHash = await walletHash(
+              wallet.sendTransaction({
+                chainId: chainIdFor(quoted.chain as 'bsc' | 'ethereum'),
+                to: prepared.to,
+                data: prepared.calldata,
+                value: prepared.value,
+                gas: prepared.gasLimit ?? undefined,
+              }),
+              'approval',
+            );
           } catch (err) {
             await cancelSwap(quoted.id).catch(() => undefined);
             throw err;
@@ -554,13 +614,16 @@ export function TokenTradeDrawer({
 
       let hash: string;
       try {
-        hash = await wallet.sendTransaction({
-          chainId: chainIdFor(quoted.chain as 'bsc' | 'ethereum'),
-          to: built.routerAddress,
-          data: built.calldata,
-          value: built.transactionValue ?? '0',
-          gas: built.gasLimit ?? undefined,
-        });
+        hash = await walletHash(
+          wallet.sendTransaction({
+            chainId: chainIdFor(quoted.chain as 'bsc' | 'ethereum'),
+            to: built.routerAddress,
+            data: built.calldata,
+            value: built.transactionValue ?? '0',
+            gas: built.gasLimit ?? undefined,
+          }),
+          'swap',
+        );
       } catch (err) {
         await cancelSwapSigning(quoted.id).catch(() => undefined);
         throw err;
@@ -602,13 +665,15 @@ export function TokenTradeDrawer({
     }
 
     cancelWaitRef.current = true;
+    setManualHash('');
+    setManualHashError(null);
     setPhase('idle');
     setError('Ожидание ответа кошелька отменено. Если запрос ещё висит в кошельке, отклоните его.');
 
     // A signature request has not broadcast anything yet, so it is safe to put the
     // order back to READY. An approval request may already be broadcast; leave it
     // alone and let the wallet response (or expiry/supersede) decide.
-    if (order && phase === 'signing') {
+    if (order && (phase === 'signing' || (phase === 'wallet_stalled' && stalledKind === 'swap'))) {
       await cancelSwapSigning(order.id).catch(() => undefined);
     }
   }
@@ -834,9 +899,11 @@ export function TokenTradeDrawer({
                             ? 'Подтверждаю approval…'
                             : phase === 'signing'
                               ? 'Подписываю…'
-                              : phase === 'submitting'
-                                ? 'Отправляю…'
-                                : 'Ожидаю подтверждение…'
+                              : phase === 'wallet_stalled'
+                                ? 'Ожидаю хеш…'
+                                : phase === 'submitting'
+                                  ? 'Отправляю…'
+                                  : 'Ожидаю подтверждение…'
                       : isBuy
                         ? `Купить ${assetSymbol}`
                         : `Продать ${assetSymbol}`}
@@ -1215,7 +1282,60 @@ export function TokenTradeDrawer({
               </div>
             ) : null}
 
-            {phase === 'signing' || phase === 'approval' ? (
+            {phase === 'wallet_stalled' ? (
+              <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                <p>
+                  {stalledKind === 'approval'
+                    ? 'Кошелёк не вернул хеш approval.'
+                    : 'Кошелёк не вернул хеш транзакции.'}{' '}
+                  Если операция уже прошла, вставьте её хеш — ордер будет учтён.
+                </p>
+                <Input
+                  value={manualHash}
+                  onChange={(event) => {
+                    setManualHash(event.target.value);
+                    setManualHashError(null);
+                  }}
+                  placeholder="0x…"
+                  className="h-9 font-mono text-xs"
+                  aria-invalid={Boolean(manualHashError)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {manualHashError ? <p className="text-xs text-red-700">{manualHashError}</p> : null}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    className="h-8 px-3 text-xs"
+                    onClick={applyManualHash}
+                    disabled={!manualHash.trim()}
+                  >
+                    Учесть хеш
+                  </Button>
+                  {explorerUrl ? (
+                    <a
+                      href={explorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs font-medium text-emerald-700 underline-offset-2 hover:underline"
+                    >
+                      История кошелька
+                    </a>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    className="h-8 px-3 text-xs"
+                    onClick={() => void cancelWalletWait()}
+                  >
+                    Я отклонил запрос
+                  </Button>
+                </div>
+                <p className="text-xs text-amber-700">
+                  Не отправляйте новую транзакцию, пока не проверите историю кошелька: подпись могла
+                  уже пройти.
+                </p>
+              </div>
+            ) : phase === 'signing' || phase === 'approval' ? (
               <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                 <p>Ожидаю ответ кошелька. Если вы отклонили запрос, нажмите «Отменить ожидание».</p>
                 <Button

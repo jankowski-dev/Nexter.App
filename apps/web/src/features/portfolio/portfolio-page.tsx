@@ -19,6 +19,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router';
 import { useCallback, useEffect, useState } from 'react';
 import type { Asset, TradeGroupSummary } from '@nexter/contracts';
 import { TradesPanel } from '../trades/trades-panel';
+import { SwapRecoveryPanel } from '../trade/swap-recovery-panel';
 import { TokenTradeDrawer } from '../trade/token-trade-drawer';
 import { useWatchlistLogos } from '../watchlist/use-watchlist-logos';
 import { AssetDrawer } from './asset-drawer';
@@ -398,7 +399,10 @@ export function PortfolioPage() {
 
       {tab === 'tokens' ? <WatchlistPage embedded /> : null}
       {tab === 'orders' ? (
-        <TradesPanel mode="journal" onOpenGroup={openTradeGroup} logos={watchlistLogos} />
+        <>
+          <SwapRecoveryPanel />
+          <TradesPanel mode="journal" onOpenGroup={openTradeGroup} logos={watchlistLogos} />
+        </>
       ) : null}
       {tab === 'operations' ? <OperationsPage embedded /> : null}
       {tab === 'robots' ? <TestingPage /> : null}
