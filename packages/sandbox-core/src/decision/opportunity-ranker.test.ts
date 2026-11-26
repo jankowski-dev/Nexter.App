@@ -83,6 +83,17 @@ describe('rankOpportunities score', () => {
     expect(result.ranked[0]?.score).toBe('0.150000');
   });
 
+  it('does not drop a low-volume candidate in execution-liquidity mode', () => {
+    const settings: SandboxDecisionSettings = {
+      ...SETTINGS,
+      regime: { ...SETTINGS.regime, liquidityMode: 'execution' },
+    };
+    const result = rankOpportunities([candidate('token', { avgVolumeUsd: '100' })], settings);
+
+    expect(result.dropped).toEqual([]);
+    expect(result.ranked[0]?.score).toBe('0.200000');
+  });
+
   it('sorts by score descending and assigns 1-based ranks', () => {
     const result = rankOpportunities(
       [

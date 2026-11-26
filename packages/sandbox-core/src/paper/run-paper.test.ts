@@ -101,6 +101,20 @@ describe('runPaperFromCandles', () => {
     expect(first.result.eventHash).toBe(first.report.eventHash);
   });
 
+  it('persists the effective 100% cap for the ignored liquidity research mode', async () => {
+    const input = helperInput(makeCandles(closes(240), { start: T0 }), {
+      settings: {
+        ...DEFAULT_SETTINGS,
+        regime: { ...DEFAULT_SETTINGS.regime, liquidityMode: 'ignored' },
+      },
+      paper: { ...DEFAULT_PAPER_SETTINGS, liquidityCapPct: 1 },
+    });
+
+    const { report } = await runPaperFromCandles(input);
+
+    expect(report.config.liquidityCapPct).toBe(100);
+  });
+
   it('starts the report period at evaluateFrom and keeps the prefix as lookback', async () => {
     const input = helperInput(makeCandles(closes(300), { start: T0 }), {
       evaluateFrom: T0 + 100 * HOUR,

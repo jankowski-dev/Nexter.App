@@ -415,6 +415,34 @@ describe('SandboxReplayService create', () => {
     );
   });
 
+  it('freezes the effective 100% cap for ignored-liquidity research', async () => {
+    const h = harness({ evaluationBars: 2160 });
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      regime: { ...DEFAULT_SETTINGS.regime, liquidityMode: 'ignored' },
+    } as unknown as SandboxReplayCreateRequest['settings'];
+
+    await h.service.create(
+      USER,
+      {
+        name: 'ignored',
+        tokenKeys: [TOKEN_A],
+        periodDays: 90,
+        initialCapitalUsd: '1000',
+        settings,
+        allowPartial: false,
+      },
+      {},
+    );
+
+    expect(h.createReplay).toHaveBeenCalledWith(
+      expect.objectContaining({
+        settings,
+        paper: { ...DEFAULT_PAPER_SETTINGS, liquidityCapPct: 100 },
+      }),
+    );
+  });
+
   it('blocks a partial window without explicit acceptance', async () => {
     const h = harness({ evaluationBars: 480, firstBarOffset: 240 });
     await expectCode(

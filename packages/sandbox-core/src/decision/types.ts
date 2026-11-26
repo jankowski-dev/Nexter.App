@@ -110,6 +110,13 @@ export interface DecisionResult {
   readonly eventHash: string;
 }
 
+export interface TrendBreakoutParams {
+  readonly enabled: boolean;
+  readonly lookbackHours: number;
+  readonly minVolumeRatio: number;
+  readonly maxAtrPct: number;
+}
+
 export interface TrendPullbackParams {
   readonly fastPeriod: number;
   readonly slowPeriod: number;
@@ -117,6 +124,8 @@ export interface TrendPullbackParams {
   readonly atrStopMult: number;
   readonly trailActivationPct: number;
   readonly trailPct: number;
+  /** Optional research breakout fallback; absent means disabled. */
+  readonly breakout?: TrendBreakoutParams;
 }
 
 export interface RangeReversionParams {
@@ -154,6 +163,8 @@ export interface RegimeSettings {
   readonly recoveryConfirmBars: number;
   readonly regimeDwellBars: number;
   readonly minLiquidityUsd: string;
+  /** Optional research mode; absent means the legacy volume gate. */
+  readonly liquidityMode?: 'volume' | 'execution' | 'ignored';
 }
 
 export interface SandboxDecisionSettings {

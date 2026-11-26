@@ -320,7 +320,13 @@ export class PaperRunner {
     const { runId, seed, configVersion, dataSnapshotId, settings } = input;
     const runSettings = validateRunSettings(input);
     const { timeframe, step, initialCapitalUsd } = runSettings;
-    const paper = input.paper;
+    // `ignored` is an explicit research mode: no 24h gate (decision engine) and
+    // no practical per-bar liquidity cap. The effective 100% cap is persisted in
+    // the report config so the run remains explainable.
+    const paper =
+      input.settings.regime.liquidityMode === 'ignored'
+        ? { ...input.paper, liquidityCapPct: 100 }
+        : input.paper;
 
     const tokenIds = [...input.tokenIds].sort(compareCodeUnits);
     if (tokenIds.length === 0) {

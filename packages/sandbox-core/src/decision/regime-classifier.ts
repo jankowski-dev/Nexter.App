@@ -228,13 +228,21 @@ function evaluateRaw(
     return { rawRegime: 'ILLIQUID', rawReason: Reason.REGIME_STALE_DATA, features };
   }
 
-  const minLiquidityUsd = Number(settings.minLiquidityUsd);
   const avgVolumeUsd = raw.avgVolumeUsd;
-  if (!Number.isFinite(minLiquidityUsd) || avgVolumeUsd === null) {
+  if (avgVolumeUsd === null) {
     return { rawRegime: 'UNKNOWN', rawReason: Reason.REGIME_UNKNOWN, features };
   }
-  if (avgVolumeUsd < minLiquidityUsd) {
-    return { rawRegime: 'ILLIQUID', rawReason: Reason.REGIME_LOW_LIQUIDITY, features };
+  // Research modes: keep the token eligible instead of rejecting the whole
+  // token by 24h volume. `execution` still caps fills; `ignored` removes the
+  // cap inside PaperRunner as well.
+  if ((settings.liquidityMode ?? 'volume') === 'volume') {
+    const minLiquidityUsd = Number(settings.minLiquidityUsd);
+    if (!Number.isFinite(minLiquidityUsd)) {
+      return { rawRegime: 'UNKNOWN', rawReason: Reason.REGIME_UNKNOWN, features };
+    }
+    if (avgVolumeUsd < minLiquidityUsd) {
+      return { rawRegime: 'ILLIQUID', rawReason: Reason.REGIME_LOW_LIQUIDITY, features };
+    }
   }
 
   const atrPct = raw.atrPct;

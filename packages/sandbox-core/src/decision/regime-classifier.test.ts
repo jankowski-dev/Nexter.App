@@ -295,6 +295,31 @@ describe('classifyRegime raw priority', () => {
     expect(result.state.features.avgVolumeUsd).toBe('10000.00');
   });
 
+  it('can bypass the 24h volume gate in execution-liquidity mode', () => {
+    const candles = makeSeries({
+      count: 30,
+      startPrice: 100,
+      stepPct: 1,
+      volumeUsd: 10_000,
+    });
+    const volumeGate = classifyAtEnd(candles);
+    const executionGate = classifyAtEnd(candles, null, {
+      ...SETTINGS,
+      liquidityMode: 'execution',
+    });
+    const ignoredGate = classifyAtEnd(candles, null, {
+      ...SETTINGS,
+      liquidityMode: 'ignored',
+    });
+
+    expect(volumeGate.rawRegime).toBe('ILLIQUID');
+    expect(volumeGate.reasonCode).toBe(Reason.REGIME_LOW_LIQUIDITY);
+    expect(executionGate.rawRegime).toBe('TREND_UP');
+    expect(executionGate.reasonCode).toBe(Reason.REGIME_TREND_UP);
+    expect(ignoredGate.rawRegime).toBe('TREND_UP');
+    expect(ignoredGate.reasonCode).toBe(Reason.REGIME_TREND_UP);
+  });
+
   it('classifies a strong uptrend as TREND_UP with normal ATR', () => {
     const candles = makeSeries({ count: 30, startPrice: 100, stepPct: 0.8 });
     const result = classifyAtEnd(candles);

@@ -76,6 +76,14 @@ describe('approved sandbox defaults', () => {
 });
 
 describe('settingsVersion', () => {
+  it('keeps the frozen Stage 1B default hash stable for existing replays', () => {
+    // APR replay 933da2de-… stores this exact settingsVersion. Optional
+    // research fields must not be injected into the default object.
+    expect(settingsVersion(DEFAULT_SETTINGS)).toBe(
+      'cc3d30cf416f7fac9a96b96d40868050cce7e68cb300f47d17fc92b789f1a26c',
+    );
+  });
+
   it('is a stable sha256 hex string across calls', () => {
     const settings = cloneSettings();
     const first = settingsVersion(settings);

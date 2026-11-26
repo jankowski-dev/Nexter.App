@@ -161,6 +161,14 @@ function validateRegimeSettings(settings: SandboxDecisionSettings): void {
     );
   }
   requireDecimal(regime.minLiquidityUsd, 'settings.regime.minLiquidityUsd');
+  if (
+    regime.liquidityMode !== undefined &&
+    regime.liquidityMode !== 'volume' &&
+    regime.liquidityMode !== 'execution' &&
+    regime.liquidityMode !== 'ignored'
+  ) {
+    invalid('settings.regime.liquidityMode must be volume, execution or ignored');
+  }
   for (const key of [
     'trendSpreadPct',
     'trendMaxAtrPct',
@@ -191,6 +199,24 @@ function validateStrategySettings(settings: SandboxDecisionSettings): void {
     'settings.strategies.trendPullback.trailActivationPct',
   );
   requireNonNegativeNumber(trendPullback.trailPct, 'settings.strategies.trendPullback.trailPct');
+  if (trendPullback.breakout !== undefined) {
+    requireObject(trendPullback.breakout, 'settings.strategies.trendPullback.breakout');
+    if (typeof trendPullback.breakout.enabled !== 'boolean') {
+      invalid('settings.strategies.trendPullback.breakout.enabled must be a boolean');
+    }
+    requirePositiveInteger(
+      trendPullback.breakout.lookbackHours,
+      'settings.strategies.trendPullback.breakout.lookbackHours',
+    );
+    requirePositiveNumber(
+      trendPullback.breakout.minVolumeRatio,
+      'settings.strategies.trendPullback.breakout.minVolumeRatio',
+    );
+    requireNonNegativeNumber(
+      trendPullback.breakout.maxAtrPct,
+      'settings.strategies.trendPullback.breakout.maxAtrPct',
+    );
+  }
 
   requirePositiveInteger(rangeReversion.lookback, 'settings.strategies.rangeReversion.lookback');
   requireNonNegativeNumber(

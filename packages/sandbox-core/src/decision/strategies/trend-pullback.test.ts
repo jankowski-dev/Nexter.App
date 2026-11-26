@@ -78,6 +78,43 @@ function flatThenLast(lastClose: number, count = 20): Candle[] {
   return makeCandlesFromCloses(values);
 }
 
+describe('trend pullback breakout experiment', () => {
+  const breakout: TrendPullbackParams = {
+    ...PARAMS,
+    breakout: { enabled: true, lookbackHours: 3, minVolumeRatio: 1, maxAtrPct: 10 },
+  };
+
+  it('buys a prior-high breakout when pullback is absent', () => {
+    const candles = makeSeries({ count: 30, startPrice: 100, stepPct: 1 });
+    const result = evaluate(candles, {}, breakout);
+
+    expect(result.action).toBe('buy');
+    expect(result.reasonCode).toBe(Reason.TREND_PULLBACK_BREAKOUT);
+    expect(result.reasonText).toContain('broke the prior');
+    expect(result.stopLossPct).not.toBeNull();
+  });
+
+  it('stays disabled when the optional block is absent', () => {
+    const candles = makeSeries({ count: 30, startPrice: 100, stepPct: 1 });
+    const result = evaluate(candles);
+
+    expect(result.action).toBe('hold');
+    expect(result.reasonCode).toBe(Reason.TREND_PULLBACK_HOLD);
+  });
+
+  it('requires volume expansion above the prior average', () => {
+    const candles = makeSeries({ count: 30, startPrice: 100, stepPct: 1 });
+    const result = evaluate(
+      candles,
+      {},
+      { ...breakout, breakout: { ...breakout.breakout!, minVolumeRatio: 2 } },
+    );
+
+    expect(result.action).toBe('hold');
+    expect(result.reasonCode).toBe(Reason.TREND_PULLBACK_HOLD);
+  });
+});
+
 describe('trend pullback strategy', () => {
   it('buys a pullback inside an uptrend and sets the ATR stop', () => {
     const candles = risingThenPullback();
