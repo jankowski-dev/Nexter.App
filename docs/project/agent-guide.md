@@ -97,7 +97,7 @@ Browser → Fastify/Nest guards → controller (Zod pipe) → service → Drizzl
 - `submit_failed`: same hash must be retried; never sign twice.
 - `SWAP_CLOSE_GROUP_BUSY`: do not bypass; wait/cancel/supersede only via service.
 - Wallet rejection may not reject the WalletConnect promise; UI has “Отменить ожидание”. If a hash arrives after cancel, it is still submitted (never leave a broadcast tx untracked).
-- A wallet can broadcast `eth_sendTransaction` without returning its hash. After 90 seconds the drawers switch to manual-hash recovery without cancelling the order; `Крипта → Ордера` surfaces recent stalled swaps. See ADR 0093.
+- A wallet can broadcast `eth_sendTransaction` without returning its hash. After 90 seconds the drawers switch to manual-hash recovery without cancelling the order; a late rejection is ignored. `Крипта → Ордера` surfaces recent stalled and built-cancelled swaps; `submitted` accepts a built `CANCELLED` order. See ADR 0093.
 - `swap_events` is the diagnostic source; don't put technical order IDs in the primary UI.
 
 ## 8. Imports

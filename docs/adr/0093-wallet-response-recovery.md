@@ -8,15 +8,16 @@ A production POP buy broadcast successfully (`0xfc69a3…9eb1`, status `0x1`, ex
 
 The transaction and the order matched exactly: same wallet, router, calldata, block and token movements. Only the JSON-RPC response was lost. WalletConnect has a known failure mode where a request can hang after the wallet has already approved and broadcast it.
 
-The existing `POST /swap/orders/:id/submitted` endpoint already accepts a hash for `AWAITING_SIGNATURE` and built `EXPIRED` orders, verifies it through tracking and writes the audit/event chain. The missing part was a UI that survives a lost response and a way to reach an order after the drawer is closed.
+The existing `POST /swap/orders/:id/submitted` endpoint already accepts a hash for `AWAITING_SIGNATURE` and built `EXPIRED` orders, verifies it through tracking and writes the audit/event chain. The missing part was a UI that survives a lost response and a way to reach an order after the drawer is closed. The production order had in fact been moved to `CANCELLED` by the local cancel flow after the wallet request stalled; a broadcast transaction must still be recoverable from that state when the order has a signed build.
 
 ## Decision
 
-1. Track every wallet transaction request with a 90-second stall signal. The wallet request is **not cancelled** and the order is **not** returned to `READY`; a late wallet response still wins.
+1. Track every wallet transaction request with a 90-second stall signal. The wallet request is **not cancelled** and the order is **not** returned to `READY`; a late wallet response still wins. A rejection after the stall is ambiguous and is ignored instead of auto-cancelling the order.
 2. On a stall, both trade drawers show a manual transaction-hash field. A valid `0x` + 64 hex hash is passed to the existing submit path; for an approval, the flow continues through approval submission, receipt wait, `ready` and swap signing.
-3. Add a compact `Незавершённые свопы` panel to `Крипта → Ордера`. It lists `AWAITING_SIGNATURE` orders without a hash from the last 7 days, links to the wallet history in BscScan/Etherscan and lets the owner attach the hash.
-4. Do not auto-retry, re-sign or create a second transaction. Do not create ledger rows from a pasted hash; tracking verifies the on-chain transaction first.
-5. The close/exchange drawer now also sends the buffered `gasLimit` returned by the API. That path was missed by ADR 0092.
+3. Add a compact `Незавершённые свопы` panel to `Крипта → Ордера`. It lists recent `AWAITING_SIGNATURE` orders and `CANCELLED` orders with a signed build, without a hash, links to the wallet history in BscScan/Etherscan and lets the owner attach the hash.
+4. Allow `POST /swap/orders/:id/submitted` to recover a `CANCELLED` order only when `calldata` exists; tracking still verifies the transaction. Clear `cancelledAt` on that transition while keeping the cancellation event in the journal.
+5. Do not auto-retry, re-sign or create a second transaction. Do not create ledger rows from a pasted hash; tracking verifies the on-chain transaction first.
+6. The close/exchange drawer now also sends the buffered `gasLimit` returned by the API. That path was missed by ADR 0092.
 
 ## Consequences
 

@@ -110,7 +110,7 @@
 
 `POST /swap/build`, `/swap/orders/:id/ready` and `/swap/approvals/build` return a buffered, actionable `gasLimit` (decimal string): the API takes the larger of the Kyber build gas and the RPC `eth_estimateGas`, adds 20% and clamps to `[150,000, 10,000,000]`. The web wallet must pass this value as the hex `gas` field of `eth_sendTransaction`; if it is absent, the wallet keeps its own estimator. See ADR 0092.
 
-If the wallet broadcast a transaction but did not return its hash, the owner can recover it through `GET /swap/orders?status=AWAITING_SIGNATURE` and `POST /swap/orders/:id/submitted` with the hash from the wallet/explorer. The UI surfaces recent stalled orders under `Крипта → Ордера`. The server verifies the on-chain transaction before accounting. See ADR 0093.
+If the wallet broadcast a transaction but did not return its hash, the owner can recover it through `GET /swap/orders` and `POST /swap/orders/:id/submitted` with the hash from the wallet/explorer. `submitted` accepts `AWAITING_SIGNATURE`, built `EXPIRED`, and built `CANCELLED` orders; the UI surfaces recent stalled orders under `Крипта → Ордера`. The server verifies the on-chain transaction before accounting. See ADR 0093.
 
 ## 7. Imports
 

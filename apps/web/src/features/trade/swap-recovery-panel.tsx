@@ -66,6 +66,11 @@ function RecoveryRow({ order }: { order: SwapOrderSummary }) {
             {formatDate(order.createdAt)}
             {order.amountInUsd ? ` · ${formatUsd(order.amountInUsd)}` : ''}
           </p>
+          {order.status === 'CANCELLED' ? (
+            <p className="mt-1 text-xs text-amber-700">
+              Ордер отменён локально. Если транзакция прошла, привяжите хеш — она будет учтена.
+            </p>
+          ) : null}
         </div>
         {!done ? (
           <Button
@@ -130,8 +135,8 @@ function RecoveryRow({ order }: { order: SwapOrderSummary }) {
  */
 export function SwapRecoveryPanel() {
   const query = useQuery({
-    queryKey: ['swap-orders', 'awaiting-signature'],
-    queryFn: () => fetchSwapOrders({ status: 'AWAITING_SIGNATURE', limit: 20 }),
+    queryKey: ['swap-orders', 'recovery'],
+    queryFn: () => fetchSwapOrders({ limit: 50 }),
     refetchInterval: 30_000,
     retry: false,
   });

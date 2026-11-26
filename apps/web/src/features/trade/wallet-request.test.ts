@@ -64,22 +64,23 @@ describe('trackWalletRequest', () => {
     await expect(tracked.outcome).resolves.toEqual({ status: 'error', error });
   });
 
-  it('surfaces a wallet rejection after the stall when no hash was supplied', async () => {
-    const request = deferred<string>();
-    const tracked = trackWalletRequest(request.promise, { timeoutMs: 90_000, onStalled: vi.fn() });
-    const error = new Error('rejected late');
-
-    await vi.advanceTimersByTimeAsync(90_000);
-    request.reject(error);
-
-    await expect(tracked.outcome).resolves.toEqual({ status: 'error', error });
-  });
-
   it('validates a transaction hash', () => {
     expect(isTransactionHash(`0x${'a'.repeat(64)}`)).toBe(true);
     expect(isTransactionHash(` 0x${'A'.repeat(64)} `)).toBe(true);
     expect(isTransactionHash('0x123')).toBe(false);
     expect(isTransactionHash(`0x${'g'.repeat(64)}`)).toBe(false);
+  });
+
+  it('keeps waiting for a manual hash when the wallet rejects after a stall', async () => {
+    const request = deferred<string>();
+    const tracked = trackWalletRequest(request.promise, { timeoutMs: 90_000, onStalled: vi.fn() });
+
+    await vi.advanceTimersByTimeAsync(90_000);
+    request.reject(new Error('rejected after stall'));
+    await Promise.resolve();
+
+    tracked.submitManualHash('0xeee');
+    await expect(tracked.outcome).resolves.toEqual({ status: 'hash', hash: '0xeee' });
   });
 
   it('ignores a late wallet rejection after a manual hash was supplied', async () => {

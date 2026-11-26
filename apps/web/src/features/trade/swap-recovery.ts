@@ -4,6 +4,7 @@ interface RecoverableSwapOrderShape {
   status: string;
   txHash: string | null;
   createdAt: string;
+  builtAt: string | null;
 }
 
 /**
@@ -16,7 +17,12 @@ export function selectRecoverableSwapOrders<T extends RecoverableSwapOrderShape>
   now: number,
 ): T[] {
   return orders.filter((order) => {
-    if (order.status !== 'AWAITING_SIGNATURE' || order.txHash) return false;
+    if (order.txHash) return false;
+    const recoverable =
+      order.status === 'AWAITING_SIGNATURE' ||
+      (order.status === 'CANCELLED' && Boolean(order.builtAt));
+    if (!recoverable) return false;
+
     const createdAt = Date.parse(order.createdAt);
     return Number.isFinite(createdAt) && now - createdAt <= SWAP_RECOVERY_WINDOW_MS;
   });
