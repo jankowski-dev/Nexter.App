@@ -47,10 +47,7 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
   await expect(page).toHaveURL(/\/dashboard$/);
 
   const header = page.locator('header');
-  await expect(header.getByRole('button', { name: 'Текущий пользователь' })).toHaveAttribute(
-    'title',
-    email,
-  );
+  await expect(header.getByText(email, { exact: true })).toBeVisible();
   await expect(header.getByRole('button', { name: 'BNB' })).toHaveAttribute('aria-pressed', 'true');
   await expect(header.getByRole('button', { name: 'Ethereum' })).toHaveAttribute(
     'aria-pressed',
@@ -133,6 +130,8 @@ test('MVP-1 UI: dashboard, portfolio, trades, watchlist, settings and manual ent
 
   await page.goto('/dashboard');
   await expect(page.getByRole('heading', { name: 'Дашборд' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Крипта' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Финансы' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Задачи на сегодня' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Без вредных привычек' })).toBeVisible();
   await expect(page.getByText('Чистая прибыль за месяц')).toBeVisible();
