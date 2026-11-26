@@ -31,6 +31,7 @@ function ChainButton({
   label,
   shortLabel,
   labelClassName,
+  iconOnly,
   children,
 }: {
   chain: ChainCode;
@@ -39,6 +40,7 @@ function ChainButton({
   label: string;
   shortLabel: string;
   labelClassName: string;
+  iconOnly: boolean;
   children: ReactNode;
 }) {
   return (
@@ -49,14 +51,15 @@ function ChainButton({
       title={chain === 'bsc' ? 'BNB Smart Chain' : 'Ethereum'}
       onClick={() => onClick(chain)}
       className={cn(
-        'flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition',
+        'flex items-center rounded-lg text-xs font-medium transition',
+        iconOnly ? 'h-7 w-7 justify-center gap-0 px-0' : 'h-8 gap-1.5 px-2',
         active
           ? 'bg-white text-zinc-900 shadow-sm'
           : 'text-zinc-400 hover:bg-white/60 hover:text-zinc-600',
       )}
     >
       <span className={active ? '' : 'opacity-40 grayscale'}>{children}</span>
-      <span className={labelClassName}>{shortLabel}</span>
+      {iconOnly ? null : <span className={labelClassName}>{shortLabel}</span>}
       {active ? <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> : null}
     </button>
   );
@@ -68,12 +71,14 @@ export function ChainToggle({
   ariaLabel = 'Сеть кошелька',
   className,
   labelClassName = 'hidden md:inline',
+  iconOnly = false,
 }: {
   value: ChainCode;
   onChange: (chain: ChainCode) => void;
   ariaLabel?: string;
   className?: string;
   labelClassName?: string;
+  iconOnly?: boolean;
 }) {
   return (
     <div
@@ -92,6 +97,7 @@ export function ChainToggle({
         label="BNB"
         shortLabel="BNB"
         labelClassName={labelClassName}
+        iconOnly={iconOnly}
       >
         <BnbIcon />
       </ChainButton>
@@ -102,6 +108,7 @@ export function ChainToggle({
         label="Ethereum"
         shortLabel="ETH"
         labelClassName={labelClassName}
+        iconOnly={iconOnly}
       >
         <EthIcon />
       </ChainButton>
