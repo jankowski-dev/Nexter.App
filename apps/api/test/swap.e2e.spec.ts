@@ -449,6 +449,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       simulation: { success: true },
     });
     expect(built.body.calldata).toBe(buildData);
+    expect(built.body.gasLimit).toBe('150000');
     expect(built.body.deadline).toBeGreaterThan(Math.floor(Date.now() / 1000));
     expect(built.body.validation).toEqual(
       expect.arrayContaining([
@@ -949,10 +950,11 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .expect(201);
     expect(built.body).toMatchObject({ chain: 'ethereum', status: 'BUILT' });
 
-    await agent
+    const ready = await agent
       .post(`/api/v1/swap/orders/${orderId}/ready`)
       .set('x-csrf-token', owner.csrf)
       .expect(200);
+    expect(Number(ready.body.gasLimit)).toBeGreaterThanOrEqual(150_000);
     const disabled = await agent
       .post(`/api/v1/swap/orders/${orderId}/signing`)
       .set('x-csrf-token', owner.csrf)
@@ -1504,6 +1506,7 @@ describe.runIf(canRun)('Phase 8 swap execution API', () => {
       .set('x-csrf-token', owner.csrf)
       .send({ orderId })
       .expect(201);
+    expect(Number(approval.body.gasLimit)).toBeGreaterThanOrEqual(150_000);
     const approvalTxHash = `0x${'8'.repeat(64)}`;
     await agent
       .post(`/api/v1/swap/approvals/${approval.body.approval.id}/submitted`)

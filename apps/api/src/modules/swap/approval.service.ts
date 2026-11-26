@@ -22,6 +22,7 @@ import { env, executionEnabledForChain } from '../../shared/config/env';
 import { DB } from '../../shared/db/db.module';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { EvmRpcService, padUint } from './evm-rpc.service';
+import { bufferedGasLimit } from './gas-limit';
 import { routerAllowlist } from './swap-allowlists';
 import { assertStepUp } from './swap-step-up';
 import { getSwapToken, isNativeToken, parseAddressList } from './token-registry';
@@ -270,6 +271,7 @@ export class ApprovalService {
         revertReason: simulation.revertReason,
         gasEstimate: simulation.gasEstimate,
       },
+      gasLimit: bufferedGasLimit([simulation.gasEstimate]),
     };
   }
 

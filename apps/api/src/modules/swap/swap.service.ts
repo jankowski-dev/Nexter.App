@@ -43,6 +43,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { EvmRpcService } from './evm-rpc.service';
+import { bufferedGasLimit } from './gas-limit';
 import {
   KYBER_SUPPORTED_SELECTORS,
   KyberCalldataError,
@@ -1009,7 +1010,9 @@ export class SwapService {
       validation.push({ check: 'simulation', passed: true, detail: null });
     }
 
-    const gasEstimate = built.gas ?? simulation?.gasEstimate ?? null;
+    // Kyber's `gas` can be below the RPC estimate; use the larger value plus a
+    // buffer so the nested router call cannot fail under EIP-150 gas forwarding.
+    const gasEstimate = bufferedGasLimit([built.gas, simulation?.gasEstimate]);
     if (gasEstimate && (!/^\d+$/.test(gasEstimate) || gasEstimate.length > 24)) {
       await fail('gas', 'SWAP_GAS_INVALID', 'Gas estimate is not a bounded integer');
     }
@@ -1155,6 +1158,7 @@ export class SwapService {
       approvalRequired,
       allowance,
       simulation,
+      gasLimit: gasEstimate,
       validation,
     };
   }
@@ -1362,9 +1366,9 @@ export class SwapService {
       });
     }
 
-    const readyGasEstimate = simulation.gasEstimate ?? order.gasEstimate;
+    const readyGasLimit = bufferedGasLimit([order.gasEstimate, simulation.gasEstimate]);
 
-    if (!readyGasEstimate) {
+    if (!readyGasLimit) {
       throw new BadRequestException({
         code: 'SWAP_GAS_MISSING',
         message: 'Gas estimate is missing',
@@ -1376,7 +1380,7 @@ export class SwapService {
       wallet,
       tokenInNative: tokenIn.native,
       amountInBase: amountIn,
-      gasEstimate: readyGasEstimate,
+      gasEstimate: readyGasLimit,
     });
 
     const updated = await this.db.transaction(async (tx) => {
@@ -1398,7 +1402,11 @@ export class SwapService {
       await tx.insert(swapEvents).values({
         orderId: order.id,
         type: 'ready',
-        payload: { allowance, simulation: { success: true, gasEstimate: simulation.gasEstimate } },
+        payload: {
+          allowance,
+          gasLimit: readyGasLimit,
+          simulation: { success: true, gasEstimate: simulation.gasEstimate },
+        },
       });
 
       await this.audit.log(
@@ -1429,6 +1437,7 @@ export class SwapService {
       approvalRequired: false,
       allowance,
       simulation,
+      gasLimit: readyGasLimit,
       validation: [
         { check: 'balance', passed: true, detail: null },
         { check: 'allowance', passed: true, detail: null },

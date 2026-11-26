@@ -9,6 +9,8 @@ export interface SendTransactionInput {
   to: string;
   data: string;
   value?: string;
+  /** Buffered gas limit from the server, as a decimal string. */
+  gas?: string;
 }
 
 type WalletProvider = Awaited<ReturnType<typeof EthereumProvider.init>>;
@@ -246,6 +248,7 @@ export function useWalletConnect(projectId: string | null) {
 
       const value =
         input.value && input.value !== '0' ? `0x${BigInt(input.value).toString(16)}` : '0x0';
+      const gas = input.gas ? `0x${BigInt(input.gas).toString(16)}` : undefined;
       const hash = await provider.request({
         method: 'eth_sendTransaction',
         params: [
@@ -254,6 +257,7 @@ export function useWalletConnect(projectId: string | null) {
             to: input.to,
             data: input.data,
             value,
+            ...(gas ? { gas } : {}),
           },
         ],
       });
