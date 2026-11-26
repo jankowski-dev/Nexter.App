@@ -45,6 +45,14 @@ export class TasksController {
     return this.tasks.list(auth.user.id, query);
   }
 
+  @Get(':id')
+  detail(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new ParseUUIDPipe()) id: string,
+  ): Promise<Task> {
+    return this.tasks.get(auth.user.id, id);
+  }
+
   @Post()
   create(
     @CurrentAuth() auth: AuthContext,
