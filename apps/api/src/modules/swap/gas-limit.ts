@@ -12,7 +12,7 @@ const DECIMAL = /^\d+$/;
  * largest valid estimate, add a 20% buffer and keep the result inside sane
  * bounds. Missing/invalid estimates are ignored.
  */
-export function bufferedGasLimit(
+export function largestGasEstimate(
   estimates: ReadonlyArray<string | null | undefined>,
 ): string | null {
   let maximum = 0n;
@@ -21,7 +21,15 @@ export function bufferedGasLimit(
     const parsed = BigInt(estimate);
     if (parsed > maximum) maximum = parsed;
   }
-  if (maximum === 0n) return null;
+  return maximum === 0n ? null : maximum.toString();
+}
+
+export function bufferedGasLimit(
+  estimates: ReadonlyArray<string | null | undefined>,
+): string | null {
+  const raw = largestGasEstimate(estimates);
+  if (raw === null) return null;
+  const maximum = BigInt(raw);
 
   const buffer = (maximum * BigInt(GAS_BUFFER_BPS) + 9_999n) / 10_000n;
   const withBuffer = maximum + buffer;

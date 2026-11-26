@@ -43,7 +43,7 @@ import { DB } from '../../shared/db/db.module';
 import { Decimal, decimal } from '../../shared/money/decimal';
 import { decodeCursor, encodeCursor, isUuid, makePage } from '../../shared/pagination/cursor';
 import { EvmRpcService } from './evm-rpc.service';
-import { bufferedGasLimit } from './gas-limit';
+import { bufferedGasLimit, largestGasEstimate } from './gas-limit';
 import {
   KYBER_SUPPORTED_SELECTORS,
   KyberCalldataError,
@@ -1012,6 +1012,7 @@ export class SwapService {
 
     // Kyber's `gas` can be below the RPC estimate; use the larger value plus a
     // buffer so the nested router call cannot fail under EIP-150 gas forwarding.
+    const rawGasEstimate = largestGasEstimate([built.gas, simulation?.gasEstimate]);
     const gasEstimate = bufferedGasLimit([built.gas, simulation?.gasEstimate]);
     if (gasEstimate && (!/^\d+$/.test(gasEstimate) || gasEstimate.length > 24)) {
       await fail('gas', 'SWAP_GAS_INVALID', 'Gas estimate is not a bounded integer');
@@ -1045,13 +1046,20 @@ export class SwapService {
       });
     }
 
-    const gasUsd =
+    let gasUsd =
       built.gasUsd && /^\d+(?:\.\d+)?$/.test(built.gasUsd) && built.gasUsd.length <= 32
         ? built.gasUsd
         : order.gasUsd;
 
     if (!gasUsd) {
       await fail('gas', 'SWAP_GAS_MISSING', 'Provider did not return a gas cost');
+    }
+
+    // `gasUsd` was quoted for the raw estimate; keep the same per-gas price now
+    // that the stored `gasEstimate` is the buffered transaction limit. This
+    // preserves the tracker's `gasUsd * gasUsed / gasEstimate` network fee.
+    if (gasEstimate !== null && rawGasEstimate !== null && rawGasEstimate !== gasEstimate) {
+      gasUsd = decimal(gasUsd!).mul(gasEstimate).div(rawGasEstimate).toFixed(8);
     }
 
     const gasRuntime = await this.settings.getRuntime();
