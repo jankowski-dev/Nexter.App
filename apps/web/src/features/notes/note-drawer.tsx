@@ -1,14 +1,8 @@
+import { AttachmentsPanel } from '@/components/ui/attachments-panel';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
-import {
-  FileIcon,
-  NotebookIcon,
-  PaperclipIcon,
-  PencilIcon,
-  PinIcon,
-  TrashIcon,
-} from '@/components/ui/icons';
+import { BookmarkIcon, NotebookIcon, PencilIcon, TrashIcon } from '@/components/ui/icons';
 import { Input } from '@/components/ui/input';
 import {
   addNoteImage,
@@ -59,20 +53,6 @@ const EXTENSION_MIME_TYPES: Record<string, string> = {
   rar: 'application/vnd.rar',
   zip: 'application/zip',
 };
-const ATTACHMENT_ACCEPT = [
-  'image/png',
-  'image/jpeg',
-  'image/webp',
-  '.pdf',
-  '.txt',
-  '.doc',
-  '.docx',
-  '.xls',
-  '.xlsx',
-  '.rar',
-  '.zip',
-].join(',');
-
 function isImageAttachment(mimeType: string): boolean {
   return IMAGE_MIME_TYPES.has(mimeType);
 }
@@ -90,12 +70,6 @@ function readDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
     reader.readAsDataURL(file);
   });
-}
-
-function formatBytes(value: number): string {
-  if (value < 1024) return `${value} Б`;
-  if (value < 1024 * 1024) return `${Math.round(value / 1024)} КБ`;
-  return `${(value / 1024 / 1024).toFixed(1)} МБ`;
 }
 
 function payloadFrom(note: { title: string; body: string; pinned: boolean }): {
@@ -151,7 +125,6 @@ export function NoteDrawer({
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [improving, setImproving] = useState(false);
   const [improvedOriginal, setImprovedOriginal] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (attachments.data) {
@@ -325,7 +298,6 @@ export function NoteDrawer({
       );
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -416,14 +388,6 @@ export function NoteDrawer({
                 <TrashIcon />
                 Удалить
               </Button>
-              <Button
-                variant="ghost"
-                onClick={() => void togglePinned()}
-                title={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
-              >
-                <PinIcon filled={pinned} className="h-[18px] w-[18px]" />
-                {pinned ? 'Открепить' : 'Закрепить'}
-              </Button>
               <span role="status" className="text-xs">
                 {saveState === 'error' ? (
                   <span className="text-red-700">Ошибка сохранения</span>
@@ -436,6 +400,14 @@ export function NoteDrawer({
               </span>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => void togglePinned()}
+                title={pinned ? 'Открепить заметку' : 'Закрепить заметку'}
+              >
+                <BookmarkIcon filled={pinned} className="h-[18px] w-[18px]" />
+                {pinned ? 'Открепить' : 'Закрепить'}
+              </Button>
               {mode === 'view' ? (
                 <Button onClick={() => setMode('edit')}>
                   <PencilIcon />
@@ -478,114 +450,18 @@ export function NoteDrawer({
             />
           )}
 
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Вложения
-              </div>
-              {mode === 'edit' ? (
-                <Button
-                  variant="secondary"
-                  className="h-9 px-3 text-xs"
-                  onClick={() => fileRef.current?.click()}
-                  disabled={uploading || images.length >= 5}
-                >
-                  <PaperclipIcon className="h-4 w-4" />
-                  {uploading ? 'Загружаю…' : 'Прикрепить файл'}
-                </Button>
-              ) : null}
-            </div>
-            <input
-              ref={fileRef}
-              type="file"
-              accept={ATTACHMENT_ACCEPT}
-              multiple
-              className="hidden"
-              onChange={(event) => void handleFiles(event.target.files)}
-            />
-            {images.length > 0 ? (
-              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {images.map((image) => (
-                  <div
-                    key={image.id}
-                    className="relative overflow-hidden rounded-lg border border-zinc-200"
-                  >
-                    {isImageAttachment(image.mimeType) ? (
-                      <button
-                        type="button"
-                        className="block h-24 w-full"
-                        onClick={() =>
-                          setViewerIndex(viewerImages.findIndex((item) => item.id === image.id))
-                        }
-                        aria-label={`Открыть фото ${image.name}`}
-                      >
-                        <img
-                          src={image.dataUrl}
-                          alt={image.name}
-                          className="h-24 w-full object-cover"
-                        />
-                      </button>
-                    ) : (
-                      <div className="flex h-24 flex-col justify-between p-2">
-                        <div className="flex min-w-0 items-start gap-1.5">
-                          <FileIcon className="mt-0.5 shrink-0 text-zinc-500" />
-                          <span className="min-w-0 truncate text-xs font-medium text-zinc-700">
-                            {image.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-[11px] text-zinc-500">
-                          <span>{formatBytes(image.sizeBytes)}</span>
-                          <a
-                            className="text-emerald-800 hover:underline"
-                            href={image.dataUrl}
-                            download={image.name}
-                          >
-                            Скачать
-                          </a>
-                        </div>
-                      </div>
-                    )}
-                    {mode === 'edit' ? (
-                      <button
-                        type="button"
-                        aria-label={`Удалить ${image.name}`}
-                        className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs text-zinc-700 shadow hover:text-red-700"
-                        onClick={() => void removeImage(image)}
-                        disabled={uploading}
-                      >
-                        ✕
-                      </button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {audio.length > 0 ? (
-              <div className="mt-3 space-y-2">
-                {audio.map((item) => (
-                  <div key={item.id} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-600">
-                      <span className="min-w-0 truncate font-medium text-zinc-800">
-                        {item.name}
-                      </span>
-                      <span>{formatBytes(item.sizeBytes)}</span>
-                    </div>
-                    <audio controls src={item.dataUrl} className="mt-2 h-9 w-full" />
-                    <a
-                      className="mt-2 inline-block text-xs text-emerald-800 hover:underline"
-                      href={item.dataUrl}
-                      download={item.name}
-                    >
-                      Скачать оригинал
-                    </a>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-            {images.length === 0 && audio.length === 0 ? (
-              <p className="mt-2 text-xs text-zinc-500">Вложений пока нет.</p>
-            ) : null}
-          </div>
+          <AttachmentsPanel
+            items={images}
+            audio={audio}
+            editable={mode === 'edit'}
+            adding={uploading}
+            onFiles={(files) => void handleFiles(files)}
+            onRemove={(image) => void removeImage(image)}
+            onOpenImage={(image) => {
+              const index = viewerImages.findIndex((item) => item.id === image.id);
+              if (index >= 0) setViewerIndex(index);
+            }}
+          />
 
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">

@@ -47,6 +47,20 @@ export function PinIcon({ filled, className }: IconProps & { filled: boolean }) 
   );
 }
 
+export function BookmarkIcon({ filled, className }: IconProps & { filled?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={cn('h-4 w-4', className)} fill="none">
+      <path
+        d="M6.5 4.5h11A1.5 1.5 0 0 1 19 6v14l-7-4.2L5 20V6a1.5 1.5 0 0 1 1.5-1.5Z"
+        fill={filled ? 'currentColor' : 'none'}
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function NotebookIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className={cn('h-5 w-5', className)} fill="none">
