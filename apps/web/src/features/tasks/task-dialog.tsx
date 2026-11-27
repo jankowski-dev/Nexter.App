@@ -1,3 +1,4 @@
+import { AttachmentsPanel } from '@/components/ui/attachments-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -6,8 +7,6 @@ import {
   CalendarIcon,
   CheckIcon,
   ClipboardIcon,
-  FileIcon,
-  PaperclipIcon,
   PencilIcon,
   TrashIcon,
   UndoIcon,
@@ -20,9 +19,7 @@ import { addTaskImage, createTask, fetchTask, removeTaskImage, updateTask } from
 import {
   MAX_TASK_ATTACHMENTS,
   MAX_TASK_ATTACHMENT_BYTES,
-  TASK_ATTACHMENT_ACCEPT,
   decodedBase64Bytes,
-  formatBytes,
   isImageMime,
   mimeTypeForFile,
   readDataUrl,
@@ -135,7 +132,6 @@ export function TaskDialog({
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(startWithDelete && Boolean(task));
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const taskIdRef = useRef<string | null>(task?.id ?? null);
   const savedSignatureRef = useRef<string | null>(
@@ -408,7 +404,6 @@ export function TaskDialog({
       );
     } finally {
       setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
@@ -533,41 +528,7 @@ export function TaskDialog({
               </p>
 
               {images.length > 0 ? (
-                <div>
-                  <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                    Файлы
-                  </div>
-                  <div className="mt-2 grid grid-cols-3 gap-2">
-                    {images
-                      .filter((image) => isImageMime(image.mimeType))
-                      .map((image) => (
-                        <img
-                          key={image.id}
-                          src={image.dataUrl}
-                          alt={image.name}
-                          className="h-24 w-full rounded-lg border border-zinc-200 object-cover"
-                        />
-                      ))}
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {images
-                      .filter((image) => !isImageMime(image.mimeType))
-                      .map((image) => (
-                        <a
-                          key={image.id}
-                          href={image.dataUrl}
-                          download={image.name}
-                          className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-800"
-                        >
-                          <FileIcon className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{image.name}</span>
-                          <span className="shrink-0 text-xs text-zinc-500">
-                            {formatBytes(image.sizeBytes)}
-                          </span>
-                        </a>
-                      ))}
-                  </div>
-                </div>
+                <AttachmentsPanel items={images} editable={false} onFiles={() => undefined} />
               ) : null}
             </>
           ) : (
@@ -638,101 +599,14 @@ export function TaskDialog({
                 placeholder="Детали, ссылки, следующий шаг"
               />
 
-              <div
-                className={`rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 p-3 ${
-                  mode === 'edit' ? 'mt-auto' : ''
-                }`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-emerald-700">
-                      <PaperclipIcon />
-                    </span>
-                    <div>
-                      <div className="text-sm font-medium text-zinc-800">Файлы</div>
-                      <p className="mt-0.5 text-xs text-zinc-500">
-                        До {MAX_TASK_ATTACHMENTS} файлов, до 1,5 МБ. PDF, таблицы, архивы и
-                        изображения.
-                      </p>
-                    </div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-8 px-3 text-xs"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploading || images.length >= MAX_TASK_ATTACHMENTS}
-                  >
-                    {uploading ? 'Загружаю…' : 'Добавить файл'}
-                  </Button>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={TASK_ATTACHMENT_ACCEPT}
-                  multiple
-                  className="hidden"
-                  aria-label="Добавить файл"
-                  onChange={(event) => void handleFiles(event.target.files)}
-                />
-                {images.length > 0 ? (
-                  <div className="mt-3 space-y-2">
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                      {images
-                        .filter((image) => isImageMime(image.mimeType))
-                        .map((image) => (
-                          <div
-                            key={image.id}
-                            className="relative overflow-hidden rounded-lg border border-zinc-200"
-                          >
-                            <img
-                              src={image.dataUrl}
-                              alt={image.name}
-                              className="h-24 w-full object-cover"
-                            />
-                            <button
-                              type="button"
-                              aria-label={`Удалить ${image.name}`}
-                              className="absolute right-1 top-1 rounded bg-white/90 px-1.5 py-0.5 text-xs text-zinc-700 shadow hover:text-red-700"
-                              onClick={() => void handleRemoveImage(image)}
-                              disabled={uploading}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                    {images
-                      .filter((image) => !isImageMime(image.mimeType))
-                      .map((image) => (
-                        <div
-                          key={image.id}
-                          className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700"
-                        >
-                          <FileIcon className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 flex-1 truncate">{image.name}</span>
-                          <span className="shrink-0 text-xs text-zinc-500">
-                            {formatBytes(image.sizeBytes)}
-                          </span>
-                          <button
-                            type="button"
-                            aria-label={`Удалить ${image.name}`}
-                            className="text-zinc-500 hover:text-red-700"
-                            onClick={() => void handleRemoveImage(image)}
-                            disabled={uploading}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-zinc-200 bg-white/70 px-3 py-2 text-xs text-zinc-500">
-                    <FileIcon className="h-4 w-4 shrink-0" />
-                    Пока нет файлов — прикрепите PDF, таблицу, архив или изображение.
-                  </div>
-                )}
-              </div>
+              <AttachmentsPanel
+                items={images}
+                editable={mode === 'edit'}
+                adding={uploading}
+                onFiles={(files) => void handleFiles(files)}
+                onRemove={(image) => void handleRemoveImage(image)}
+                className={mode === 'edit' ? 'mt-auto' : ''}
+              />
             </>
           )}
 
