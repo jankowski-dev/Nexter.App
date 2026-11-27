@@ -12,43 +12,43 @@
 
 Основные (см. `apps/api/src/shared/config/env.ts`):
 
-| Переменная                                          | Назначение                             |
-| --------------------------------------------------- | -------------------------------------- |
-| `DATABASE_URL`                                      | подключение API к БД                   |
-| `MIGRATION_DATABASE_URL`                            | pre-deploy миграции (owner/DDL)        |
-| `SETUP_TOKEN`                                       | первичная настройка owner              |
-| `AUTH_ENCRYPTION_KEY`                               | шифрование TOTP/recovery/сессий        |
-| `APP_URL`                                           | origin для cookie/CSRF/CORS            |
-| `SESSION_TTL_DAYS`                                  | срок полной сессии                     |
-| `SESSION_PENDING_TTL_MINUTES`                       | срок pending-сессии до 2FA (15)        |
-| `ENABLE_DOCS`                                       | Swagger                                |
-| `SWAP_ENABLED`                                      | включить swap-модуль                   |
-| `SWAP_EXECUTION_ENABLED`                            | разрешить execution (BSC)              |
-| `SWAP_ETHEREUM_EXECUTION_ENABLED`                   | разрешить execution Ethereum           |
-| `SWAP_KILL_SWITCH`                                  | аварийный стоп                         |
-| `SWAP_STEP_UP_THRESHOLD_USD`                        | порог step-up TOTP                     |
-| `SWAP_WALLET_ALLOWLIST`                             | разрешённые wallet addresses           |
-| `SWAP_ROUTER_ALLOWLIST` / `SWAP_EXECUTOR_ALLOWLIST` | allowlist контрактов                   |
-| `MARKET_QUOTES_ENABLED`                             | фоновые котировки                      |
-| `MARKET_QUOTE_INTERVAL_SECONDS`                     | DEX refresh (60)                       |
-| `MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS`           | CoinGecko refresh (600)                |
-| `COINGECKO_API_KEY`                                 | optional demo/pro key                  |
-| `GECKOTERMINAL_BASE_URL`                            | fallback daily candles (GeckoTerminal) |
-| `GECKOTERMINAL_TIMEOUT_MS`                          | GeckoTerminal timeout (default 5000)   |
-| `BSC_RPC_URL` / `ETHEREUM_RPC_URL`                  | RPC                                    |
-| `WALLETCONNECT_PROJECT_ID`                          | WalletConnect                          |
-| `RECONCILIATION_ENABLED`                            | on-chain indexer                       |
-| `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots + hourly equity points |
-| `PORTFOLIO_SNAPSHOT_INTERVAL_SECONDS`               | hourly bucket capture interval         |
-| `BOT_API_TOKEN`                                     | bearer-токен для `/api/v1/bot/*`       |
-| `NOTIFICATION_POLL_SECONDS` (Nexter.Bot)            | Viber outbox poll, default 15          |
-| `VIBER_TOKEN` / `VIBER_USER_ID` (Nexter.Bot)        | Viber credentials, never in the API    |
-| `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)      |
-| `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)             |
-| `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)         |
-| `SANDBOX_ENABLED`                                   | live paper sandbox + replay worker     |
-| `DEEPSEEK_BASE_URL`                                 | optional DeepSeek base URL             |
-| `BACKUP_ENCRYPTION_KEY`                             | только для backup/restore, не в API    |
+| Переменная                                          | Назначение                                       |
+| --------------------------------------------------- | ------------------------------------------------ |
+| `DATABASE_URL`                                      | подключение API к БД                             |
+| `MIGRATION_DATABASE_URL`                            | pre-deploy миграции (owner/DDL)                  |
+| `SETUP_TOKEN`                                       | первичная настройка owner                        |
+| `AUTH_ENCRYPTION_KEY`                               | шифрование TOTP/recovery/сессий                  |
+| `APP_URL`                                           | origin для cookie/CSRF/CORS                      |
+| `SESSION_TTL_DAYS`                                  | срок полной сессии                               |
+| `SESSION_PENDING_TTL_MINUTES`                       | срок pending-сессии до 2FA (15)                  |
+| `ENABLE_DOCS`                                       | Swagger                                          |
+| `SWAP_ENABLED`                                      | включить swap-модуль                             |
+| `SWAP_EXECUTION_ENABLED`                            | разрешить execution (BSC)                        |
+| `SWAP_ETHEREUM_EXECUTION_ENABLED`                   | разрешить execution Ethereum                     |
+| `SWAP_KILL_SWITCH`                                  | аварийный стоп                                   |
+| `SWAP_STEP_UP_THRESHOLD_USD`                        | порог step-up TOTP                               |
+| `SWAP_WALLET_ALLOWLIST`                             | разрешённые wallet addresses                     |
+| `SWAP_ROUTER_ALLOWLIST` / `SWAP_EXECUTOR_ALLOWLIST` | allowlist контрактов                             |
+| `MARKET_QUOTES_ENABLED`                             | фоновые котировки                                |
+| `MARKET_QUOTE_INTERVAL_SECONDS`                     | DEX refresh (60)                                 |
+| `MARKET_QUOTE_COINGECKO_INTERVAL_SECONDS`           | CoinGecko refresh (600)                          |
+| `COINGECKO_API_KEY`                                 | demo/pro key; strongly recommended (public 429s) |
+| `GECKOTERMINAL_BASE_URL`                            | fallback daily candles (GeckoTerminal)           |
+| `GECKOTERMINAL_TIMEOUT_MS`                          | GeckoTerminal timeout (default 5000)             |
+| `BSC_RPC_URL` / `ETHEREUM_RPC_URL`                  | RPC                                              |
+| `WALLETCONNECT_PROJECT_ID`                          | WalletConnect                                    |
+| `RECONCILIATION_ENABLED`                            | on-chain indexer                                 |
+| `PORTFOLIO_SNAPSHOTS_ENABLED`                       | daily snapshots + hourly equity points           |
+| `PORTFOLIO_SNAPSHOT_INTERVAL_SECONDS`               | hourly bucket capture interval                   |
+| `BOT_API_TOKEN`                                     | bearer-токен для `/api/v1/bot/*`                 |
+| `NOTIFICATION_POLL_SECONDS` (Nexter.Bot)            | Viber outbox poll, default 15                    |
+| `VIBER_TOKEN` / `VIBER_USER_ID` (Nexter.Bot)        | Viber credentials, never in the API              |
+| `BOT_RUNNER_ENABLED`                                | paper-runner ботов (default true)                |
+| `BOT_RUNNER_INTERVAL_SECONDS`                       | интервал тика (default 60)                       |
+| `BOT_SAMPLE_RETENTION_DAYS`                         | retention samples (default 30)                   |
+| `SANDBOX_ENABLED`                                   | live paper sandbox + replay worker               |
+| `DEEPSEEK_BASE_URL`                                 | optional DeepSeek base URL                       |
+| `BACKUP_ENCRYPTION_KEY`                             | только для backup/restore, не в API              |
 
 Секреты хранятся в Railway Variables и локальном `.env`, не в репозитории.
 
