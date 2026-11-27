@@ -154,7 +154,9 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
     ),
   });
   await expect(taskDialog.getByAltText('dot.jpg')).toBeVisible();
-  await taskDialog.getByRole('button', { name: 'Создать' }).click();
+  await taskDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(taskDialog.getByRole('heading', { name: 'Проверить BASED' })).toBeVisible();
+  await taskDialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
   const todayCell = page.locator(`[data-date="${todayKey}"]`);
