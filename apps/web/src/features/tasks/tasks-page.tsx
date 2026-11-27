@@ -130,46 +130,11 @@ export function TasksPage() {
         title="Задачи"
         subtitle="Личные задачи и напоминания. Не связаны с бухгалтерским учётом."
         actions={
-          <>
-            <div
-              className="flex flex-wrap gap-1 rounded-lg border border-zinc-200 bg-zinc-50 p-1"
-              role="tablist"
-              aria-label="Вид задач"
-            >
-              {(
-                [
-                  ['list', 'Список'],
-                  ['calendar', 'Календарь'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === value}
-                  onClick={() => {
-                    setView(value);
-                    if (value === 'calendar') setFilter('all');
-                    else if (view === 'calendar') setFilter('open');
-                  }}
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    view === value
-                      ? 'bg-white text-zinc-900 shadow-sm'
-                      : 'text-zinc-500 hover:text-zinc-900'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <Button
-              onClick={() =>
-                openCreate(view === 'calendar' ? dateInputValue(new Date()) : undefined)
-              }
-            >
-              Новая задача
-            </Button>
-          </>
+          <Button
+            onClick={() => openCreate(view === 'calendar' ? dateInputValue(new Date()) : undefined)}
+          >
+            Новая задача
+          </Button>
         }
       />
 
@@ -178,6 +143,21 @@ export function TasksPage() {
         onSearch={setSearch}
         searchPlaceholder="Поиск по задачам"
         searchAriaLabel="Поиск по задачам"
+        leading={
+          <TabGroup
+            value={view}
+            onChange={(next) => {
+              setView(next);
+              if (next === 'calendar') setFilter('all');
+              else if (view === 'calendar') setFilter('open');
+            }}
+            ariaLabel="Вид задач"
+            options={[
+              { value: 'calendar', label: 'Месяц' },
+              { value: 'list', label: 'Список' },
+            ]}
+          />
+        }
       >
         {view === 'list' ? (
           <TabGroup

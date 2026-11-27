@@ -44,6 +44,7 @@ export function ListToolbar({
   onSearch,
   searchPlaceholder,
   searchAriaLabel,
+  leading,
   children,
   actions,
   className,
@@ -52,12 +53,14 @@ export function ListToolbar({
   onSearch: (value: string) => void;
   searchPlaceholder: string;
   searchAriaLabel?: string;
+  leading?: ReactNode;
   children?: ReactNode;
   actions?: ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn('flex flex-wrap items-center gap-3', className)}>
+      {leading ? <div className="shrink-0">{leading}</div> : null}
       <Input
         type="search"
         value={search}

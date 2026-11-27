@@ -127,10 +127,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
 
   await nav.getByRole('link', { name: 'Задачи' }).click();
   await expect(page.getByRole('heading', { name: 'Задачи', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Календарь' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
+  await expect(page.getByRole('tab', { name: 'Месяц' })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: 'Список' })).toBeVisible();
 
   const today = new Date();
@@ -218,7 +215,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   const firstDate = `${today.getFullYear()}-${monthValue}-10`;
   const secondDate = `${today.getFullYear()}-${monthValue}-11`;
 
-  await page.getByRole('tab', { name: 'Календарь' }).click();
+  await page.getByRole('tab', { name: 'Месяц' }).click();
   await page.getByRole('button', { name: 'Новая задача' }).first().click();
   const calendarDialog = page.getByRole('dialog');
   await calendarDialog.getByLabel('Название').fill('Календарная задача');
