@@ -145,19 +145,50 @@ export function TasksPage() {
         searchPlaceholder="Поиск по задачам"
         searchAriaLabel="Поиск по задачам"
         leading={
-          <TabGroup
-            value={view}
-            onChange={(next) => {
-              setView(next);
-              if (next === 'calendar') setFilter('all');
-              else if (view === 'calendar') setFilter('open');
-            }}
-            ariaLabel="Вид задач"
-            options={[
-              { value: 'calendar', label: 'Месяц' },
-              { value: 'list', label: 'Список' },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <TabGroup
+              value={view}
+              onChange={(next) => {
+                setView(next);
+                if (next === 'calendar') setFilter('all');
+                else if (view === 'calendar') setFilter('open');
+              }}
+              ariaLabel="Вид задач"
+              options={[
+                { value: 'calendar', label: 'Месяц' },
+                { value: 'list', label: 'Список' },
+              ]}
+            />
+            {view === 'calendar' ? (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="secondary"
+                  className="h-8 w-8 px-0"
+                  aria-label="Предыдущий месяц"
+                  onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                >
+                  ←
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-8 px-2 text-xs"
+                  onClick={() =>
+                    setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))
+                  }
+                >
+                  Сегодня
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="h-8 w-8 px-0"
+                  aria-label="Следующий месяц"
+                  onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                >
+                  →
+                </Button>
+              </div>
+            ) : null}
+          </div>
         }
         actions={view === 'calendar' ? <TaskStatusLegend /> : undefined}
       >
@@ -194,9 +225,6 @@ export function TasksPage() {
           <TaskCalendar
             month={month}
             tasks={rows}
-            onPrev={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-            onNext={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-            onToday={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}
             onOpen={openView}
             onDuplicate={openDuplicate}
             onCreate={(date) => openCreate(date)}

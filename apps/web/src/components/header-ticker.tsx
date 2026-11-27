@@ -11,9 +11,10 @@ export function HeaderTicker() {
   const query = useQuery({
     queryKey: ['market-ticker'],
     queryFn: fetchMarketTicker,
+    placeholderData: (previous) => previous,
     refetchInterval: 60_000,
     staleTime: 30_000,
-    retry: 1,
+    retry: 2,
   });
 
   const items = query.data?.items ?? [];
