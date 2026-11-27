@@ -594,7 +594,7 @@ export function TaskDialog({
 
               <Textarea
                 aria-label="Описание"
-                className="min-h-52 w-full max-w-none resize-none border-0 bg-transparent px-3 leading-relaxed shadow-none focus:border-0 focus:ring-0"
+                className="min-h-[45vh] w-full max-w-none flex-1 resize-none border-0 bg-transparent px-3 leading-relaxed shadow-none focus:border-0 focus:ring-0"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Детали, ссылки, следующий шаг"
