@@ -10,7 +10,13 @@ import { formatDate } from '@/lib/format';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { Note } from '@nexter/contracts';
-import { NotebookIcon, PaperclipIcon, PencilIcon, PinIcon, TrashIcon } from '@/components/ui/icons';
+import {
+  BookmarkIcon,
+  NotebookIcon,
+  PaperclipIcon,
+  PencilIcon,
+  TrashIcon,
+} from '@/components/ui/icons';
 import { NoteDrawer } from './note-drawer';
 import { sortNotes } from './notes-sort';
 
@@ -71,19 +77,20 @@ export function NotesPage() {
       <ListToolbar
         search={search}
         onSearch={setSearch}
-        searchPlaceholder="Поиск по заголовку, тексту и тегам"
+        searchPlaceholder="Поиск по заметкам"
         searchAriaLabel="Поиск по заметкам"
-      >
-        <TabGroup
-          value={sort}
-          onChange={setSort}
-          ariaLabel="Сортировка заметок"
-          options={[
-            { value: 'updated', label: 'По изменению' },
-            { value: 'created', label: 'По созданию' },
-          ]}
-        />
-      </ListToolbar>
+        leading={
+          <TabGroup
+            value={sort}
+            onChange={setSort}
+            ariaLabel="Сортировка заметок"
+            options={[
+              { value: 'updated', label: 'По изменению' },
+              { value: 'created', label: 'По созданию' },
+            ]}
+          />
+        }
+      />
 
       {error ? (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
@@ -157,7 +164,7 @@ export function NotesPage() {
                       pinMutation.mutate(note);
                     }}
                   >
-                    <PinIcon filled={note.pinned} className="h-[18px] w-[18px]" />
+                    <BookmarkIcon filled={note.pinned} className="h-[18px] w-[18px]" />
                   </Button>
                   <Button
                     variant="ghost"
