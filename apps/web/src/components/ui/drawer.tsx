@@ -16,6 +16,7 @@ export function Drawer({
   placement = 'right',
   inert = false,
   closeDisabled = false,
+  bodyClassName,
 }: {
   open: boolean;
   onClose: () => void;
@@ -29,6 +30,7 @@ export function Drawer({
   placement?: 'right' | 'beside';
   inert?: boolean;
   closeDisabled?: boolean;
+  bodyClassName?: string;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -123,7 +125,9 @@ export function Drawer({
             ✕
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">{children}</div>
+        <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain p-6', bodyClassName)}>
+          {children}
+        </div>
         {footer ? (
           <div className="flex justify-end gap-2 border-t border-zinc-200 px-6 py-3">{footer}</div>
         ) : null}

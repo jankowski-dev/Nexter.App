@@ -11,6 +11,7 @@ import { useState } from 'react';
 import type { Task, TaskStatus } from '@nexter/contracts';
 import { TaskCalendar } from './task-calendar';
 import { TaskDialog } from './task-dialog';
+import { TaskStatusLegend } from './task-legend';
 import { TaskCompactRow } from './task-row';
 
 type TaskFilter = 'all' | 'open' | 'done';
@@ -158,6 +159,7 @@ export function TasksPage() {
             ]}
           />
         }
+        actions={view === 'calendar' ? <TaskStatusLegend /> : undefined}
       >
         {view === 'list' ? (
           <TabGroup
