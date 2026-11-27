@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button';
 import type { Task } from '@nexter/contracts';
 import { isTaskOverdue, taskTimeLabel } from '@/lib/tasks';
 import { useState } from 'react';
@@ -26,9 +25,6 @@ function taskTone(task: Task, now: Date): string {
 export function TaskCalendar({
   month,
   tasks,
-  onPrev,
-  onNext,
-  onToday,
   onOpen,
   onDuplicate,
   onCreate,
@@ -37,9 +33,6 @@ export function TaskCalendar({
 }: {
   month: Date;
   tasks: Task[];
-  onPrev: () => void;
-  onNext: () => void;
-  onToday: () => void;
   onOpen: (task: Task) => void;
   onDuplicate: (task: Task) => void;
   onCreate: (date: string) => void;
@@ -78,23 +71,10 @@ export function TaskCalendar({
   }
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={onPrev} aria-label="Предыдущий месяц">
-            ←
-          </Button>
-          <Button variant="secondary" onClick={onToday}>
-            Сегодня
-          </Button>
-          <Button variant="secondary" onClick={onNext} aria-label="Следующий месяц">
-            →
-          </Button>
-        </div>
-        <div className="text-lg font-semibold capitalize text-zinc-900">{monthTitle(month)}</div>
-      </div>
+    <div className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="mb-2 text-sm font-medium capitalize text-zinc-700">{monthTitle(month)}</div>
 
-      <div className="mt-4 grid grid-cols-7 border-l border-t border-zinc-200">
+      <div className="mt-2 grid grid-cols-7 border-l border-t border-zinc-200">
         {WEEKDAYS.map((day) => (
           <div
             key={day}

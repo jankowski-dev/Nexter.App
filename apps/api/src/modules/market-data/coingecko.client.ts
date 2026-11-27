@@ -83,6 +83,8 @@ function optionalPercent(value: unknown): string | null {
 export class CoinGeckoClient {
   private readonly logger = new Logger(CoinGeckoClient.name);
   private readonly cache = new Map<string, { expiresAt: number; value: unknown }>();
+  /** Last successful ticker keeps the header populated through provider 429s. */
+  private lastTopMarkets: CoinGeckoTopMarket[] = [];
 
   async getTokenByContract(chain: string, address: string): Promise<CoinGeckoToken | null> {
     if (env.NODE_ENV === 'test') return null;
@@ -140,14 +142,32 @@ export class CoinGeckoClient {
     const bounded = Math.min(Math.max(Math.trunc(limit), 1), 25);
     const key = `ticker:top:${bounded}`;
     const cached = this.read<CoinGeckoTopMarket[]>(key);
-    if (cached !== undefined) return cached ?? [];
+    if (cached !== undefined) {
+      if (cached && cached.length > 0) {
+        this.lastTopMarkets = cached;
+        return cached;
+      }
+      if (this.lastTopMarkets.length > 0) return this.lastTopMarkets.slice(0, bounded);
+      return [];
+    }
 
     const body = await this.fetchJson(
       `/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${bounded}&page=1&price_change_percentage=24h&sparkline=false`,
     );
     const result = mapTopMarketsResponse(body, bounded);
-    this.write(key, result, result.length > 0 ? TICKER_CACHE_TTL_MS : 15_000);
-    return result;
+    if (result.length > 0) {
+      this.lastTopMarkets = result;
+      this.write(key, result, TICKER_CACHE_TTL_MS);
+      return result;
+    }
+
+    if (this.lastTopMarkets.length > 0) {
+      this.write(key, this.lastTopMarkets.slice(0, bounded), 15_000);
+      return this.lastTopMarkets.slice(0, bounded);
+    }
+
+    this.write(key, [], 15_000);
+    return [];
   }
 
   async getMarkets(ids: string[]): Promise<Map<string, CoinGeckoMarket>> {
