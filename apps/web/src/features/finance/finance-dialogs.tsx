@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { ExpressionInput } from '@/components/ui/expression-input';
@@ -16,6 +17,7 @@ import {
 } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { normalizeAmountInput } from '@/lib/expression';
+import { Decimal } from 'decimal.js';
 import { useState } from 'react';
 import type {
   FinanceAccount,
@@ -162,15 +164,12 @@ export function FinanceTransactionDialog({
               <option value="income">Доход</option>
             </Select>
           </label>
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата
-            <Input
-              className="mt-1"
-              type="date"
-              value={occurredOn}
-              onChange={(event) => setOccurredOn(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker label="Дата" value={occurredOn} onChange={setOccurredOn} />
+            </div>
+          </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">
@@ -332,15 +331,12 @@ export function FinanceTransferDialog({
               ))}
             </Select>
           </label>
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата
-            <Input
-              className="mt-1"
-              type="date"
-              value={occurredOn}
-              onChange={(event) => setOccurredOn(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker label="Дата" value={occurredOn} onChange={setOccurredOn} />
+            </div>
+          </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">
@@ -436,6 +432,11 @@ export function FinanceAccountDialog({
     const normalizedFxRate = normalizeAmountInput(fxRate);
     const normalizedCreditLimit = creditLimit.trim() ? normalizeAmountInput(creditLimit) : '';
 
+    if (currency !== 'BYN' && (!normalizedFxRate || new Decimal(normalizedFxRate).lte(0))) {
+      setError(`Укажите курс к BYN — сколько BYN стоит 1 ${currency}.`);
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -446,7 +447,7 @@ export function FinanceAccountDialog({
         currency,
         openingBalance: normalizedOpeningBalance,
         openingDate,
-        fxRate: normalizedFxRate,
+        fxRate: currency === 'BYN' ? '1' : normalizedFxRate,
         creditLimit: normalizedCreditLimit || null,
       };
       if (account) await updateFinanceAccount(account.id, body);
@@ -519,15 +520,12 @@ export function FinanceAccountDialog({
             Начальный остаток
             <ExpressionInput className="mt-1" value={openingBalance} onChange={setOpeningBalance} />
           </label>
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата начала
-            <Input
-              className="mt-1"
-              type="date"
-              value={openingDate}
-              onChange={(event) => setOpeningDate(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker label="Дата начала" value={openingDate} onChange={setOpeningDate} />
+            </div>
+          </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-600">

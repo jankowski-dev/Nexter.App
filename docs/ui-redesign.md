@@ -305,7 +305,9 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 
 ## Finance overview visual refresh
 
-- `Финансы → Обзор` accounts use kind-tinted `tone-surface` cards with a type glyph, native/BYN balances, an archived badge and assets/liabilities/net-capital totals.
-- `Категории периода` splits expenses and income. Expenses are a colored donut with a legend of amounts, shares and bars; income is a compact secondary block; both have friendly empty states.
-- `Последние 12 месяцев` replaces the table with grouped emerald/rose bars, per-month net labels, hover/focus details and 12-month totals.
-- No schema, API, data or dependency change.
+- `Финансы → Обзор` accounts use kind-tinted `tone-surface` cards with a type glyph, native/BYN balances, an archived badge and assets/liabilities/net-capital totals. The accounts and categories cards stretch to the same height.
+- `Категории периода` shows only the top 10 expense categories as a colored donut and legend of amounts, shares and bars; the badge shows `10 из N` when more exist and the block has a friendly empty state. Income categories are no longer duplicated in this block.
+- `Последние 12 месяцев` uses one column of income/expense/net totals beside the grouped emerald/rose bar chart and a compact scrollable month table; all three parts share one row height. Totals show a smaller USD equivalent when an active USD account supplies the rate.
+- New operation, account and credit date fields use the shared Tasks-style calendar, and the Finance period uses the new `MonthPicker`; the whole field opens the popup. The operation category field is a searchable picker with `Без категории` as the default, and the description is borderless.
+- The Finance `Импорт` tab is removed; the legacy crypto `/import` page is unchanged. Account creation now requires a positive rate for non-BYN currencies instead of silently storing `1`.
+- No schema, data or dependency change.

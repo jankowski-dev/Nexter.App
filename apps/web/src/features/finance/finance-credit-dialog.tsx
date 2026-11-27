@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { ExpressionInput } from '@/components/ui/expression-input';
@@ -205,15 +206,12 @@ export function FinanceCreditDialog({
               placeholder="5000.00"
             />
           </label>
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата
-            <Input
-              className="mt-1"
-              type="date"
-              value={occurredOn}
-              onChange={(event) => setOccurredOn(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker label="Дата" value={occurredOn} onChange={setOccurredOn} />
+            </div>
+          </div>
         </div>
 
         <label className="block text-sm text-zinc-600">

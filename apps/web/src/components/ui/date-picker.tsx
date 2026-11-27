@@ -31,6 +31,151 @@ export function monthMatrix(year: number, month: number): Array<Array<number | n
   return weeks;
 }
 
+export function monthKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+export function parseMonthKey(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return new Date(Number(match[1]), month - 1, 1);
+}
+
+export function MonthPicker({
+  value,
+  onChange,
+  label = 'Месяц',
+  disabled = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  disabled?: boolean;
+}) {
+  const selected = parseMonthKey(value);
+  const [open, setOpen] = useState(false);
+  const [year, setYear] = useState(() => selected?.getFullYear() ?? new Date().getFullYear());
+
+  useEffect(() => {
+    if (selected) setYear(selected.getFullYear());
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  const months = Array.from({ length: 12 }, (_, index) =>
+    new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(year, index, 1)),
+  );
+  const display = selected
+    ? new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(selected)
+    : 'Выберите месяц';
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-left text-sm capitalize text-zinc-800 transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+      >
+        <span className={value ? 'capitalize' : 'text-zinc-400'}>{display}</span>
+        <CalendarIcon className="h-4 w-4 text-zinc-500" />
+      </button>
+
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Выбор месяца"
+          className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-xl border border-zinc-200 bg-white p-3 shadow-xl"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              aria-label="Предыдущий год"
+              onClick={() => setYear((current) => current - 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              ‹
+            </button>
+            <div className="text-sm font-medium text-zinc-800">{year}</div>
+            <button
+              type="button"
+              aria-label="Следующий год"
+              onClick={() => setYear((current) => current + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1">
+            {months.map((month, index) => {
+              const key = monthKey(year, index);
+              const isSelected = key === value;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-label={key}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    onChange(key);
+                    setOpen(false);
+                  }}
+                  className={`flex h-9 items-center justify-center rounded-lg text-xs capitalize transition ${
+                    isSelected
+                      ? 'bg-emerald-600 font-semibold text-white'
+                      : 'text-zinc-700 hover:bg-zinc-100'
+                  }`}
+                >
+                  {month}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                onChange(monthKey(now.getFullYear(), now.getMonth()));
+                setOpen(false);
+              }}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+            >
+              Текущий месяц
+            </button>
+            {value ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+                className="text-xs text-zinc-500 hover:text-zinc-800"
+              >
+                Очистить
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DatePicker({
   value,
   onChange,

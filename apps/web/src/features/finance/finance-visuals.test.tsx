@@ -72,6 +72,29 @@ describe('finance overview visuals', () => {
     expect(html).not.toContain('Чистый капитал');
   });
 
+  it('shows only the top ten expense categories', () => {
+    const many = Array.from({ length: 12 }, (_, index) => ({
+      categoryId: `category-${index + 1}`,
+      name: `Категория ${index + 1}`,
+      kind: 'expense' as const,
+      amountBase: String(120 - index * 10),
+      count: 1,
+    }));
+    const html = renderToStaticMarkup(
+      <FinanceCategoriesBlock
+        categories={many}
+        colorById={new Map()}
+        periodLabel="Ноябрь 2026"
+        onAddExpense={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Категория 10');
+    expect(html).not.toContain('Категория 11');
+    expect(html).not.toContain('Категория 12');
+    expect(html).toContain('10 из 12');
+  });
+
   it('renders category shares and the empty state', () => {
     const html = renderToStaticMarkup(
       <FinanceCategoriesBlock
@@ -96,8 +119,8 @@ describe('finance overview visuals', () => {
     expect(emptyHtml).toContain('За период пока нет категорий');
   });
 
-  it('renders the monthly chart, totals and the month table', () => {
-    const html = renderToStaticMarkup(<FinanceMonthsBlock months={[month]} />);
+  it('renders the monthly chart, totals, USD equivalents and the month table', () => {
+    const html = renderToStaticMarkup(<FinanceMonthsBlock months={[month]} usdRate="2.00" />);
 
     expect(html).toContain('Последние 12 месяцев');
     expect(html).toContain('Доходы');
@@ -105,5 +128,8 @@ describe('finance overview visuals', () => {
     expect(html).toContain('ноя');
     expect(html).toContain('<table');
     expect(html).toContain('Месяц');
+    expect(html).toContain('≈');
+    expect(html).toContain('50,00');
+    expect(html).toContain('30,00');
   });
 });

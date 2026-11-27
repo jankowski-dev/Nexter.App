@@ -19,6 +19,7 @@ import {
   monthLabel,
   monthShortLabel,
   summarizeMonths,
+  usdEquivalent,
   type FinanceCategorySection,
   type FinanceCategorySlice,
 } from './finance-view-model';
@@ -136,7 +137,7 @@ export function FinanceAccountsBlock({
   const hasNegativeNetWorth = Number(netWorthBase ?? 0) < 0;
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>Счета</CardTitle>
@@ -162,7 +163,7 @@ export function FinanceAccountsBlock({
         </div>
       ) : (
         <>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid flex-1 gap-3 sm:grid-cols-2">
             {accounts.map((account) => {
               const surface = accountSurfaceTone[account.kind];
               const isNegative = account.kind === 'credit' || Number(account.balanceBase) < 0;
@@ -216,7 +217,7 @@ export function FinanceAccountsBlock({
             })}
           </div>
 
-          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+          <div className="mt-auto rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
             <div className="grid gap-3 sm:grid-cols-3">
               <TotalCell
                 label="Активы"
@@ -365,19 +366,6 @@ function CategoryLegendRow({ slice, color }: { slice: FinanceCategorySlice; colo
   );
 }
 
-function CategoryCompactRow({ slice, color }: { slice: FinanceCategorySlice; color: string }) {
-  return (
-    <div className="flex items-center gap-2 py-0.5 text-xs">
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-      <span className="min-w-0 flex-1 truncate text-zinc-700">{slice.name}</span>
-      <span className="shrink-0 font-mono tabular-nums text-zinc-800">
-        {financeMoney(slice.amountBase, 'BYN')}
-      </span>
-      <span className="w-10 shrink-0 text-right text-zinc-500">{formatShare(slice.percent)}</span>
-    </div>
-  );
-}
-
 export function FinanceCategoriesBlock({
   categories,
   colorById,
@@ -390,25 +378,28 @@ export function FinanceCategoriesBlock({
   onAddExpense: () => void;
 }) {
   const sections = buildCategorySections(categories);
-  const primary = sections[0];
-  const secondary = sections[1];
+  const primary = sections.find((section) => section.kind === 'expense');
+  const visiblePrimary: FinanceCategorySection | undefined = primary
+    ? { ...primary, slices: primary.slices.slice(0, 10) }
+    : undefined;
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>Категории периода</CardTitle>
           <CardDescription>{periodLabel}</CardDescription>
         </div>
         {primary ? (
-          <Badge tone={primary.kind === 'expense' ? 'danger' : 'success'}>
-            {primary.slices.length}{' '}
-            {pluralizeRu(primary.slices.length, 'категория', 'категории', 'категорий')}
+          <Badge tone="danger">
+            {visiblePrimary?.slices.length}
+            {primary.slices.length > 10 ? ` из ${primary.slices.length}` : ''}{' '}
+            {pluralizeRu(visiblePrimary?.slices.length ?? 0, 'категория', 'категории', 'категорий')}
           </Badge>
         ) : null}
       </div>
 
-      {!primary ? (
+      {!visiblePrimary ? (
         <div className="mt-4 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 px-4 py-7 text-center">
           <div className="mx-auto flex w-fit items-end gap-1.5">
             <span className="h-5 w-2 rounded-full bg-emerald-300" />
@@ -425,14 +416,16 @@ export function FinanceCategoriesBlock({
           </Button>
         </div>
       ) : (
-        <div className="mt-4 space-y-4">
+        <div className="mt-4 flex-1 space-y-4">
           <div className="grid items-center gap-4 sm:grid-cols-[176px_1fr]">
             <CategoryDonut
-              section={primary}
-              colors={primary.slices.map((slice, index) => categoryColor(slice, index, colorById))}
+              section={visiblePrimary}
+              colors={visiblePrimary.slices.map((slice, index) =>
+                categoryColor(slice, index, colorById),
+              )}
             />
             <div className="space-y-3">
-              {primary.slices.map((slice, index) => (
+              {visiblePrimary.slices.map((slice, index) => (
                 <CategoryLegendRow
                   key={slice.key}
                   slice={slice}
@@ -441,32 +434,6 @@ export function FinanceCategoriesBlock({
               ))}
             </div>
           </div>
-
-          {secondary ? (
-            <div className="rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: categoryColor(secondary.slices[0]!, 0, colorById) }}
-                  />
-                  <span className="text-xs font-medium text-zinc-600">{secondary.label}</span>
-                </div>
-                <span className="font-mono text-sm font-semibold tabular-nums text-zinc-900">
-                  {financeMoney(secondary.totalBase, 'BYN')}
-                </span>
-              </div>
-              <div className="mt-2 grid gap-x-4 gap-y-1 sm:grid-cols-2">
-                {secondary.slices.map((slice, index) => (
-                  <CategoryCompactRow
-                    key={slice.key}
-                    slice={slice}
-                    color={categoryColor(slice, index, colorById)}
-                  />
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       )}
     </Card>
@@ -480,37 +447,64 @@ const compactNumber = new Intl.NumberFormat('ru-RU', {
 
 function MonthlyFlowTable({ months }: { months: readonly FinanceMonthTotal[] }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200">
-      <table className="w-full min-w-[360px] text-sm">
-        <thead>
-          <tr className="border-b border-zinc-200 bg-zinc-50/70 text-left text-[11px] text-zinc-500">
-            <th className="px-3 py-2 font-medium">Месяц</th>
-            <th className="px-3 py-2 text-right font-medium">Доходы</th>
-            <th className="px-3 py-2 text-right font-medium">Расходы</th>
-            <th className="px-3 py-2 text-right font-medium">Сальдо</th>
-          </tr>
-        </thead>
-        <tbody>
-          {months.map((row) => (
-            <tr key={row.month} className="border-b border-zinc-100 last:border-0">
-              <td className="px-3 py-2 capitalize text-zinc-700">{monthShortLabel(row.month)}</td>
-              <td className="px-3 py-2 text-right font-mono text-emerald-700">
-                {financeMoney(row.incomeBase, 'BYN')}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-rose-700">
-                {financeMoney(row.expenseBase, 'BYN')}
-              </td>
-              <td
-                className={`px-3 py-2 text-right font-mono ${
-                  Number(row.netBase) >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                }`}
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white">
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full min-w-[420px] border-separate border-spacing-0 text-sm">
+          <thead className="sticky top-0 z-10 bg-zinc-50/95 text-[11px] uppercase tracking-wide text-zinc-500 backdrop-blur">
+            <tr>
+              <th
+                scope="col"
+                className="border-b border-zinc-200 px-3 py-2.5 text-left font-medium"
               >
-                {financeMoney(row.netBase, 'BYN')}
-              </td>
+                Месяц
+              </th>
+              <th
+                scope="col"
+                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
+              >
+                Доходы
+              </th>
+              <th
+                scope="col"
+                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
+              >
+                Расходы
+              </th>
+              <th
+                scope="col"
+                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
+              >
+                Сальдо
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {months.map((row) => (
+              <tr
+                key={row.month}
+                className="odd:bg-white even:bg-zinc-50/40 hover:bg-zinc-100/60 transition-colors"
+              >
+                <td className="border-b border-zinc-100 px-3 py-2.5 font-medium capitalize text-zinc-700">
+                  {monthShortLabel(row.month)}
+                </td>
+                <td className="border-b border-zinc-100 px-3 py-2.5 text-right font-mono tabular-nums text-emerald-700">
+                  {financeMoney(row.incomeBase, 'BYN')}
+                </td>
+                <td className="border-b border-zinc-100 px-3 py-2.5 text-right font-mono tabular-nums text-rose-700">
+                  {financeMoney(row.expenseBase, 'BYN')}
+                </td>
+                <td
+                  className={`border-b border-zinc-100 px-3 py-2.5 text-right font-mono font-semibold tabular-nums ${
+                    Number(row.netBase) >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {financeMoney(row.netBase, 'BYN')}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -551,8 +545,8 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
   const hoveredMonth = hovered === null ? null : months[hovered];
 
   return (
-    <div className="relative">
-      <div className="mb-2 flex min-h-[34px] flex-wrap items-center justify-between gap-2">
+    <div className="relative flex h-full min-h-[280px] flex-col">
+      <div className="mb-2 flex min-h-[34px] shrink-0 flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3 text-[11px] text-zinc-500">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -593,11 +587,12 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
         )}
       </div>
 
-      <div className="overflow-x-auto">
-        <div className="min-w-[680px]">
+      <div className="min-h-0 flex-1 overflow-x-auto">
+        <div className="h-full min-w-[360px]">
           <svg
             viewBox={`0 0 ${width} ${height}`}
-            className="h-auto w-full"
+            className="h-full w-full"
+            preserveAspectRatio="xMidYMid meet"
             role="img"
             aria-label="Доходы, расходы и сальдо по месяцам"
             onMouseLeave={() => setHovered(null)}
@@ -729,13 +724,22 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
   );
 }
 
-export function FinanceMonthsBlock({ months }: { months: readonly FinanceMonthTotal[] }) {
+export function FinanceMonthsBlock({
+  months,
+  usdRate,
+}: {
+  months: readonly FinanceMonthTotal[];
+  usdRate?: string | null;
+}) {
   const totals = summarizeMonths(months);
   const hasMovement = hasMonthlyMovement(months);
   const positiveNet = Number(totals.netBase) >= 0;
+  const incomeUsd = usdEquivalent(totals.incomeBase, usdRate);
+  const expenseUsd = usdEquivalent(totals.expenseBase, usdRate);
+  const netUsd = usdEquivalent(totals.netBase, usdRate);
 
   return (
-    <Card>
+    <Card className="flex h-full flex-col">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <CardTitle>Последние 12 месяцев</CardTitle>
@@ -746,52 +750,71 @@ export function FinanceMonthsBlock({ months }: { months: readonly FinanceMonthTo
         <Badge tone="info">12 месяцев</Badge>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <div className="tone-surface tone-surface-emerald rounded-xl border p-3">
-          <div className="text-[11px] text-zinc-600">Доходы</div>
-          <div className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-emerald-800">
-            {financeMoney(totals.incomeBase, 'BYN')}
+      <div className="mt-4 grid flex-1 gap-4 xl:grid-cols-[200px_minmax(0,1fr)_minmax(0,0.9fr)]">
+        <div className="flex h-full flex-col gap-2">
+          <div className="tone-surface tone-surface-emerald flex flex-1 flex-col justify-center rounded-xl border p-3">
+            <div className="text-[11px] text-zinc-600">Доходы</div>
+            <div className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-emerald-800">
+              {financeMoney(totals.incomeBase, 'BYN')}
+            </div>
+            {incomeUsd ? (
+              <div className="mt-0.5 text-[11px] text-zinc-500">
+                ≈ {financeMoney(incomeUsd, 'USD')}
+              </div>
+            ) : null}
+          </div>
+          <div className="tone-surface tone-surface-rose flex flex-1 flex-col justify-center rounded-xl border p-3">
+            <div className="text-[11px] text-zinc-600">Расходы</div>
+            <div className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-rose-700">
+              {financeMoney(totals.expenseBase, 'BYN')}
+            </div>
+            {expenseUsd ? (
+              <div className="mt-0.5 text-[11px] text-zinc-500">
+                ≈ {financeMoney(expenseUsd, 'USD')}
+              </div>
+            ) : null}
+          </div>
+          <div className="tone-surface tone-surface-sky flex flex-1 flex-col justify-center rounded-xl border p-3">
+            <div className="text-[11px] text-zinc-600">Сальдо</div>
+            <div
+              className={`mt-0.5 font-mono text-lg font-semibold tabular-nums ${
+                positiveNet ? 'text-emerald-700' : 'text-rose-700'
+              }`}
+            >
+              {financeMoney(totals.netBase, 'BYN')}
+            </div>
+            {netUsd ? (
+              <div className="mt-0.5 text-[11px] text-zinc-500">
+                ≈ {financeMoney(netUsd, 'USD')}
+              </div>
+            ) : null}
           </div>
         </div>
-        <div className="tone-surface tone-surface-rose rounded-xl border p-3">
-          <div className="text-[11px] text-zinc-600">Расходы</div>
-          <div className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-rose-700">
-            {financeMoney(totals.expenseBase, 'BYN')}
-          </div>
-        </div>
-        <div className="tone-surface tone-surface-sky rounded-xl border p-3">
-          <div className="text-[11px] text-zinc-600">Сальдо</div>
-          <div
-            className={`mt-0.5 font-mono text-lg font-semibold tabular-nums ${
-              positiveNet ? 'text-emerald-700' : 'text-rose-700'
-            }`}
-          >
-            {financeMoney(totals.netBase, 'BYN')}
-          </div>
-        </div>
-      </div>
 
-      {hasMovement ? (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
-          <MonthlyFlowChart months={months} />
-          <MonthlyFlowTable months={months} />
-        </div>
-      ) : (
-        <div className="mt-4 rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center">
-          <div className="mx-auto flex h-10 w-fit items-end gap-1.5">
-            <span className="h-4 w-2 rounded-full bg-emerald-200" />
-            <span className="h-9 w-2 rounded-full bg-sky-200" />
-            <span className="h-6 w-2 rounded-full bg-amber-200" />
-            <span className="h-10 w-2 rounded-full bg-violet-200" />
+        {hasMovement ? (
+          <>
+            <MonthlyFlowChart months={months} />
+            <MonthlyFlowTable months={months} />
+          </>
+        ) : (
+          <div className="flex min-h-48 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center xl:col-span-2">
+            <div>
+              <div className="mx-auto flex h-10 w-fit items-end gap-1.5">
+                <span className="h-4 w-2 rounded-full bg-emerald-200" />
+                <span className="h-9 w-2 rounded-full bg-sky-200" />
+                <span className="h-6 w-2 rounded-full bg-amber-200" />
+                <span className="h-10 w-2 rounded-full bg-violet-200" />
+              </div>
+              <p className="mt-3 text-sm font-medium text-zinc-700">
+                За последние 12 месяцев нет движения
+              </p>
+              <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-500">
+                Как только появятся доходы или расходы, здесь появится динамика по месяцам.
+              </p>
+            </div>
           </div>
-          <p className="mt-3 text-sm font-medium text-zinc-700">
-            За последние 12 месяцев нет движения
-          </p>
-          <p className="mx-auto mt-1 max-w-sm text-xs text-zinc-500">
-            Как только появятся доходы или расходы, здесь появится динамика по месяцам.
-          </p>
-        </div>
-      )}
+        )}
+      </div>
     </Card>
   );
 }

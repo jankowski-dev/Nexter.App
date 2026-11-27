@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FinanceCategoryTotal, FinanceMonthTotal } from '@nexter/contracts';
-import { buildCategorySections, formatShare, summarizeMonths } from './finance-view-model';
+import {
+  buildCategorySections,
+  formatShare,
+  summarizeMonths,
+  usdEquivalent,
+} from './finance-view-model';
 
 function category(
   overrides: Partial<FinanceCategoryTotal> &
@@ -76,6 +81,15 @@ describe('summarizeMonths', () => {
       expenseBase: '0.00',
       netBase: '0.00',
     });
+  });
+});
+
+describe('usdEquivalent', () => {
+  it('converts BYN to USD with Decimal and rejects missing/zero rates', () => {
+    expect(usdEquivalent('296.50', '2.965')).toBe('100.00');
+    expect(usdEquivalent('100.00', null)).toBeNull();
+    expect(usdEquivalent('100.00', '0')).toBeNull();
+    expect(usdEquivalent(null, '2.965')).toBeNull();
   });
 });
 

@@ -456,6 +456,17 @@ describe.runIf(canRun)('Finance API', () => {
     }).expect(201);
     expect(Number(byn.body.fxRate)).toBe(1);
 
+    for (const fxRate of [undefined, '', '0', '-1']) {
+      await post('/api/v1/finance/accounts', {
+        name: `USD без курса ${String(fxRate)}`,
+        kind: 'cash',
+        currency: 'USD',
+        openingBalance: '0',
+        openingDate: '2026-05-27',
+        ...(fxRate === undefined ? {} : { fxRate }),
+      }).expect(400);
+    }
+
     const usd = await post('/api/v1/finance/accounts', {
       name: 'USD счёт',
       kind: 'cash',

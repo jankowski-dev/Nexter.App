@@ -182,6 +182,23 @@ export class FinanceService {
     input: FinanceAccountCreateRequest,
     meta: FinanceMeta,
   ): Promise<FinanceAccountWithBalance> {
+    let fxRate = '1';
+    if (input.currency !== 'BYN') {
+      if (!input.fxRate) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'A non-BYN account requires an fxRate',
+        });
+      }
+      if (decimal(input.fxRate).lte(0)) {
+        throw new BadRequestException({
+          code: 'VALIDATION_ERROR',
+          message: 'fxRate must be positive',
+        });
+      }
+      fxRate = input.fxRate;
+    }
+
     const [created] = await this.db
       .insert(financeAccounts)
       .values({
@@ -191,7 +208,7 @@ export class FinanceService {
         currency: input.currency,
         openingBalance: input.openingBalance ?? '0',
         openingDate: input.openingDate,
-        fxRate: input.currency === 'BYN' ? '1' : (input.fxRate ?? '1'),
+        fxRate,
         creditLimit: input.creditLimit ?? null,
         sortOrder: input.sortOrder ?? 0,
       })

@@ -130,6 +130,15 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   );
   await page.getByRole('button', { name: 'Текущий месяц' }).click();
 
+  await page.getByRole('button', { name: 'Выбрать месяц' }).click();
+  await page.getByRole('button', { name: 'Месяц периода' }).click();
+  await expect(page.getByRole('dialog', { name: 'Выбор месяца' })).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Выбор месяца' })
+    .getByRole('button', { name: 'Текущий месяц' })
+    .click();
+  await expect(page.getByRole('button', { name: 'Месяц периода' })).toBeVisible();
+
   await page.getByRole('tab', { name: 'Категории' }).click();
   await page.getByRole('button', { name: '+ Категория' }).first().click();
   const categoryDialog = page.getByRole('dialog');
@@ -169,6 +178,16 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await expect(page.getByText('950,00 BYN').first()).toBeVisible();
   await expect(page.getByText('100,00 BYN').first()).toBeVisible();
 
+  await page.getByRole('button', { name: '+ Счёт' }).click();
+  const accountDialog = page.getByRole('dialog');
+  await accountDialog.getByLabel('Название').fill('Доллары');
+  await accountDialog.getByLabel('Валюта').selectOption('USD');
+  await accountDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(accountDialog.getByText('Укажите курс к BYN')).toBeVisible();
+  await accountDialog.getByLabel('Курс к BYN').fill('2.965');
+  await accountDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByText('Доллары')).toBeVisible();
+
   await page.getByRole('button', { name: 'Получить кредит' }).click();
   const creditDialog = page.getByRole('dialog');
   await creditDialog.getByLabel('Название').fill('Кредит на авто');
@@ -178,6 +197,5 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await expect(page.getByText('Кредит на авто')).toBeVisible();
   await expect(page.getByText('1 450,00 BYN').first()).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Импорт' }).click();
-  await expect(page.getByText('История импортов')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Импорт' })).toHaveCount(0);
 });
