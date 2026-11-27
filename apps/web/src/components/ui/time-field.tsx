@@ -66,6 +66,16 @@ export function TimeField({
           </option>
         ))}
       </Select>
+      <button
+        type="button"
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-base text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-30"
+        onClick={() => onChange('')}
+        disabled={disabled || !value}
+        title="Сбросить время"
+        aria-label="Сбросить время"
+      >
+        ×
+      </button>
       <div className="flex flex-wrap items-center gap-1">
         {presets.map((preset) => (
           <button
@@ -83,15 +93,6 @@ export function TimeField({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className="h-8 rounded-md px-1.5 text-[11px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-        onClick={() => onChange('')}
-        disabled={disabled || !value}
-        title="Убрать время"
-      >
-        Сбросить
-      </button>
     </div>
   );
 }
