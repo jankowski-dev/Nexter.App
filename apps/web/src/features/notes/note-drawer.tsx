@@ -1,4 +1,3 @@
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Drawer } from '@/components/ui/drawer';
@@ -99,24 +98,14 @@ function formatBytes(value: number): string {
   return `${(value / 1024 / 1024).toFixed(1)} МБ`;
 }
 
-function tagsFromInput(value: string): string[] {
-  return value
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter(Boolean)
-    .slice(0, 20);
-}
-
-function payloadFrom(note: { title: string; body: string; tags: string; pinned: boolean }): {
+function payloadFrom(note: { title: string; body: string; pinned: boolean }): {
   title: string;
   body: string;
-  tags: string[];
   pinned: boolean;
 } {
   return {
     title: note.title.trim(),
     body: note.body,
-    tags: tagsFromInput(note.tags),
     pinned: note.pinned,
   };
 }
@@ -142,7 +131,6 @@ export function NoteDrawer({
   const [mode, setMode] = useState<'view' | 'edit'>(note && !startInEdit ? 'view' : 'edit');
   const [title, setTitle] = useState(note?.title ?? '');
   const [body, setBody] = useState(note?.body ?? '');
-  const [tags, setTags] = useState(note?.tags.join(', ') ?? '');
   const [pinned, setPinned] = useState(note?.pinned ?? false);
   const [images, setImages] = useState<NoteImage[]>(note?.images ?? []);
   const [audio, setAudio] = useState<NoteAudio[]>(note?.audio ?? []);
@@ -183,13 +171,12 @@ export function NoteDrawer({
       ? JSON.stringify({
           title: note.title,
           body: note.body,
-          tags: note.tags,
           pinned: note.pinned,
         })
       : null,
   );
-  const draftRef = useRef({ title, body, tags, pinned });
-  draftRef.current = { title, body, tags, pinned };
+  const draftRef = useRef({ title, body, pinned });
+  draftRef.current = { title, body, pinned };
 
   async function runSave(): Promise<boolean> {
     const draft = draftRef.current;
@@ -599,28 +586,6 @@ export function NoteDrawer({
               <p className="mt-2 text-xs text-zinc-500">Вложений пока нет.</p>
             ) : null}
           </div>
-
-          {mode === 'view' && tagsFromInput(tags).length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {tagsFromInput(tags).map((tag) => (
-                <Badge key={tag} tone="neutral">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
-
-          {mode === 'edit' ? (
-            <label className="block text-sm text-zinc-600">
-              Теги (через запятую)
-              <Input
-                className="mt-1"
-                value={tags}
-                onChange={(event) => setTags(event.target.value)}
-                placeholder="Идея, риск, наблюдение"
-              />
-            </label>
-          ) : null}
 
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">

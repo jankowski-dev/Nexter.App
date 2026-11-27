@@ -154,6 +154,8 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
     ),
   });
   await expect(taskDialog.getByAltText('dot.jpg')).toBeVisible();
+  await taskDialog.getByRole('button', { name: 'Готово' }).click();
+  await expect(taskDialog.getByRole('heading', { name: 'Проверить BASED' })).toBeVisible();
   await taskDialog.getByLabel('Закрыть').click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
@@ -176,7 +178,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   const listTaskDialog = page.getByRole('dialog');
   await listTaskDialog.getByLabel('Название').fill('Задача для списка');
   await listTaskDialog.getByLabel('Описание').fill('Скрытое описание');
-  await listTaskDialog.getByLabel('Закрыть').click();
+  await listTaskDialog.getByRole('button', { name: 'Создать' }).click();
   await expect(page.getByText('Задача для списка')).toBeVisible();
   await expect(page.getByText('Скрытое описание')).toHaveCount(0);
   await expect(page.getByText('тег1, тег2')).toHaveCount(0);
@@ -191,7 +193,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
     'true',
   );
   await expect(taskView.getByRole('combobox', { name: 'Повтор' })).toHaveCount(0);
-  await expect(taskView.getByRole('button', { name: 'Готово' })).toHaveCount(0);
+  await expect(taskView.getByRole('button', { name: 'Готово' })).toBeVisible();
   await taskView.getByLabel('Срок').click();
   await expect(taskView.getByRole('button', { name: todayKey })).toBeVisible();
   await taskView.getByLabel('Срок').click();
@@ -222,7 +224,7 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await calendarDialog.getByLabel('Название').fill('Календарная задача');
   await calendarDialog.getByLabel('Срок').click();
   await calendarDialog.getByRole('button', { name: firstDate }).click();
-  await calendarDialog.getByLabel('Закрыть').click();
+  await calendarDialog.getByRole('button', { name: 'Создать' }).click();
 
   const firstCell = page.locator(`[data-date="${firstDate}"]`);
   const secondCell = page.locator(`[data-date="${secondDate}"]`);
@@ -260,7 +262,6 @@ test('encrypted vault, tasks and notes through the UI', async ({ page }) => {
   await expect(noteDrawer.getByLabel('Текст заметки')).toHaveValue(
     'Проверить корреляцию BASED и LINK',
   );
-  await noteDrawer.getByLabel('Теги (через запятую)').fill('идея, риск');
   await noteDrawer.getByRole('button', { name: 'Готово' }).click();
   await expect(noteDrawer).toBeVisible();
   await expect(noteDrawer.getByRole('heading', { name: 'Идея по портфелю' })).toBeVisible();

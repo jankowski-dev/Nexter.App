@@ -7,6 +7,7 @@ import {
   CheckIcon,
   ClipboardIcon,
   FileIcon,
+  PaperclipIcon,
   PencilIcon,
   TrashIcon,
   UndoIcon,
@@ -287,6 +288,34 @@ export function TaskDialog({
     if (saved) onClose();
   }
 
+  async function finishEditing(): Promise<void> {
+    if (!draftRef.current.title.trim()) {
+      setError('Введите название задачи.');
+      setSaveState('error');
+      return;
+    }
+
+    const saved = await saveNow();
+    if (saved) {
+      setError(null);
+      setMode('view');
+    }
+  }
+
+  async function createAndClose(): Promise<void> {
+    if (!draftRef.current.title.trim()) {
+      setError('Введите название задачи.');
+      setSaveState('error');
+      return;
+    }
+
+    const saved = await saveNow();
+    if (saved) {
+      setError(null);
+      onClose();
+    }
+  }
+
   async function toggleStatus(): Promise<void> {
     const saved = taskIdRef.current ? true : await saveNow();
     if (!saved || !taskIdRef.current) return;
@@ -459,7 +488,18 @@ export function TaskDialog({
                   <PencilIcon />
                   Изменить
                 </Button>
-              ) : null}
+              ) : persisted ? (
+                <Button variant="secondary" onClick={() => void finishEditing()}>
+                  Готово
+                </Button>
+              ) : (
+                <>
+                  <Button variant="secondary" onClick={onClose}>
+                    Отмена
+                  </Button>
+                  <Button onClick={() => void createAndClose()}>Создать</Button>
+                </>
+              )}
             </div>
           </div>
         }
@@ -577,13 +617,13 @@ export function TaskDialog({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-[1fr_auto] gap-3">
-                  <div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="w-[190px] max-w-full">
                     <div className="text-sm text-zinc-600">Срок</div>
                     <DatePicker value={due} onChange={setDue} />
                   </div>
-                  <div className="block text-sm text-zinc-600">
-                    Время
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-zinc-600">Время</div>
                     <TimeField
                       value={dueTimeValue}
                       onChange={(value) => {
@@ -610,9 +650,20 @@ export function TaskDialog({
                 />
               </label>
 
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium text-zinc-700">Файлы</div>
+              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-emerald-700">
+                      <PaperclipIcon />
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium text-zinc-800">Файлы</div>
+                      <p className="mt-0.5 text-xs text-zinc-500">
+                        До {MAX_TASK_ATTACHMENTS} файлов, до 1,5 МБ. PDF, таблицы, архивы и
+                        изображения.
+                      </p>
+                    </div>
+                  </div>
                   <Button
                     type="button"
                     variant="secondary"
@@ -684,10 +735,10 @@ export function TaskDialog({
                       ))}
                   </div>
                 ) : (
-                  <p className="mt-2 text-xs text-zinc-500">
-                    До {MAX_TASK_ATTACHMENTS} файлов, до 1,5 МБ каждый. Изображения сжимаются в
-                    браузере.
-                  </p>
+                  <div className="mt-3 flex items-center gap-2 rounded-lg border border-dashed border-zinc-200 bg-white/70 px-3 py-2 text-xs text-zinc-500">
+                    <FileIcon className="h-4 w-4 shrink-0" />
+                    Пока нет файлов — прикрепите PDF, таблицу, архив или изображение.
+                  </div>
                 )}
               </div>
             </>
