@@ -200,7 +200,7 @@ export function DashboardPage() {
       {summary.isPending ? <LoadingRows rows={4} /> : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
-        <div className="space-y-3" aria-label="Крипта">
+        <div className="grid gap-3 sm:grid-cols-2" aria-label="Крипта">
           <h2 className="sr-only">Крипта</h2>
           <StatCard
             size="compact"
@@ -240,7 +240,7 @@ export function DashboardPage() {
           />
         </div>
 
-        <div className="space-y-3" aria-label="Финансы">
+        <div className="grid gap-3 sm:grid-cols-2" aria-label="Финансы">
           <h2 className="sr-only">Финансы</h2>
           <StatCard
             size="compact"
