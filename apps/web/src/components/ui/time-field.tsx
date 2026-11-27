@@ -36,53 +36,42 @@ export function TimeField({
   }
 
   return (
-    <div>
-      <div className="mt-1 flex items-center gap-1.5" role="group" aria-label={ariaLabel}>
-        <Select
-          aria-label={`${ariaLabel}: часы`}
-          className="h-10 w-20"
-          value={hour}
-          disabled={disabled}
-          onChange={(event) => update(event.target.value, minute)}
-        >
-          <option value="">--</option>
-          {hours.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </Select>
-        <span className="text-zinc-400">:</span>
-        <Select
-          aria-label={`${ariaLabel}: минуты`}
-          className="h-10 w-20"
-          value={minute}
-          disabled={disabled}
-          onChange={(event) => update(hour, event.target.value)}
-        >
-          <option value="">--</option>
-          {minutes.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </Select>
-        <button
-          type="button"
-          className="h-10 rounded-lg px-2 text-xs text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
-          onClick={() => onChange('')}
-          disabled={disabled || !value}
-          title="Убрать время"
-        >
-          Сбросить
-        </button>
-      </div>
-      <div className="mt-1.5 flex flex-wrap gap-1">
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={ariaLabel}>
+      <Select
+        aria-label={`${ariaLabel}: часы`}
+        className="h-10 w-[62px]"
+        value={hour}
+        disabled={disabled}
+        onChange={(event) => update(event.target.value, minute)}
+      >
+        <option value="">--</option>
+        {hours.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </Select>
+      <span className="text-zinc-400">:</span>
+      <Select
+        aria-label={`${ariaLabel}: минуты`}
+        className="h-10 w-[62px]"
+        value={minute}
+        disabled={disabled}
+        onChange={(event) => update(hour, event.target.value)}
+      >
+        <option value="">--</option>
+        {minutes.map((item) => (
+          <option key={item} value={item}>
+            {item}
+          </option>
+        ))}
+      </Select>
+      <div className="flex flex-wrap items-center gap-1">
         {presets.map((preset) => (
           <button
             key={preset.value}
             type="button"
-            className={`rounded-md border px-2 py-0.5 text-[11px] transition-colors ${
+            className={`h-8 rounded-md border px-2 text-[11px] transition-colors ${
               value === preset.value
                 ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
                 : 'border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:text-zinc-800'
@@ -94,6 +83,15 @@ export function TimeField({
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        className="h-8 rounded-md px-1.5 text-[11px] text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+        onClick={() => onChange('')}
+        disabled={disabled || !value}
+        title="Убрать время"
+      >
+        Сбросить
+      </button>
     </div>
   );
 }
