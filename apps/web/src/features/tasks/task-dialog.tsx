@@ -504,7 +504,7 @@ export function TaskDialog({
           </div>
         }
       >
-        <div className="space-y-5 [&_input]:text-[15px] [&_select]:text-[15px] [&_textarea]:text-[15px]">
+        <div className="flex min-h-full flex-col gap-5 [&_input]:text-[15px] [&_select]:text-[15px] [&_textarea]:text-[15px]">
           {mode === 'view' ? (
             <>
               <div>
@@ -635,9 +635,6 @@ export function TaskDialog({
                     />
                   </div>
                 </div>
-                <p className="text-[11px] text-zinc-500">
-                  Время необязательно. Без него задача считается задачей на день.
-                </p>
               </div>
 
               <label className="block text-sm text-zinc-600">
@@ -650,7 +647,11 @@ export function TaskDialog({
                 />
               </label>
 
-              <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 p-3">
+              <div
+                className={`rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 p-3 ${
+                  mode === 'edit' ? 'mt-auto' : ''
+                }`}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-emerald-700">
