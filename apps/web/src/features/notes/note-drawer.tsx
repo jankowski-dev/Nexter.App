@@ -422,7 +422,7 @@ export function NoteDrawer({
           </div>
         }
       >
-        <div className="space-y-5">
+        <div className="flex min-h-full flex-col gap-5">
           {mode === 'edit' ? (
             <Input
               value={title}
@@ -455,6 +455,7 @@ export function NoteDrawer({
             audio={audio}
             editable={mode === 'edit'}
             adding={uploading}
+            className="mt-auto"
             onFiles={(files) => void handleFiles(files)}
             onRemove={(image) => void removeImage(image)}
             onOpenImage={(image) => {

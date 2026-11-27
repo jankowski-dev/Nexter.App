@@ -593,7 +593,7 @@ export function TaskDialog({
 
               <Textarea
                 aria-label="Описание"
-                className="min-h-52 border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
+                className="min-h-52 w-full max-w-none resize-none border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Детали, ссылки, следующий шаг"
