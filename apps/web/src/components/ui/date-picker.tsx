@@ -92,7 +92,7 @@ export function DatePicker({
         <div
           role="dialog"
           aria-label="Календарь"
-          className="mt-2 rounded-xl border border-zinc-200 bg-white p-3 shadow-lg"
+          className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-xl border border-zinc-200 bg-white p-3 shadow-xl"
         >
           <div className="mb-2 flex items-center justify-between gap-2">
             <button

@@ -528,14 +528,9 @@ export function TaskDialog({
                 {completedAt ? <div>Выполнена {formatDate(completedAt)}</div> : null}
               </div>
 
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Описание
-                </div>
-                <p className="mt-1 whitespace-pre-wrap text-[15px] text-zinc-700">
-                  {description || 'Описание не заполнено.'}
-                </p>
-              </div>
+              <p className="whitespace-pre-wrap text-[15px] text-zinc-700">
+                {description || 'Описание не заполнено.'}
+              </p>
 
               {images.length > 0 ? (
                 <div>
@@ -617,13 +612,11 @@ export function TaskDialog({
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="w-[190px] max-w-full">
-                    <div className="text-sm text-zinc-600">Срок</div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-[190px] flex-1">
                     <DatePicker value={due} onChange={setDue} />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm text-zinc-600">Время</div>
+                  <div className="shrink-0">
                     <TimeField
                       value={dueTimeValue}
                       onChange={(value) => {
@@ -637,15 +630,13 @@ export function TaskDialog({
                 </div>
               </div>
 
-              <label className="block text-sm text-zinc-600">
-                Описание
-                <Textarea
-                  className="mt-1 min-h-52 border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Детали, ссылки, следующий шаг"
-                />
-              </label>
+              <Textarea
+                aria-label="Описание"
+                className="min-h-52 border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Детали, ссылки, следующий шаг"
+              />
 
               <div
                 className={`rounded-xl border border-dashed border-zinc-300 bg-zinc-50/70 p-3 ${
