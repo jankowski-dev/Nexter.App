@@ -374,6 +374,7 @@ export function NoteDrawer({
             : 'Измените текст и закройте окно — сохранится автоматически.'
         }
         size="third"
+        bodyClassName="flex flex-col"
         inert={confirmDelete}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -422,7 +423,7 @@ export function NoteDrawer({
           </div>
         }
       >
-        <div className="flex min-h-full flex-col gap-5">
+        <div className="flex flex-1 flex-col gap-5">
           {mode === 'edit' ? (
             <Input
               value={title}

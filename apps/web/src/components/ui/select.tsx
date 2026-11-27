@@ -129,7 +129,7 @@ export function Select({
 
       {open ? (
         <div
-          className="absolute left-0 right-0 top-full z-30 mt-1 max-h-64 overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-xl"
+          className="absolute left-0 top-full z-30 mt-1 max-h-64 w-max min-w-full max-w-[240px] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-xl"
           role="listbox"
         >
           {options.map((option) => {
@@ -142,7 +142,7 @@ export function Select({
                 aria-selected={active}
                 disabled={option.disabled}
                 className={cn(
-                  'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition',
+                  'flex w-full items-center justify-between gap-1.5 rounded-lg px-1.5 py-1.5 text-left text-sm transition',
                   active
                     ? 'bg-emerald-50 font-medium text-emerald-900'
                     : 'text-zinc-800 hover:bg-zinc-50',

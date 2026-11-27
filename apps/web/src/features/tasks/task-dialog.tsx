@@ -447,6 +447,7 @@ export function TaskDialog({
             : 'Изменения сохраняются автоматически каждые 10 секунд и при закрытии.'
         }
         size="third"
+        bodyClassName="flex flex-col"
         inert={confirmDelete}
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -499,7 +500,7 @@ export function TaskDialog({
           </div>
         }
       >
-        <div className="flex min-h-full flex-col gap-5 [&_input]:text-[15px] [&_select]:text-[15px] [&_textarea]:text-[15px]">
+        <div className="flex flex-1 flex-col gap-5 [&_input]:text-[15px] [&_select]:text-[15px] [&_textarea]:text-[15px]">
           {mode === 'view' ? (
             <>
               <div>
@@ -523,7 +524,7 @@ export function TaskDialog({
                 {completedAt ? <div>Выполнена {formatDate(completedAt)}</div> : null}
               </div>
 
-              <p className="whitespace-pre-wrap text-[15px] text-zinc-700">
+              <p className="whitespace-pre-wrap px-3 text-[15px] leading-relaxed text-zinc-700">
                 {description || 'Описание не заполнено.'}
               </p>
 
@@ -593,7 +594,7 @@ export function TaskDialog({
 
               <Textarea
                 aria-label="Описание"
-                className="min-h-52 w-full max-w-none resize-none border-0 bg-transparent shadow-none focus:border-0 focus:ring-0"
+                className="min-h-52 w-full max-w-none resize-none border-0 bg-transparent px-3 leading-relaxed shadow-none focus:border-0 focus:ring-0"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder="Детали, ссылки, следующий шаг"
