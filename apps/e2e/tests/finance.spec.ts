@@ -61,6 +61,14 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
     expect(response.status()).toBe(201);
     return response.json();
   };
+  const patch = async (url: string, data: Record<string, unknown>) => {
+    const response = await page.request.patch(url, {
+      headers: { 'x-csrf-token': csrf },
+      data,
+    });
+    expect(response.status()).toBe(200);
+    return response.json();
+  };
   const today = dateInputValue(new Date());
 
   const card = (await post('/api/v1/finance/accounts', {
@@ -87,7 +95,7 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
     name: 'Продукты',
     kind: 'expense',
   })) as { id: string };
-  await post('/api/v1/finance/rates/USD', { rate: '2.965' });
+  await patch('/api/v1/finance/rates/USD', { rate: '2.965' });
 
   await post('/api/v1/finance/transactions', {
     kind: 'income',
