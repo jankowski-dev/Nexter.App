@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarIcon } from './icons';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -31,6 +31,171 @@ export function monthMatrix(year: number, month: number): Array<Array<number | n
   return weeks;
 }
 
+export function monthKey(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}`;
+}
+
+export function parseMonthKey(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  return new Date(Number(match[1]), month - 1, 1);
+}
+
+export function MonthPicker({
+  value,
+  onChange,
+  label = 'Месяц',
+  disabled = false,
+  clearable = true,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  disabled?: boolean;
+  clearable?: boolean;
+}) {
+  const selected = parseMonthKey(value);
+  const [open, setOpen] = useState(false);
+  const [year, setYear] = useState(() => selected?.getFullYear() ?? new Date().getFullYear());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (selected) setYear(selected.getFullYear());
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [open]);
+
+  const months = Array.from({ length: 12 }, (_, index) =>
+    new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(year, index, 1)),
+  );
+  const formatted = selected
+    ? new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(selected)
+    : 'Выберите месяц';
+  const display = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`${label}: ${display}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-10 w-full items-center justify-between rounded-xl border border-zinc-200 bg-white px-3 text-left text-sm capitalize text-zinc-800 transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400"
+      >
+        <span className={value ? 'capitalize' : 'text-zinc-400'}>{display}</span>
+        <CalendarIcon className="h-4 w-4 text-zinc-500" />
+      </button>
+
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Выбор месяца"
+          className="absolute left-0 top-full z-50 mt-2 w-[280px] rounded-xl border border-zinc-200 bg-white p-3 shadow-xl"
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              aria-label="Предыдущий год"
+              onClick={() => setYear((current) => current - 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              ‹
+            </button>
+            <div className="text-sm font-medium text-zinc-800">{year}</div>
+            <button
+              type="button"
+              aria-label="Следующий год"
+              onClick={() => setYear((current) => current + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-1">
+            {months.map((month, index) => {
+              const key = monthKey(year, index);
+              const isSelected = key === value;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-label={key}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    onChange(key);
+                    setOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                  className={`flex h-9 items-center justify-center rounded-lg text-xs capitalize transition ${
+                    isSelected
+                      ? 'bg-emerald-600 font-semibold text-white'
+                      : 'text-zinc-700 hover:bg-zinc-100'
+                  }`}
+                >
+                  {month}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-zinc-100 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                const now = new Date();
+                onChange(monthKey(now.getFullYear(), now.getMonth()));
+                setOpen(false);
+                triggerRef.current?.focus();
+              }}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+            >
+              Текущий месяц
+            </button>
+            {value && clearable ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                className="text-xs text-zinc-500 hover:text-zinc-800"
+              >
+                Очистить
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DatePicker({
   value,
   onChange,
@@ -45,6 +210,8 @@ export function DatePicker({
   const selected = parseDateKey(value);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => selected ?? new Date());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (selected) setView(selected);
@@ -52,11 +219,22 @@ export function DatePicker({
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, [open]);
 
   const weeks = useMemo(() => monthMatrix(view.getFullYear(), view.getMonth()), [view]);
@@ -74,10 +252,11 @@ export function DatePicker({
     : 'Выберите дату';
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        aria-label={label}
+        aria-label={`${label}: ${display}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -138,6 +317,7 @@ export function DatePicker({
                       onClick={() => {
                         onChange(key);
                         setOpen(false);
+                        triggerRef.current?.focus();
                       }}
                       className={`flex h-8 items-center justify-center rounded-lg text-xs transition ${
                         isSelected
@@ -162,6 +342,7 @@ export function DatePicker({
                 const now = new Date();
                 onChange(dateKey(now.getFullYear(), now.getMonth(), now.getDate()));
                 setOpen(false);
+                triggerRef.current?.focus();
               }}
               className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
             >
@@ -173,6 +354,7 @@ export function DatePicker({
                 onClick={() => {
                   onChange('');
                   setOpen(false);
+                  triggerRef.current?.focus();
                 }}
                 className="text-xs text-zinc-500 hover:text-zinc-800"
               >

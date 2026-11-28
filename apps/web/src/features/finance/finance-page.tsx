@@ -1,18 +1,14 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { MonthPicker } from '@/components/ui/date-picker';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import {
-  commitFinanceImport,
   fetchFinanceAccounts,
   fetchFinanceCategories,
-  fetchFinanceImports,
   fetchFinanceJournal,
   fetchFinanceSummary,
-  previewFinanceImport,
-  rollbackFinanceImport,
   updateFinanceAccount,
   updateFinanceCategory,
   updateFinanceTransaction,
@@ -23,14 +19,12 @@ import { formatDate } from '@/lib/format';
 import { useConfirm } from '@/lib/confirm';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Decimal } from 'decimal.js';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type {
   FinanceAccount,
   FinanceCategory,
   FinanceCategoryKind,
   FinanceCurrency,
-  FinanceImport,
-  FinanceImportRequest,
   FinanceTransaction,
   FinanceTransfer,
 } from '@nexter/contracts';
@@ -51,7 +45,7 @@ import {
   FinanceMonthsBlock,
 } from './finance-visuals';
 
-type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories' | 'import';
+type FinanceTab = 'overview' | 'journal' | 'accounts' | 'categories';
 type JournalFilter = 'all' | 'income' | 'expense' | 'transfer' | 'cancelled';
 type PeriodPreset = 'current' | 'previous' | 'custom' | 'year' | 'all';
 
@@ -60,7 +54,6 @@ const tabLabels: Record<FinanceTab, string> = {
   journal: 'Операции',
   accounts: 'Счета',
   categories: 'Категории',
-  import: 'Импорт',
 };
 
 const periodLabels: Record<PeriodPreset, string> = {
@@ -92,12 +85,6 @@ function monthEnd(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number);
   const date = new Date(Date.UTC(year, monthNumber, 0));
   return date.toISOString().slice(0, 10);
-}
-
-function statusTone(status: string): 'success' | 'warning' | 'neutral' {
-  if (status === 'committed') return 'success';
-  if (status === 'preview') return 'warning';
-  return 'neutral';
 }
 
 function Kpi({
@@ -144,9 +131,6 @@ export function FinancePage() {
     category?: FinanceCategory;
     kind?: FinanceCategoryKind;
   } | null>(null);
-  const [importPreview, setImportPreview] = useState<FinanceImport | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const periodRange = useMemo(() => {
     const today = new Date();
@@ -238,9 +222,10 @@ export function FinancePage() {
         limit: 500,
       }),
   });
-  const imports = useQuery({ queryKey: ['finance-imports'], queryFn: fetchFinanceImports });
-
   const accountRows = accounts.data?.accounts ?? [];
+  const usdRate =
+    accountRows.find((account) => account.currency === 'USD' && !account.archivedAt)?.fxRate ??
+    null;
   const categoryRows = categories.data?.categories ?? [];
   const accountById = new Map(accountRows.map((account) => [account.id, account]));
   const categoryById = new Map(categoryRows.map((category) => [category.id, category]));
@@ -252,7 +237,6 @@ export function FinancePage() {
       'finance-accounts',
       'finance-categories',
       'finance-journal',
-      'finance-imports',
     ]) {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
@@ -287,20 +271,6 @@ export function FinancePage() {
       invalidate();
     },
   });
-  const commitImport = useMutation({
-    mutationFn: (id: string) => commitFinanceImport(id),
-    onSuccess: () => {
-      setImportPreview(null);
-      invalidate();
-    },
-    onError: (error) => setImportError(toRussianError(error, 'Не удалось применить импорт')),
-  });
-  const rollbackImport = useMutation({
-    mutationFn: (id: string) => rollbackFinanceImport(id),
-    onSuccess: invalidate,
-    onError: (error) => setImportError(toRussianError(error, 'Не удалось откатить импорт')),
-  });
-
   function journalRows(): Array<{
     id: string;
     type: 'income' | 'expense' | 'transfer';
@@ -371,22 +341,6 @@ export function FinancePage() {
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   }
 
-  async function readImportFile(file: File | undefined): Promise<void> {
-    if (!file) return;
-    setImportError(null);
-    setImportPreview(null);
-
-    try {
-      const payload = JSON.parse(await file.text()) as FinanceImportRequest;
-      const preview = await previewFinanceImport(payload);
-      setImportPreview(preview);
-    } catch (error) {
-      setImportError(toRussianError(error, 'Не удалось прочитать или проверить файл импорта'));
-    } finally {
-      if (fileRef.current) fileRef.current.value = '';
-    }
-  }
-
   const avgIncome =
     summary.data && periodDays
       ? new Decimal(summary.data.incomeBase).div(periodDays).toFixed(2)
@@ -449,13 +403,14 @@ export function FinancePage() {
           ))}
         </div>
         {period === 'custom' ? (
-          <Input
-            className="h-9 w-40"
-            type="month"
-            aria-label="Выбрать месяц"
-            value={customMonth}
-            onChange={(event) => setCustomMonth(event.target.value || currentMonth())}
-          />
+          <div className="w-44">
+            <MonthPicker
+              label="Месяц периода"
+              value={customMonth}
+              onChange={(value) => setCustomMonth(value || currentMonth())}
+              clearable={false}
+            />
+          </div>
         ) : null}
         <span className="text-xs text-zinc-500">{periodRange.label}</span>
       </div>
@@ -533,7 +488,7 @@ export function FinancePage() {
             меняется. Сама операция — во вкладке «Переводы».
           </p>
 
-          <div className="grid items-start gap-4 xl:grid-cols-2">
+          <div className="grid items-stretch gap-4 xl:grid-cols-2">
             <FinanceAccountsBlock
               accounts={accountRows}
               assetsBase={summary.data?.assetsBase}
@@ -549,7 +504,7 @@ export function FinancePage() {
             />
           </div>
 
-          <FinanceMonthsBlock months={summary.data?.months ?? []} />
+          <FinanceMonthsBlock months={summary.data?.months ?? []} usdRate={usdRate} />
         </div>
       ) : null}
 
@@ -839,127 +794,6 @@ export function FinancePage() {
               </div>
             </Card>
           ))}
-        </div>
-      ) : null}
-
-      {!isLoading && !hasError && tab === 'import' ? (
-        <div className="space-y-6">
-          <Card>
-            <CardTitle>Импорт из Notion</CardTitle>
-            <CardDescription>
-              Загрузите нормализованный JSON: счета, категории, операции и переводы. Preview
-              проверяет дубликаты и ошибки, commit применяет данные, rollback откатывает последний
-              импорт.
-            </CardDescription>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/json,.json"
-                className="hidden"
-                aria-label="Файл импорта финансов"
-                onChange={(event) => void readImportFile(event.target.files?.[0])}
-              />
-              <Button variant="secondary" onClick={() => fileRef.current?.click()}>
-                Выбрать JSON
-              </Button>
-              {importPreview ? (
-                <Button
-                  onClick={() => commitImport.mutate(importPreview.id)}
-                  disabled={commitImport.isPending || importPreview.summary.errors.length > 0}
-                >
-                  {commitImport.isPending ? 'Применяю…' : 'Применить импорт'}
-                </Button>
-              ) : null}
-            </div>
-            {importError ? <p className="mt-3 text-sm text-red-700">{importError}</p> : null}
-            {importPreview ? (
-              <div className="mt-4 space-y-3">
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <Kpi label="Счета" value={String(importPreview.summary.accounts)} />
-                  <Kpi label="Категории" value={String(importPreview.summary.categories)} />
-                  <Kpi label="Операции" value={String(importPreview.summary.transactions)} />
-                  <Kpi label="Переводы" value={String(importPreview.summary.transfers)} />
-                </div>
-                {importPreview.summary.duplicates > 0 ? (
-                  <p className="text-sm text-amber-700">
-                    Дубликатов: {importPreview.summary.duplicates}. Они будут пропущены.
-                  </p>
-                ) : null}
-                {importPreview.summary.warnings.map((warning) => (
-                  <p key={warning} className="text-sm text-amber-700">
-                    {warning}
-                  </p>
-                ))}
-                {importPreview.summary.errors.length > 0 ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                    <div className="font-medium">
-                      Ошибки ({importPreview.summary.errors.length})
-                    </div>
-                    <ul className="mt-1 space-y-1">
-                      {importPreview.summary.errors.slice(0, 20).map((error, index) => (
-                        <li key={`${error.entityType}-${error.sourceId ?? index}`}>
-                          {error.entityType} {error.sourceId ?? ''}: {error.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </Card>
-
-          <Card>
-            <CardTitle>История импортов</CardTitle>
-            <CardDescription>Последние 20 импортов.</CardDescription>
-            <div className="mt-4 space-y-2">
-              {(imports.data?.imports ?? []).map((row) => (
-                <div
-                  key={row.id}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={statusTone(row.status)}>
-                        {row.status === 'committed'
-                          ? 'Применён'
-                          : row.status === 'preview'
-                            ? 'Проверка'
-                            : 'Откачен'}
-                      </Badge>
-                      <span className="text-zinc-700">{formatDate(row.createdAt)}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-zinc-500">
-                      {row.summary.transactions} операций · {row.summary.transfers} переводов ·{' '}
-                      {row.summary.duplicates} дубликатов
-                    </div>
-                  </div>
-                  {row.status === 'committed' ? (
-                    <Button
-                      variant="ghost"
-                      className="h-8 px-3 text-xs text-red-700"
-                      onClick={async () => {
-                        if (
-                          await confirm({
-                            title: 'Откатить импорт?',
-                            description:
-                              'Все созданные импортом операции, лоты, группы и цены будут удалены.',
-                            confirmLabel: 'Откатить',
-                            variant: 'danger',
-                          })
-                        ) {
-                          rollbackImport.mutate(row.id);
-                        }
-                      }}
-                      disabled={rollbackImport.isPending}
-                    >
-                      Откатить
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </Card>
         </div>
       ) : null}
 

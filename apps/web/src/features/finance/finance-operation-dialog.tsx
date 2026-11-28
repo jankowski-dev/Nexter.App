@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { ExpressionInput } from '@/components/ui/expression-input';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import type {
 } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { FinanceCategoryPicker } from './finance-category-picker';
 import {
   operationKindLabels,
   resolveOperationTitle,
@@ -300,13 +302,6 @@ export function FinanceOperationDialog({
                   onChange={setToAmount}
                   placeholder="0.00"
                 />
-                {selectedFrom && selectedTo ? (
-                  <span className="mt-1 block text-[11px] text-zinc-500">
-                    {selectedFrom.currency === selectedTo.currency
-                      ? 'Одинаковая валюта: сумма подставляется автоматически.'
-                      : `Курсы счетов: ${selectedFrom.currency} → ${selectedTo.currency}. Проверьте сумму зачисления.`}
-                  </span>
-                ) : null}
               </label>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -324,15 +319,12 @@ export function FinanceOperationDialog({
                   ))}
                 </Select>
               </label>
-              <label className="block text-sm text-zinc-600">
+              <div className="block text-sm text-zinc-600">
                 Дата
-                <Input
-                  className="mt-1"
-                  type="date"
-                  value={occurredOn}
-                  onChange={(event) => setOccurredOn(event.target.value)}
-                />
-              </label>
+                <div className="mt-1">
+                  <DatePicker label="Дата" value={occurredOn} onChange={setOccurredOn} />
+                </div>
+              </div>
             </div>
           </>
         ) : (
@@ -381,21 +373,16 @@ export function FinanceOperationDialog({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block text-sm text-zinc-600">
+              <div className="block text-sm text-zinc-600">
                 Все категории
-                <Select
-                  className="mt-1"
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
-                >
-                  <option value="">Без категории</option>
-                  {availableCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </Select>
-              </label>
+                <div className="mt-1">
+                  <FinanceCategoryPicker
+                    categories={availableCategories}
+                    value={categoryId}
+                    onChange={setCategoryId}
+                  />
+                </div>
+              </div>
               <label className="block text-sm text-zinc-600">
                 Счёт
                 <Select
@@ -421,32 +408,24 @@ export function FinanceOperationDialog({
                   onChange={(event) => setTitle(event.target.value)}
                   placeholder={selectedCategory?.name ?? 'Например, продукты'}
                 />
-                <span className="mt-1 block text-[11px] text-zinc-500">
-                  Можно не заполнять: подставится категория или тип.
-                </span>
               </label>
-              <label className="block text-sm text-zinc-600">
+              <div className="block text-sm text-zinc-600">
                 Дата
-                <Input
-                  className="mt-1"
-                  type="date"
-                  value={occurredOn}
-                  onChange={(event) => setOccurredOn(event.target.value)}
-                />
-              </label>
+                <div className="mt-1">
+                  <DatePicker label="Дата" value={occurredOn} onChange={setOccurredOn} />
+                </div>
+              </div>
             </div>
           </>
         )}
 
-        <label className="block text-sm text-zinc-600">
-          Описание
-          <Textarea
-            className="mt-1"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Необязательно"
-          />
-        </label>
+        <Textarea
+          aria-label="Описание"
+          className="min-h-28 resize-none border-0 bg-transparent px-3 leading-relaxed shadow-none focus:border-0 focus:ring-0"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="Заметка к операции"
+        />
         {financeError(error)}
       </div>
     </Drawer>

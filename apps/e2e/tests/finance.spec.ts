@@ -13,6 +13,16 @@ function previousMonthLabel(): string {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function dateInputValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate(),
+  ).padStart(2, '0')}`;
+}
+
+function monthInputValue(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
 test.skip(process.env.NEXTER_TEST_DB !== '1', 'Test DB only');
 
 test.beforeAll(async () => {
@@ -51,7 +61,7 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
     expect(response.status()).toBe(201);
     return response.json();
   };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dateInputValue(new Date());
 
   const card = (await post('/api/v1/finance/accounts', {
     name: 'Карта',
@@ -130,6 +140,22 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   );
   await page.getByRole('button', { name: 'Текущий месяц' }).click();
 
+  await page.getByRole('button', { name: 'Выбрать месяц' }).click();
+  const previousMonth = new Date();
+  previousMonth.setDate(1);
+  previousMonth.setMonth(previousMonth.getMonth() - 1);
+  await page.getByRole('button', { name: /^Месяц периода/ }).click();
+  const monthDialog = page.getByRole('dialog', { name: 'Выбор месяца' });
+  await expect(monthDialog).toBeVisible();
+  if (previousMonth.getFullYear() !== new Date().getFullYear()) {
+    await monthDialog.getByRole('button', { name: 'Предыдущий год' }).click();
+  }
+  await monthDialog.getByRole('button', { name: monthInputValue(previousMonth) }).click();
+  await expect(page.getByRole('button', { name: /^Месяц периода/ })).toHaveText(
+    previousMonthLabel(),
+  );
+  await page.getByRole('button', { name: 'Текущий месяц' }).click();
+
   await page.getByRole('tab', { name: 'Категории' }).click();
   await page.getByRole('button', { name: '+ Категория' }).first().click();
   const categoryDialog = page.getByRole('dialog');
@@ -161,6 +187,19 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   const incomeRow = page.getByRole('row').filter({ hasText: 'Зарплата' });
   await incomeRow.getByRole('button', { name: 'Изменить' }).click();
   const dialog = page.getByRole('dialog');
+  const categoryTrigger = dialog.getByRole('button', { name: /^Категория:/ });
+  await categoryTrigger.click();
+  const categoryList = dialog.getByRole('listbox', { name: 'Категории' });
+  await expect(categoryList).toBeVisible();
+  await dialog.getByLabel('Поиск категории').fill('Доход');
+  await expect(categoryList.getByRole('option', { name: /Доход/ })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(categoryList).toHaveCount(0);
+  await expect(dialog).toBeVisible();
+  await categoryTrigger.click();
+  await dialog.getByLabel('Поиск категории').fill('Доход');
+  await page.keyboard.press('Enter');
+  await expect(categoryTrigger).toContainText('Доход');
   await dialog.getByLabel('Сумма').fill('1200');
   await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -168,6 +207,22 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await page.getByRole('tab', { name: 'Счета' }).click();
   await expect(page.getByText('950,00 BYN').first()).toBeVisible();
   await expect(page.getByText('100,00 BYN').first()).toBeVisible();
+
+  await page.getByRole('button', { name: '+ Счёт' }).click();
+  const accountDialog = page.getByRole('dialog');
+  await accountDialog.getByLabel('Название').fill('Доллары');
+  await accountDialog.getByLabel('Валюта').selectOption('USD');
+  await accountDialog.getByRole('button', { name: /^Дата начала/ }).click();
+  const dateDialog = page.getByRole('dialog', { name: 'Календарь' });
+  await expect(dateDialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dateDialog).toHaveCount(0);
+  await expect(accountDialog).toBeVisible();
+  await accountDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(accountDialog.getByText('Укажите курс к BYN')).toBeVisible();
+  await accountDialog.getByLabel('Курс к BYN').fill('2.965');
+  await accountDialog.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByText('Доллары')).toBeVisible();
 
   await page.getByRole('button', { name: 'Получить кредит' }).click();
   const creditDialog = page.getByRole('dialog');
@@ -178,6 +233,5 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await expect(page.getByText('Кредит на авто')).toBeVisible();
   await expect(page.getByText('1 450,00 BYN').first()).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Импорт' }).click();
-  await expect(page.getByText('История импортов')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Импорт' })).toHaveCount(0);
 });

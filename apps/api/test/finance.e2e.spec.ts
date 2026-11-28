@@ -456,6 +456,17 @@ describe.runIf(canRun)('Finance API', () => {
     }).expect(201);
     expect(Number(byn.body.fxRate)).toBe(1);
 
+    for (const fxRate of [undefined, '', '0', '-1']) {
+      await post('/api/v1/finance/accounts', {
+        name: `USD без курса ${String(fxRate)}`,
+        kind: 'cash',
+        currency: 'USD',
+        openingBalance: '0',
+        openingDate: '2026-05-27',
+        ...(fxRate === undefined ? {} : { fxRate }),
+      }).expect(400);
+    }
+
     const usd = await post('/api/v1/finance/accounts', {
       name: 'USD счёт',
       kind: 'cash',
@@ -472,6 +483,31 @@ describe.runIf(canRun)('Finance API', () => {
       openingDate: '2026-05-27',
       fxRate: '1',
     }).expect(201);
+
+    const convertible = await post('/api/v1/finance/accounts', {
+      name: 'Счёт для смены валюты',
+      kind: 'cash',
+      currency: 'USD',
+      openingBalance: '0',
+      openingDate: '2026-05-27',
+      fxRate: '2.9',
+    }).expect(201);
+    await agent
+      .patch(`/api/v1/finance/accounts/${convertible.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ currency: 'EUR' })
+      .expect(400);
+    await agent
+      .patch(`/api/v1/finance/accounts/${convertible.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ currency: 'EUR', fxRate: '0' })
+      .expect(400);
+    const converted = await agent
+      .patch(`/api/v1/finance/accounts/${convertible.body.id}`)
+      .set('x-csrf-token', owner.csrf)
+      .send({ currency: 'EUR', fxRate: '3.2' })
+      .expect(200);
+    expect(Number(converted.body.fxRate)).toBe(3.2);
 
     const category = await post('/api/v1/finance/categories', {
       name: 'Доход',

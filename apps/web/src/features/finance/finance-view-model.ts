@@ -124,6 +124,17 @@ export interface FinanceMonthlySummary {
   netBase: string;
 }
 
+export function usdEquivalent(
+  valueBase: string | null | undefined,
+  usdRate: string | null | undefined,
+): string | null {
+  if (valueBase === null || valueBase === undefined || valueBase === '') return null;
+  if (usdRate === null || usdRate === undefined || usdRate === '') return null;
+  const rate = new Decimal(usdRate);
+  if (rate.lte(0)) return null;
+  return new Decimal(valueBase).div(rate).toFixed(2);
+}
+
 export function summarizeMonths(months: readonly FinanceMonthTotal[]): FinanceMonthlySummary {
   let income = new Decimal(0);
   let expense = new Decimal(0);
