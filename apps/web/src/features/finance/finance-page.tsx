@@ -104,7 +104,7 @@ function Kpi({
     <Card className={surface ? `tone-surface tone-surface-${surface}` : undefined}>
       <CardTitle>{label}</CardTitle>
       <div
-        className={`mt-1 font-mono text-2xl font-semibold tabular-nums ${tone ?? 'text-zinc-900'}`}
+        className={`mt-1 font-mono text-xl font-semibold tabular-nums 2xl:text-2xl ${tone ?? 'text-zinc-900'}`}
       >
         {value}
       </div>
@@ -437,8 +437,8 @@ export function FinancePage() {
       ) : null}
 
       {!isLoading && !hasError && tab === 'overview' ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-8">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <Kpi
               label="Средний расход в день"
               value={periodDays ? money(avgExpense, 'BYN') : '—'}
@@ -453,21 +453,19 @@ export function FinancePage() {
               tone="text-emerald-700"
               surface="emerald"
             />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi
-              label="Доходы"
-              value={money(summary.data?.incomeBase, 'BYN')}
-              hint={periodRange.label}
-              tone="text-emerald-700"
-              surface="emerald"
-            />
             <Kpi
               label="Расходы"
               value={money(summary.data?.expenseBase, 'BYN')}
               hint={periodRange.label}
               tone="text-red-700"
               surface="rose"
+            />
+            <Kpi
+              label="Доходы"
+              value={money(summary.data?.incomeBase, 'BYN')}
+              hint={periodRange.label}
+              tone="text-emerald-700"
+              surface="emerald"
             />
             <Kpi
               label="Чистый поток"
@@ -488,7 +486,7 @@ export function FinancePage() {
             меняется. Сама операция — во вкладке «Переводы».
           </p>
 
-          <div className="grid items-stretch gap-4 xl:grid-cols-2">
+          <div className="grid items-stretch gap-6 xl:grid-cols-2">
             <FinanceAccountsBlock
               accounts={accountRows}
               assetsBase={summary.data?.assetsBase}

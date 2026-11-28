@@ -305,9 +305,9 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 
 ## Finance overview visual refresh
 
-- `Финансы → Обзор` accounts use kind-tinted `tone-surface` cards with a type glyph, native/BYN balances, an archived badge and assets/liabilities/net-capital totals. The accounts and categories cards stretch to the same height.
+- `Финансы → Обзор` starts with six equal KPI cards in one row on wide screens: average expense/day, average income/day, expenses, income, net flow and net capital. Accounts use kind-tinted `tone-surface` cards with a type glyph, native/BYN balances, an archived badge and assets/liabilities/net-capital totals. The accounts and categories cards stretch to the same height.
 - `Категории периода` shows only the top 10 expense categories as a colored donut and legend of amounts, shares and bars; the badge shows `10 из N` when more exist and the block has a friendly empty state. Income categories are no longer duplicated in this block.
-- `Последние 12 месяцев` uses one column of income/expense/net totals beside the grouped emerald/rose bar chart and a compact scrollable month table; all three parts share one row height. Totals show a smaller USD equivalent when an active USD account supplies the rate.
+- `Последние 12 месяцев` uses one column of income/expense/net totals beside the grouped emerald/rose bar chart and a compact scrollable month table; all three parts share one row height with wider gaps. The chart shows the last six months, the table keeps 12 months and only the income/expense columns, and the header no longer carries the old description/badge. Totals show a smaller USD equivalent when an active USD account supplies the rate.
 - New operation, account and credit date fields use the shared Tasks-style calendar, and the Finance period uses the new `MonthPicker`; the whole field opens the popup. The operation category field is a searchable picker with `Без категории` as the default, and the description is borderless.
 - The Finance `Импорт` tab is removed; the legacy crypto `/import` page is unchanged. Account creation through the Finance UI/API now requires a positive rate for non-BYN currencies instead of silently storing `1`; the legacy JSON import path is unchanged.
 - No schema, data or dependency change.
