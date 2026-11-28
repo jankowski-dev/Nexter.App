@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { formatByn, pluralizeRu } from '@/lib/format';
+import { pluralizeRu } from '@/lib/format';
 import { useId, useState, type ReactNode } from 'react';
 import type {
   FinanceAccountKind,
@@ -217,23 +217,25 @@ export function FinanceAccountsBlock({
             })}
           </div>
 
-          <div className="mt-auto rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <TotalCell
-                label="Активы"
-                value={financeMoney(assetsBase, 'BYN')}
-                tone="text-emerald-700"
-              />
-              <TotalCell
-                label="Обязательства"
-                value={financeMoney(liabilitiesBase, 'BYN')}
-                tone="text-rose-700"
-              />
-              <TotalCell
-                label="Итого по счетам"
-                value={financeMoney(netWorthBase, 'BYN')}
-                tone={hasNegativeNetWorth ? 'text-rose-700' : 'text-emerald-800'}
-              />
+          <div className="mt-auto pt-4">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <TotalCell
+                  label="Активы"
+                  value={financeMoney(assetsBase, 'BYN')}
+                  tone="text-emerald-700"
+                />
+                <TotalCell
+                  label="Обязательства"
+                  value={financeMoney(liabilitiesBase, 'BYN')}
+                  tone="text-rose-700"
+                />
+                <TotalCell
+                  label="Итого по счетам"
+                  value={financeMoney(netWorthBase, 'BYN')}
+                  tone={hasNegativeNetWorth ? 'text-rose-700' : 'text-emerald-800'}
+                />
+              </div>
             </div>
           </div>
         </>
@@ -449,32 +451,26 @@ function MonthlyFlowTable({ months }: { months: readonly FinanceMonthTotal[] }) 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[420px] border-separate border-spacing-0 text-sm">
+        <table className="w-full min-w-[340px] border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-zinc-50/95 text-[11px] uppercase tracking-wide text-zinc-500 backdrop-blur">
             <tr>
               <th
                 scope="col"
-                className="border-b border-zinc-200 px-3 py-2.5 text-left font-medium"
+                className="border-b border-zinc-200 px-3 py-1.5 text-left font-medium"
               >
                 Месяц
               </th>
               <th
                 scope="col"
-                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
+                className="border-b border-zinc-200 px-3 py-1.5 text-right font-medium"
               >
                 Доходы
               </th>
               <th
                 scope="col"
-                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
+                className="border-b border-zinc-200 px-3 py-1.5 text-right font-medium"
               >
                 Расходы
-              </th>
-              <th
-                scope="col"
-                className="border-b border-zinc-200 px-3 py-2.5 text-right font-medium"
-              >
-                Сальдо
               </th>
             </tr>
           </thead>
@@ -484,21 +480,14 @@ function MonthlyFlowTable({ months }: { months: readonly FinanceMonthTotal[] }) 
                 key={row.month}
                 className="odd:bg-white even:bg-zinc-50/40 hover:bg-zinc-100/60 transition-colors"
               >
-                <td className="border-b border-zinc-100 px-3 py-2.5 font-medium capitalize text-zinc-700">
+                <td className="border-b border-zinc-100 px-3 py-1.5 font-medium capitalize text-zinc-700">
                   {monthShortLabel(row.month)}
                 </td>
-                <td className="border-b border-zinc-100 px-3 py-2.5 text-right font-mono tabular-nums text-emerald-700">
+                <td className="border-b border-zinc-100 px-3 py-1.5 text-right font-mono tabular-nums text-emerald-700">
                   {financeMoney(row.incomeBase, 'BYN')}
                 </td>
-                <td className="border-b border-zinc-100 px-3 py-2.5 text-right font-mono tabular-nums text-rose-700">
+                <td className="border-b border-zinc-100 px-3 py-1.5 text-right font-mono tabular-nums text-rose-700">
                   {financeMoney(row.expenseBase, 'BYN')}
-                </td>
-                <td
-                  className={`border-b border-zinc-100 px-3 py-2.5 text-right font-mono font-semibold tabular-nums ${
-                    Number(row.netBase) >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                  }`}
-                >
-                  {financeMoney(row.netBase, 'BYN')}
                 </td>
               </tr>
             ))}
@@ -514,11 +503,6 @@ function compactByn(value: number): string {
   return `${compactNumber.format(value)} Br`;
 }
 
-function signedCompactByn(value: number): string {
-  if (!Number.isFinite(value) || value === 0) return '0 Br';
-  return `${value > 0 ? '+' : '−'}${compactByn(Math.abs(value))}`;
-}
-
 function niceCeil(value: number): number {
   if (!Number.isFinite(value) || value <= 0) return 1;
   const magnitude = 10 ** Math.floor(Math.log10(value));
@@ -532,7 +516,7 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
   const gradientId = useId().replace(/:/g, '');
   const width = 860;
   const height = 300;
-  const padding = { top: 20, right: 16, bottom: 54, left: 64 };
+  const padding = { top: 20, right: 16, bottom: 40, left: 64 };
   const plotWidth = width - padding.left - padding.right;
   const plotHeight = height - padding.top - padding.bottom;
   const values = months.flatMap((month) => [Number(month.incomeBase), Number(month.expenseBase)]);
@@ -572,15 +556,6 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
             <span className="font-mono text-rose-700">
               {financeMoney(hoveredMonth.expenseBase, 'BYN')}
             </span>
-            <span className="text-zinc-400">·</span>
-            <span className="text-zinc-500">сальдо</span>
-            <span
-              className={`font-mono ${
-                Number(hoveredMonth.netBase) >= 0 ? 'text-emerald-700' : 'text-rose-700'
-              }`}
-            >
-              {formatByn(hoveredMonth.netBase)}
-            </span>
           </div>
         ) : (
           <span className="text-[11px] text-zinc-400">Наведите на месяц, чтобы увидеть детали</span>
@@ -594,7 +569,7 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
             className="h-full w-full"
             preserveAspectRatio="xMidYMid meet"
             role="img"
-            aria-label="Доходы, расходы и сальдо по месяцам"
+            aria-label="Доходы и расходы по месяцам"
             onMouseLeave={() => setHovered(null)}
           >
             <defs>
@@ -645,7 +620,6 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
               const center = padding.left + slot * (index + 0.5);
               const income = Number(month.incomeBase);
               const expense = Number(month.expenseBase);
-              const net = Number(month.netBase);
               const incomeY = y(Number.isFinite(income) ? income : 0);
               const expenseY = y(Number.isFinite(expense) ? expense : 0);
               const incomeHeight = Math.max(income > 0 ? 2 : 0, zeroY - incomeY);
@@ -662,9 +636,7 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
                   aria-label={`${monthLabel(month.month)}: доходы ${financeMoney(
                     month.incomeBase,
                     'BYN',
-                  )}, расходы ${financeMoney(month.expenseBase, 'BYN')}, сальдо ${formatByn(
-                    month.netBase,
-                  )}`}
+                  )}, расходы ${financeMoney(month.expenseBase, 'BYN')}`}
                   className="outline-none"
                 >
                   {active ? (
@@ -698,21 +670,12 @@ function MonthlyFlowChart({ months }: { months: readonly FinanceMonthTotal[] }) 
                   />
                   <text
                     x={center}
-                    y={height - 34}
+                    y={height - 16}
                     textAnchor="middle"
                     fontSize="10"
                     fill="var(--text-soft)"
                   >
                     {monthShortLabel(month.month)}
-                  </text>
-                  <text
-                    x={center}
-                    y={height - 18}
-                    textAnchor="middle"
-                    fontSize="9"
-                    fill={net >= 0 ? '#047857' : '#be123c'}
-                  >
-                    {signedCompactByn(net)}
                   </text>
                 </g>
               );
@@ -740,18 +703,10 @@ export function FinanceMonthsBlock({
 
   return (
     <Card className="flex h-full flex-col">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <CardTitle>Последние 12 месяцев</CardTitle>
-          <CardDescription>
-            Доходы, расходы (включая погашение кредита) и сальдо в BYN.
-          </CardDescription>
-        </div>
-        <Badge tone="info">12 месяцев</Badge>
-      </div>
+      <CardTitle>Последние 12 месяцев</CardTitle>
 
-      <div className="mt-4 grid flex-1 gap-4 xl:grid-cols-[200px_minmax(0,1fr)_minmax(0,0.9fr)]">
-        <div className="flex h-full flex-col gap-2">
+      <div className="mt-6 grid flex-1 gap-6 xl:grid-cols-[200px_minmax(0,1fr)_minmax(0,0.9fr)]">
+        <div className="flex h-full flex-col gap-4">
           <div className="tone-surface tone-surface-emerald flex flex-1 flex-col justify-center rounded-xl border p-3">
             <div className="text-[11px] text-zinc-600">Доходы</div>
             <div className="mt-0.5 font-mono text-lg font-semibold tabular-nums text-emerald-800">
@@ -793,7 +748,7 @@ export function FinanceMonthsBlock({
 
         {hasMovement ? (
           <>
-            <MonthlyFlowChart months={months} />
+            <MonthlyFlowChart months={months.slice(-6)} />
             <MonthlyFlowTable months={months} />
           </>
         ) : (

@@ -151,8 +151,28 @@ describe('finance overview visuals', () => {
     expect(html).toContain('ноя');
     expect(html).toContain('<table');
     expect(html).toContain('Месяц');
+    expect(html).not.toMatch(/<th[^>]*>Сальдо/);
     expect(html).toContain('≈');
     expect(html).toContain('50,00');
     expect(html).toContain('30,00');
+  });
+
+  it('shows the last six months on the chart while keeping the 12-month table', () => {
+    const months = Array.from({ length: 12 }, (_, index) => {
+      const month = String(index + 1).padStart(2, '0');
+      return {
+        month: `2026-${month}`,
+        incomeBase: '100.00',
+        expenseBase: '40.00',
+        netBase: '60.00',
+        incomeCount: 1,
+        expenseCount: 1,
+      } satisfies FinanceMonthTotal;
+    });
+    const html = renderToStaticMarkup(<FinanceMonthsBlock months={months} />);
+    const chartLabels = html.match(/aria-label="[^"]*: доходы/g) ?? [];
+
+    expect(chartLabels).toHaveLength(6);
+    expect(html.match(/<tr/g)?.length).toBe(13);
   });
 });
