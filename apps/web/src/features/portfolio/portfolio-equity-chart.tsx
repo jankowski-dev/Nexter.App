@@ -57,11 +57,53 @@ export function equitySeriesChange(
   return { absoluteUsd: absolute.toFixed(2), percent };
 }
 
-export function PortfolioEquityChart({ series }: { series?: EquitySeries }) {
-  return <ChartBody series={series} />;
+function equityBucket(date: string, range: EquitySeriesRange): string {
+  const value = new Date(date);
+  const day = `${value.getFullYear()}-${value.getMonth()}-${value.getDate()}`;
+  if (range === 'hour') return `${day}-${value.getHours()}`;
+  if (range === 'day') return day;
+  return `${value.getFullYear()}-${value.getMonth()}`;
 }
 
-function ChartBody({ series }: { series?: EquitySeries }) {
+/**
+ * The snapshot worker runs hourly, while the cards use live prices. Replace
+ * the current bucket with the live equity point (or append it when the last
+ * snapshot belongs to an earlier bucket), so "Текущий капитал" matches the
+ * live card values.
+ */
+export function withLiveEquityPoint(
+  series: EquitySeries,
+  current: EquityCurvePoint | null | undefined,
+): EquitySeries {
+  if (!current) return series;
+  const points = series.points;
+  if (points.length === 0) return { ...series, points: [current] };
+
+  const last = points[points.length - 1]!;
+  if (equityBucket(last.date, series.range) === equityBucket(current.date, series.range)) {
+    return { ...series, points: [...points.slice(0, -1), current] };
+  }
+
+  return { ...series, points: [...points, current] };
+}
+
+export function PortfolioEquityChart({
+  series,
+  current,
+}: {
+  series?: EquitySeries;
+  current?: EquityCurvePoint | null;
+}) {
+  return <ChartBody series={series} current={current} />;
+}
+
+function ChartBody({
+  series,
+  current,
+}: {
+  series?: EquitySeries;
+  current?: EquityCurvePoint | null;
+}) {
   if (!series || series.points.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 py-8 text-center">
@@ -73,19 +115,23 @@ function ChartBody({ series }: { series?: EquitySeries }) {
     );
   }
 
-  const current = series.points.at(-1)?.equityUsd ?? '0';
-  const change = equitySeriesChange(series.points);
-  const chartPoints = series.points.map((point) => ({
-    label: equitySeriesLabel(new Date(point.date), series.range),
+  const effectiveSeries = withLiveEquityPoint(series, current);
+  const currentEquity = effectiveSeries.points.at(-1)?.equityUsd ?? '0';
+  const change = equitySeriesChange(effectiveSeries.points);
+  const chartPoints = effectiveSeries.points.map((point) => ({
+    label: equitySeriesLabel(new Date(point.date), effectiveSeries.range),
     value: Number(point.equityUsd),
   }));
+  const note = current
+    ? `${effectiveSeries.note} Последняя точка — текущая оценка.`
+    : effectiveSeries.note;
 
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="font-mono text-2xl font-semibold tracking-tight text-zinc-900">
-            {formatUsd(current)}
+            {formatUsd(currentEquity)}
           </div>
           <div className="mt-1 text-xs text-zinc-500">Текущий капитал</div>
         </div>
@@ -105,12 +151,12 @@ function ChartBody({ series }: { series?: EquitySeries }) {
       <div className="mt-3">
         <LineChart points={chartPoints} height={260} />
       </div>
-      <p className="mt-2 text-[11px] leading-4 text-zinc-500">{series.note}</p>
+      <p className="mt-2 text-[11px] leading-4 text-zinc-500">{note}</p>
     </div>
   );
 }
 
-export function PortfolioEquityCard() {
+export function PortfolioEquityCard({ current }: { current?: EquityCurvePoint | null }) {
   const [range, setRange] = useState<EquitySeriesRange>('day');
   const series = useQuery({
     queryKey: ['portfolio-equity-series', range],
@@ -156,7 +202,9 @@ export function PortfolioEquityCard() {
             onRetry={() => void series.refetch()}
           />
         ) : null}
-        {!series.isPending && !series.isError ? <ChartBody series={series.data} /> : null}
+        {!series.isPending && !series.isError ? (
+          <ChartBody series={series.data} current={current} />
+        ) : null}
       </div>
     </Card>
   );
