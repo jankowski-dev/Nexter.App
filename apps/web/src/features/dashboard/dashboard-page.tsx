@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/ui/page-header';
@@ -455,16 +456,17 @@ export function DashboardPage() {
               placeholder="Без сахара, без алкоголя…"
             />
           </label>
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата начала воздержания
-            <Input
-              className="mt-1"
-              type="date"
-              value={habitStartedOn}
-              max={localDateKey()}
-              onChange={(event) => setHabitStartedOn(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker
+                label="Дата начала воздержания"
+                value={habitStartedOn}
+                max={localDateKey()}
+                onChange={setHabitStartedOn}
+              />
+            </div>
+          </div>
         </div>
       </Drawer>
 

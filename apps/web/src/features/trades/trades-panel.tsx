@@ -1,6 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
@@ -240,18 +241,8 @@ export function TradesPanel({
                   </option>
                 ))}
               </Select>
-              <Input
-                type="date"
-                value={from}
-                onChange={(event) => setFrom(event.target.value)}
-                aria-label="С даты"
-              />
-              <Input
-                type="date"
-                value={to}
-                onChange={(event) => setTo(event.target.value)}
-                aria-label="По дату"
-              />
+              <DatePicker label="С даты" value={from} onChange={setFrom} />
+              <DatePicker label="По дату" value={to} onChange={setTo} />
             </div>
           </Card>
         </>
