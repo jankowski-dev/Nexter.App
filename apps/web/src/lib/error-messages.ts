@@ -171,6 +171,25 @@ export function apiErrorReason(error: unknown): string | undefined {
   return error instanceof ApiError ? reasonFrom(error) : undefined;
 }
 
+function validationDetailsMessage(error: ApiError): string | undefined {
+  if (error.code !== 'VALIDATION_ERROR' || !Array.isArray(error.details)) return undefined;
+
+  const paths = new Set<string>();
+  for (const issue of error.details) {
+    if (typeof issue !== 'object' || issue === null) continue;
+    const path = (issue as { path?: unknown }).path;
+    if (!Array.isArray(path)) continue;
+    for (const part of path) paths.add(String(part));
+  }
+
+  if (paths.has('stopLossPct')) return 'Стоп-лосс: 1–90% или 0.';
+  if (paths.has('takeProfitPct')) return 'Тейк-профит: 1–1000% или 0.';
+  if (paths.has('amountIn') || paths.has('amount') || paths.has('quoteAmount')) {
+    return 'Проверьте сумму операции.';
+  }
+  return undefined;
+}
+
 export function toRussianError(error: unknown, fallback: string): string {
   if (error instanceof ClientValidationError) {
     return error.message;
@@ -182,6 +201,9 @@ export function toRussianError(error: unknown, fallback: string): string {
     if (reason && reasonMessages[reason]) {
       return reasonMessages[reason];
     }
+
+    const validation = validationDetailsMessage(error);
+    if (validation) return validation;
 
     return messages[error.code] ?? fallback;
   }
