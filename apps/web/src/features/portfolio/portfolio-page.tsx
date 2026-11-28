@@ -193,7 +193,14 @@ export function PortfolioPage() {
       {tab === 'overview' && data ? (
         <>
           <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
-            <PortfolioEquityCard />
+            <PortfolioEquityCard
+              current={{
+                date: new Date().toISOString(),
+                cashUsd: data.cashUsd,
+                positionsValueUsd: data.positionsValueUsd,
+                equityUsd: data.equityUsd,
+              }}
+            />
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-2">
               <StatCard
                 title="Стоимость позиций"
