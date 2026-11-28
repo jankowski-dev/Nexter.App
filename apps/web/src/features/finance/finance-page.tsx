@@ -7,6 +7,7 @@ import { ErrorState, LoadingRows } from '@/components/ui/states';
 import {
   fetchFinanceAccounts,
   fetchFinanceCategories,
+  fetchFinanceFxRates,
   fetchFinanceJournal,
   fetchFinanceSummary,
   updateFinanceAccount,
@@ -212,6 +213,7 @@ export function FinancePage() {
     queryKey: ['finance-categories'],
     queryFn: fetchFinanceCategories,
   });
+  const fxRates = useQuery({ queryKey: ['finance-fx-rates'], queryFn: fetchFinanceFxRates });
   const journal = useQuery({
     queryKey: ['finance-journal', periodRange.from ?? null, periodRange.to ?? null, journalFilter],
     queryFn: () =>
@@ -223,7 +225,9 @@ export function FinancePage() {
       }),
   });
   const accountRows = accounts.data?.accounts ?? [];
+  const rateRows = fxRates.data?.rates ?? [];
   const usdRate =
+    rateRows.find((rate) => rate.currency === 'USD')?.rate ??
     accountRows.find((account) => account.currency === 'USD' && !account.archivedAt)?.fxRate ??
     null;
   const categoryRows = categories.data?.categories ?? [];
@@ -374,7 +378,7 @@ export function FinancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Финансы"
-        subtitle="Доходы, расходы, переводы и счета в BYN, USD и EUR."
+        subtitle="Доходы, расходы, переводы и счета в BYN, USD, EUR и CNY."
         actions={
           <Button onClick={() => setOperationDialog({ kind: 'expense' })}>Новая операция</Button>
         }
@@ -809,6 +813,7 @@ export function FinancePage() {
       {creditDialogOpen ? (
         <FinanceCreditDialog
           accounts={accountRows}
+          fxRates={rateRows}
           onClose={() => setCreditDialogOpen(false)}
           onSaved={invalidate}
         />
@@ -816,6 +821,7 @@ export function FinancePage() {
       {accountDialog ? (
         <FinanceAccountDialog
           account={accountDialog.account}
+          fxRates={rateRows}
           onClose={() => setAccountDialog(null)}
           onSaved={invalidate}
         />

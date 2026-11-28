@@ -21,6 +21,7 @@ import { StrategiesSettingsPage } from '@/features/settings/strategies-settings-
 import { DataSettingsPage } from '@/features/settings/data-settings-page';
 import { ExportSettingsPage } from '@/features/settings/export-settings-page';
 import { GeneralSettingsPage } from '@/features/settings/general-settings-page';
+import { FinanceSettingsPage } from '@/features/settings/finance-settings-page';
 import { ViberSettingsPage } from '@/features/settings/viber-settings-page';
 import { DiagnosticsSettingsPage } from '@/features/settings/diagnostics-settings-page';
 import { MarketSettingsPage } from '@/features/settings/market-settings-page';
@@ -333,6 +334,12 @@ const accountingSettingsRoute = createRoute({
   component: AccountingSettingsPage,
 });
 
+const financeSettingsRoute = createRoute({
+  getParentRoute: () => appLayoutRoute,
+  path: '/settings/finance',
+  component: FinanceSettingsPage,
+});
+
 const marketSettingsRoute = createRoute({
   getParentRoute: () => appLayoutRoute,
   path: '/settings/market',
@@ -430,6 +437,7 @@ const routeTree = rootRoute.addChildren([
     dataQualityRoute,
     generalSettingsRoute,
     accountingSettingsRoute,
+    financeSettingsRoute,
     exportSettingsRoute,
     viberSettingsRoute,
     marketSettingsRoute,

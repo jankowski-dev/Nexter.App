@@ -90,6 +90,13 @@ export function SettingsPage() {
           tone="emerald"
         />
         <SettingsNavCard
+          to="/settings/finance"
+          title="Финансы и курсы"
+          description="Курсы НБРБ для счетов и долларового эквивалента."
+          icon="finance"
+          tone="emerald"
+        />
+        <SettingsNavCard
           to="/settings/market"
           title="Рынок и графики"
           description="Котировки, ликвидность, история и период графика."

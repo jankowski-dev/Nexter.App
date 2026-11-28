@@ -167,15 +167,18 @@ stateDiagram-v2
 
 ```mermaid
 flowchart LR
-  Acc[finance_accounts] --> Tx[finance_transactions]
+  Rates[finance_fx_rates] --> Acc[finance_accounts]
+  Acc --> Tx[finance_transactions]
   Cat[finance_categories] --> Tx
   Acc --> Tr[finance_transfers]
   Tx --> Summary[finance/summary]
   Tr --> Summary
+  NBRB[NBRB] --> Rates
 ```
 
 - Отдельный модуль, не влияет на крипто-ledger.
-- Базовая валюта BYN; USD/EUR счета хранят native balance и курс.
+- Базовая валюта BYN; USD/EUR/CNY счета хранят native balance и курс.
+- `finance_fx_rates` хранит текущий курс BYN за 1 USD/EUR/CNY из НБРБ или ручной override. Курс обновляется в `Настройки → Финансы и курсы`; он используется для новых счетов и USD-эквивалента, но не пересчитывает исторические `fx_rate`/`base_amount`.
 - `credit` — liability; net worth = assets − debt.
 - Погашение кредита — перевод с asset-счёта на credit-счёт: уменьшает и актив, и долг, поэтому не меняет net worth, но входит в `expenseBase`/`netBase` как cash-flow расход. Получение кредита доходом не считается.
 - Операции отменяются (soft cancel), не удаляются; отменённые исключены из статистики.

@@ -79,6 +79,7 @@
 | Таблица                                   | Назначение                                                                |
 | ----------------------------------------- | ------------------------------------------------------------------------- |
 | `finance_accounts`                        | Счета (cash/card/bank/credit), валюта, opening balance, credit limit      |
+| `finance_fx_rates`                        | Текущие курсы BYN за 1 USD/EUR/CNY: source (`nbrb`/`manual`), rate date   |
 | `finance_categories`                      | Категории income/expense + цвет                                           |
 | `finance_transactions`                    | Операции: kind, amount, currency, account, category, FX rate, cancelledAt |
 | `finance_transfers`                       | Переводы между счетами (card_topup, credit, ...)                          |

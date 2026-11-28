@@ -9,7 +9,8 @@ import { toRussianError } from '@/lib/error-messages';
 import { normalizeAmountInput } from '@/lib/expression';
 import { Decimal } from 'decimal.js';
 import { useState } from 'react';
-import type { FinanceAccountWithBalance, FinanceCurrency } from '@nexter/contracts';
+import { rateInputValue } from './finance-view-model';
+import type { FinanceAccountWithBalance, FinanceCurrency, FinanceFxRate } from '@nexter/contracts';
 
 function today(): string {
   const date = new Date();
@@ -20,10 +21,12 @@ function today(): string {
 
 export function FinanceCreditDialog({
   accounts,
+  fxRates = [],
   onClose,
   onSaved,
 }: {
   accounts: FinanceAccountWithBalance[];
+  fxRates?: readonly FinanceFxRate[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -55,6 +58,7 @@ export function FinanceCreditDialog({
   const creditCurrency = mode === 'existing' ? selectedCredit?.currency : currency;
   const currenciesDiffer =
     Boolean(selectedDestination) && selectedDestination?.currency !== creditCurrency;
+  const selectedRate = fxRates.find((rate) => rate.currency === currency);
 
   async function save(): Promise<void> {
     const normalizedAmount = normalizeAmountInput(amount);
@@ -178,13 +182,15 @@ export function FinanceCreditDialog({
                 value={currency}
                 onChange={(event) => {
                   const next = event.target.value as FinanceCurrency;
+                  const nextRate = fxRates.find((rate) => rate.currency === next);
                   setCurrency(next);
-                  setFxRate(next === 'BYN' ? '1' : '');
+                  setFxRate(next === 'BYN' ? '1' : rateInputValue(nextRate?.rate));
                 }}
               >
                 <option value="BYN">BYN</option>
                 <option value="USD">USD</option>
                 <option value="EUR">EUR</option>
+                <option value="CNY">CNY</option>
               </Select>
             </label>
             {currency !== 'BYN' ? (
@@ -196,6 +202,13 @@ export function FinanceCreditDialog({
                   onChange={setFxRate}
                   placeholder="2.965"
                 />
+                {selectedRate ? (
+                  <span className="mt-1 block text-[11px] text-zinc-500">
+                    {selectedRate.source === 'manual'
+                      ? 'Ручной курс'
+                      : `Курс НБРБ на ${selectedRate.rateDate}`}
+                  </span>
+                ) : null}
               </label>
             ) : null}
           </div>

@@ -242,7 +242,8 @@ export type TransactionSource = 'manual' | 'notion' | 'onchain' | 'kyberswap' | 
 export type TradeGroupStatus = 'open' | 'partial' | 'closed' | 'reserve' | 'for_sale';
 export type TaskStatus = 'open' | 'done' | 'cancelled';
 export type TaskRecurrence = 'daily' | 'weekly' | 'monthly';
-export type FinanceCurrency = 'BYN' | 'USD' | 'EUR';
+export type FinanceCurrency = 'BYN' | 'USD' | 'EUR' | 'CNY';
+export type FinanceFxRateSource = 'nbrb' | 'manual';
 export type FinanceAccountKind = 'cash' | 'card' | 'bank' | 'savings' | 'investment' | 'credit';
 export type FinanceCategoryKind = 'income' | 'expense' | 'transfer';
 export type FinanceTransactionKind = 'income' | 'expense';
@@ -1175,6 +1176,29 @@ export const financeAccounts = pgTable(
     index('finance_accounts_user_archived_idx').on(table.userId, table.archivedAt),
     check('finance_accounts_fx_rate_positive', sql`${table.fxRate} > 0`),
     check('finance_accounts_byn_rate_one', sql`${table.currency} <> 'BYN' or ${table.fxRate} = 1`),
+  ],
+);
+
+export const financeFxRates = pgTable(
+  'finance_fx_rates',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    currency: text('currency').$type<FinanceCurrency>().notNull(),
+    rate: numeric('rate', { precision: 18, scale: 8 }).notNull(),
+    source: text('source').$type<FinanceFxRateSource>().notNull().default('nbrb'),
+    rateDate: date('rate_date').notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('finance_fx_rates_user_currency_unique').on(table.userId, table.currency),
+    check('finance_fx_rates_currency_check', sql`${table.currency} in ('USD', 'EUR', 'CNY')`),
+    check('finance_fx_rates_rate_positive', sql`${table.rate} > 0`),
+    check('finance_fx_rates_source_check', sql`${table.source} in ('nbrb', 'manual')`),
   ],
 );
 
@@ -2269,6 +2293,7 @@ export type AudioNoteRecord = typeof audioNotes.$inferSelect;
 export type HabitRecord = typeof habits.$inferSelect;
 export type FinanceImport = typeof financeImports.$inferSelect;
 export type FinanceAccount = typeof financeAccounts.$inferSelect;
+export type FinanceFxRate = typeof financeFxRates.$inferSelect;
 export type FinanceCategory = typeof financeCategories.$inferSelect;
 export type FinanceTransaction = typeof financeTransactions.$inferSelect;
 export type FinanceTransfer = typeof financeTransfers.$inferSelect;

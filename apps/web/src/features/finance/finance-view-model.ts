@@ -124,6 +124,12 @@ export interface FinanceMonthlySummary {
   netBase: string;
 }
 
+/** Trim database-padded zeros without changing the stored rate value. */
+export function rateInputValue(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.includes('.') ? value.replace(/0+$/, '').replace(/\.$/, '') : value;
+}
+
 export function usdEquivalent(
   valueBase: string | null | undefined,
   usdRate: string | null | undefined,

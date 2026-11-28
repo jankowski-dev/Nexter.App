@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { generateSync } from 'otplib';
 import request from 'supertest';
 import { createDb, type Database } from '@nexter/db';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AppModule } from '../src/app.module';
 import { AllExceptionsFilter } from '../src/shared/errors/all-exceptions.filter';
 
@@ -612,6 +612,99 @@ describe.runIf(canRun)('Finance API', () => {
       .send({ title: 'Доход в архиве' })
       .expect(200);
   }, 60_000);
+
+  it('refreshes NBRB rates and keeps manual overrides', async () => {
+    const agent = request.agent(app.getHttpServer());
+    const owner = await setupOwner(agent);
+    const post = (url: string, body: Record<string, unknown>) =>
+      agent.post(url).set('x-csrf-token', owner.csrf).send(body);
+    const patch = (url: string, body: Record<string, unknown>) =>
+      agent.patch(url).set('x-csrf-token', owner.csrf).send(body);
+    const nbrb = (usd: number, eur: number, cny: number) => [
+      {
+        Cur_Abbreviation: 'USD',
+        Cur_Scale: 1,
+        Cur_OfficialRate: usd,
+        Date: '2026-11-28T00:00:00',
+      },
+      {
+        Cur_Abbreviation: 'EUR',
+        Cur_Scale: 1,
+        Cur_OfficialRate: eur,
+        Date: '2026-11-28T00:00:00',
+      },
+      {
+        Cur_Abbreviation: 'CNY',
+        Cur_Scale: 10,
+        Cur_OfficialRate: cny,
+        Date: '2026-11-28T00:00:00',
+      },
+    ];
+    const fetchMock = vi.spyOn(globalThis, 'fetch');
+
+    try {
+      const empty = await agent.get('/api/v1/finance/rates').expect(200);
+      expect(empty.body).toEqual({ rates: [], stale: true });
+
+      fetchMock.mockImplementation(
+        async () =>
+          new Response(JSON.stringify(nbrb(2.965, 3.42, 4.1)), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      const refreshed = await post('/api/v1/finance/rates/refresh', {}).expect(201);
+      expect(refreshed.body.stale).toBe(false);
+      expect(
+        (refreshed.body.rates as Array<{ currency: string; rate: string; source: string }>).map(
+          (rate) => [rate.currency, rate.rate, rate.source],
+        ),
+      ).toEqual([
+        ['USD', '2.96500000', 'nbrb'],
+        ['EUR', '3.42000000', 'nbrb'],
+        ['CNY', '0.41000000', 'nbrb'],
+      ]);
+
+      await patch('/api/v1/finance/rates/USD', { rate: '0' }).expect(400);
+      const manual = await patch('/api/v1/finance/rates/USD', { rate: '3.05' }).expect(200);
+      expect(
+        (manual.body.rates as Array<{ currency: string; rate: string; source: string }>).find(
+          (rate) => rate.currency === 'USD',
+        ),
+      ).toMatchObject({ rate: '3.05000000', source: 'manual' });
+
+      fetchMock.mockImplementation(
+        async () =>
+          new Response(JSON.stringify(nbrb(3.5, 3.6, 4.2)), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
+      const second = await post('/api/v1/finance/rates/refresh', {}).expect(201);
+      const secondRates = second.body.rates as Array<{
+        currency: string;
+        rate: string;
+        source: string;
+      }>;
+      expect(secondRates.find((rate) => rate.currency === 'USD')).toMatchObject({
+        rate: '3.05000000',
+        source: 'manual',
+      });
+      expect(secondRates.find((rate) => rate.currency === 'EUR')).toMatchObject({
+        rate: '3.60000000',
+        source: 'nbrb',
+      });
+
+      const reset = await post('/api/v1/finance/rates/USD/reset', {}).expect(201);
+      expect(
+        (reset.body.rates as Array<{ currency: string; rate: string; source: string }>).find(
+          (rate) => rate.currency === 'USD',
+        ),
+      ).toMatchObject({ rate: '3.50000000', source: 'nbrb' });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  }, 30_000);
 
   it('refuses an import rollback after an imported row was edited', async () => {
     const agent = request.agent(app.getHttpServer());

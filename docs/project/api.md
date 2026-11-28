@@ -140,6 +140,10 @@ If the wallet broadcast a transaction but did not return its hash, the owner can
 | GET   | `/finance/transfers`                | переводы                                                              |
 | POST  | `/finance/transfers`                | перевод                                                               |
 | GET   | `/finance/summary`                  | сводка (`from/to` или `all=true`); погашение кредита входит в расходы |
+| GET   | `/finance/rates`                    | текущие курсы USD/EUR/CNY к BYN и флаг stale                          |
+| POST  | `/finance/rates/refresh`            | обновить курсы из НБРБ; ручные курсы не перезаписываются              |
+| PATCH | `/finance/rates/:currency`          | сохранить ручной курс USD/EUR/CNY                                     |
+| POST  | `/finance/rates/:currency/reset`    | вернуть курс валюты к НБРБ                                            |
 | POST  | `/finance/import/preview`           | preview                                                               |
 | POST  | `/finance/import/commit`            | commit                                                                |
 | POST  | `/finance/import/rollback`          | rollback                                                              |
