@@ -124,8 +124,8 @@ export function ManualOrderForm({
           ...common,
           quoteAssetId,
           quoteAmount,
-          ...(stopLossPct != null ? { stopLossPct } : {}),
-          ...(takeProfitPct != null ? { takeProfitPct } : {}),
+          ...(stopLossPct != null && stopLossPct > 0 ? { stopLossPct } : {}),
+          ...(takeProfitPct != null && takeProfitPct > 0 ? { takeProfitPct } : {}),
         });
       }
 
