@@ -15,7 +15,7 @@ import {
 import { toRussianError } from '@/lib/error-messages';
 import { normalizeAmountInput } from '@/lib/expression';
 import type {
-  FinanceAccount,
+  FinanceAccountWithBalance,
   FinanceCategory,
   FinanceTransaction,
   FinanceTransactionKind,
@@ -26,6 +26,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { FinanceCategoryPicker } from './finance-category-picker';
 import {
+  accountOptionLabel,
   operationKindLabels,
   resolveOperationTitle,
   type FinanceOperationKind,
@@ -103,7 +104,7 @@ export function FinanceOperationDialog({
   kind?: FinanceOperationKind;
   transaction?: FinanceTransaction;
   transfer?: FinanceTransfer;
-  accounts: FinanceAccount[];
+  accounts: FinanceAccountWithBalance[];
   categories: FinanceCategory[];
   onClose: () => void;
   onSaved: () => void;
@@ -264,7 +265,7 @@ export function FinanceOperationDialog({
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {account.currency}
+                      {accountOptionLabel(account)}
                     </option>
                   ))}
                 </Select>
@@ -278,7 +279,7 @@ export function FinanceOperationDialog({
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {account.currency}
+                      {accountOptionLabel(account)}
                     </option>
                   ))}
                 </Select>
@@ -392,7 +393,7 @@ export function FinanceOperationDialog({
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name} · {account.currency}
+                      {accountOptionLabel(account)}
                     </option>
                   ))}
                 </Select>

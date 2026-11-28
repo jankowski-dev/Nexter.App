@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { resolveOperationTitle } from './finance-operation';
+import { accountOptionLabel, resolveOperationTitle } from './finance-operation';
+
+describe('accountOptionLabel', () => {
+  it('shows the account name with its current balance', () => {
+    const label = accountOptionLabel({ name: 'Карта', currency: 'BYN', balance: '17.00' });
+
+    expect(label).toContain('Карта ·');
+    expect(label).toContain('17,00');
+    expect(label).toContain('BYN');
+  });
+});
 
 describe('resolveOperationTitle', () => {
   it('prefers a non-empty title', () => {

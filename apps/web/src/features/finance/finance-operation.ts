@@ -1,4 +1,5 @@
-import type { FinanceTransactionKind } from '@nexter/contracts';
+import type { FinanceAccountWithBalance, FinanceTransactionKind } from '@nexter/contracts';
+import { financeMoney } from './finance-view-model';
 
 export type FinanceOperationKind = FinanceTransactionKind | 'transfer';
 
@@ -7,6 +8,12 @@ export const operationKindLabels: Record<FinanceOperationKind, string> = {
   income: 'Доход',
   transfer: 'Перевод',
 };
+
+export function accountOptionLabel(
+  account: Pick<FinanceAccountWithBalance, 'name' | 'currency' | 'balance'>,
+): string {
+  return `${account.name} · ${financeMoney(account.balance, account.currency)}`;
+}
 
 export function resolveOperationTitle(
   title: string,

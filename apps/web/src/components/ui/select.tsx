@@ -154,7 +154,7 @@ export function Select({
                   setOpen(false);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 break-words">{option.label}</span>
                 {active ? <span className="ml-2 shrink-0 text-emerald-700">✓</span> : null}
               </button>
             );
