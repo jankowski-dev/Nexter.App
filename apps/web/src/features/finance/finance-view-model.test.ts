@@ -3,6 +3,7 @@ import type { FinanceCategoryTotal, FinanceMonthTotal } from '@nexter/contracts'
 import {
   buildCategorySections,
   formatShare,
+  rateInputValue,
   summarizeMonths,
   usdEquivalent,
 } from './finance-view-model';
@@ -81,6 +82,15 @@ describe('summarizeMonths', () => {
       expenseBase: '0.00',
       netBase: '0.00',
     });
+  });
+});
+
+describe('rateInputValue', () => {
+  it('trims database-padded zeros for the rate input', () => {
+    expect(rateInputValue('2.96500000')).toBe('2.965');
+    expect(rateInputValue('3.00000000')).toBe('3');
+    expect(rateInputValue('0.41000000')).toBe('0.41');
+    expect(rateInputValue(null)).toBe('');
   });
 });
 

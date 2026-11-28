@@ -9,6 +9,7 @@ import { toRussianError } from '@/lib/error-messages';
 import { normalizeAmountInput } from '@/lib/expression';
 import { Decimal } from 'decimal.js';
 import { useState } from 'react';
+import { rateInputValue } from './finance-view-model';
 import type { FinanceAccountWithBalance, FinanceCurrency, FinanceFxRate } from '@nexter/contracts';
 
 function today(): string {
@@ -183,7 +184,7 @@ export function FinanceCreditDialog({
                   const next = event.target.value as FinanceCurrency;
                   const nextRate = fxRates.find((rate) => rate.currency === next);
                   setCurrency(next);
-                  setFxRate(next === 'BYN' ? '1' : (nextRate?.rate ?? ''));
+                  setFxRate(next === 'BYN' ? '1' : rateInputValue(nextRate?.rate));
                 }}
               >
                 <option value="BYN">BYN</option>

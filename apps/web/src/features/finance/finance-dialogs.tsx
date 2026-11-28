@@ -32,6 +32,7 @@ import type {
   FinanceTransferKind,
 } from '@nexter/contracts';
 import { CategoryColorPicker } from './category-color-picker';
+import { rateInputValue } from './finance-view-model';
 
 const accountKindLabels: Record<FinanceAccountKind, string> = {
   cash: 'Наличные',
@@ -420,7 +421,7 @@ export function FinanceAccountDialog({
   const [currency, setCurrency] = useState<FinanceCurrency>(account?.currency ?? 'BYN');
   const [openingBalance, setOpeningBalance] = useState(account?.openingBalance ?? '0');
   const [openingDate, setOpeningDate] = useState(account?.openingDate ?? today());
-  const [fxRate, setFxRate] = useState(account?.fxRate ?? '1');
+  const [fxRate, setFxRate] = useState(account ? rateInputValue(account.fxRate) : '1');
   const [creditLimit, setCreditLimit] = useState(account?.creditLimit ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -511,7 +512,7 @@ export function FinanceAccountDialog({
                 const next = event.target.value as FinanceCurrency;
                 const nextRate = fxRates.find((rate) => rate.currency === next);
                 setCurrency(next);
-                setFxRate(next === 'BYN' ? '1' : (nextRate?.rate ?? ''));
+                setFxRate(next === 'BYN' ? '1' : rateInputValue(nextRate?.rate));
               }}
             >
               <option value="BYN">BYN</option>
