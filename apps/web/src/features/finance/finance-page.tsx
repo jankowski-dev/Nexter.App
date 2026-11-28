@@ -408,6 +408,7 @@ export function FinancePage() {
               label="Месяц периода"
               value={customMonth}
               onChange={(value) => setCustomMonth(value || currentMonth())}
+              clearable={false}
             />
           </div>
         ) : null}

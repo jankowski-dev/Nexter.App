@@ -163,7 +163,7 @@ export function FinanceAccountsBlock({
         </div>
       ) : (
         <>
-          <div className="mt-4 grid flex-1 gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid content-start gap-3 sm:grid-cols-2">
             {accounts.map((account) => {
               const surface = accountSurfaceTone[account.kind];
               const isNegative = account.kind === 'credit' || Number(account.balanceBase) < 0;
@@ -407,9 +407,9 @@ export function FinanceCategoriesBlock({
             <span className="h-6 w-2 rounded-full bg-amber-300" />
             <span className="h-10 w-2 rounded-full bg-violet-300" />
           </div>
-          <p className="mt-3 text-sm font-medium text-zinc-700">За период пока нет категорий</p>
+          <p className="mt-3 text-sm font-medium text-zinc-700">За период нет расходов</p>
           <p className="mx-auto mt-1 max-w-xs text-xs text-zinc-500">
-            Добавьте доход или расход — здесь появится структура с суммами и долями.
+            Добавьте расход — здесь появится структура с суммами и долями.
           </p>
           <Button variant="secondary" className="mt-3 h-8 px-3 text-xs" onClick={onAddExpense}>
             + Расход

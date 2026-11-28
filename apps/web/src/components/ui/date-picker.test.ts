@@ -1,5 +1,15 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { dateKey, monthKey, monthMatrix, parseDateKey, parseMonthKey } from './date-picker';
+import {
+  DatePicker,
+  MonthPicker,
+  dateKey,
+  monthKey,
+  monthMatrix,
+  parseDateKey,
+  parseMonthKey,
+} from './date-picker';
 
 describe('date picker helpers', () => {
   it('builds a Monday-first month matrix', () => {
@@ -30,5 +40,27 @@ describe('month picker helpers', () => {
     expect(parseMonthKey('2026-13')).toBeNull();
     expect(parseMonthKey('2026-1')).toBeNull();
     expect(parseMonthKey('')).toBeNull();
+  });
+
+  it('exposes the selected value in the trigger accessible name', () => {
+    const month = renderToStaticMarkup(
+      createElement(MonthPicker, {
+        value: '2026-11',
+        onChange: () => undefined,
+        label: 'Месяц периода',
+        clearable: false,
+      }),
+    );
+    const date = renderToStaticMarkup(
+      createElement(DatePicker, {
+        value: '2026-11-27',
+        onChange: () => undefined,
+        label: 'Дата',
+      }),
+    );
+
+    expect(month).toContain('aria-label="Месяц периода: ноябрь 2026');
+    expect(month).not.toContain('Очистить');
+    expect(date).toContain('aria-label="Дата: 27.11.2026');
   });
 });

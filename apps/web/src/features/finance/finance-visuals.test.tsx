@@ -116,7 +116,30 @@ describe('finance overview visuals', () => {
     expect(html).toContain('Продукты');
     expect(html).toContain('60%');
     expect(html).toContain('Расходы');
-    expect(emptyHtml).toContain('За период пока нет категорий');
+    expect(emptyHtml).toContain('За период нет расходов');
+  });
+
+  it('does not claim there are no categories when only income exists', () => {
+    const html = renderToStaticMarkup(
+      <FinanceCategoriesBlock
+        categories={[
+          {
+            categoryId: 'income-1',
+            name: 'Зарплата',
+            kind: 'income',
+            amountBase: '100.00',
+            count: 1,
+          },
+        ]}
+        colorById={new Map()}
+        periodLabel="Ноябрь 2026"
+        onAddExpense={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('За период нет расходов');
+    expect(html).not.toContain('Зарплата');
+    expect(html).not.toContain('За период пока нет категорий');
   });
 
   it('renders the monthly chart, totals, USD equivalents and the month table', () => {

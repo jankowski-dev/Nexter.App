@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarIcon } from './icons';
 
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -48,15 +48,19 @@ export function MonthPicker({
   onChange,
   label = 'Месяц',
   disabled = false,
+  clearable = true,
 }: {
   value: string;
   onChange: (value: string) => void;
   label?: string;
   disabled?: boolean;
+  clearable?: boolean;
 }) {
   const selected = parseMonthKey(value);
   const [open, setOpen] = useState(false);
   const [year, setYear] = useState(() => selected?.getFullYear() ?? new Date().getFullYear());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (selected) setYear(selected.getFullYear());
@@ -64,11 +68,22 @@ export function MonthPicker({
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, [open]);
 
   const months = Array.from({ length: 12 }, (_, index) =>
@@ -79,10 +94,11 @@ export function MonthPicker({
     : 'Выберите месяц';
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        aria-label={label}
+        aria-label={`${label}: ${display}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -132,6 +148,7 @@ export function MonthPicker({
                   onClick={() => {
                     onChange(key);
                     setOpen(false);
+                    triggerRef.current?.focus();
                   }}
                   className={`flex h-9 items-center justify-center rounded-lg text-xs capitalize transition ${
                     isSelected
@@ -152,17 +169,19 @@ export function MonthPicker({
                 const now = new Date();
                 onChange(monthKey(now.getFullYear(), now.getMonth()));
                 setOpen(false);
+                triggerRef.current?.focus();
               }}
               className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
             >
               Текущий месяц
             </button>
-            {value ? (
+            {value && clearable ? (
               <button
                 type="button"
                 onClick={() => {
                   onChange('');
                   setOpen(false);
+                  triggerRef.current?.focus();
                 }}
                 className="text-xs text-zinc-500 hover:text-zinc-800"
               >
@@ -190,6 +209,8 @@ export function DatePicker({
   const selected = parseDateKey(value);
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => selected ?? new Date());
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (selected) setView(selected);
@@ -197,11 +218,22 @@ export function DatePicker({
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown, true);
+    };
   }, [open]);
 
   const weeks = useMemo(() => monthMatrix(view.getFullYear(), view.getMonth()), [view]);
@@ -219,10 +251,11 @@ export function DatePicker({
     : 'Выберите дату';
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        aria-label={label}
+        aria-label={`${label}: ${display}`}
         aria-haspopup="dialog"
         aria-expanded={open}
         disabled={disabled}
@@ -283,6 +316,7 @@ export function DatePicker({
                       onClick={() => {
                         onChange(key);
                         setOpen(false);
+                        triggerRef.current?.focus();
                       }}
                       className={`flex h-8 items-center justify-center rounded-lg text-xs transition ${
                         isSelected
@@ -307,6 +341,7 @@ export function DatePicker({
                 const now = new Date();
                 onChange(dateKey(now.getFullYear(), now.getMonth(), now.getDate()));
                 setOpen(false);
+                triggerRef.current?.focus();
               }}
               className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
             >
@@ -318,6 +353,7 @@ export function DatePicker({
                 onClick={() => {
                   onChange('');
                   setOpen(false);
+                  triggerRef.current?.focus();
                 }}
                 className="text-xs text-zinc-500 hover:text-zinc-800"
               >

@@ -7,6 +7,7 @@ import { Select } from '@/components/ui/select';
 import { createFinanceCreditDrawdown } from '@/lib/api';
 import { toRussianError } from '@/lib/error-messages';
 import { normalizeAmountInput } from '@/lib/expression';
+import { Decimal } from 'decimal.js';
 import { useState } from 'react';
 import type { FinanceAccountWithBalance, FinanceCurrency } from '@nexter/contracts';
 
@@ -64,8 +65,12 @@ export function FinanceCreditDialog({
       setError('Заполните сумму и название кредита.');
       return;
     }
-    if (mode === 'new' && currency !== 'BYN' && !normalizedFxRate) {
-      setError('Укажите курс кредита к BYN.');
+    if (
+      mode === 'new' &&
+      currency !== 'BYN' &&
+      (!normalizedFxRate || new Decimal(normalizedFxRate).lte(0))
+    ) {
+      setError('Укажите положительный курс кредита к BYN.');
       return;
     }
     if (currenciesDiffer && !normalizedDestinationAmount) {
