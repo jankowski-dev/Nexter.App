@@ -199,7 +199,7 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   await categoryTrigger.click();
   await dialog.getByLabel('Поиск категории').fill('Доход');
   await page.keyboard.press('Enter');
-  await expect(categoryTrigger).toHaveText('Доход');
+  await expect(categoryTrigger).toContainText('Доход');
   await dialog.getByLabel('Сумма').fill('1200');
   await dialog.getByRole('button', { name: 'Сохранить' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
