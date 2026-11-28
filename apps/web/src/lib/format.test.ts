@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatPrice, formatRelativeTime, normalizeDecimalInput } from './format';
+import {
+  formatPrice,
+  formatRelativeTime,
+  formatSignedUsdTight,
+  formatTokenAmountCompact,
+  formatUsdTight,
+  normalizeDecimalInput,
+} from './format';
 
 describe('formatPrice', () => {
   it('keeps small token prices visible', () => {
@@ -16,6 +23,28 @@ describe('formatPrice', () => {
     expect(formatPrice(null)).toBe('—');
     expect(formatPrice('')).toBe('—');
     expect(formatPrice('not-a-number')).toBe('—');
+  });
+});
+
+describe('tight USD formatting', () => {
+  it('uses one decimal for normal values and two for sub-dollar values', () => {
+    expect(formatUsdTight('1.34')).toContain('1,3');
+    expect(formatUsdTight('92.50')).toContain('92,5');
+    expect(formatUsdTight('66.01')).toContain('66');
+    expect(formatUsdTight('0.28')).toContain('0,28');
+  });
+
+  it('keeps the sign for P&L values', () => {
+    expect(formatSignedUsdTight('-3.28')).toContain('-3,3');
+    expect(formatSignedUsdTight('3.28')).toContain('+3,3');
+  });
+});
+
+describe('formatTokenAmountCompact', () => {
+  it('shortens large token quantities but preserves small ones', () => {
+    expect(formatTokenAmountCompact('1306138.66683913')).toContain('138,67');
+    expect(formatTokenAmountCompact('0.000051')).toBe('0,000051');
+    expect(formatTokenAmountCompact('123.456789')).toContain('123,4568');
   });
 });
 

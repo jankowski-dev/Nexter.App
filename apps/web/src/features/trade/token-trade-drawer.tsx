@@ -33,9 +33,11 @@ import {
   formatDate,
   formatPct,
   formatPrice,
-  formatSignedUsd,
+  formatSignedUsdTight,
   formatTokenAmount,
+  formatTokenAmountCompact,
   formatUsd,
+  formatUsdTight,
   normalizeDecimalInput,
   pnlTone,
 } from '@/lib/format';
@@ -366,7 +368,7 @@ export function TokenTradeDrawer({
 
   useEffect(() => {
     if (mode === 'sell' && trade && !amount) {
-      setAmount(normalizeDecimalInput(trade.group.remainingAmount));
+      setAmount(normalizeDecimalInput(trade.group.remainingAmount, 8));
     }
   }, [mode, trade, amount]);
 
@@ -390,7 +392,7 @@ export function TokenTradeDrawer({
       if (!mountedRef.current) return;
       setTrade(detail);
       setMode('sell');
-      setAmount(normalizeDecimalInput(detail.group.remainingAmount));
+      setAmount(normalizeDecimalInput(detail.group.remainingAmount, 8));
     } catch (err) {
       if (mountedRef.current) {
         setError(toRussianError(err, 'Не удалось загрузить данные сделки'));
@@ -1108,7 +1110,7 @@ export function TokenTradeDrawer({
                 {sellExceedsRemaining && trade ? (
                   <p className="mt-1 text-xs text-red-700">
                     Нельзя продать больше остатка:{' '}
-                    {formatTokenAmount(trade.group.remainingAmount, 8)} {assetSymbol}.
+                    {formatTokenAmountCompact(trade.group.remainingAmount, 8)} {assetSymbol}.
                   </p>
                 ) : null}
               </label>
@@ -1151,7 +1153,7 @@ export function TokenTradeDrawer({
                 </div>
                 {minimumOut ? (
                   <div className="mt-1 text-xs text-emerald-700">
-                    Минимум с учётом проскальзывания: {formatTokenAmount(minimumOut, 8)}
+                    Минимум с учётом проскальзывания: {formatTokenAmountCompact(minimumOut, 8)}
                   </div>
                 ) : null}
               </div>
@@ -1177,11 +1179,11 @@ export function TokenTradeDrawer({
                           : 'text-zinc-800'
                     }`}
                   >
-                    {sellPnl ? formatSignedUsd(sellPnl.toFixed(2)) : '—'}
+                    {sellPnl ? formatSignedUsdTight(sellPnl.toFixed(2)) : '—'}
                   </div>
                   <div className="mt-1 text-xs text-zinc-500">
                     Вложено:{' '}
-                    {showPreview && sellCostBasis ? formatUsd(sellCostBasis.toFixed(2)) : '—'}
+                    {showPreview && sellCostBasis ? formatUsdTight(sellCostBasis.toFixed(2)) : '—'}
                   </div>
                 </div>
               ) : null}
@@ -1225,10 +1227,10 @@ export function TokenTradeDrawer({
                 <div className="font-mono text-xs text-zinc-800">
                   {isBuy
                     ? minimumOut
-                      ? `${formatTokenAmount(minimumOut, 8)} ${assetSymbol}`
+                      ? `${formatTokenAmountCompact(minimumOut, 8)} ${assetSymbol}`
                       : '—'
                     : trade
-                      ? `${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}`
+                      ? `${formatTokenAmountCompact(trade.group.remainingAmount, 8)} ${assetSymbol}`
                       : '—'}
                 </div>
               </div>
@@ -1379,7 +1381,7 @@ export function TokenTradeDrawer({
                 {trade
                   ? trade.group.status === 'closed'
                     ? 'Позиция закрыта.'
-                    : `Остаток: ${formatTokenAmount(trade.group.remainingAmount, 8)} ${assetSymbol}.`
+                    : `Остаток: ${formatTokenAmountCompact(trade.group.remainingAmount, 8)} ${assetSymbol}.`
                   : 'Операция записана в журнал.'}
               </div>
             ) : null}
@@ -1765,7 +1767,7 @@ function TradeSummary({
             Результат
           </div>
           <div className={`font-mono text-2xl font-semibold tracking-tight ${pnlTone(pnl)}`}>
-            {pnl ? formatSignedUsd(pnl) : '—'}
+            {pnl ? formatSignedUsdTight(pnl) : '—'}
           </div>
           <div className={`text-[11px] font-medium ${pnlTone(group.returnPct)}`}>
             {group.returnPct ? formatPct(group.returnPct) : '—'}
@@ -1790,20 +1792,20 @@ function TradeSummary({
             {formatPrice(currentPrice)}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
             Остаток
           </div>
-          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
-            {formatTokenAmount(group.remainingAmount, 8)} {group.asset.symbol}
+          <div className="mt-0.5 break-words font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
+            {formatTokenAmountCompact(group.remainingAmount, 8)} {group.asset.symbol}
           </div>
         </div>
-        <div>
+        <div className="min-w-0">
           <div className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
             Вложено
           </div>
-          <div className="mt-0.5 font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
-            {formatUsd(group.buyUsd)}
+          <div className="mt-0.5 break-words font-mono text-[14px] font-semibold tabular-nums text-zinc-900">
+            {formatUsdTight(group.buyUsd)}
           </div>
         </div>
       </div>
