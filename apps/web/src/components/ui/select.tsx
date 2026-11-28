@@ -10,7 +10,7 @@ import {
   type SelectHTMLAttributes,
 } from 'react';
 
-interface SelectOption {
+export interface SelectOption {
   value: string;
   label: ReactNode;
   disabled: boolean;
@@ -54,8 +54,13 @@ export function Select({
   style,
   multiple,
   onMouseDown,
+  renderOption,
+  renderValue,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
+}: SelectHTMLAttributes<HTMLSelectElement> & {
+  renderOption?: (option: SelectOption) => ReactNode;
+  renderValue?: (option: SelectOption) => ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const options = collectOptions(children);
@@ -106,7 +111,13 @@ export function Select({
           open && 'border-emerald-500 ring-4 ring-emerald-500/10',
         )}
       >
-        <span className="min-w-0 truncate">{selected?.label ?? '—'}</span>
+        <span className="min-w-0 flex-1">
+          {selected && renderValue ? (
+            renderValue(selected)
+          ) : (
+            <span className="block truncate">{selected?.label ?? '—'}</span>
+          )}
+        </span>
         <span className="shrink-0 text-xs text-zinc-500">▾</span>
       </div>
 
@@ -154,7 +165,9 @@ export function Select({
                   setOpen(false);
                 }}
               >
-                <span className="min-w-0 flex-1 break-words">{option.label}</span>
+                <span className="min-w-0 flex-1 break-words">
+                  {renderOption ? renderOption(option) : option.label}
+                </span>
                 {active ? <span className="ml-2 shrink-0 text-emerald-700">✓</span> : null}
               </button>
             );
