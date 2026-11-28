@@ -59,7 +59,7 @@ describe('month picker helpers', () => {
       }),
     );
 
-    expect(month).toContain('aria-label="Месяц периода: ноябрь 2026');
+    expect(month).toContain('aria-label="Месяц периода: Ноябрь 2026');
     expect(month).not.toContain('Очистить');
     expect(date).toContain('aria-label="Дата: 27.11.2026');
   });

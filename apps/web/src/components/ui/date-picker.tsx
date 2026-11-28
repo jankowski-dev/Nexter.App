@@ -89,9 +89,10 @@ export function MonthPicker({
   const months = Array.from({ length: 12 }, (_, index) =>
     new Intl.DateTimeFormat('ru-RU', { month: 'short' }).format(new Date(year, index, 1)),
   );
-  const display = selected
+  const formatted = selected
     ? new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' }).format(selected)
     : 'Выберите месяц';
+  const display = formatted.charAt(0).toUpperCase() + formatted.slice(1);
 
   return (
     <div ref={rootRef} className="relative">
