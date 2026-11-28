@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const financeCurrencySchema = z.enum(['BYN', 'USD', 'EUR']);
+export const financeCurrencySchema = z.enum(['BYN', 'USD', 'EUR', 'CNY']);
 export const financeAccountKindSchema = z.enum([
   'cash',
   'card',
@@ -12,6 +12,8 @@ export const financeAccountKindSchema = z.enum([
 export const financeCategoryKindSchema = z.enum(['income', 'expense', 'transfer']);
 export const financeTransactionKindSchema = z.enum(['income', 'expense']);
 export const financeTransferKindSchema = z.enum(['exchange', 'card_topup', 'credit', 'other']);
+export const financeFxCurrencySchema = z.enum(['USD', 'EUR', 'CNY']);
+export const financeFxRateSourceSchema = z.enum(['nbrb', 'manual']);
 
 const moneySchema = z
   .string()
@@ -44,6 +46,24 @@ export const financeAccountSchema = z.object({
 export const financeAccountWithBalanceSchema = financeAccountSchema.extend({
   balance: z.string(),
   balanceBase: z.string(),
+});
+
+export const financeFxRateSchema = z.object({
+  currency: financeFxCurrencySchema,
+  rate: z.string(),
+  source: financeFxRateSourceSchema,
+  rateDate: dateOnlySchema,
+  fetchedAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+
+export const financeFxRatesResponseSchema = z.object({
+  rates: z.array(financeFxRateSchema),
+  stale: z.boolean(),
+});
+
+export const financeFxRateUpdateRequestSchema = z.object({
+  rate: rateSchema,
 });
 
 export const financeCategorySchema = z.object({
@@ -284,6 +304,11 @@ export const financeJournalResponseSchema = z.object({
 });
 
 export type FinanceCurrency = z.infer<typeof financeCurrencySchema>;
+export type FinanceFxCurrency = z.infer<typeof financeFxCurrencySchema>;
+export type FinanceFxRateSource = z.infer<typeof financeFxRateSourceSchema>;
+export type FinanceFxRate = z.infer<typeof financeFxRateSchema>;
+export type FinanceFxRatesResponse = z.infer<typeof financeFxRatesResponseSchema>;
+export type FinanceFxRateUpdateRequest = z.infer<typeof financeFxRateUpdateRequestSchema>;
 export type FinanceAccountKind = z.infer<typeof financeAccountKindSchema>;
 export type FinanceCategoryKind = z.infer<typeof financeCategoryKindSchema>;
 export type FinanceTransactionKind = z.infer<typeof financeTransactionKindSchema>;

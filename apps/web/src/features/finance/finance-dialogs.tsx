@@ -25,6 +25,7 @@ import type {
   FinanceCategory,
   FinanceCategoryKind,
   FinanceCurrency,
+  FinanceFxRate,
   FinanceTransaction,
   FinanceTransactionKind,
   FinanceTransfer,
@@ -405,10 +406,12 @@ export function FinanceTransferDialog({
 
 export function FinanceAccountDialog({
   account,
+  fxRates = [],
   onClose,
   onSaved,
 }: {
   account?: FinanceAccount;
+  fxRates?: readonly FinanceFxRate[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -421,6 +424,7 @@ export function FinanceAccountDialog({
   const [creditLimit, setCreditLimit] = useState(account?.creditLimit ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const selectedRate = fxRates.find((rate) => rate.currency === currency);
 
   async function save(): Promise<void> {
     if (!name.trim()) {
@@ -505,13 +509,15 @@ export function FinanceAccountDialog({
               value={currency}
               onChange={(event) => {
                 const next = event.target.value as FinanceCurrency;
+                const nextRate = fxRates.find((rate) => rate.currency === next);
                 setCurrency(next);
-                setFxRate(next === 'BYN' ? '1' : '');
+                setFxRate(next === 'BYN' ? '1' : (nextRate?.rate ?? ''));
               }}
             >
               <option value="BYN">BYN</option>
               <option value="USD">USD</option>
               <option value="EUR">EUR</option>
+              <option value="CNY">CNY</option>
             </Select>
           </label>
         </div>
@@ -536,6 +542,13 @@ export function FinanceAccountDialog({
               disabled={currency === 'BYN'}
               onChange={setFxRate}
             />
+            {currency !== 'BYN' && selectedRate ? (
+              <span className="mt-1 block text-[11px] text-zinc-500">
+                {selectedRate.source === 'manual'
+                  ? 'Ручной курс'
+                  : `Курс НБРБ на ${selectedRate.rateDate}`}
+              </span>
+            ) : null}
           </label>
           <label className="block text-sm text-zinc-600">
             Кредитный лимит

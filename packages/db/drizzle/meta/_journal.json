@@ -393,6 +393,13 @@
       "when": 1795628915698,
       "tag": "0055_favorites_default_group",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1795853280330,
+      "tag": "0056_powerful_blizzard",
+      "breakpoints": true
     }
   ]
 }

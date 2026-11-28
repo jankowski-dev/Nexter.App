@@ -146,9 +146,9 @@ describe('sandbox historical replay migration 0053', () => {
   });
 
   it('keeps the migration journal and snapshot chain consistent', () => {
-    expect(journal.entries).toHaveLength(56);
+    expect(journal.entries).toHaveLength(57);
     const last = journal.entries.at(-1);
-    expect(last).toMatchObject({ idx: 55, tag: '0055_favorites_default_group' });
+    expect(last).toMatchObject({ idx: 56, tag: '0056_powerful_blizzard' });
     expect(journal.entries.some((entry) => entry.tag === '0053_sandbox_replays')).toBe(true);
     expect(journal.entries.some((entry) => entry.tag === '0052_sandbox_stage2')).toBe(true);
     expect(replaySnapshotSource).toContain('"sandbox_replays"');

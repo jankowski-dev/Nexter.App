@@ -87,6 +87,7 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
     name: 'Продукты',
     kind: 'expense',
   })) as { id: string };
+  await post('/api/v1/finance/rates/USD', { rate: '2.965' });
 
   await post('/api/v1/finance/transactions', {
     kind: 'income',
@@ -212,6 +213,8 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   const accountDialog = page.getByRole('dialog');
   await accountDialog.getByLabel('Название').fill('Доллары');
   await accountDialog.getByLabel('Валюта').selectOption('USD');
+  await expect(accountDialog.getByLabel('Курс к BYN')).toHaveValue('2.965');
+  await accountDialog.getByLabel('Курс к BYN').fill('');
   await accountDialog.getByRole('button', { name: /^Дата начала/ }).click();
   const dateDialog = page.getByRole('dialog', { name: 'Календарь' });
   await expect(dateDialog).toBeVisible();

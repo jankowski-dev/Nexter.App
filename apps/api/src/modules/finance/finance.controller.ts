@@ -20,6 +20,9 @@ import type {
   FinanceCategoriesResponse,
   FinanceCreditDrawdownRequest,
   FinanceCreditDrawdownResponse,
+  FinanceFxCurrency,
+  FinanceFxRateUpdateRequest,
+  FinanceFxRatesResponse,
   FinanceImport,
   FinanceImportRequest,
   FinanceImportsResponse,
@@ -41,6 +44,8 @@ import {
   financeCategorySuggestionsQuerySchema,
   financeCategoryUpdateRequestSchema,
   financeCreditDrawdownRequestSchema,
+  financeFxCurrencySchema,
+  financeFxRateUpdateRequestSchema,
   financeImportRequestSchema,
   financeListQuerySchema,
   financeSummaryQuerySchema,
@@ -53,6 +58,7 @@ import type { FastifyRequest } from 'fastify';
 import { ZodValidationPipe } from '../../shared/validation/zod-validation.pipe';
 import { CurrentAuth } from '../auth/current-auth.decorator';
 import type { AuthContext } from '../auth/auth.types';
+import { FinanceFxRatesService } from './finance-fx-rates.service';
 import { FinanceImportService } from './finance-import.service';
 import { FinanceService } from './finance.service';
 
@@ -69,7 +75,43 @@ export class FinanceController {
   constructor(
     private readonly finance: FinanceService,
     private readonly financeImport: FinanceImportService,
+    private readonly fxRates: FinanceFxRatesService,
   ) {}
+
+  @Get('rates')
+  rates(@CurrentAuth() auth: AuthContext): Promise<FinanceFxRatesResponse> {
+    return this.fxRates.list(auth.user.id);
+  }
+
+  @Post('rates/refresh')
+  refreshRates(
+    @CurrentAuth() auth: AuthContext,
+    @Req() request: FastifyRequest,
+  ): Promise<FinanceFxRatesResponse> {
+    return this.fxRates.refresh(auth.user.id, meta(request));
+  }
+
+  @Patch('rates/:currency')
+  updateRate(
+    @CurrentAuth() auth: AuthContext,
+    @Param('currency', new ZodValidationPipe(financeFxCurrencySchema))
+    currency: FinanceFxCurrency,
+    @Body(new ZodValidationPipe(financeFxRateUpdateRequestSchema))
+    body: FinanceFxRateUpdateRequest,
+    @Req() request: FastifyRequest,
+  ): Promise<FinanceFxRatesResponse> {
+    return this.fxRates.setManual(auth.user.id, currency, body.rate, meta(request));
+  }
+
+  @Post('rates/:currency/reset')
+  resetRate(
+    @CurrentAuth() auth: AuthContext,
+    @Param('currency', new ZodValidationPipe(financeFxCurrencySchema))
+    currency: FinanceFxCurrency,
+    @Req() request: FastifyRequest,
+  ): Promise<FinanceFxRatesResponse> {
+    return this.fxRates.reset(auth.user.id, currency, meta(request));
+  }
 
   @Get('accounts')
   accounts(@CurrentAuth() auth: AuthContext): Promise<FinanceAccountsResponse> {

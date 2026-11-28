@@ -29,6 +29,7 @@ import {
   financeCategoriesResponseSchema,
   financeCategorySuggestionsResponseSchema,
   financeCreditDrawdownResponseSchema,
+  financeFxRatesResponseSchema,
   financeImportSchema,
   financeImportsResponseSchema,
   financeJournalResponseSchema,
@@ -123,6 +124,9 @@ import {
   type FinanceCategorySuggestionsResponse,
   type FinanceCreditDrawdownRequest,
   type FinanceCreditDrawdownResponse,
+  type FinanceFxCurrency,
+  type FinanceFxRateUpdateRequest,
+  type FinanceFxRatesResponse,
   type FinanceImport,
   type FinanceImportRequest,
   type FinanceImportsResponse,
@@ -954,6 +958,27 @@ export async function updateFinanceAccount(
     body,
     financeAccountsResponseSchema.shape.accounts.element,
   );
+}
+
+export async function fetchFinanceFxRates(): Promise<FinanceFxRatesResponse> {
+  return apiFetch('/api/v1/finance/rates', {}, financeFxRatesResponseSchema);
+}
+
+export async function refreshFinanceFxRates(): Promise<FinanceFxRatesResponse> {
+  return apiPost('/api/v1/finance/rates/refresh', {}, financeFxRatesResponseSchema);
+}
+
+export async function updateFinanceFxRate(
+  currency: FinanceFxCurrency,
+  body: FinanceFxRateUpdateRequest,
+): Promise<FinanceFxRatesResponse> {
+  return apiPatch(`/api/v1/finance/rates/${currency}`, body, financeFxRatesResponseSchema);
+}
+
+export async function resetFinanceFxRate(
+  currency: FinanceFxCurrency,
+): Promise<FinanceFxRatesResponse> {
+  return apiPost(`/api/v1/finance/rates/${currency}/reset`, {}, financeFxRatesResponseSchema);
 }
 
 export async function fetchFinanceCategories(): Promise<FinanceCategoriesResponse> {
