@@ -1,7 +1,7 @@
 import { BarChart } from '@/components/charts/bar-chart';
 import { TokenIcon } from '@/components/token-icon';
 import { Card, CardDescription, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState, LoadingRows } from '@/components/ui/states';
 import { LiveValue } from '@/components/ui/live-value';
@@ -182,26 +182,18 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
 
         {preset === 'custom' ? (
           <div className="mt-3 flex flex-wrap items-end gap-3">
-            <label className="block text-sm text-zinc-600">
+            <div className="block min-w-[180px] text-sm text-zinc-600">
               С
-              <Input
-                className="mt-1"
-                type="date"
-                aria-label="Начало периода"
-                value={customFrom}
-                onChange={(event) => setCustomFrom(event.target.value)}
-              />
-            </label>
-            <label className="block text-sm text-zinc-600">
+              <div className="mt-1">
+                <DatePicker label="Начало периода" value={customFrom} onChange={setCustomFrom} />
+              </div>
+            </div>
+            <div className="block min-w-[180px] text-sm text-zinc-600">
               По
-              <Input
-                className="mt-1"
-                type="date"
-                aria-label="Конец периода"
-                value={customTo}
-                onChange={(event) => setCustomTo(event.target.value)}
-              />
-            </label>
+              <div className="mt-1">
+                <DatePicker label="Конец периода" value={customTo} onChange={setCustomTo} />
+              </div>
+            </div>
           </div>
         ) : null}
 

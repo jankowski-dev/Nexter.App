@@ -1,3 +1,4 @@
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { createManualTransaction, fetchAccounts, fetchAssets } from '@/lib/api';
@@ -282,16 +283,17 @@ export function ManualOrderForm({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm text-zinc-600">
+        <div className="block text-sm text-zinc-600">
           Дата
-          <Input
-            className="mt-1"
-            type="date"
-            value={occurredAt}
-            onChange={(event) => setOccurredAt(event.target.value)}
-            disabled={save.isPending}
-          />
-        </label>
+          <div className="mt-1">
+            <DatePicker
+              label="Дата"
+              value={occurredAt}
+              onChange={setOccurredAt}
+              disabled={save.isPending}
+            />
+          </div>
+        </div>
         <label className="block text-sm text-zinc-600">
           Заметка
           <Input

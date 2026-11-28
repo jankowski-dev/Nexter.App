@@ -201,11 +201,15 @@ export function DatePicker({
   onChange,
   label = 'Срок',
   disabled = false,
+  min,
+  max,
 }: {
   value: string;
   onChange: (value: string) => void;
   label?: string;
   disabled?: boolean;
+  min?: string;
+  max?: string;
 }) {
   const selected = parseDateKey(value);
   const [open, setOpen] = useState(false);
@@ -308,18 +312,21 @@ export function DatePicker({
                   const key = dateKey(view.getFullYear(), view.getMonth(), day);
                   const isSelected = key === value;
                   const isToday = key === todayKey;
+                  const isOutOfRange =
+                    (min !== undefined && key < min) || (max !== undefined && key > max);
                   return (
                     <button
                       key={key}
                       type="button"
                       aria-label={key}
                       aria-pressed={isSelected}
+                      disabled={isOutOfRange}
                       onClick={() => {
                         onChange(key);
                         setOpen(false);
                         triggerRef.current?.focus();
                       }}
-                      className={`flex h-8 items-center justify-center rounded-lg text-xs transition ${
+                      className={`flex h-8 items-center justify-center rounded-lg text-xs transition disabled:cursor-not-allowed disabled:text-zinc-300 ${
                         isSelected
                           ? 'bg-emerald-600 font-semibold text-white'
                           : isToday
@@ -344,7 +351,8 @@ export function DatePicker({
                 setOpen(false);
                 triggerRef.current?.focus();
               }}
-              className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+              disabled={max !== undefined && todayKey > max}
+              className="text-xs font-medium text-emerald-700 hover:text-emerald-800 disabled:cursor-not-allowed disabled:text-zinc-300"
             >
               Сегодня
             </button>

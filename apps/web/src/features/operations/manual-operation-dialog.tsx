@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -461,15 +462,12 @@ export function ManualOperationDialog({
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm text-zinc-600">
+          <div className="block text-sm text-zinc-600">
             Дата
-            <Input
-              className="mt-1"
-              type="date"
-              value={occurredAt}
-              onChange={(event) => setOccurredAt(event.target.value)}
-            />
-          </label>
+            <div className="mt-1">
+              <DatePicker label="Дата" value={occurredAt} onChange={setOccurredAt} />
+            </div>
+          </div>
           <label className="block text-sm text-zinc-600">
             Заметка
             <Input
