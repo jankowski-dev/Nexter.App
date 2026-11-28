@@ -3,7 +3,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Drawer } from '@/components/ui/drawer';
 import { ExpressionInput } from '@/components/ui/expression-input';
 import { Input } from '@/components/ui/input';
-import { Select } from '@/components/ui/select';
+import { Select, type SelectOption } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   createFinanceTransaction,
@@ -24,6 +24,7 @@ import type {
 } from '@nexter/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { FinanceAccountOption } from './finance-account-option';
 import { FinanceCategoryPicker } from './finance-category-picker';
 import {
   accountOptionLabel,
@@ -162,6 +163,10 @@ export function FinanceOperationDialog({
   const selectedCategory = availableCategories.find((category) => category.id === categoryId);
   const selectedFrom = accounts.find((account) => account.id === fromAccountId);
   const selectedTo = accounts.find((account) => account.id === toAccountId);
+  const renderAccountOption = (option: SelectOption) => {
+    const account = availableAccounts.find((item) => item.id === option.value);
+    return account ? <FinanceAccountOption account={account} /> : option.label;
+  };
 
   function changeKind(next: FinanceOperationKind): void {
     if (locked || next === kind) return;
@@ -262,6 +267,8 @@ export function FinanceOperationDialog({
                   className="mt-1"
                   value={fromAccountId}
                   onChange={(event) => setFromAccountId(event.target.value)}
+                  renderOption={renderAccountOption}
+                  renderValue={renderAccountOption}
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
@@ -276,6 +283,8 @@ export function FinanceOperationDialog({
                   className="mt-1"
                   value={toAccountId}
                   onChange={(event) => setToAccountId(event.target.value)}
+                  renderOption={renderAccountOption}
+                  renderValue={renderAccountOption}
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
@@ -390,6 +399,8 @@ export function FinanceOperationDialog({
                   className="mt-1"
                   value={accountId}
                   onChange={(event) => setAccountId(event.target.value)}
+                  renderOption={renderAccountOption}
+                  renderValue={renderAccountOption}
                 >
                   {availableAccounts.map((account) => (
                     <option key={account.id} value={account.id}>
