@@ -21,6 +21,25 @@ describe('toRussianError', () => {
     ).toBe('Сумма больше остатка по ордеру.');
   });
 
+  it('turns validation issue paths into specific swap messages', () => {
+    expect(
+      toRussianError(
+        new ApiError('VALIDATION_ERROR', 'Validation failed', undefined, [
+          { path: ['takeProfitPct'], message: 'Too small' },
+        ]),
+        'Не удалось сохранить сделку',
+      ),
+    ).toBe('Тейк-профит: 1–1000% или 0.');
+    expect(
+      toRussianError(
+        new ApiError('VALIDATION_ERROR', 'Validation failed', undefined, [
+          { path: ['stopLossPct'], message: 'Too small' },
+        ]),
+        'Не удалось сохранить сделку',
+      ),
+    ).toBe('Стоп-лосс: 1–90% или 0.');
+  });
+
   it('falls back for an unknown error', () => {
     expect(toRussianError(new Error('boom'), 'Не удалось сохранить сделку')).toBe(
       'Не удалось сохранить сделку',
