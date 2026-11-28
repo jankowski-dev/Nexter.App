@@ -28,6 +28,37 @@ export function formatUsd(value: string | null | undefined, digits = 2): string 
   }).format(number);
 }
 
+const usdTightFormatter = new Intl.NumberFormat('ru-RU', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+
+const usdSmallFormatter = new Intl.NumberFormat('ru-RU', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
+
+/** Cramped trade cards: one decimal for normal USD, two for sub-dollar values. */
+export function formatUsdTight(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return (Math.abs(number) >= 1 ? usdTightFormatter : usdSmallFormatter).format(number);
+}
+
+export function formatSignedUsdTight(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  if (number === 0) return formatUsdTight('0');
+
+  return `${number > 0 ? '+' : ''}${formatUsdTight(value)}`;
+}
+
 export function formatUsdCompact(value: string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
   const number = Number(value);
@@ -73,6 +104,24 @@ export function formatTokenAmount(value: string, maxDigits = 6): string {
 
   return new Intl.NumberFormat('ru-RU', {
     maximumFractionDigits: maxDigits,
+  }).format(number);
+}
+
+/** Token quantities in narrow cards: 2/4/8 fraction digits by magnitude. */
+export function formatTokenAmountCompact(value: string, maxDigits = 8): string {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value;
+
+  const absolute = Math.abs(number);
+  const digits =
+    absolute >= 1000
+      ? Math.min(2, maxDigits)
+      : absolute >= 1
+        ? Math.min(4, maxDigits)
+        : Math.min(8, maxDigits);
+
+  return new Intl.NumberFormat('ru-RU', {
+    maximumFractionDigits: digits,
   }).format(number);
 }
 

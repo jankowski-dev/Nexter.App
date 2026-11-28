@@ -9,9 +9,9 @@ import { toRussianError } from '@/lib/error-messages';
 import {
   formatDate,
   formatPrice,
-  formatSignedUsd,
-  formatTokenAmount,
-  formatUsd,
+  formatSignedUsdTight,
+  formatTokenAmountCompact,
+  formatUsdTight,
   pluralizeRu,
   pnlTone,
 } from '@/lib/format';
@@ -152,7 +152,7 @@ export function AssetDrawer({
             <Metric
               surface="emerald"
               label="Количество"
-              value={position ? formatTokenAmount(position.amount) : '—'}
+              value={position ? formatTokenAmountCompact(position.amount, 8) : '—'}
               hint={data.asset.symbol}
             />
             <Metric
@@ -164,14 +164,14 @@ export function AssetDrawer({
             <Metric
               surface="amber"
               label="Стоимость"
-              value={formatUsd(position?.valueUsd ?? null)}
+              value={formatUsdTight(position?.valueUsd ?? null)}
               hint="По текущей цене"
             />
             <Metric
               surface="violet"
               label="Нереализованный P&L"
-              value={formatSignedUsd(position?.unrealizedPnlUsd ?? null)}
-              hint={`Себестоимость ${formatUsd(position?.costBasisUsd ?? null)}`}
+              value={formatSignedUsdTight(position?.unrealizedPnlUsd ?? null)}
+              hint={`Себестоимость ${formatUsdTight(position?.costBasisUsd ?? null)}`}
               tone={pnlTone(position?.unrealizedPnlUsd)}
             />
           </div>
@@ -238,7 +238,7 @@ export function AssetDrawer({
                         <div
                           className={`font-mono text-lg font-semibold ${pnlTone(group.totalPnlUsd)}`}
                         >
-                          {formatSignedUsd(group.totalPnlUsd)}
+                          {formatSignedUsdTight(group.totalPnlUsd)}
                         </div>
                         <div className="text-xs text-zinc-500">
                           {group.returnPct ? `${group.returnPct}%` : '—'}
@@ -246,26 +246,31 @@ export function AssetDrawer({
                       </div>
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-zinc-100 bg-zinc-50/60 p-2 text-[11px] sm:grid-cols-4">
-                      <div title="Часть вложений, которая ещё не продана">
+                      <div className="min-w-0" title="Часть вложений, которая ещё не продана">
                         <div className="text-zinc-500">Вложено в остаток</div>
-                        <div className="font-mono text-zinc-800">
-                          {formatUsd(group.remainingCostBasisUsd)}
+                        <div className="break-words font-mono text-zinc-800">
+                          {formatUsdTight(group.remainingCostBasisUsd)}
                         </div>
                       </div>
-                      <div title="Сколько токена осталось в этом ордере">
+                      <div className="min-w-0" title="Сколько токена осталось в этом ордере">
                         <div className="text-zinc-500">Остаток токена</div>
-                        <div className="font-mono text-zinc-800">
-                          {formatTokenAmount(group.remainingAmount, 8)} {data.asset.symbol}
+                        <div className="break-all font-mono text-zinc-800">
+                          {formatTokenAmountCompact(group.remainingAmount, 8)} {data.asset.symbol}
                         </div>
                       </div>
-                      <div title="Сумма всех покупок по ордеру">
+                      <div className="min-w-0" title="Сумма всех покупок по ордеру">
                         <div className="text-zinc-500">Куплено всего</div>
-                        <div className="font-mono text-zinc-800">{formatUsd(group.buyUsd)}</div>
+                        <div className="break-words font-mono text-zinc-800">
+                          {formatUsdTight(group.buyUsd)}
+                        </div>
                       </div>
-                      <div title="Сумма всех продаж по ордеру; у активного ордера может быть частичная продажа">
+                      <div
+                        className="min-w-0"
+                        title="Сумма всех продаж по ордеру; у активного ордера может быть частичная продажа"
+                      >
                         <div className="text-zinc-500">Продано всего</div>
-                        <div className="font-mono text-zinc-800">
-                          {Number(group.sellUsd) > 0 ? formatUsd(group.sellUsd) : '—'}
+                        <div className="break-words font-mono text-zinc-800">
+                          {Number(group.sellUsd) > 0 ? formatUsdTight(group.sellUsd) : '—'}
                         </div>
                       </div>
                     </div>
