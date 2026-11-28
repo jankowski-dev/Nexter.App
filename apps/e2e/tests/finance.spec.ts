@@ -196,6 +196,9 @@ test('finance accounts, operations, transfers and overview through the UI', asyn
   const incomeRow = page.getByRole('row').filter({ hasText: 'Зарплата' });
   await incomeRow.getByRole('button', { name: 'Изменить' }).click();
   const dialog = page.getByRole('dialog');
+  await expect(
+    dialog.getByLabel('Счёт').locator('option').filter({ hasText: 'Карта' }),
+  ).toContainText('750,00');
   const categoryTrigger = dialog.getByRole('button', { name: /^Категория:/ });
   await categoryTrigger.click();
   const categoryList = dialog.getByRole('listbox', { name: 'Категории' });
