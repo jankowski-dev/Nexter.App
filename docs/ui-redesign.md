@@ -313,3 +313,8 @@ Detailed metrics live in `Статистика` (`/statistics`; `/reports` redir
 - The Finance `Импорт` tab is removed; the legacy crypto `/import` page is unchanged. Account creation through the Finance UI/API now requires a positive rate for non-BYN currencies instead of silently storing `1`; the legacy JSON import path is unchanged.
 - `Настройки → Финансы и курсы` manages current NBRB rates for USD, EUR and CNY: refresh, manual override, reset and a stale indicator. Account and credit dialogs prefill the selected currency's stored rate and label it as NBRB or manual; CNY is available in finance accounts.
 - Migration `0056` adds only `finance_fx_rates`; historical finance snapshots are not rewritten.
+
+## Portfolio equity and trade number formatting
+
+- The portfolio equity chart overlays the live cash/positions/equity point on the current hour/day/month bucket, so "Текущий капитал" matches the live cards; historical snapshots are unchanged.
+- Trade and order cards use compact token quantities (2/4/8 fraction digits by magnitude) and one-decimal USD values (two decimals for sub-dollar amounts). Token prices keep their 8–12 decimal precision, and the close-order amount input prefills at 8 decimals.
