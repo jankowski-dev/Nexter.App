@@ -47,6 +47,7 @@ import {
   isBuildRetryable,
   isStepUpRequired,
   isSwapSettled,
+  parseProtectionPct,
   phaseAfterExecutionFailure,
 } from './swap-execution';
 import {
@@ -205,6 +206,9 @@ export function TokenTradeDrawer({
   const onCompletedRef = useRef(onCompleted);
   const handledOrderRef = useRef<string | null>(null);
   const cancelWaitRef = useRef(false);
+  const stopLoss = parseProtectionPct(stopLossPct, 1, 90, 'Стоп-лосс');
+  const takeProfit = parseProtectionPct(takeProfitPct, 1, 1000, 'Тейк-профит');
+  const protectionError = stopLoss.error ?? takeProfit.error;
 
   useEffect(() => {
     onCompletedRef.current = onCompleted;
@@ -276,8 +280,8 @@ export function TokenTradeDrawer({
         walletAddress: wallet.address ?? undefined,
         ...(mode === 'buy'
           ? {
-              stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
-              takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+              stopLossPct: stopLoss.value,
+              takeProfitPct: takeProfit.value,
             }
           : {}),
       }),
@@ -289,6 +293,7 @@ export function TokenTradeDrawer({
       tokenOut &&
       isPositiveDecimal(previewAmount) &&
       !sellExceedsRemaining &&
+      !protectionError &&
       (!allowlistRequired || wallet.address) &&
       !executing &&
       !pendingSubmit,
@@ -519,6 +524,10 @@ export function TokenTradeDrawer({
       setError('On-chain исполнение для этой сети сейчас выключено.');
       return;
     }
+    if (protectionError) {
+      setError(protectionError);
+      return;
+    }
     if (mode === 'sell' && !tradeGroupId) {
       setError('Не выбрана сделка для продажи.');
       return;
@@ -548,8 +557,8 @@ export function TokenTradeDrawer({
         ...(mode === 'sell' && tradeGroupId ? { closeGroupIds: [tradeGroupId] } : {}),
         ...(mode === 'buy'
           ? {
-              stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
-              takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+              stopLossPct: stopLoss.value,
+              takeProfitPct: takeProfit.value,
             }
           : {}),
       };
@@ -749,6 +758,7 @@ export function TokenTradeDrawer({
     Boolean(wallet.connected) &&
     isPositiveDecimal(amount) &&
     !sellExceedsRemaining &&
+    !protectionError &&
     (mode === 'buy' || Boolean(tradeGroupId)) &&
     !executing &&
     !pendingSubmit;
@@ -816,8 +826,8 @@ export function TokenTradeDrawer({
         assetId: token.id,
         amountUsd: delayedAmountUsd,
         triggerPriceUsd: delayedTriggerPrice,
-        stopLossPct: stopLossPct.trim() ? Number(stopLossPct) : null,
-        takeProfitPct: takeProfitPct.trim() ? Number(takeProfitPct) : null,
+        stopLossPct: stopLoss.value,
+        takeProfitPct: takeProfit.value,
       }),
     onSuccess: () => {
       onCompletedRef.current?.();
@@ -959,7 +969,7 @@ export function TokenTradeDrawer({
                     Защита и отложенная покупка
                   </div>
                   <div className="text-[11px] text-zinc-500">
-                    Только для этого ордера. Пустые поля отключают защиту.
+                    Только для этого ордера. 0 или пусто отключают защиту.
                   </div>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-zinc-700">
@@ -976,7 +986,13 @@ export function TokenTradeDrawer({
                   tone="sky"
                   title="Тейк-профит"
                   value={takeProfitPct}
-                  onChange={setTakeProfitPct}
+                  onChange={(value) => {
+                    setTakeProfitPct(value);
+                    setError(null);
+                  }}
+                  onBlur={() => {
+                    if (takeProfitPct.trim() && Number(takeProfitPct) <= 0) setTakeProfitPct('');
+                  }}
                   direction={1}
                   hint={buyTargetHint(takeProfitPct, 1)}
                 />
@@ -984,11 +1000,20 @@ export function TokenTradeDrawer({
                   tone="rose"
                   title="Стоп-лосс"
                   value={stopLossPct}
-                  onChange={setStopLossPct}
+                  onChange={(value) => {
+                    setStopLossPct(value);
+                    setError(null);
+                  }}
+                  onBlur={() => {
+                    if (stopLossPct.trim() && Number(stopLossPct) <= 0) setStopLossPct('');
+                  }}
                   direction={-1}
                   hint={buyTargetHint(stopLossPct, -1)}
                 />
               </div>
+              {protectionError ? (
+                <p className="mt-1 text-[11px] text-red-700">{protectionError}</p>
+              ) : null}
               {delayed ? (
                 <div className="mt-2 space-y-2 rounded-lg border border-zinc-200 bg-white/70 p-2">
                   <div className="grid gap-2 sm:grid-cols-3">
@@ -1370,8 +1395,8 @@ export function TokenTradeDrawer({
               onSaved={() => onCompletedRef.current?.()}
               onClose={onClose}
               onPendingChange={setManualPending}
-              stopLossPct={stopLossPct.trim() ? Number(stopLossPct) : null}
-              takeProfitPct={takeProfitPct.trim() ? Number(takeProfitPct) : null}
+              stopLossPct={stopLoss.value}
+              takeProfitPct={takeProfit.value}
               onQuoteAmountChange={setManualQuoteAmount}
             />
           </div>
@@ -1561,14 +1586,22 @@ function ProtectionEditor({
     const current = valuesRef.current;
     const key = `${current.stopPct}|${current.takePct}`;
     if (key === savedRef.current || savingRef.current) return;
+    const stop = parseProtectionPct(current.stopPct, 1, 90, 'Стоп-лосс');
+    const take = parseProtectionPct(current.takePct, 1, 1000, 'Тейк-профит');
+    const validationError = stop.error ?? take.error;
+    if (validationError) {
+      setStatus('error');
+      setError(validationError);
+      return;
+    }
     savingRef.current = true;
     setStatus('saving');
     setError(null);
     let saved = false;
     try {
       const updated = await updateTradeGroupProtection(group.id, {
-        stopLossPct: current.stopPct.trim() ? Number(current.stopPct) : null,
-        takeProfitPct: current.takePct.trim() ? Number(current.takePct) : null,
+        stopLossPct: stop.value,
+        takeProfitPct: take.value,
       });
       savedRef.current = key;
       saved = true;
@@ -1601,8 +1634,8 @@ function ProtectionEditor({
       const key = `${current.stopPct}|${current.takePct}`;
       if (key === savedRef.current) return;
       void updateTradeGroupProtection(group.id, {
-        stopLossPct: current.stopPct.trim() ? Number(current.stopPct) : null,
-        takeProfitPct: current.takePct.trim() ? Number(current.takePct) : null,
+        stopLossPct: parseProtectionPct(current.stopPct, 1, 90, 'Стоп-лосс').value,
+        takeProfitPct: parseProtectionPct(current.takePct, 1, 1000, 'Тейк-профит').value,
       }).catch(() => undefined);
     },
     [group.id],

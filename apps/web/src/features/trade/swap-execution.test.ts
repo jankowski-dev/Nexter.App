@@ -3,6 +3,7 @@ import {
   isBuildRetryable,
   isStepUpRequired,
   isSwapSettled,
+  parseProtectionPct,
   phaseAfterExecutionFailure,
 } from './swap-execution';
 
@@ -37,5 +38,17 @@ describe('swap execution flow', () => {
   it('keeps a broadcast hash for retry instead of starting a new quote', () => {
     expect(phaseAfterExecutionFailure(true)).toBe('submit_failed');
     expect(phaseAfterExecutionFailure(false)).toBe('idle');
+  });
+
+  it('treats 0 or an empty protection value as disabled', () => {
+    expect(parseProtectionPct('', 1, 90, 'Стоп-лосс')).toEqual({ value: null, error: null });
+    expect(parseProtectionPct('0', 1, 90, 'Стоп-лосс')).toEqual({ value: null, error: null });
+    expect(parseProtectionPct('10', 1, 90, 'Стоп-лосс')).toEqual({ value: 10, error: null });
+  });
+
+  it('rejects malformed or out-of-range protection values', () => {
+    expect(parseProtectionPct('-5', 1, 90, 'Стоп-лосс').error).toContain('Стоп-лосс');
+    expect(parseProtectionPct('95', 1, 90, 'Стоп-лосс').error).toContain('1–90');
+    expect(parseProtectionPct('abc', 1, 90, 'Стоп-лосс').error).toContain('Стоп-лосс');
   });
 });
