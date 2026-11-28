@@ -182,13 +182,13 @@ export function ReportsPage({ embedded = false }: { embedded?: boolean }) {
 
         {preset === 'custom' ? (
           <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div className="block text-sm text-zinc-600">
+            <div className="block min-w-[180px] text-sm text-zinc-600">
               С
               <div className="mt-1">
                 <DatePicker label="Начало периода" value={customFrom} onChange={setCustomFrom} />
               </div>
             </div>
-            <div className="block text-sm text-zinc-600">
+            <div className="block min-w-[180px] text-sm text-zinc-600">
               По
               <div className="mt-1">
                 <DatePicker label="Конец периода" value={customTo} onChange={setCustomTo} />
