@@ -1633,9 +1633,12 @@ function ProtectionEditor({
       const current = valuesRef.current;
       const key = `${current.stopPct}|${current.takePct}`;
       if (key === savedRef.current) return;
+      const stop = parseProtectionPct(current.stopPct, 1, 90, 'Стоп-лосс');
+      const take = parseProtectionPct(current.takePct, 1, 1000, 'Тейк-профит');
+      if (stop.error || take.error) return;
       void updateTradeGroupProtection(group.id, {
-        stopLossPct: parseProtectionPct(current.stopPct, 1, 90, 'Стоп-лосс').value,
-        takeProfitPct: parseProtectionPct(current.takePct, 1, 1000, 'Тейк-профит').value,
+        stopLossPct: stop.value,
+        takeProfitPct: take.value,
       }).catch(() => undefined);
     },
     [group.id],
